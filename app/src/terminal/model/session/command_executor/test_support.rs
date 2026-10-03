@@ -120,9 +120,8 @@ pub fn find_tool(name: &str) -> Option<PathBuf> {
     })
 }
 
-/// The executable of a shell that a local session of that type is launched with, or `None`
-/// outside CI with a message saying the test is skipped. With `CI` set a missing shell fails
-/// the test: a run that skips fish and PowerShell proves nothing about them.
+/// The executable of a shell that a local session of that type is launched with.
+/// Missing shells exit 86: a run that skips fish or PowerShell supplies no policy evidence.
 /// `OPENRUN_TEST_FISH` and `OPENRUN_TEST_PWSH` name an executable that is not on `PATH`.
 pub fn session_shell(name: &str, override_variable: &str) -> Option<PathBuf> {
     let found = match std::env::var_os(override_variable) {
@@ -139,36 +138,24 @@ pub fn session_shell(name: &str, override_variable: &str) -> Option<PathBuf> {
                 .find(|candidate| candidate.is_file())
         }
     };
-    let in_ci = std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "false");
     if found.is_none() {
-        assert!(
-            !in_ci,
-            "{name} is not installed and CI is set: the session shell tests must run in {name} \
-             (install it on the runner or set {override_variable})"
-        );
         eprintln!(
-            "SKIPPED: {name} is not installed, so its session shell test does not run here (CI \
-             installs it and fails without it; set {override_variable} to run it)"
+            "TEST SKIPPED: required session shell {name} is not installed (set {override_variable})"
         );
+        std::process::exit(86);
     }
     found
 }
 
 /// Tools whose absence on a CI runner is a failure, not a skip: the tests that use them are the
 /// evidence for the generator policy, and a skipped test is no evidence.
-const REQUIRED_ON_CI: &[&str] = &["git", "npm", "corepack", "rustup", "docker", "python3"];
-
-/// The tool's path, or `None` after saying why the test is skipped. On CI (`CI=true`), a tool in
-/// [`REQUIRED_ON_CI`] that is missing fails the test instead.
+/// Missing real tools are explicit runtime skips. Exit 86 is a failure under nextest, including
+/// CI: none of these security controls may silently count as a pass.
 pub fn require_tool(name: &str) -> Option<PathBuf> {
     let tool = find_tool(name);
     if tool.is_none() {
-        assert!(
-            !(std::env::var("CI").is_ok_and(|ci| ci == "true") && REQUIRED_ON_CI.contains(&name)),
-            "{name} is not installed on this CI runner, so the real-tool tests that need it \
-             would pass without testing anything"
-        );
-        eprintln!("SKIPPED: {name} is not installed on this machine");
+        eprintln!("TEST SKIPPED: required real tool {name} is not installed");
+        std::process::exit(86);
     }
     tool
 }

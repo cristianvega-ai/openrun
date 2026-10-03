@@ -36,8 +36,8 @@ pub enum TokenPolicy {
     Strict,
 }
 
-/// Generators that are not `Strict`, sorted by `(spec, generator)`. Every entry must also be
-/// on the allow-list (a test checks it) and holds up in the injection corpus.
+/// Generators that are not `Strict`, sorted by `(spec, generator)`. Entries remain classified when their tools are denied;
+/// token safety alone never grants execution. The injection corpus verifies these policies.
 const TOKEN_POLICIES: &[(&str, &str, TokenPolicy)] = &[
     ("apt", "list_prefix", TokenPolicy::Escaped),
     ("chown", "users_or_groups", TokenPolicy::Escaped),

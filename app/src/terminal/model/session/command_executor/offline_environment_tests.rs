@@ -25,7 +25,7 @@ fn table_sets_every_documented_variable() {
         ("npm_config_update_notifier", "false"),
         ("GIT_TERMINAL_PROMPT", "0"),
         ("GIT_NO_LAZY_FETCH", "1"),
-        ("GIT_ALLOW_PROTOCOL", "file"),
+        ("GIT_ALLOW_PROTOCOL", ""),
         ("GOTOOLCHAIN", "local"),
         ("GOPROXY", "off"),
         ("POWERSHELL_TELEMETRY_OPTOUT", "1"),
@@ -294,7 +294,7 @@ fn every_table_row_names_a_verification_test_that_exists() {
         ("GIT_TERMINAL_PROMPT", "git_terminal_prompt_is_off"),
         (
             "GIT_ALLOW_PROTOCOL",
-            "git_cannot_lazy_fetch_over_a_network_transport",
+            "a_repositorys_uploadpack_program_never_runs_on_any_git_the_gate_accepts",
         ),
         (
             "log.showSignature",
@@ -320,6 +320,7 @@ fn every_table_row_names_a_verification_test_that_exists() {
     let source = [
         include_str!("offline_environment_tests.rs"),
         include_str!("git_completion_tests.rs"),
+        include_str!("git_local_promisor_tests.rs"),
     ]
     .concat();
     let mut rows: Vec<&str> = FIXED_VARIABLES.iter().map(|(name, _)| *name).collect();

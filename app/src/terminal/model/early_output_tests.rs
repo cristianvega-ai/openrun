@@ -75,10 +75,9 @@ fn test_lazy_background_insertion() {
     assert_eq!(background.output_to_string(), "hi\n");
 }
 
-/// The tty echoes the input-reporting key (ESC i) as `^[i` when the shell is not reading yet. That
-/// echo is not background output: the first line of output that follows must not be preceded by it.
+/// Displayed text alone cannot distinguish a reporting-key echo from legitimate output.
 #[test]
-fn test_input_reporting_echo_is_not_background_output() {
+fn literal_reporting_key_text_is_background_output() {
     let mut block_list = new_block_list(
         ChannelEventListener::new_for_test(),
         TypeaheadMode::ShellReported,
@@ -93,7 +92,7 @@ fn test_input_reporting_echo_is_not_background_output() {
     let background = block_list
         .background_block_mut()
         .expect("Background block should exist");
-    assert_eq!(background.output_to_string(), "Output 1\n");
+    assert_eq!(background.output_to_string(), "^[iOutput 1\n");
 }
 
 /// Text that starts like the echo but is not the echo is kept.
@@ -115,7 +114,7 @@ fn test_text_that_starts_like_the_input_reporting_echo_is_kept() {
     let background = block_list
         .background_block_mut()
         .expect("Background block should exist");
-    assert_eq!(background.output_to_string(), "^^[x!\n");
+    assert_eq!(background.output_to_string(), "^^[x^[i!\n");
 }
 
 #[test]
@@ -246,4 +245,53 @@ fn test_queued_typeahead_shell_reported() {
             .expect("Block should exist")
             .is_empty()
     );
+}
+
+#[test]
+fn reporting_key_lookalikes_are_preserved_at_every_chunk_boundary() {
+    for text in [
+        "^\n",
+        "prefix ^[i literal\n",
+        "^[1\n",
+        "x ^[i ^[1 ^[p ^[w\n",
+        "normal output\n",
+    ] {
+        for split in 0..=text.len() {
+            let mut blocks = new_block_list(
+                ChannelEventListener::new_for_test(),
+                TypeaheadMode::ShellReported,
+            );
+            let mut parser = ansi::Processor::new();
+            parser.parse_bytes(&mut blocks, &text.as_bytes()[..split], &mut std::io::sink());
+            parser.parse_bytes(&mut blocks, &text.as_bytes()[split..], &mut std::io::sink());
+            assert_eq!(
+                blocks.background_block_mut().unwrap().output_to_string(),
+                text,
+                "{text:?}, split {split}"
+            );
+        }
+    }
+}
+
+#[test]
+fn controls_and_osc_cannot_join_lookalikes_into_an_echo_to_remove() {
+    for bytes in [
+        b"^\0[i\n".as_slice(),
+        b"^\x18[i\n",
+        b"^\x1b]2;title\x07[i\n",
+    ] {
+        let mut blocks = new_block_list(
+            ChannelEventListener::new_for_test(),
+            TypeaheadMode::ShellReported,
+        );
+        let mut parser = ansi::Processor::new();
+        for byte in bytes {
+            parser.parse_bytes(&mut blocks, &[*byte], &mut std::io::sink());
+        }
+        assert_eq!(
+            blocks.background_block_mut().unwrap().output_to_string(),
+            "^[i\n",
+            "{bytes:?}"
+        );
+    }
 }

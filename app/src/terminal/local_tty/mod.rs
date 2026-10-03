@@ -14,6 +14,10 @@ pub fn run_terminal_server(args: &warp_cli::TerminalServerArgs) {
 }
 
 impl event_loop::ActiveTerminal for crate::terminal::TerminalModel {
+    fn input_reporting_block(&self) -> Option<warp_terminal::model::BlockId> {
+        self.input_reporting_block()
+    }
+
     fn exit(&mut self, reason: crate::terminal::model::terminal_model::ExitReason) {
         crate::terminal::TerminalModel::exit(self, reason);
     }

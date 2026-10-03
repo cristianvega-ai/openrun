@@ -1121,7 +1121,7 @@ pub fn test_complete_last_arg_after_non_variadic_option() {
 /// it is ambiguous whether the user is trying to complete the option argument
 /// or the next command argument. In this scenario, we should show suggestions
 /// for both argument types.
-#[ignore]
+#[ignore = "ENG-238: positional arguments under optional or variadic options fail"]
 #[test]
 pub fn test_complete_last_arg_after_optional_non_variadic_option() {
     let registry = create_test_command_registry([ls_signature()]);
@@ -1152,7 +1152,7 @@ pub fn test_complete_last_arg_after_optional_non_variadic_option() {
 }
 
 /// See above test.
-#[ignore]
+#[ignore = "ENG-238: positional arguments under optional or variadic options fail"]
 #[test]
 pub fn test_complete_last_arg_after_variadic_option() {
     let registry = create_test_command_registry([ls_signature()]);
@@ -1180,7 +1180,7 @@ pub fn test_complete_last_arg_after_variadic_option() {
 /// TODO: we should fix these failing tests. These tests are currently failing
 /// because we don't have a way of computing the positional index correctly
 /// when nesting arguments under options.
-#[ignore]
+#[ignore = "ENG-238: positional arguments under optional or variadic options fail"]
 #[test]
 pub fn test_completions_after_arguments_under_option() {
     let registry = create_test_command_registry([test_signature()]);
@@ -1206,7 +1206,7 @@ pub fn test_completions_after_arguments_under_option() {
 }
 
 /// This suffers from the same problem above.
-#[ignore]
+#[ignore = "ENG-238: positional arguments under optional or variadic options fail"]
 #[test]
 pub fn test_required_and_optional_args_for_option() {
     let registry = create_test_command_registry([test_signature()]);

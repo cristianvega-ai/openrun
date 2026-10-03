@@ -2,7 +2,9 @@ use std::collections::{HashMap, VecDeque};
 use std::convert::TryInto;
 use std::ffi::OsString;
 use std::path::{Path, PathBuf};
+use std::sync::mpsc::RecvTimeoutError;
 use std::sync::{Arc, Once};
+use std::time::{Duration, Instant};
 use std::{fs, thread};
 
 use anyhow::{Context, Result, anyhow};
@@ -20,6 +22,7 @@ use lsp::supported_servers::LSPServerType;
 use num_traits::FromPrimitive;
 use pathfinder_geometry::rect::RectF;
 use pathfinder_geometry::vector::Vector2F;
+use uuid::Uuid;
 use warp_errors::report_error;
 use warpui::platform::FullscreenState;
 use warpui::windowing::{MIN_WINDOW_HEIGHT, MIN_WINDOW_WIDTH};
@@ -31,9 +34,9 @@ use super::model::{
     WorkspaceMetadata as WorkspaceMetadataModel,
 };
 use super::{
-    BlockCompleted, FinishedCommandMetadata, HistoryPersistence, ModelEvent, PersistedData,
-    PersistedDataScope, PersistenceScope, SavedHistoryDeleted, StartedCommandMetadata,
-    WriterHandles, schema,
+    BlockCompleted, FinishedCommandMetadata, HistoryPersistence, HistoryScrub, ModelEvent,
+    PersistedData, PersistedDataScope, PersistenceScope, SavedHistoryDeleted, ScrubBlocker,
+    StartedCommandMetadata, WriterHandles, schema,
 };
 use crate::app_state::{
     AppState, BranchSnapshot, CodePaneSnapShot, CodePaneTabSnapshot, CodeReviewPaneSnapshot,
@@ -81,6 +84,9 @@ pub fn initialize(
     let database_path = database_file_path_for_scope(&scope);
     match init_db(&scope) {
         Ok(mut conn) => {
+            // Finish a deletion that an earlier run could not scrub, before anything reads the
+            // database. If another program still holds it open, the writer thread keeps trying.
+            finish_pending_scrub(&mut conn, &ScrubPolicy::STARTUP);
             let persisted_data = read_persisted_data(&mut conn, data_scope);
 
             let writer_handles = match start_writer(conn, database_path.clone(), history) {
@@ -337,39 +343,91 @@ fn start_writer(
     database_path: PathBuf,
     history: HistoryPersistence,
 ) -> Result<WriterHandles> {
+    start_writer_with_scrub_retry(conn, database_path, history, SCRUB_RETRY_INTERVAL)
+}
+
+/// Starts the writer thread. While a scrub of deleted history is owed (see
+/// [`finish_pending_scrub`]), the thread tries to finish it every `scrub_retry_interval`, and one
+/// last time when it is told to stop.
+fn start_writer_with_scrub_retry(
+    conn: SqliteConnection,
+    database_path: PathBuf,
+    history: HistoryPersistence,
+    scrub_retry_interval: Duration,
+) -> Result<WriterHandles> {
     let (tx, rx) = std::sync::mpsc::sync_channel(CHANNEL_SIZE);
     let mut current_conn = conn;
     let handle = thread::Builder::new()
         .name("SQLite Writer".into())
         .spawn(move || {
+            let mut scrub_pending = scrub_is_pending(&mut current_conn);
+            let mut next_scrub = Instant::now() + scrub_retry_interval;
             loop {
-                let events = match rx.recv() {
-                    Ok(event) => {
-                        // Wait for there to be at least one event, but collect any other pending
-                        // events too. This way, we can start dropping redundant events if the
-                        // writer thread is falling behind.
-                        let mut events = vec![event];
-                        events.extend(rx.try_iter());
-                        deduplicate_events(events)
+                if scrub_pending && Instant::now() >= next_scrub {
+                    scrub_pending =
+                        !finish_pending_scrub(&mut current_conn, &ScrubPolicy::BACKGROUND);
+                    next_scrub = Instant::now() + scrub_retry_interval;
+                }
+                let first = if scrub_pending {
+                    match rx.recv_timeout(next_scrub.saturating_duration_since(Instant::now())) {
+                        Ok(event) => Some(event),
+                        Err(RecvTimeoutError::Timeout) => None,
+                        Err(RecvTimeoutError::Disconnected) => {
+                            log::warn!(
+                                "SQLite event sender has closed; terminating SQLite writer thread."
+                            );
+                            finish_pending_scrub(&mut current_conn, &ScrubPolicy::BACKGROUND);
+                            break;
+                        }
                     }
-                    Err(_) => {
-                        log::warn!(
-                            "SQLite event sender has closed; terminating SQLite writer thread."
-                        );
-                        break;
+                } else {
+                    match rx.recv() {
+                        Ok(event) => Some(event),
+                        Err(_) => {
+                            log::warn!(
+                                "SQLite event sender has closed; terminating SQLite writer thread."
+                            );
+                            break;
+                        }
                     }
                 };
+                let Some(first) = first else {
+                    continue;
+                };
+                // Wait for there to be at least one event, but collect any other pending
+                // events too. This way, we can start dropping redundant events if the
+                // writer thread is falling behind.
+                let mut events = vec![first];
+                events.extend(rx.try_iter().take(CHANNEL_SIZE));
+                let events = deduplicate_events(events);
 
                 for event in events {
+                    if scrub_pending && Instant::now() >= next_scrub {
+                        scrub_pending =
+                            !finish_pending_scrub(&mut current_conn, &ScrubPolicy::BACKGROUND);
+                        next_scrub = Instant::now() + scrub_retry_interval;
+                    }
                     match event {
                         ModelEvent::Terminate => {
                             log::info!("Shutting down SQLite writer thread");
+                            if scrub_pending {
+                                finish_pending_scrub(&mut current_conn, &ScrubPolicy::BACKGROUND);
+                            }
                             return;
                         }
                         event => {
+                            let deletes_history =
+                                matches!(event, ModelEvent::DeleteSavedHistory { .. });
                             if let Err(err) = handle_model_event(event, &mut current_conn, &history)
                             {
                                 report_db_error("Model", err, &database_path);
+                            }
+                            if deletes_history {
+                                let was_pending = scrub_pending;
+                                scrub_pending = scrub_is_pending(&mut current_conn);
+                                if scrub_pending && !was_pending {
+                                    next_scrub = Instant::now() + scrub_retry_interval;
+                                }
                             }
                         }
                     }
@@ -407,7 +465,7 @@ fn handle_model_event(
             Ok(())
         }
         ModelEvent::DeleteSavedHistory { done } => {
-            let result = delete_saved_history(connection);
+            let result = delete_saved_history(connection, &ScrubPolicy::INTERACTIVE);
             let outcome = match &result {
                 Ok(deleted) => Ok(*deleted),
                 Err(err) => Err(format!("{err:#}")),
@@ -1562,25 +1620,286 @@ impl From<StartedCommandMetadata> for model::NewCommand {
     }
 }
 
-/// Deletes every saved command and every saved block, then compacts the database so the deleted
-/// text is not left behind in free pages or the write-ahead log.
-///
-/// Neither table is referenced by a foreign key, so the rows can be removed directly; the pane
-/// layout tables that session restoration uses are not touched.
-fn delete_saved_history(conn: &mut SqliteConnection) -> Result<SavedHistoryDeleted, Error> {
-    // Overwrite deleted content with zeroes instead of leaving it in free pages.
-    conn.batch_execute("PRAGMA secure_delete = ON;")?;
-    let deleted = conn.transaction::<SavedHistoryDeleted, Error, _>(|conn| {
-        let commands = diesel::delete(schema::commands::dsl::commands).execute(conn)?;
-        let blocks = diesel::delete(schema::blocks::dsl::blocks).execute(conn)?;
-        Ok(SavedHistoryDeleted { commands, blocks })
+/// How long, and how often, the compaction of a deleted history is retried while another
+/// connection keeps SQLite from merging and truncating the write-ahead log.
+#[derive(Clone, Copy, Debug)]
+struct ScrubPolicy {
+    /// Tries before giving up for now. Each try can itself wait up to the connection's
+    /// `busy_timeout` inside SQLite.
+    attempts: u32,
+    first_delay: Duration,
+    max_delay: Duration,
+}
+
+impl ScrubPolicy {
+    /// The user is waiting for the result of "Delete saved history".
+    const INTERACTIVE: Self = Self {
+        attempts: 3,
+        first_delay: Duration::from_millis(200),
+        max_delay: Duration::from_secs(1),
+    };
+    /// A scrub left over from an earlier run, before the first window opens.
+    const STARTUP: Self = Self {
+        attempts: 2,
+        first_delay: Duration::from_millis(100),
+        max_delay: Duration::from_millis(250),
+    };
+    /// The periodic retry while the app runs, and the last try when it quits.
+    const BACKGROUND: Self = Self {
+        attempts: 2,
+        first_delay: Duration::from_millis(250),
+        max_delay: Duration::from_secs(1),
+    };
+
+    fn delay_before_retry(&self, failed_attempts: u32) -> Duration {
+        self.first_delay
+            .saturating_mul(1 << failed_attempts.min(16))
+            .min(self.max_delay)
+    }
+}
+
+/// How often the writer thread retries a scrub that could not finish, while the app runs.
+const SCRUB_RETRY_INTERVAL: Duration = Duration::from_secs(30);
+
+/// The row `PRAGMA wal_checkpoint` returns. `batch_execute` throws it away, and it is the only
+/// place SQLite says that a checkpoint was blocked by another connection: the statement itself
+/// succeeds.
+#[derive(diesel::QueryableByName, Debug, PartialEq, Eq)]
+struct CheckpointRow {
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    busy: i32,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    log: i32,
+    #[diesel(sql_type = diesel::sql_types::Integer)]
+    checkpointed: i32,
+}
+
+/// Whether a checkpoint row says the whole write-ahead log was merged into the database file.
+fn checkpoint_finished(rows: &[CheckpointRow]) -> Result<(), ScrubBlocker> {
+    match rows {
+        // Every frame of the log is back in the database file. Without a write-ahead log (not in
+        // WAL mode) SQLite answers (0, -1, -1), which is also nothing left to merge.
+        [
+            CheckpointRow {
+                busy: 0,
+                log: 0,
+                checkpointed: 0,
+            }
+            | CheckpointRow {
+                busy: 0,
+                log: -1,
+                checkpointed: -1,
+            },
+        ] => Ok(()),
+        [row]
+            if row.busy == 1
+                || (row.busy == 0
+                    && row.log >= 0
+                    && row.checkpointed >= 0
+                    && row.checkpointed <= row.log) =>
+        {
+            Err(ScrubBlocker::InUse)
+        }
+        _ => Err(ScrubBlocker::Failed),
+    }
+}
+
+fn blocker_for(err: &Error) -> ScrubBlocker {
+    if is_lock_error(err) {
+        ScrubBlocker::DatabaseLocked
+    } else {
+        ScrubBlocker::Failed
+    }
+}
+
+/// Whether SQLite refused because another connection holds a lock (`SQLITE_BUSY`/`SQLITE_LOCKED`).
+fn is_lock_error(err: &Error) -> bool {
+    match err {
+        Error::DatabaseError(_, info) => {
+            let message = info.message().to_ascii_lowercase();
+            message.contains("locked") || message.contains("busy")
+        }
+        _ => false,
+    }
+}
+
+/// Merges the write-ahead log into the database file and truncates it, and reports whether SQLite
+/// really did.
+fn truncate_checkpoint(conn: &mut SqliteConnection) -> Result<(), ScrubBlocker> {
+    let rows: Vec<CheckpointRow> = diesel::sql_query("PRAGMA wal_checkpoint(TRUNCATE)")
+        .load(conn)
+        .map_err(|err| {
+            log::warn!("wal_checkpoint(TRUNCATE) failed: {err}");
+            blocker_for(&err)
+        })?;
+    checkpoint_finished(&rows).inspect_err(|_| {
+        log::info!("wal_checkpoint(TRUNCATE) was not complete: {rows:?}");
+    })
+}
+
+/// One try at compaction: merge the log, rebuild the database without the free pages, and merge
+/// the rebuilt pages. The `VACUUM` is skipped when the first merge is blocked, because rebuilding
+/// the database then only adds a second copy of it to the log.
+fn compact_once(conn: &mut SqliteConnection) -> Result<(), ScrubBlocker> {
+    truncate_checkpoint(conn)?;
+    conn.batch_execute("VACUUM;").map_err(|err| {
+        log::warn!("VACUUM failed: {err}");
+        blocker_for(&err)
     })?;
-    // Rewrite the database file without the free pages, then drop the write-ahead log, which can
-    // still hold the old page images.
-    conn.batch_execute("PRAGMA wal_checkpoint(TRUNCATE);")?;
-    conn.batch_execute("VACUUM;")?;
-    conn.batch_execute("PRAGMA wal_checkpoint(TRUNCATE);")?;
-    Ok(deleted)
+    truncate_checkpoint(conn)
+}
+
+/// Retries [`compact_once`] with a bounded backoff while the blocker is another connection that
+/// may go away. Nothing but a successful, fully merged checkpoint counts as done.
+fn compact_with_retries(
+    conn: &mut SqliteConnection,
+    policy: &ScrubPolicy,
+) -> Result<(), ScrubBlocker> {
+    let mut last = ScrubBlocker::Failed;
+    for attempt in 0..policy.attempts.max(1) {
+        match compact_once(conn) {
+            Ok(()) => return Ok(()),
+            Err(blocker @ (ScrubBlocker::InUse | ScrubBlocker::DatabaseLocked)) => {
+                last = blocker;
+                if attempt + 1 < policy.attempts {
+                    thread::sleep(policy.delay_before_retry(attempt));
+                }
+            }
+            Err(other) => return Err(other),
+        }
+    }
+    Err(last)
+}
+
+#[derive(diesel::QueryableByName)]
+struct ScrubGeneration {
+    #[diesel(sql_type = diesel::sql_types::Text)]
+    generation: String,
+}
+
+fn pending_scrub_generation(conn: &mut SqliteConnection) -> Result<Option<String>, Error> {
+    diesel::sql_query("SELECT generation FROM history_scrub_pending WHERE id = 1")
+        .get_result::<ScrubGeneration>(conn)
+        .optional()
+        .map(|row| row.map(|row| row.generation))
+}
+
+fn complete_scrub_generation(
+    conn: &mut SqliteConnection,
+    generation: &str,
+) -> Result<(), ScrubBlocker> {
+    diesel::sql_query("DELETE FROM history_scrub_pending WHERE id = 1 AND generation = ?")
+        .bind::<diesel::sql_types::Text, _>(generation)
+        .execute(conn)
+        .map_err(|err| blocker_for(&err))?;
+    // A concurrent deletion may owe a newer compaction. Never clear its generation.
+    match pending_scrub_generation(conn).map_err(|err| blocker_for(&err))? {
+        None => Ok(()),
+        Some(_) => Err(ScrubBlocker::InUse),
+    }
+}
+
+fn enable_secure_delete(conn: &mut SqliteConnection) -> anyhow::Result<()> {
+    #[derive(diesel::QueryableByName)]
+    struct SecureDelete {
+        #[diesel(sql_type = diesel::sql_types::Integer)]
+        secure_delete: i32,
+    }
+    let row = diesel::sql_query("PRAGMA secure_delete = ON").get_result::<SecureDelete>(conn)?;
+    anyhow::ensure!(
+        row.secure_delete == 1,
+        "SQLite did not enable secure_delete; nothing was deleted"
+    );
+    Ok(())
+}
+
+/// Deletes saved history and records the pending compaction in the same transaction. Checked
+/// TRUNCATE checkpoints surround VACUUM; a busy result leaves cleanup queued for a later retry.
+/// This reports SQLite compaction, not a forensic erasure guarantee for the filesystem or backups.
+fn delete_saved_history(
+    conn: &mut SqliteConnection,
+    policy: &ScrubPolicy,
+) -> anyhow::Result<SavedHistoryDeleted> {
+    enable_secure_delete(conn)?;
+    let generation = Uuid::new_v4().to_string();
+    let (commands, blocks) = delete_rows_with_retries(conn, policy, &generation)?;
+    let scrub = match compact_with_retries(conn, policy)
+        .and_then(|()| complete_scrub_generation(conn, &generation))
+    {
+        Ok(()) => HistoryScrub::Complete,
+        Err(blocker) => {
+            log::warn!("deleted history database compaction is pending: {blocker:?}");
+            HistoryScrub::Incomplete(blocker)
+        }
+    };
+    Ok(SavedHistoryDeleted {
+        commands,
+        blocks,
+        scrub,
+    })
+}
+
+/// Deletes the rows, retrying while another connection holds the write lock.
+fn delete_rows_with_retries(
+    conn: &mut SqliteConnection,
+    policy: &ScrubPolicy,
+    generation: &str,
+) -> anyhow::Result<(usize, usize)> {
+    let mut attempt = 0;
+    loop {
+        let result = conn.transaction::<(usize, usize), Error, _>(|conn| {
+            diesel::sql_query("INSERT INTO history_scrub_pending (id, generation) VALUES (1, ?) ON CONFLICT(id) DO UPDATE SET generation = excluded.generation")
+                .bind::<diesel::sql_types::Text, _>(generation)
+                .execute(conn)?;
+            let commands = diesel::delete(schema::commands::dsl::commands).execute(conn)?;
+            let blocks = diesel::delete(schema::blocks::dsl::blocks).execute(conn)?;
+            Ok((commands, blocks))
+        });
+        match result {
+            Ok(counts) => return Ok(counts),
+            Err(err) if is_lock_error(&err) && attempt + 1 < policy.attempts => {
+                thread::sleep(policy.delay_before_retry(attempt));
+                attempt += 1;
+            }
+            Err(err) if is_lock_error(&err) => {
+                return Err(anyhow::Error::from(err).context(
+                    "another program is writing to the database; nothing was deleted, try again",
+                ));
+            }
+            Err(err) => return Err(err.into()),
+        }
+    }
+}
+
+fn scrub_is_pending(conn: &mut SqliteConnection) -> bool {
+    match pending_scrub_generation(conn) {
+        Ok(generation) => generation.is_some(),
+        Err(err) => {
+            log::warn!("could not read pending history compaction: {err}");
+            true
+        }
+    }
+}
+
+/// Retries the pending compaction without deleting history saved since the original request.
+fn finish_pending_scrub(conn: &mut SqliteConnection, policy: &ScrubPolicy) -> bool {
+    let generation = match pending_scrub_generation(conn) {
+        Ok(Some(generation)) => generation,
+        Ok(None) => return true,
+        Err(err) => {
+            log::warn!("could not read pending history compaction: {err}");
+            return false;
+        }
+    };
+    match compact_with_retries(conn, policy)
+        .and_then(|()| complete_scrub_generation(conn, &generation))
+    {
+        Ok(()) => true,
+        Err(blocker) => {
+            log::info!("deleted history database compaction is still pending: {blocker:?}");
+            false
+        }
+    }
 }
 
 fn insert_command(

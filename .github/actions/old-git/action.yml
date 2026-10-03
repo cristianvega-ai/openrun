@@ -1,0 +1,55 @@
+name: Older git builds
+description: >-
+  Builds the git versions that the completion tests need besides the runner's own (the oldest the
+  completion gate accepts, two that ignore GIT_NO_LAZY_FETCH, and one patched backport) from the
+  official source tarballs, caches the builds, and sets OPENRUN_TEST_GIT to their install
+  prefixes. The tests fail with exit 86 unless the required versions are present.
+
+runs:
+  using: composite
+  steps:
+    - name: Name the cache
+      id: name
+      shell: bash
+      run: echo "key=old-git-v1-$RUNNER_OS-$RUNNER_ARCH-${ImageVersion:-unknown}" >> "$GITHUB_OUTPUT"
+
+    - name: Restore the builds
+      id: cache
+      uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v5.0.5
+      with:
+        path: ~/old-git
+        key: ${{ steps.name.outputs.key }}
+
+    # SHA-256 of each tarball as listed in https://www.kernel.org/pub/software/scm/git/sha256sums.asc
+    # (the list is signed by the git maintainer).
+    - name: Build git 2.31.0, 2.43.0, 2.44.0 and 2.43.4
+      if: ${{ steps.cache.outputs.cache-hit != 'true' }}
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p "$HOME/old-git" "$RUNNER_TEMP/old-git-src"
+        cd "$RUNNER_TEMP/old-git-src"
+        while read -r version sha; do
+          curl -fsSL --retry 3 -o "git-$version.tar.xz" "https://mirrors.edge.kernel.org/pub/software/scm/git/git-$version.tar.xz"
+          echo "$sha  git-$version.tar.xz" | shasum -a 256 -c -
+          tar xf "git-$version.tar.xz"
+          make -C "git-$version" -j"$(sysctl -n hw.ncpu)" prefix="$HOME/old-git/$version" \
+            NO_GETTEXT=1 NO_OPENSSL=1 NO_EXPAT=1 NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 NO_CURL=1 \
+            CFLAGS="-O1 -Wno-error" install > "build-$version.log" 2>&1 || { tail -40 "build-$version.log"; exit 1; }
+        done <<'VERSIONS'
+        2.31.0 e8f162cbdb3283e13cd7388d864ed23485f1b046a19e969f12ed2685fb789a40
+        2.43.0 5446603e73d911781d259e565750dcd277a42836c8e392cac91cf137aa9b76ec
+        2.44.0 e358738dcb5b5ea340ce900a0015c03ae86e804e7ff64e47aa4631ddee681de3
+        2.43.4 6b7aadda1787f0c1eaa257c1df56bb12e43d12bce55cfe7e5ade00228ee3d886
+        VERSIONS
+
+    - name: List the builds for the tests
+      shell: bash
+      run: |
+        set -euo pipefail
+        list=""
+        for version in 2.31.0 2.43.0 2.44.0 2.43.4; do
+          "$HOME/old-git/$version/bin/git" --version
+          list="$list${list:+:}$HOME/old-git/$version"
+        done
+        echo "OPENRUN_TEST_GIT=$list" >> "$GITHUB_ENV"

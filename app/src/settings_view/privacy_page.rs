@@ -37,7 +37,7 @@ use super::{SettingsAction, SettingsSection, ToggleSettingActionPair, flags};
 use crate::GlobalResourceHandlesProvider;
 use crate::appearance::Appearance;
 use crate::modal::{Modal, ModalEvent, ModalViewState};
-use crate::persistence::{ModelEvent, SavedHistoryDeleted};
+use crate::persistence::{HistoryScrub, ModelEvent, SavedHistoryDeleted, ScrubBlocker};
 use crate::settings::{CustomSecretRegex, HistorySettings, PrivacySettings, RegexDisplayInfo};
 use crate::settings_view::privacy::AddRegexModalViewState;
 use crate::terminal::History;
@@ -70,6 +70,51 @@ const USER_SECRET_REGEX_TITLE: &str = "Custom secret redaction";
 const USER_SECRET_REGEX_DESCRIPTION: &str = "Use regex to define additional secrets or data you'd like to redact. This will take effect \
     when the next command runs. You can use the inline (?i) flag as a prefix to your regex \
     to make it case-insensitive.";
+
+/// What the user is told when "Delete saved history" finishes. The three cases are different
+/// facts: history is deleted and SQLite compaction finished, compaction remains pending, or
+/// nothing was deleted.
+#[derive(Debug, PartialEq, Eq)]
+enum DeleteHistoryNotice {
+    /// Deleted and SQLite compaction finished.
+    Compacted(String),
+    /// Deleted and no longer loaded, but old text may remain in the database files for now.
+    CompactionPending(String),
+    /// Nothing was deleted.
+    Failed(String),
+}
+
+fn delete_history_notice(result: &Result<SavedHistoryDeleted, String>) -> DeleteHistoryNotice {
+    let deleted = match result {
+        Ok(deleted) => deleted,
+        Err(error) => {
+            return DeleteHistoryNotice::Failed(format!("Could not delete saved history: {error}"));
+        }
+    };
+    let counts = format!(
+        "Deleted {} saved commands and {} saved blocks.",
+        deleted.commands, deleted.blocks
+    );
+    match deleted.scrub {
+        HistoryScrub::Complete => {
+            DeleteHistoryNotice::Compacted(format!("{counts} Database compaction completed."))
+        }
+        HistoryScrub::Incomplete(blocker) => {
+            let why = match blocker {
+                ScrubBlocker::InUse => {
+                    "another program or OpenRun window still has the database open"
+                }
+                ScrubBlocker::DatabaseLocked => "another program was writing to the database",
+                ScrubBlocker::Failed => "the cleanup hit a database error (see the log)",
+            };
+            DeleteHistoryNotice::CompactionPending(format!(
+                "{counts} They will not load again, but their text may still be in OpenRun's \
+                 database files, because {why}. OpenRun keeps trying while it runs and tries \
+                 again when it next starts."
+            ))
+        }
+    }
+}
 
 pub struct PrivacyPageView {
     page: PageType<Self>,
@@ -335,9 +380,15 @@ impl PrivacyPageView {
             return;
         }
         let window_id = ctx.window_id();
-        let show_toast = move |toast: DismissibleToast<WorkspaceAction>, ctx: &mut AppContext| {
+        let show_toast = move |toast: DismissibleToast<WorkspaceAction>,
+                               persistent: bool,
+                               ctx: &mut AppContext| {
             ToastStack::handle(ctx).update(ctx, |toast_stack, ctx| {
-                toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+                if persistent {
+                    toast_stack.add_persistent_toast(toast, window_id, ctx);
+                } else {
+                    toast_stack.add_ephemeral_toast(toast, window_id, ctx);
+                }
             });
         };
 
@@ -350,6 +401,7 @@ impl PrivacyPageView {
                 DismissibleToast::error(
                     "OpenRun has no local history database to delete from.".to_string(),
                 ),
+                false,
                 ctx,
             );
             return;
@@ -369,27 +421,26 @@ impl PrivacyPageView {
             },
             move |view, result: Result<SavedHistoryDeleted, String>, ctx| {
                 view.delete_history_in_progress = false;
-                match result {
-                    Ok(deleted) => {
-                        History::handle(ctx).update(ctx, |history, _| {
-                            history.clear_persisted_commands();
-                        });
-                        show_toast(
-                            DismissibleToast::success(format!(
-                                "Deleted {} saved commands and {} saved blocks.",
-                                deleted.commands, deleted.blocks
-                            )),
-                            ctx,
-                        );
+                if let Err(error) = &result {
+                    log::warn!("Failed to delete saved history: {error}");
+                }
+                if result.is_ok() {
+                    // The rows are gone from the database whether or not the files are scrubbed,
+                    // so the in-memory copy of the saved commands goes either way.
+                    History::handle(ctx).update(ctx, |history, _| {
+                        history.clear_persisted_commands();
+                    });
+                }
+                match delete_history_notice(&result) {
+                    DeleteHistoryNotice::Compacted(text) => {
+                        show_toast(DismissibleToast::success(text), false, ctx);
                     }
-                    Err(error) => {
-                        log::warn!("Failed to delete saved history: {error}");
-                        show_toast(
-                            DismissibleToast::error(format!(
-                                "Could not delete saved history: {error}"
-                            )),
-                            ctx,
-                        );
+                    // Stays until dismissed: it says that something is still owed.
+                    DeleteHistoryNotice::CompactionPending(text) => {
+                        show_toast(DismissibleToast::default(text), true, ctx);
+                    }
+                    DeleteHistoryNotice::Failed(text) => {
+                        show_toast(DismissibleToast::error(text), false, ctx);
                     }
                 }
                 ctx.notify();

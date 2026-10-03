@@ -7,7 +7,7 @@
 use super::integration_tests;
 
 integration_tests! {
-    #[ignore = "Idles for two minutes; the CI idle job runs it in a network sandbox"]
+    #[ignore = "ENG-227: Idles for two minutes; the CI idle job runs it in a network sandbox"]
     test_idle_session,
     test_add_many_sessions,
     test_ctrl_tab_session_switching,
@@ -30,10 +30,10 @@ integration_tests! {
     test_open_and_close_settings,
     test_scroll_to_hidden_block_and_open_context_menu_with_keybinding,
     test_block_navigation,
-    #[ignore]
+    #[ignore = "ENG-194: waterfall input selection or execution flakes on CI"]
     test_waterfall_input_text_selection,
     test_waterfall_input_scrolling,
-    #[ignore = "Flakes in CI"]
+    #[ignore = "ENG-194: waterfall input selection or execution flakes on CI"]
     test_waterfall_input_after_command_execution,
     test_waterfall_input_alt_grid,
     test_undo_redo,
@@ -55,7 +55,7 @@ integration_tests! {
     test_restore_snapshot_with_markdown_file,
     test_restore_snapshot_with_settings_page,
     // TODO(kevin): figure out why the file name doesn't match.
-    #[ignore]
+    #[ignore = "ENG-107: restored code file name does not match the expected path"]
     test_restore_snapshot_with_code_file,
     test_multi_block_selections,
     test_input_focused_after_executing_command,
@@ -66,10 +66,10 @@ integration_tests! {
     test_session_navigation_recency_change_tab,
     test_session_navigation_recency_navigate_to_tab,
     // Temporarily disable while we investigate why this test is failing on CI.
-    #[ignore]
+    #[ignore = "ENG-171: window activation or bootstrap timing is flaky on CI"]
     test_session_navigation_recency_click_on_window,
     // TODO: Figure out why it is flakey.
-    #[ignore]
+    #[ignore = "ENG-171: window activation or bootstrap timing is flaky on CI"]
     test_session_navigation_recency_navigate_to_window,
     test_block_based_snackbar_scroll_to_top,
     test_block_based_snackbar_small_window,
@@ -82,11 +82,11 @@ integration_tests! {
     test_accepting_completion_inserts_space,
     test_palette_opens_when_theme_chooser_is_open,
     test_launch_warp_with_theme_in_warp_config,
-    #[ignore = "Flakes in CI"]
+    #[ignore = "ENG-171: Flakes in CI"]
     test_add_launch_config_to_warp_config,
-    #[ignore = "Flakes in CI"]
+    #[ignore = "ENG-171: Flakes in CI"]
     test_add_workflows_to_warp_config,
-    #[ignore = "Flakes in CI"]
+    #[ignore = "ENG-171: Flakes in CI"]
     test_add_theme_to_warp_config,
     test_loading_project_workflows,
     test_completions_as_you_type,
@@ -145,7 +145,7 @@ integration_tests! {
     test_can_auto_bootstrap,
 
     // Disabled due to flakiness on CI.
-    #[ignore]
+    #[ignore = "ENG-171: window activation or bootstrap timing is flaky on CI"]
     test_create_session_with_split_pane_while_bootstrapping,
 
     test_tab_behavior_setting,
@@ -192,7 +192,7 @@ integration_tests! {
 
 
     // TODO(alokedesai): Fix this on the latest version of Bash.
-    #[ignore]
+    #[ignore = "ENG-107: history assertion fails with current bash versions"]
     test_up_arrow_history,
 
     test_block_filtering_keybinding,
@@ -262,7 +262,7 @@ integration_tests! {
     test_keyboard_protocol_alternate_keys_and_text,
 
     // Video recording test — requires real display, run manually
-    #[ignore = "Manual test: requires real display for frame capture"]
+    #[ignore = "ENG-171: Manual test: requires real display for frame capture"]
     test_video_recording,
 
     // Rich Input Ctrl+Enter submit toggle

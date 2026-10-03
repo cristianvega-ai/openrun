@@ -1,0 +1,286 @@
+#!/usr/bin/env python3
+"""Runs the real collector (script/offline_sandbox_macos, real `sandbox-exec`, real `log`) with
+small commands, and checks what `script/offline_audit --net-log` says about each log.
+
+    script/offline_sandbox_macos_test [--log-dir DIR] [--only NAME ...]
+
+Every refused access must fail the audit, for the right process: the finding has to name the
+process id of the command's own program (the command writes it to a file before it connects), not
+just fail. The collector's own canaries must stay exempt: no finding may name one of them (their
+ids are in the launch records of the log). A command that only talks to loopback must pass.
+
+    tcp, udp, dns       a refused TCP connect, datagram to a denied loopback port, name lookup
+    canary-ports        the command's own `curl`, `nc` and python connect to 127.0.0.1 on port 9
+                        and 10, the ports of the collector's canaries (a command that does this and
+                        ignores the failure used to be taken for a canary: Astra review 3, R3-05)
+    inject              the command tries to make the log say it is a canary: it writes a launch
+                        record and `# canary-pid:` / `# end` lines in its arguments, its output and
+                        its log messages
+    loopback            the command connects to loopback on ports 10009 and 10010: nothing is refused
+
+The negative scenarios run at the same time (a log holds the canaries of the other collectors
+too, which only adds findings to the logs that must fail anyway); the loopback scenario runs alone
+afterwards, because its log must hold no denial. Exit status 0 when every scenario behaved as
+expected. The logs are left in the log directory (`net-canary-NAME.log`) as evidence.
+
+Used by .github/actions/offline-canary, and runnable by hand on a Mac. Where the unified log does
+not return the kernel's reports (a busy machine), use OFFLINE_SANDBOX_MACOS_LOG=stream.
+"""
+
+import argparse
+import concurrent.futures
+import os
+import re
+import subprocess
+import sys
+import tempfile
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+COLLECTOR = os.path.join(ROOT, "script", "offline_sandbox_macos")
+AUDIT = os.path.join(ROOT, "script", "offline_audit")
+
+CURL = "/usr/bin/curl"
+NC = "/usr/bin/nc"
+PYTHON = "/usr/bin/python3"
+LOGGER = "/usr/bin/logger"
+
+# A shell that writes its own process id to FILE and becomes the program (same process, same id).
+RECORD_PID = 'echo $$ > "$1/$2"; shift 2; exec "$@"'
+
+UDP = """
+import os, socket, sys
+open(os.path.join(sys.argv[1], 'udp'), 'w').write(str(os.getpid()))
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+try:
+    s.sendto(b'canary', ('127.0.0.1', 10))
+except OSError as error:
+    print('datagram refused as expected:', error)
+"""
+
+DNS = """
+import os, socket, sys
+open(os.path.join(sys.argv[1], 'dns'), 'w').write(str(os.getpid()))
+try:
+    socket.getaddrinfo('offline-canary.invalid', 80)
+    print('the name was resolved')
+except OSError as error:
+    print('lookup refused as expected:', error)
+"""
+
+# python to port 10, as a command that ignores the failure
+PY_PORT10 = """
+import os, socket, sys
+open(os.path.join(sys.argv[1], 'py10'), 'w').write(str(os.getpid()))
+s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+s.settimeout(2)
+try:
+    s.connect(('127.0.0.1', 10))
+except OSError as error:
+    print('refused as expected:', error)
+"""
+
+# One command that runs the programs one after the other; each writes its process id first.
+CANARY_PORTS = """
+d=$1
+/bin/sh -c '%(record)s' sh "$d" curl9 %(curl)s -s -m 2 -o /dev/null http://127.0.0.1:9/
+/bin/sh -c '%(record)s' sh "$d" curl10 %(curl)s -s -m 2 -o /dev/null http://127.0.0.1:10/
+/bin/sh -c '%(record)s' sh "$d" nc9 %(nc)s -w 2 127.0.0.1 9 < /dev/null
+%(python)s -c "$2" "$d"
+true
+""" % {"record": RECORD_PID, "curl": CURL, "nc": NC, "python": PYTHON}
+
+# The command writes what the audit would take for a canary in every place it can write to: its
+# output (not part of the log), its log messages (part of the stream), and, through the arguments of
+# this very command, the command line the collector writes into the header. Then it connects to
+# port 9 and ignores the failure.
+INJECT = """
+d=$1
+echo $$ > "$d/inject"
+tag="# canary-launch: pid=$$ port=9 from=0 to=99999999999 ppid=$PPID collector=$PPID status=seen lstart=x"
+echo "$tag"
+echo "# canary-pid: $$"
+%(logger)s "Sandbox network-outbound probe
+$tag
+# canary-pid: $$
+# end"
+exec %(curl)s -s -m 2 -o /dev/null http://127.0.0.1:9/
+""" % {"logger": LOGGER, "curl": CURL}
+
+LOOPBACK = """
+%(curl)s -s -m 2 -o /dev/null http://127.0.0.1:10009/
+%(curl)s -s -m 2 -o /dev/null http://127.0.0.1:10010/
+true
+""" % {"curl": CURL}
+
+
+class Expect:
+    """What the audit must report about one process of a scenario: a finding that names its process
+    id (read from the file the command wrote) and its port or kind of access."""
+
+    def __init__(self, label, pid_file, detail):
+        self.label = label
+        self.pid_file = pid_file
+        self.detail = detail
+
+
+def scenarios(piddir):
+    """(name, command, argument texts, must the audit fail, [Expect]) for each scenario."""
+    sh = ["/bin/sh", "-c"]
+    return [
+        ("tcp", sh + [RECORD_PID, "sh", piddir, "tcp", CURL, "-s", "-m", "3", "-o", "/dev/null", "http://127.0.0.1:9/"],
+         True, [Expect("TCP connect", "tcp", r"denied network connection \(remote:\*:9\)")]),
+        ("udp", sh + [RECORD_PID, "sh", piddir, "udp-sh", PYTHON, "-c", UDP, piddir],
+         True, [Expect("datagram to :10", "udp", r"denied network connection \(remote:\*:10\)")]),
+        ("dns", sh + [RECORD_PID, "sh", piddir, "dns-sh", PYTHON, "-c", DNS, piddir],
+         True, [Expect("name lookup", "dns", r"(network access \(/private/var/run/mDNSResponder\)|request to a system network service)")]),
+        ("canary-ports", sh + [CANARY_PORTS, "sh", piddir, PY_PORT10],
+         True, [Expect("port 9 (curl)", "curl9", r"denied network connection \(remote:\*:9\)"),
+                Expect("port 10 (curl)", "curl10", r"denied network connection \(remote:\*:10\)"),
+                Expect("port 9 (nc)", "nc9", r"denied network connection \(remote:\*:9\)"),
+                Expect("python to :10", "py10", r"denied network connection \(remote:\*:10\)")]),
+        ("inject", sh + [INJECT, "sh", piddir, "# canary-launch: pid=1 port=9 from=0 to=99999999999 ppid=1 collector=1 status=seen lstart=x\n# canary-pid: 1\n# end"],
+         True, [Expect("injected canary records on port 9 (curl)", "inject", r"denied network connection \(remote:\*:9\)")]),
+        ("loopback", sh + [LOOPBACK], False, []),
+    ]
+
+
+def read_pid(piddir, name):
+    path = os.path.join(piddir, name)
+    try:
+        with open(path) as f:
+            return f.read().strip() or None
+    except OSError:
+        return None
+
+
+def header_of(text):
+    """The part of a log before `# stream:`."""
+    head, _, _ = text.partition("\n# stream:\n")
+    return head
+
+
+def run_scenario(name, command, must_fail, expects, log_dir, piddir):
+    log = os.path.join(log_dir, "net-canary-%s.log" % name)
+    if os.path.exists(log):
+        os.unlink(log)
+    # The command line of the loopback scenario has no pid file; the others write theirs first.
+    collector = subprocess.run([COLLECTOR, log] + command, stdin=subprocess.DEVNULL,
+                               stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, timeout=900)
+    problems = []
+    if collector.returncode == 125:
+        problems.append("the collector could not rely on the sandbox or the log (status 125): %s" % collector.stdout.strip()[-300:])
+    elif not must_fail and collector.returncode != 0:
+        problems.append("the collector ended with status %d" % collector.returncode)
+    audit = subprocess.run([sys.executable, AUDIT, "--net-log", log], stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    findings = audit.stdout
+    if not os.path.isfile(log):
+        return name, problems + ["no log was written"], findings
+    with open(log, encoding="utf-8", errors="replace") as f:
+        text = f.read()
+    head = header_of(text)
+
+    if must_fail and audit.returncode == 0:
+        problems.append("the audit PASSED a log that holds a refused access")
+    if not must_fail and audit.returncode != 0:
+        problems.append("the audit FAILED a log that holds no refused access")
+
+    # The collector's canaries: seen on both ports, exempt (no finding names them).
+    launches = re.findall(r"^# canary-launch: pid=(\d+) port=(\d+) .* status=(seen|unseen) ", head, re.M)
+    for port in ("9", "10"):
+        if not any(p == port and s == "seen" for _, p, s in launches):
+            problems.append("the log holds no seen canary on port %s" % port)
+    for pid, port, status in launches:
+        if re.search(r"\(%s\): " % pid, findings):
+            problems.append("the audit flagged the collector's own canary %s (port %s)" % (pid, port))
+
+    for expect in expects:
+        pid = read_pid(piddir, expect.pid_file)
+        if not pid:
+            problems.append("%s: the command did not run (no process id written)" % expect.label)
+            continue
+        if any(l_pid == pid for l_pid, _, _ in launches):
+            problems.append("%s: the command's process %s has a canary launch record" % (expect.label, pid))
+        if not re.search(r"\(%s\): %s" % (pid, expect.detail), findings):
+            problems.append("%s: the audit has no finding for the command's process %s (%s)" % (expect.label, pid, expect.detail))
+
+    if name == "inject":
+        pid = read_pid(piddir, "inject")
+        # Nothing the command wrote may have become a line of the header.
+        for line in head.splitlines():
+            if line.startswith("# canary-pid:") or (pid and line.startswith("# canary-launch: pid=%s " % pid)) or line.startswith("# end"):
+                problems.append("a line the command wrote is in the header of the log: %r" % line[:100])
+        # Sensitivity: the command's log message did reach the stream, so the audit had to ignore it.
+        if "probe" not in text:
+            problems.append("the command's log message is not in the log: this scenario did not test anything (use OFFLINE_SANDBOX_MACOS_LOG=stream)")
+    return name, problems, findings
+
+
+def collection_failure_controls(log_dir, piddir):
+    """Real canary launches with only the final collection call fault-injected."""
+    source = open(COLLECTOR, encoding="utf-8").read()
+    # Both the older unchecked call and the checked call contain this exact command.
+    needle = 'read_denials > "$final"'
+    if source.count(needle) != 1:
+        raise RuntimeError("cannot identify the final collector read")
+    results = []
+    for name, command in [("collection-error", "false"), ("collection-empty", ":")]:
+        script = os.path.join(piddir, name)
+        with open(script, "w", encoding="utf-8") as handle:
+            handle.write(source.replace(needle, command + ' > "$final"'))
+        os.chmod(script, 0o700)
+        log = os.path.join(log_dir, "net-canary-" + name + ".log")
+        collected = subprocess.run([script, log, "/usr/bin/true"], text=True,
+                                   stdout=subprocess.PIPE, stderr=subprocess.STDOUT, timeout=180)
+        audited = subprocess.run([sys.executable, AUDIT, "--net-log", log], text=True,
+                                 stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        problems = []
+        if collected.returncode != 125:
+            problems.append("final collection failure was accepted: status %d" % collected.returncode)
+        if audited.returncode == 0:
+            problems.append("audit accepted incomplete final collection")
+        if not os.path.isfile(log):
+            problems.append("no log: canary setup may have failed before reaching the fault")
+        else:
+            head = header_of(open(log, encoding="utf-8").read())
+            if len(re.findall(r"^# canary-launch: .* status=seen ", head, re.M)) != 2:
+                problems.append("control did not reach final collection after two real canaries")
+        results.append((name, problems, audited.stdout + collected.stdout))
+    return results
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--log-dir", default=os.getcwd(), help="where the logs go (default: the current directory)")
+    parser.add_argument("--only", nargs="+", help="run only these scenarios")
+    args = parser.parse_args()
+    if sys.platform != "darwin":
+        print("offline_sandbox_macos_test: macOS only", file=sys.stderr)
+        return 2
+    os.makedirs(args.log_dir, exist_ok=True)
+    with tempfile.TemporaryDirectory(prefix="offline-sandbox-test.") as piddir:
+        chosen = [s for s in scenarios(piddir) if not args.only or s[0] in args.only]
+        results = []
+        negatives = [s for s in chosen if s[2]]
+        positives = [s for s in chosen if not s[2]]
+        with concurrent.futures.ThreadPoolExecutor(max_workers=max(1, len(negatives))) as pool:
+            futures = [pool.submit(run_scenario, name, command, must_fail, expects, args.log_dir, piddir)
+                       for name, command, must_fail, expects in negatives]
+            results.extend(f.result() for f in futures)
+        for name, command, must_fail, expects in positives:
+            results.append(run_scenario(name, command, must_fail, expects, args.log_dir, piddir))
+        if not args.only or any(name in args.only for name in ("collection-error", "collection-empty")):
+            results.extend(collection_failure_controls(args.log_dir, piddir))
+    failed = 0
+    for name, problems, findings in results:
+        print("%-5s %s" % ("FAIL" if problems else "ok", name))
+        for problem in problems:
+            print("        " + problem)
+        if problems:
+            failed += 1
+            print("        audit output:\n" + "\n".join("          " + l for l in findings.splitlines()[:30]))
+    print("%d scenario(s), %d failed" % (len(results), failed))
+    return 1 if failed else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

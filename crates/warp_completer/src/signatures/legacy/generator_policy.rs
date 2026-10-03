@@ -21,43 +21,21 @@
 //! `completer::engine::argument::legacy`. Alias generators, which the completion engine runs to
 //! expand an alias the user typed, are the second place a command is executed
 //! (`CommandRegistry::signature_with_alias_expansion`); they follow the same rule through
-//! `CommandRegistry::allows_alias_generator` and `ALLOWED_ALIAS_GENERATORS`, which is empty.
+//! `CommandRegistry::allows_alias_generator` and `ALLOWED_ALIAS_GENERATORS`.
 //!
-//! `ALLOWED_WHEN_ISOLATED` lists the generators whose tool can reach a network or run repository
-//! code in the environment alone but was shown not to when the operating system denies the
-//! network to the command and the offline environment table is applied. They run only when the
-//! `GeneratorContext` reports `network_isolated()` (macOS local sessions).
+//! Every retained generator and alias command requires `Containment::NetworkIsolated`, before
+//! any version probe. Only the app's local executor supplies that context and applies the
+//! audited offline environment. SSH control-socket and in-band executors do not qualify.
 //!
-//! Generators that run `git` (every pair on `LOCAL_GIT_GENERATORS`, `git-flow`'s
-//! `type_branches`, and the `git/alias` alias generator) have a second condition: the session's
-//! git must be known to be at least `MINIMUM_GIT_VERSION` (2.31). The
-//! environment table protects them with `GIT_CONFIG_COUNT` overrides, which older git ignores.
-//! The engine asks `GeneratorContext::git_version` (the app probes `git --version` once per
-//! session) after the allow-list says yes; an unknown version counts as too old. See
-//! `CommandRegistry::generator_requires_supported_git`.
+//! Git reads and aliases additionally need the session's Git to be at least 2.31, because older
+//! Git ignores the `GIT_CONFIG_COUNT` overrides. The offline environment also supplies an empty
+//! `GIT_ALLOW_PROTOCOL`: no local, remote or custom transport may run during completion.
 //!
-//! An entry in `allowed.rs` records that someone read the command and the tool's behaviour. It
-//! is not a proof: only some tools were run against a canary (see `denied.rs` for which), and
-//! the rest of the allowed external CLIs are reviewed from their commands and documentation.
-//!
-//! # Classifying generators
-//!
-//! * `allowed.rs` lists the generators whose command reads only the local machine: files, the
-//!   repository, local daemons. If in doubt, deny.
-//! * `denied.rs` lists the generators that must not run, with a class. It is not consulted at
-//!   runtime; it lets the drift test tell a reviewed generator from an unclassified one.
-//! * The drift test (`generator_policy_tests.rs`) enumerates
-//!   `warp_command_signatures::dynamic_command_signature_data()` and fails, listing the pairs and
-//!   their commands, when a generator or alias generator is in neither file. Bumping the
-//!   `command-signatures` pin therefore forces a review. Put each new pair in exactly one of the
-//!   files, keeping both sorted.
-//! * The injection corpus in the same test file runs every allowed token-taking generator with
-//!   hostile tokens in real bash, zsh, sh, fish and PowerShell 7 (started as a local session
-//!   starts them: `fish --no-config -c`, `pwsh -NoProfile -c`) and fails if anything but the
-//!   generator's own command ran. fish and `pwsh` must be installed when `CI` is set; elsewhere
-//!   a missing one is skipped with a message.
-//! * Stripping the network generators from our future `command-signatures` fork (DEP-05) is the
-//!   follow-up; this allow-list stays as the guard in this repository.
+//! `AUDIT.md` records every formerly accepted generator's hostile real-tool evidence or deny
+//! decision. Missing required tools exit 86 and fail nextest. `generator_policy_tests.rs` checks
+//! classification drift, containment, version probing and typed-token injection with real shells.
+//! The two accepted lists retain their evidence categories (environment-reviewed and requiring
+//! both environment and OS isolation); neither is permission to run in an unproved context.
 
 mod allowed;
 #[cfg(test)]
@@ -76,8 +54,8 @@ use crate::completer::Containment;
 /// a command. `containment` says what the context guarantees about the command (see
 /// [`ALLOWED_WHEN_ISOLATED`]).
 ///
-/// [`ALLOWED_GENERATORS`] always run; [`ALLOWED_WHEN_ISOLATED`] only in a network-isolated
-/// context.
+/// Both accepted lists require a network-isolated local context; their evidence categories
+/// differ, not their runtime containment requirement.
 pub(super) fn is_generator_allowed(spec: &str, generator: &str, containment: Containment) -> bool {
     let listed = |list: &[(&str, &str)]| {
         list.binary_search_by(|(listed_spec, listed_generator)| {
@@ -85,10 +63,8 @@ pub(super) fn is_generator_allowed(spec: &str, generator: &str, containment: Con
         })
         .is_ok()
     };
-    if listed(ALLOWED_GENERATORS) {
-        return true;
-    }
-    containment == Containment::NetworkIsolated && listed(ALLOWED_WHEN_ISOLATED)
+    containment == Containment::NetworkIsolated
+        && (listed(ALLOWED_GENERATORS) || listed(ALLOWED_WHEN_ISOLATED))
 }
 
 /// Whether the generator named `generator` of the spec registered as `spec` (lowercase) runs
@@ -123,12 +99,17 @@ pub(super) fn generators_allowed_when_isolated() -> &'static [(&'static str, &'s
 
 /// Whether the alias generator named `alias` of the spec registered as `spec` (lowercase) may
 /// run a command.
-pub(super) fn is_alias_generator_allowed(spec: &str, alias: &str) -> bool {
-    ALLOWED_ALIAS_GENERATORS
-        .binary_search_by(|(allowed_spec, allowed_alias)| {
-            (*allowed_spec, *allowed_alias).cmp(&(spec, alias))
-        })
-        .is_ok()
+pub(super) fn is_alias_generator_allowed(
+    spec: &str,
+    alias: &str,
+    containment: Containment,
+) -> bool {
+    containment == Containment::NetworkIsolated
+        && ALLOWED_ALIAS_GENERATORS
+            .binary_search_by(|(allowed_spec, allowed_alias)| {
+                (*allowed_spec, *allowed_alias).cmp(&(spec, alias))
+            })
+            .is_ok()
 }
 
 #[cfg(test)]

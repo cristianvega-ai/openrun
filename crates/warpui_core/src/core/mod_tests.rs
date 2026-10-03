@@ -310,7 +310,7 @@ fn test_spawn_from_model() {
     });
 }
 
-#[ignore]
+#[ignore = "ENG-241: abortable task completion is flaky"]
 #[test]
 fn test_spawn_abortable_from_model() {
     #[derive(Debug, Default, PartialEq)]
@@ -1210,7 +1210,7 @@ fn test_spawn_stream_local_from_view() {
 }
 
 #[test]
-#[ignore]
+#[ignore = "ENG-241: stream task hangs after closing the view"]
 fn test_spawn_stream_local_from_view_await_after_closing_window() {
     #[derive(Default)]
     struct View {}

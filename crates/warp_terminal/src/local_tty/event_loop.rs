@@ -10,6 +10,7 @@ use std::marker::Send;
 use std::ops::DerefMut;
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
+use std::time::{Duration, Instant};
 
 use log::error;
 use mio::{self, Events, Interest};
@@ -19,7 +20,7 @@ use super::mio_channel::Receiver;
 use crate::event::ExitReason;
 use crate::event_listener::ChannelEventListener;
 use crate::local_tty;
-use crate::model::ansi;
+use crate::model::{BlockId, ansi};
 use crate::writeable_pty::Message;
 
 /// The size of the buffer to read data into from the PTY.
@@ -28,6 +29,9 @@ const READ_BUFFER_SIZE: usize = 0x4_0000;
 /// Max bytes to process from the PTY while holding the lock before giving
 /// someone else an opportunity to lock it.
 const MAX_LOCKED_READ: usize = 0x1_0000;
+
+const REPORTING_TIMEOUT: Duration = Duration::from_secs(2);
+const REPORTING_POLL_INTERVAL: Duration = Duration::from_millis(10);
 
 pub const CHANNEL_TOKEN: mio::Token = mio::Token(0);
 pub const PTY_TOKEN: mio::Token = mio::Token(1);
@@ -39,6 +43,10 @@ pub const SIGNALS_TOKEN: mio::Token = mio::Token(2);
 /// state.
 pub trait ActiveTerminal: ansi::Handler + Send {
     fn exit(&mut self, reason: ExitReason);
+
+    fn input_reporting_block(&self) -> Option<BlockId> {
+        None
+    }
 }
 
 pub struct EventLoop<P: local_tty::EventedPty, M: ActiveTerminal> {
@@ -59,6 +67,20 @@ pub struct EventLoop<P: local_tty::EventedPty, M: ActiveTerminal> {
 struct Writing {
     source: Cow<'static, [u8]>,
     written: usize,
+    reporting: Option<ReportingRequest>,
+}
+
+struct ReportingRequest {
+    block: BlockId,
+    deadline: Instant,
+    done: async_channel::Sender<bool>,
+}
+
+#[derive(Debug, PartialEq, Eq)]
+enum ReportingAction {
+    Write,
+    Wait,
+    Discard,
 }
 
 /// All of the mutable state needed to run the event loop.
@@ -66,9 +88,10 @@ struct Writing {
 /// Contains list of items to write, current write state, etc. Anything that
 /// would otherwise be mutated on the `EventLoop` goes here.
 pub struct State {
-    write_list: VecDeque<Cow<'static, [u8]>>,
+    write_list: VecDeque<Writing>,
     writing: Option<Writing>,
     parser: ansi::Processor,
+    reporting_retry_at: Option<Instant>,
 }
 
 impl Default for State {
@@ -77,11 +100,24 @@ impl Default for State {
             write_list: VecDeque::new(),
             parser: ansi::Processor::new(),
             writing: None,
+            reporting_retry_at: None,
         }
     }
 }
 
 impl State {
+    fn reporting_retry_due(&mut self) -> bool {
+        if self
+            .reporting_retry_at
+            .is_some_and(|at| Instant::now() >= at)
+        {
+            self.reporting_retry_at = None;
+            true
+        } else {
+            false
+        }
+    }
+
     #[inline]
     fn ensure_next(&mut self) {
         if self.writing.is_none() {
@@ -91,7 +127,7 @@ impl State {
 
     #[inline]
     fn goto_next(&mut self) {
-        self.writing = self.write_list.pop_front().map(Writing::new);
+        self.writing = self.write_list.pop_front();
     }
 
     #[inline]
@@ -116,6 +152,40 @@ impl Writing {
         Writing {
             source: c,
             written: 0,
+            reporting: None,
+        }
+    }
+
+    fn reporting(key: [u8; 2], block: BlockId, done: async_channel::Sender<bool>) -> Self {
+        let mut writing = Self::new(Cow::Owned(key.to_vec()));
+        writing.reporting = Some(ReportingRequest {
+            block,
+            deadline: Instant::now() + REPORTING_TIMEOUT,
+            done,
+        });
+        writing
+    }
+
+    fn reporting_action(
+        &self,
+        block: Option<BlockId>,
+        echo_enabled: io::Result<bool>,
+        now: Instant,
+    ) -> ReportingAction {
+        let Some(request) = &self.reporting else {
+            return ReportingAction::Write;
+        };
+        // Once ESC was written, finish the key even if the prompt or tty mode changed.
+        if self.written > 0 {
+            return ReportingAction::Write;
+        }
+        if block.as_ref() != Some(&request.block) || now >= request.deadline {
+            return ReportingAction::Discard;
+        }
+        if matches!(echo_enabled, Ok(false)) {
+            ReportingAction::Write
+        } else {
+            ReportingAction::Wait
         }
     }
 
@@ -167,7 +237,12 @@ where
     fn drain_recv_channel(&mut self, state: &mut State) -> ChannelResult {
         while let Ok(msg) = self.rx.try_recv() {
             match msg {
-                Message::Input(input) => state.write_list.push_back(input),
+                Message::Input(input) => state.write_list.push_back(Writing::new(input)),
+                Message::InputReportingKey { key, block, done } => {
+                    state
+                        .write_list
+                        .push_back(Writing::reporting(key, block, done));
+                }
                 Message::Shutdown => {
                     return ChannelResult::TerminateLoop {
                         child_exited: false,
@@ -259,7 +334,7 @@ where
             if !terminal_response_sequences.is_empty() {
                 state
                     .write_list
-                    .push_back(Cow::Owned(terminal_response_sequences));
+                    .push_back(Writing::new(Cow::Owned(terminal_response_sequences)));
             }
 
             bytes_processed += bytes_in_buffer;
@@ -288,6 +363,28 @@ where
         state.ensure_next();
 
         'write_many: while let Some(mut current) = state.take_current() {
+            let terminal =
+                (current.reporting.is_some() && current.written == 0).then(|| self.terminal.lock());
+            if let Some(terminal) = &terminal {
+                let now = Instant::now();
+                let block = terminal.input_reporting_block();
+                match current.reporting_action(block, self.pty.echo_enabled(), now) {
+                    ReportingAction::Write => {}
+                    ReportingAction::Discard => {
+                        if let Some(reporting) = current.reporting {
+                            let _ = reporting.done.try_send(false);
+                        }
+                        state.goto_next();
+                        continue;
+                    }
+                    ReportingAction::Wait => {
+                        state.reporting_retry_at = Some(now + REPORTING_POLL_INTERVAL);
+                        state.set_current(Some(current));
+                        *can_write = false;
+                        break;
+                    }
+                }
+            }
             'write_one: loop {
                 match self.pty.writer().write(current.remaining_bytes()) {
                     Ok(0) => {
@@ -301,6 +398,9 @@ where
                     Ok(n) => {
                         current.advance(n);
                         if current.finished() {
+                            if let Some(reporting) = current.reporting {
+                                let _ = reporting.done.try_send(true);
+                            }
                             state.goto_next();
                             break 'write_one;
                         }
@@ -370,8 +470,17 @@ where
 
                     // Wait for events, but only up to the remaining timeout for the synchronous output
                     // update (if any).
-                    let sync_state_timeout = state.parser.sync_output_remaining_timeout();
-                    if let Err(err) = self.poll.poll(&mut events, sync_state_timeout) {
+                    let now = Instant::now();
+                    let reporting_timeout = state
+                        .reporting_retry_at
+                        .map(|at| at.saturating_duration_since(now));
+                    let timeout = state
+                        .parser
+                        .sync_output_remaining_timeout()
+                        .into_iter()
+                        .chain(reporting_timeout)
+                        .min();
+                    if let Err(err) = self.poll.poll(&mut events, timeout) {
                         match err.kind() {
                             ErrorKind::Interrupted => continue,
                             _ => panic!("EventLoop polling error: {err:?}"),
@@ -379,7 +488,12 @@ where
                     }
 
                     // If there were no events but `poll` returned, that means we hit the timeout.
-                    if events.is_empty() {
+                    can_write |= state.reporting_retry_due();
+                    if state
+                        .parser
+                        .sync_output_remaining_timeout()
+                        .is_some_and(|left| left.is_zero())
+                    {
                         let mut terminal_response_sequences = Vec::new();
                         state.parser.finish_sync_output(
                             &mut *self.terminal.lock(),
@@ -388,7 +502,7 @@ where
                         if !terminal_response_sequences.is_empty() {
                             state
                                 .write_list
-                                .push_back(Cow::Owned(terminal_response_sequences));
+                                .push_back(Writing::new(Cow::Owned(terminal_response_sequences)));
                         }
                     }
 
@@ -448,6 +562,12 @@ where
                     // or new data to write), go back to the start of the event
                     // loop.
                     while can_read || (state.needs_write() && can_write) {
+                        if matches!(
+                            self.drain_recv_channel(&mut state),
+                            ChannelResult::TerminateLoop { .. }
+                        ) {
+                            break 'event_loop;
+                        }
                         if can_read {
                             match self.pty_read(&mut state, &mut buf, &mut can_read) {
                                 Ok(_) => {}
@@ -464,6 +584,7 @@ where
                             }
                         }
 
+                        can_write |= state.reporting_retry_due();
                         if state.needs_write()
                             && can_write
                             && let Err(err) = self.pty_write(&mut state, &mut can_write)
@@ -491,3 +612,7 @@ where
             .expect("thread spawn works")
     }
 }
+
+#[cfg(test)]
+#[path = "event_loop_tests.rs"]
+mod tests;

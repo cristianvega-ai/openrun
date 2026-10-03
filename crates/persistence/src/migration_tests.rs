@@ -432,6 +432,13 @@ fn migration_runs_on_an_empty_database_and_can_be_reverted_and_rerun() {
         assert!(!tables(&mut conn).iter().any(|t| t == dropped));
     }
 
+    while tables(&mut conn)
+        .iter()
+        .any(|table| table == "history_scrub_pending")
+    {
+        conn.revert_last_migration(MIGRATIONS)
+            .expect("later migration should revert");
+    }
     conn.revert_last_migration(MIGRATIONS)
         .expect("the migration should revert");
     for dropped in DROPPED_TABLES {
@@ -457,6 +464,13 @@ fn migration_runs_on_an_empty_database_and_can_be_reverted_and_rerun() {
 #[test]
 fn reverted_migration_runs_again_over_a_seeded_database() {
     let mut conn = migrated_seeded_connection();
+    while tables(&mut conn)
+        .iter()
+        .any(|table| table == "history_scrub_pending")
+    {
+        conn.revert_last_migration(MIGRATIONS)
+            .expect("later migration should revert");
+    }
     conn.revert_last_migration(MIGRATIONS)
         .expect("the migration should revert");
     conn.run_pending_migrations(MIGRATIONS)

@@ -226,11 +226,40 @@ pub struct BlockCompleted {
     pub block: Arc<SerializedBlock>,
 }
 
-/// How much saved history [`ModelEvent::DeleteSavedHistory`] removed.
+/// What stands between a deletion and a scrubbed database.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ScrubBlocker {
+    /// Another connection, in another OpenRun process or another program such as the `sqlite3`
+    /// tool or a database browser, still holds a read snapshot or the write lock. SQLite cannot
+    /// merge and truncate the write-ahead log while it does, so the old pages stay in the files.
+    InUse,
+    /// SQLite refused a statement because another connection held a lock for the whole retry
+    /// period.
+    DatabaseLocked,
+    /// SQLite reported some other error; the log has the details.
+    Failed,
+}
+
+/// Whether SQLite completed compaction after the saved history was deleted.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum HistoryScrub {
+    /// The write-ahead log was merged into the database and truncated, the database was rebuilt
+    /// with `VACUUM` and the resulting WAL checkpointed and truncated.
+    #[default]
+    Complete,
+    /// The rows are deleted and no longer load, but old text may remain in the database files.
+    /// OpenRun retries the cleanup while it runs, and at its next launch before anything reads the
+    /// database.
+    Incomplete(ScrubBlocker),
+}
+
+/// How much saved history [`ModelEvent::DeleteSavedHistory`] removed, and whether the files were
+/// scrubbed afterwards.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct SavedHistoryDeleted {
     pub commands: usize,
     pub blocks: usize,
+    pub scrub: HistoryScrub,
 }
 
 #[derive(Debug)]
@@ -259,7 +288,8 @@ pub enum ModelEvent {
     SaveBlock(BlockCompleted),
     DeleteBlocks(Vec<u8>),
     /// Deletes every saved command and every saved block's command text and output, whether or not
-    /// history saving is enabled. `done` receives the outcome once the database has been compacted.
+    /// history saving is enabled. `done` receives the outcome once the database has been compacted and
+    /// checked, or once the compaction has been given up for now (see [`HistoryScrub`]).
     DeleteSavedHistory {
         done: Option<futures::channel::oneshot::Sender<Result<SavedHistoryDeleted, String>>>,
     },

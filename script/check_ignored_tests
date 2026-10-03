@@ -1,0 +1,282 @@
+#!/usr/bin/env python3
+"""Fail on an ignored Rust test that does not name the Linear issue that owns it.
+
+Every `#[ignore]` under app/ and crates/ must carry a reason that names an issue and says why:
+
+    #[ignore = "ENG-107: pane title is compared with a cwd-relative path"]
+
+A bare `#[ignore]`, a reason without an `ENG-<number>` reference, and a reference with no reason
+text fail. `#[cfg_attr(<condition>, ignore)]` and `cfg_attr(<condition>, ignore = "...")` follow the
+same rule. An ignored test is a test that does not run in the blocking CI jobs unless a job runs it
+on purpose (`--run-ignored`: the idle session and the shell-only scenarios); the issue is what keeps
+it from being forgotten. This does not check that the issue is still open or that it exists.
+
+Rustdoc fences marked `ignore` are not tests and are not checked.
+
+Usage:
+    script/check_ignored_tests            check the repository
+    script/check_ignored_tests --self-test  prove that the check fails on what it must reject
+"""
+
+import argparse
+import os
+import re
+import sys
+import subprocess
+import tempfile
+
+ROOTS = ("app", "crates")
+SKIP_DIRS = {"target", ".git", "node_modules"}
+ISSUE = re.compile(r"\bENG-\d+\b")
+MIN_REASON_WORDS = 3
+
+# Strings and comments are skipped before recognizing attributes, including raw strings and nested
+# block comments. Offsets remain those of the source so CI annotations point at the right line.
+RAW = re.compile(r'(?:br|r)(\#*)"')
+CHAR = re.compile(r"'(?:\\.|[^'\\\n])'")
+
+
+def token_end(text, index):
+    if text.startswith("//", index):
+        end = text.find("\n", index)
+        return len(text) if end < 0 else end
+    if text.startswith("/*", index):
+        depth, cursor = 1, index + 2
+        while cursor < len(text) and depth:
+            if text.startswith("/*", cursor):
+                depth += 1
+                cursor += 2
+            elif text.startswith("*/", cursor):
+                depth -= 1
+                cursor += 2
+            else:
+                cursor += 1
+        return cursor
+    raw = RAW.match(text, index)
+    if raw:
+        terminator = '"' + raw.group(1)
+        end = text.find(terminator, raw.end())
+        return len(text) if end < 0 else end + len(terminator)
+    if text[index] == '"':
+        cursor = index + 1
+        while cursor < len(text):
+            if text[cursor] == "\\":
+                cursor += 2
+            elif text[cursor] == '"':
+                return cursor + 1
+            else:
+                cursor += 1
+        return len(text)
+    char = CHAR.match(text, index)
+    return char.end() if char else None
+
+
+def attributes(text):
+    index = 0
+    while index < len(text):
+        end = token_end(text, index)
+        if end is not None:
+            index = end
+            continue
+        start = re.match(r"#\s*!?\s*\[", text[index:]) if text[index] == "#" else None
+        if start is None:
+            index += 1
+            continue
+        cursor, depth = index + start.end(), 1
+        body = []
+        while cursor < len(text) and depth:
+            end = token_end(text, cursor)
+            if end is not None:
+                token = text[cursor:end]
+                body.append(" " * len(token) if token.startswith(("//", "/*")) else token)
+                cursor = end
+                continue
+            char = text[cursor]
+            depth += (char == "[") - (char == "]")
+            if depth:
+                body.append(char)
+            cursor += 1
+        yield index, "".join(body)
+        index = cursor
+
+
+def split_arguments(body):
+    cursor, start, depth = 0, 0, 0
+    while cursor < len(body):
+        end = token_end(body, cursor)
+        if end is not None:
+            cursor = end
+            continue
+        char = body[cursor]
+        depth += (char in "([{") - (char in ")]}")
+        if char == "," and depth == 0:
+            yield body[start:cursor]
+            start = cursor + 1
+        cursor += 1
+    yield body[start:]
+
+
+def ignored_values(body):
+    body = body.strip()
+    direct = re.fullmatch(r"(?:r#)?ignore\b\s*(?:=\s*(.*))?", body, re.DOTALL)
+    if direct:
+        yield direct.group(1)
+        return
+    conditional = re.fullmatch(r"(?:r#)?cfg_attr\s*\((.*)\)", body, re.DOTALL)
+    if conditional:
+        for part in list(split_arguments(conditional.group(1)))[1:]:
+            yield from ignored_values(part)
+
+
+def rust_files(root):
+    for top in ROOTS:
+        base = os.path.join(root, top)
+        for dirpath, dirnames, filenames in os.walk(base):
+            dirnames[:] = [d for d in dirnames if d not in SKIP_DIRS]
+            for name in filenames:
+                if name.endswith(".rs"):
+                    yield os.path.join(dirpath, name)
+
+
+def judge(value):
+    """Return None when the attribute value is acceptable, else the reason it is not."""
+    if value is None:
+        return "bare `ignore` with no reason"
+    value = value.strip()
+    if not (len(value) >= 2 and value[0] == '"' and value[-1] == '"'):
+        return f"the reason is not a plain string literal ({value[:40]!r})"
+    reason = value[1:-1]
+    if not ISSUE.search(reason):
+        return "the reason does not name a Linear issue (expected ENG-<number>)"
+    rest = ISSUE.sub(" ", reason)
+    if len(re.findall(r"[A-Za-z]{2,}", rest)) < MIN_REASON_WORDS:
+        return "the reason names an issue but does not say why the test is ignored"
+    return None
+
+
+def check_text(text):
+    """Yield (offset, problem) for each ignored test in `text` that is not owned."""
+    for offset, body in attributes(text):
+        for value in ignored_values(body):
+            problem = judge(value)
+            if problem:
+                yield offset, problem
+
+
+def check_repository(root):
+    problems = []
+    count = 0
+    for path in sorted(rust_files(root)):
+        with open(path, encoding="utf-8", errors="replace") as handle:
+            text = handle.read()
+        count += sum(len(list(ignored_values(body))) for _, body in attributes(text))
+        for offset, problem in check_text(text):
+            line = text.count("\n", 0, offset) + 1
+            problems.append((os.path.relpath(path, root), line, problem))
+    return count, problems
+
+
+def report(problems):
+    annotate = os.environ.get("GITHUB_ACTIONS") == "true"
+    for path, line, problem in problems:
+        if annotate:
+            print(f"::error file={path},line={line}::ignored test without an owning issue: {problem}")
+        else:
+            print(f"{path}:{line}: {problem}")
+    print(
+        "\nEvery ignored test needs a reason that names its Linear issue and says why, for example\n"
+        '    #[ignore = "ENG-107: pane title is compared with a cwd-relative path"]\n'
+        "If no issue fits, file one (team Engineering, label OpenRun), or delete the test if it is obsolete."
+    )
+
+
+FIXTURE_OK = {
+    "ok_reason.rs": '#[ignore = "ENG-107: fails under zsh because the title is relative"]\n#[test]\nfn a() {}\n',
+    "ok_macro.rs": 'integration_tests! {\n    #[ignore = "ENG-233: bash only, run with --run-ignored"]\n    test_x,\n}\n',
+    "ok_cfg_attr.rs": '#[cfg_attr(target_os = "macos", ignore = "ENG-171: flaky on the runner (see issue)")]\nfn b() {}\n',
+    "ok_commented.rs": "// #[ignore]\n/// #[ignore]\nfn c() {}\n",
+    "ok_block_comments.rs": '/* nested /* #[ignore] */ #[ignore] */ fn c() {}',
+    "ok_raw_string.rs": 'const S: &str = r##"#[ignore] // \" /* */"##;',
+    "ok_string.rs": 'const S: &str = "#[ignore]";',
+    "ok_no_ignore.rs": "#[test]\nfn d() { let ignore = 1; assert_eq!(ignore, 1); }\n",
+}
+
+FIXTURE_BAD = {
+    "bare_after_url.rs": 'const S: &str = "http://fixture.invalid"; #[ignore] fn e() {}',
+    "bare_after_raw.rs": 'const S: &str = r#"//"#; #[ignore] fn e() {}',
+    "bare_with_comment.rs": '#[/* explanation */ ignore] fn e() {}',
+    "bare_nested_cfg.rs": '#[cfg_attr(a, cfg_attr(b, ignore))] fn e() {}',
+    "no_issue_bracket.rs": '#[cfg_attr(a, ignore = "a ] bracket in reason")] fn e() {}',
+    "bare_raw_ident.rs": "#[r#ignore] #[test] fn e() {}",
+    "bare_raw_conditional.rs": "#[cfg_attr(unix, r#ignore)] #[test] fn e() {}",
+    "bare_raw_cfg_attr.rs": "#[r#cfg_attr(unix, ignore)] #[test] fn e() {}",
+    "bare.rs": "#[ignore]\n#[test]\nfn e() {}\n",
+    "bare_spaced.rs": "#[test]\n#[ignore ]\nfn e() {}\n",
+    "bare_macro.rs": "integration_tests! {\n    // Disabled due to flakiness on CI.\n    #[ignore]\n    test_y,\n}\n",
+    "no_issue.rs": '#[ignore = "flaky test"]\nfn f() {}\n',
+    "wrong_prefix.rs": '#[ignore = "REL-07: fails sometimes on the runner"]\nfn g() {}\n',
+    "issue_only.rs": '#[ignore = "ENG-107"]\nfn h() {}\n',
+    "cfg_attr_bare.rs": "#[cfg_attr(windows, ignore)]\nfn i() {}\n",
+    "cfg_attr_no_issue.rs": '#[cfg_attr(unix, ignore = "flaky")]\nfn j() {}\n',
+    "not_a_string.rs": "#[ignore = REASON]\nfn k() {}\n",
+    "multi_line.rs": '#[ignore\n    = "no issue here at all"]\nfn l() {}\n',
+}
+
+
+def self_test():
+    failures = []
+    with tempfile.TemporaryDirectory() as root:
+        src = os.path.join(root, "crates", "fixture", "src")
+        os.makedirs(src)
+        for name, body in {**FIXTURE_OK, **FIXTURE_BAD}.items():
+            with open(os.path.join(src, name), "w") as handle:
+                handle.write(body)
+        _, problems = check_repository(root)
+        flagged = {os.path.basename(p[0]) for p in problems}
+        for name in FIXTURE_BAD:
+            if name not in flagged:
+                failures.append(f"{name}: the check accepted it")
+        for name in FIXTURE_OK:
+            if name in flagged:
+                failures.append(f"{name}: the check rejected it")
+        # The command line must fail on a tree with one bare ignore and pass on a clean one.
+        for name in FIXTURE_BAD:
+            os.remove(os.path.join(src, name))
+        count, problems = check_repository(root)
+        if problems:
+            failures.append(f"clean tree reported problems: {problems}")
+        if count != 3:
+            failures.append(f"expected 3 owned ignores in the clean tree, counted {count}")
+        with open(os.path.join(src, "synthetic.rs"), "w") as handle:
+            handle.write("#[ignore]\n#[test]\nfn synthetic() {}\n")
+        if subprocess.run(
+            [sys.executable, os.path.abspath(__file__), "--root", root],
+            stdout=subprocess.DEVNULL,
+            check=False,
+        ).returncode == 0:
+            failures.append("the command line exited 0 on a tree with a bare #[ignore]")
+    if failures:
+        print("self-test FAILED:\n  " + "\n  ".join(failures))
+        return 1
+    print(f"self-test passed: {len(FIXTURE_BAD)} rejected forms, {len(FIXTURE_OK)} accepted forms, command line fails on a bare #[ignore]")
+    return 0
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__.split("\n")[0])
+    parser.add_argument("--root", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), ".."))
+    parser.add_argument("--self-test", action="store_true")
+    args = parser.parse_args()
+    if args.self_test:
+        return self_test()
+    count, problems = check_repository(args.root)
+    if problems:
+        report(problems)
+        print(f"\n{len(problems)} of {count} ignored tests have no owning issue.")
+        return 1
+    print(f"{count} ignored tests, each names its issue.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

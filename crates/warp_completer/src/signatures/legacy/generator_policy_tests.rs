@@ -234,8 +234,7 @@ const NETWORK_INPUTS: &[(&str, &str)] = &[
 const LOCAL_INPUTS: &[(&str, &str)] = &[
     ("git checkout ", "branch"),
     ("git stash apply ", "stash"),
-    ("npm run ", "package.json"),
-    ("kill ", "ps "),
+    ("uv tool uninstall ", "uv tool list"),
 ];
 
 /// Inputs whose completion reaches a generator that looks local but depends on the
@@ -253,7 +252,7 @@ const ENVIRONMENT_INPUTS: &[(&str, &str)] = &[
 
 #[test]
 fn network_generators_never_run_with_the_bundled_registry() {
-    let guarded = guarded();
+    let guarded = guarded_isolated();
     let unrestricted = unrestricted();
     for (input, marker) in NETWORK_INPUTS {
         let reachable = unrestricted.commands_for(input);
@@ -295,7 +294,7 @@ fn environment_dependent_generators_never_run_with_the_bundled_registry() {
 
 #[test]
 fn local_generators_still_run_with_the_bundled_registry() {
-    let guarded = guarded();
+    let guarded = guarded_isolated();
     for (input, marker) in LOCAL_INPUTS {
         let executed = guarded.commands_for(input);
         assert!(
@@ -310,7 +309,11 @@ fn the_policy_decides_by_spec_and_generator_name() {
     use warp_command_signatures::GeneratorName;
     let registry = CommandRegistry::global_instance();
     let name = |name: &str| GeneratorName::new(name);
-    assert!(registry.allows_generator("git", &name("local_branches"), Containment::Unrestricted));
+    assert!(registry.allows_generator(
+        "git",
+        &name("local_branches"),
+        Containment::NetworkIsolated
+    ));
     assert!(!registry.allows_generator(
         "npm",
         &name("npm_registry_search"),
@@ -321,8 +324,8 @@ fn the_policy_decides_by_spec_and_generator_name() {
         &name("crates_io_search"),
         Containment::Unrestricted
     ));
-    // The same generator name is local in one spec and a network call in another.
-    assert!(registry.allows_generator("bat", &name("completions"), Containment::Unrestricted));
+    // Neither a local-looking command nor a familiar generator name grants permission.
+    assert!(!registry.allows_generator("bat", &name("completions"), Containment::Unrestricted));
     assert!(!registry.allows_generator(
         "softwareupdate",
         &name("completions"),
@@ -407,6 +410,7 @@ fn allow_and_deny_lists_are_sorted_unique_lowercase_and_disjoint() {
 }
 
 const DENIED_CLASSES: &[&str] = &[
+    "unverified-tool",
     "network",
     "cluster",
     "maybe-network",
@@ -625,9 +629,83 @@ fn the_injectable_and_environment_dependent_generators_are_denied_with_their_cla
         24
     );
     for (spec, alias, _) in DENIED_ALIAS_GENERATORS {
-        assert!(!is_alias_generator_allowed(spec, alias), "{spec}/{alias}");
+        assert!(
+            !is_alias_generator_allowed(spec, alias, Containment::NetworkIsolated),
+            "{spec}/{alias}"
+        );
     }
     assert_eq!(ALLOWED_ALIAS_GENERATORS, &[("git", "alias")]);
+}
+
+/// The generators whose command makes a tool discover an interpreter, toolchain or file
+/// name that the project controls (Astra review 3, R3-01). Each is denied in every context, with
+/// the class `project-code`. The real-tool evidence that each one ran project code is in
+/// `project_code_tests.rs` of the app crate (uv, cargo, bazel; npm 6 is a local-only control; conda
+/// was not run and is denied for being a Python tool nobody has measured).
+const PROJECT_SELECTED_RUNTIME_GENERATORS: &[(&str, &str)] = &[
+    ("bazel", "build_file"),
+    ("cargo", "bin_list"),
+    ("cargo", "features_generators"),
+    ("cargo", "read_manifest"),
+    ("cargo", "spec"),
+    ("cargo", "target_list"),
+    ("cargo", "test_targets"),
+    ("conda", "get_conda_configs"),
+    ("conda", "get_conda_environments"),
+    ("conda", "get_installed_packages"),
+    ("npm", "workspace_generator"),
+    ("uv", "installed_pythons"),
+    ("uv", "pip_installed_packages"),
+    ("uv", "project_dependencies"),
+    ("uv", "python_versions"),
+];
+
+/// The neighbours that stay allowed because a real-tool control showed they start nothing the
+/// project controls (`project_code_tests.rs`, and the reasoning in the CHANGES.md section).
+const KEPT_NEXT_TO_THEM: &[(&str, &str, Containment)] = &[
+    ("uv", "installed_tools", Containment::NetworkIsolated),
+    ("rustup", "rustup_docs", Containment::NetworkIsolated),
+];
+
+#[test]
+fn the_generators_that_start_a_project_selected_runtime_are_denied_in_every_context() {
+    for (spec, name) in PROJECT_SELECTED_RUNTIME_GENERATORS {
+        for containment in [Containment::Unrestricted, Containment::NetworkIsolated] {
+            assert!(
+                !is_generator_allowed(spec, name, containment),
+                "{spec}/{name} starts a project-selected runtime and must not be allowed in a \
+                 {containment:?} context"
+            );
+        }
+        assert_eq!(
+            DENIED_GENERATORS
+                .iter()
+                .find(|(s, g, _)| s == spec && g == name)
+                .map(|(_, _, class)| *class),
+            Some("project-code"),
+            "{spec}/{name} must be denied as project-code"
+        );
+    }
+    for (spec, name, containment) in KEPT_NEXT_TO_THEM {
+        assert!(
+            is_generator_allowed(spec, name, *containment),
+            "{spec}/{name} is the proven-quiet neighbour and stays allowed"
+        );
+    }
+    // Every generator of those specs is classified one way or the other, so a new `cargo` or `uv`
+    // generator in a dependency bump fails `every_bundled_generator_is_classified`, not silently
+    // runs.
+    let mut allowed_in_those_specs: Vec<(&str, &str)> = ALLOWED_GENERATORS
+        .iter()
+        .chain(ALLOWED_WHEN_ISOLATED)
+        .filter(|(spec, _)| matches!(*spec, "uv" | "cargo" | "conda" | "bazel" | "rustup"))
+        .copied()
+        .collect();
+    allowed_in_those_specs.sort_unstable();
+    assert_eq!(
+        allowed_in_those_specs,
+        vec![("rustup", "rustup_docs"), ("uv", "installed_tools")]
+    );
 }
 
 /// The restored tier: generators that look local but reached a network, or ran repository code,
@@ -659,9 +737,8 @@ fn isolated_generators_run_only_when_the_context_is_isolated() {
 #[test]
 fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
     for (input, marker) in [
-        ("cargo run --bin ", "cargo metadata"),
+        ("git reset ", "diff --cached"),
         ("docker start ", "docker ps"),
-        ("npm install -w ", "npm prefix"),
     ] {
         let plain = guarded().commands_for(input);
         assert!(
@@ -673,6 +750,22 @@ fn an_isolated_context_runs_the_restored_generators_and_a_plain_one_does_not() {
             isolated.iter().any(|command| command.contains(marker)),
             "{input:?} should run {marker:?} in an isolated context, got {isolated:?}"
         );
+    }
+    // The cargo and npm ones were in this tier and are denied for starting project code (a
+    // `path =` toolchain, npm 6's `onload-script`), and so is the uv one that Astra reproduced.
+    for (input, marker) in [
+        ("cargo run --bin ", "cargo metadata"),
+        ("npm install -w ", "npm prefix"),
+        ("uv pip uninstall ", "uv pip list"),
+        ("uv python pin ", "uv python list"),
+    ] {
+        for context in [guarded(), guarded_isolated()] {
+            let executed = context.commands_for(input);
+            assert!(
+                !executed.iter().any(|command| command.contains(marker)),
+                "{input:?} ran {marker:?}: {executed:?}"
+            );
+        }
     }
     // Isolation does not make a network generator run.
     for (input, marker) in NETWORK_INPUTS {
@@ -810,10 +903,6 @@ mod real_shells {
         }
     }
 
-    fn running_in_ci() -> bool {
-        std::env::var_os("CI").is_some_and(|value| !value.is_empty() && value != "false")
-    }
-
     fn find_executable(name: &str, override_variable: &str) -> Option<PathBuf> {
         if let Some(path) = std::env::var_os(override_variable) {
             let path = PathBuf::from(path);
@@ -845,22 +934,9 @@ mod real_shells {
                 args,
                 kind,
             }),
-            None if running_in_ci() => panic!(
-                "{label} is not installed and CI is set: the injection tests must run in {label}, \
-                 install it on the runner (or set {override_variable})"
-            ),
             None => {
-                static NOTIFIED: std::sync::Mutex<Vec<&str>> = std::sync::Mutex::new(Vec::new());
-                let mut notified = NOTIFIED.lock().unwrap();
-                if !notified.contains(&label) {
-                    notified.push(label);
-                    eprintln!(
-                        "SKIPPED: {label} is not installed, so the injection tests do not run in \
-                         {label} here (CI installs it and fails without it; set \
-                         {override_variable} to a {label} executable to run them)"
-                    );
-                }
-                None
+                eprintln!("TEST SKIPPED: install {label} or set {override_variable}");
+                std::process::exit(86);
             }
         }
     }
@@ -1210,7 +1286,7 @@ fn the_codex_git_generators_are_the_same_local_git_reads_as_the_git_and_gt_ones(
         assert!(is_generator_allowed(
             "codex",
             name,
-            Containment::Unrestricted
+            Containment::NetworkIsolated
         ));
     }
 
@@ -1244,11 +1320,7 @@ fn every_allowed_generator_that_runs_git_is_in_the_git_family_and_nothing_else_i
         .chain(GIT_PIPELINE_GENERATORS)
         .copied()
         .collect();
-    assert_eq!(
-        GIT_PIPELINE_GENERATORS,
-        [("git-flow", "type_branches")],
-        "the pipeline git generators are pinned"
-    );
+    assert!(GIT_PIPELINE_GENERATORS.is_empty());
     for pair in GIT_PIPELINE_GENERATORS {
         assert!(ALLOWED_GENERATORS.contains(pair), "{pair:?}");
         assert!(!LOCAL_GIT_GENERATORS.contains(pair), "{pair:?}");
@@ -1276,7 +1348,10 @@ fn every_allowed_generator_that_runs_git_is_in_the_git_family_and_nothing_else_i
             running_git.insert((spec.clone(), name.clone()));
         }
     }
-    assert!(checked > 200, "{checked}");
+    assert_eq!(
+        checked,
+        ALLOWED_GENERATORS.len() + ALLOWED_WHEN_ISOLATED.len()
+    );
 
     let family_owned: BTreeSet<(String, String)> = family
         .iter()
@@ -1361,7 +1436,7 @@ fn git_generators_run_only_when_the_sessions_git_is_at_least_2_31() {
                 let git = git_commands(&executed);
                 assert_eq!(
                     !git.is_empty(),
-                    runs,
+                    runs && context.isolated,
                     "{input:?} with git {version:?} ran {executed:?}"
                 );
             }
@@ -1384,13 +1459,13 @@ fn git_generators_run_only_when_the_sessions_git_is_at_least_2_31() {
 
 #[test]
 fn a_git_that_is_too_old_does_not_stop_the_generators_that_do_not_run_git() {
-    let mut context = guarded();
+    let mut context = guarded_isolated();
     context.git_version = Some(GitVersion::new(2, 30, 0));
-    let executed = context.commands_for("npm run ");
+    let executed = context.commands_for("uv tool uninstall ");
     assert!(
         executed
             .iter()
-            .any(|command| command.contains("package.json")),
+            .any(|command| command.contains("uv tool list")),
         "{executed:?}"
     );
     assert_eq!(
@@ -1468,7 +1543,7 @@ fn every_bundled_alias_generator_is_classified() {
 
 #[test]
 fn only_the_git_alias_generator_runs_and_only_for_inert_words() {
-    let guarded = guarded();
+    let guarded = guarded_isolated();
     let unrestricted = unrestricted();
     // `npm` and `yarn` run `npm prefix`, which is denied.
     for input in ["npm run build ", "yarn run build "] {
@@ -1521,10 +1596,16 @@ fn only_the_git_alias_generator_runs_and_only_for_inert_words() {
 #[test]
 fn is_alias_generator_allowed_matches_the_listed_pairs() {
     for (spec, name) in ALLOWED_ALIAS_GENERATORS {
-        assert!(is_alias_generator_allowed(spec, name), "{spec}/{name}");
+        assert!(
+            is_alias_generator_allowed(spec, name, Containment::NetworkIsolated),
+            "{spec}/{name}"
+        );
     }
     for (spec, name, _) in DENIED_ALIAS_GENERATORS {
-        assert!(!is_alias_generator_allowed(spec, name), "{spec}/{name}");
+        assert!(
+            !is_alias_generator_allowed(spec, name, Containment::NetworkIsolated),
+            "{spec}/{name}"
+        );
     }
 }
 
@@ -1533,13 +1614,13 @@ fn is_generator_allowed_matches_the_listed_pairs() {
     use super::is_generator_allowed;
     for (spec, name) in ALLOWED_GENERATORS {
         assert!(
-            is_generator_allowed(spec, name, Containment::Unrestricted),
+            is_generator_allowed(spec, name, Containment::NetworkIsolated),
             "{spec}/{name}"
         );
     }
     for (spec, name, _) in DENIED_GENERATORS {
         assert!(
-            !is_generator_allowed(spec, name, Containment::Unrestricted),
+            !is_generator_allowed(spec, name, Containment::NetworkIsolated),
             "{spec}/{name}"
         );
     }
@@ -1995,11 +2076,18 @@ mod injection_corpus {
             .filter(|shell| shell.kind != ShellKind::PowerShell)
         {
             let count = ran.get(shell.label).copied().unwrap_or(0);
-            assert!(
-                count > 100,
-                "only {count} hostile commands reached {} behind the gate",
-                shell.label
-            );
+            let has_escaped = ALLOWED_GENERATORS
+                .iter()
+                .any(|(spec, name)| token_policy(spec, name) == TokenPolicy::Escaped);
+            if has_escaped {
+                assert!(
+                    count > 100,
+                    "the escaped-token corpus did not execute in {}",
+                    shell.label
+                );
+            } else {
+                assert_eq!(count, 0, "no allowed generator interpolates hostile words");
+            }
         }
     }
 
@@ -2434,7 +2522,7 @@ fn environment_assignments_are_filtered_for_every_generator() {
 }
 
 #[test]
-fn the_token_policy_table_is_sorted_allowed_and_holds_up() {
+fn the_token_policy_table_is_sorted_classified_and_holds_up() {
     let table = listed_token_policies();
     assert!(
         table
@@ -2449,8 +2537,11 @@ fn the_token_policy_table_is_sorted_allowed_and_holds_up() {
             .collect();
     for (spec, name, policy) in table {
         assert!(
-            ALLOWED_GENERATORS.contains(&(*spec, *name)),
-            "{spec}/{name} is in the token policy table but not on the allow-list"
+            ALLOWED_GENERATORS.contains(&(*spec, *name))
+                || DENIED_GENERATORS
+                    .iter()
+                    .any(|(s, g, _)| (s, g) == (spec, name)),
+            "{spec}/{name} has no policy decision"
         );
         let generator = &bundled[&(spec.to_string(), name.to_string())];
         let GeneratorProcess::CommandFromTokens(f) = generator.process else {
@@ -2491,7 +2582,7 @@ fn the_token_policy_table_is_sorted_allowed_and_holds_up() {
 /// quotes, a path with a space.
 #[test]
 fn valid_inputs_still_reach_their_generators() {
-    let guarded = guarded();
+    let guarded = guarded_isolated();
     let ran = |input: &str, marker: &str| {
         let commands = guarded.commands_for(input);
         assert!(
@@ -2499,40 +2590,13 @@ fn valid_inputs_still_reach_their_generators() {
             "{input:?} should run a generator containing {marker:?}, got {commands:?}"
         );
     };
-    ran("kubectl --context ", "get-contexts");
-    ran(
-        "kubectl --context prod.example/x get pods --cluster ",
-        "get-clusters",
-    );
-    ran("oc --context ", "get-contexts");
-    ran(
-        "KUBECONFIG=/home/me/.kube/config kubectl --context ",
-        "--kubeconfig=/home/me/.kube/config",
-    );
-    ran("asdf uninstall nodejs ", "asdf list nodejs");
-    ran("trivy image --severity LOW,", "LOW,UNKNOWN");
-    ran("scc --format ", "tabular");
-    ran("eslint --env node,", "node,browser");
-    ran("man -S 1:", "1:2");
-    ran(
-        "ros2 run demo_nodes_cpp ",
-        "ros2 pkg executables demo_nodes_cpp",
-    );
-    ran("sdk use java ", "candidates/java/");
     ran("git checkout feature/x.y", "branch");
-    ran(
-        r#"docker build -f "it's; touch pwned" --target "#,
-        r#"'it'\''s; touch pwned'"#,
-    );
-    ran(
-        "docker build -f 'my dir/Dockerfile' --target ",
-        "'my dir/Dockerfile'",
-    );
+    ran("uv tool uninstall ", "uv tool list");
 }
 
 #[test]
 fn hostile_input_reaches_no_generator_through_the_engine() {
-    let guarded = guarded();
+    let guarded = guarded_isolated();
     let unrestricted = unrestricted();
     let mut reached_without_the_gate = 0;
     for (input, marker) in [
@@ -2592,7 +2656,7 @@ fn typed_words_are_never_executed_by_a_real_shell_through_the_engine() {
     let mut reproduced_in: std::collections::BTreeMap<&str, BTreeSet<&str>> = Default::default();
     for shell in installed_shells() {
         let control = unrestricted().in_shell(&shell);
-        let guarded = guarded().in_shell(&shell);
+        let guarded = guarded_isolated().in_shell(&shell);
         let guarded_isolated = guarded_isolated().in_shell(&shell);
         for input in ENGINE_INJECTION_INPUTS {
             let typed = shell.kind.typed_line(input);
@@ -2648,4 +2712,70 @@ fn typed_words_are_never_executed_by_a_real_shell_through_the_engine() {
             );
         }
     }
+}
+
+#[test]
+fn audit_inventory_matches_runtime_policy() {
+    let audit = include_str!("generator_policy/AUDIT.md");
+    let mut rows = BTreeSet::new();
+    for line in audit.lines().filter(|line| line.starts_with("| `")) {
+        let cells: Vec<_> = line.split('|').map(str::trim).collect();
+        let pair = cells[1].trim_matches('`');
+        let (spec, name) = pair.split_once('/').expect("audit pair");
+        assert!(rows.insert((spec, name)), "duplicate audit row {pair}");
+        let expected = if ALLOWED_GENERATORS.contains(&(spec, name)) {
+            "allowed"
+        } else if ALLOWED_WHEN_ISOLATED.contains(&(spec, name)) {
+            "isolated"
+        } else {
+            assert!(
+                DENIED_GENERATORS
+                    .iter()
+                    .any(|(s, g, _)| (*s, *g) == (spec, name))
+            );
+            "denied"
+        };
+        assert_eq!(cells[4], expected, "audit decision for {pair}");
+        assert!(!cells[5].is_empty(), "audit evidence for {pair}");
+    }
+    for pair in ALLOWED_GENERATORS.iter().chain(ALLOWED_WHEN_ISOLATED) {
+        assert!(
+            rows.contains(pair),
+            "allowed without an audit row: {pair:?}"
+        );
+    }
+}
+
+#[test]
+fn an_unhardened_context_runs_no_generator_alias_or_git_version_probe() {
+    let plain = guarded();
+    for input in LOCAL_INPUTS.iter().map(|(input, _)| *input).chain([
+        "git co ",
+        "git stash apply ",
+        "git log ",
+        "uv tool uninstall ",
+        "docker start ",
+        "rustup docs ",
+    ]) {
+        assert!(
+            plain.commands_for(input).is_empty(),
+            "unhardened {input:?} executed a command"
+        );
+    }
+    for (spec, name) in ALLOWED_GENERATORS.iter().chain(ALLOWED_WHEN_ISOLATED) {
+        assert!(!is_generator_allowed(spec, name, Containment::Unrestricted));
+    }
+    for (spec, name) in ALLOWED_ALIAS_GENERATORS {
+        assert!(!is_alias_generator_allowed(
+            spec,
+            name,
+            Containment::Unrestricted
+        ));
+    }
+    assert_eq!(
+        plain
+            .git_version_requests
+            .load(std::sync::atomic::Ordering::Relaxed),
+        0
+    );
 }

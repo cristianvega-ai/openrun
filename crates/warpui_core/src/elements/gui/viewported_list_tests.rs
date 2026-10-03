@@ -80,7 +80,7 @@ impl TypedActionView for ScrollPreservationTestView {
 }
 
 #[test]
-#[ignore = "Flaking on CI - KC looking into 3/31/26"]
+#[ignore = "ENG-171: watcher task or viewport event ordering is flaky on CI"]
 fn test_scroll_preservation_adjusts_position_when_item_above_grows() {
     App::test((), |mut app| async move {
         let app = &mut app;
@@ -170,7 +170,7 @@ fn test_scroll_preservation_adjusts_position_when_item_above_grows() {
 }
 
 #[test]
-#[ignore = "Flaking on CI - KC looking into 3/31/26"]
+#[ignore = "ENG-171: watcher task or viewport event ordering is flaky on CI"]
 fn test_scroll_preservation_no_adjustment_when_item_below_changes() {
     App::test((), |mut app| async move {
         let app = &mut app;
@@ -257,7 +257,7 @@ fn test_scroll_preservation_no_adjustment_when_item_below_changes() {
 }
 
 #[test]
-#[ignore = "Flaking on CI - KC looking into 3/31/26"]
+#[ignore = "ENG-171: watcher task or viewport event ordering is flaky on CI"]
 fn test_list_state_without_scroll_preservation_backward_compatible() {
     App::test((), |mut app| async move {
         let app = &mut app;
@@ -385,7 +385,7 @@ impl TypedActionView for ScrollSenderTestView {
 }
 
 #[test]
-#[ignore = "Flaking on CI - KC looking into 3/31/26"]
+#[ignore = "ENG-171: watcher task or viewport event ordering is flaky on CI"]
 fn test_scroll_sender_receives_events_on_scroll() {
     App::test((), |mut app| async move {
         let app = &mut app;

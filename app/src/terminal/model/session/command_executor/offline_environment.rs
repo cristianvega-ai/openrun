@@ -8,9 +8,12 @@
 //! table switches those behaviours off. It is applied last, after PATH, so it overrides whatever
 //! the session environment says.
 //!
-//! The git entries need git 2.31 or newer (`GIT_CONFIG_COUNT`). An older git ignores them, so the
+//! The `GIT_CONFIG_COUNT` entries need git 2.31 or newer. An older git ignores them, so the
 //! completion engine runs no generator that starts `git` unless the session's git is known to be
-//! 2.31 or newer (`Session::git_version`, probed with `git --version`).
+//! 2.31 or newer (`Session::git_version`, probed with `git --version`). The protocol list
+//! (`GIT_ALLOW_PROTOCOL`) is what keeps a repository's `uploadpack` program from running during a
+//! lazy fetch, and it works on every git the gate accepts; `GIT_NO_LAZY_FETCH` does not (see the
+//! entry), so no version check relies on it.
 //!
 //! This is one layer of three. It does not make a command offline, only stops the *implicit*
 //! network use of the tools below. The OS sandbox (SEC-SBX) is what denies the network to
@@ -40,16 +43,13 @@ const FIXED_VARIABLES: &[(&str, &str)] = &[
     // Verified (npm 11.12.1, `npm_does_not_check_for_updates`): `npm prefix` and other commands end with an
     // update-notifier registry GET. `NO_UPDATE_NOTIFIER=1` does not stop it; this does.
     ("npm_config_update_notifier", "false"),
-    // Verified (git 2.54, `git_does_not_lazy_fetch_from_a_promisor_remote`): git fetches a missing
-    // object from a partial clone's promisor remote while reading history or diffs.
-    // `GIT_NO_LAZY_FETCH` needs git 2.44; older gits ignore it.
+    // Additional protection on Git versions that implement it; older accepted versions ignore
+    // this variable. Transport refusal below independently prevents their lazy fetches.
     ("GIT_NO_LAZY_FETCH", "1"),
-    // Verified (git 2.54, `git_cannot_lazy_fetch_over_a_network_transport`): `GIT_NO_LAZY_FETCH`
-    // is ignored by git older than 2.44. With only
-    // local transports allowed, a lazy fetch from a promisor remote that is not a local path
-    // fails before it connects ("transport 'http' not allowed"). The variable overrides any
-    // `protocol.<name>.allow` setting of the repository.
-    ("GIT_ALLOW_PROTOCOL", "file"),
+    // An empty allow-list refuses all transports, including local paths and custom remote
+    // helpers, before a promisor fetch can run repository-configured upload-pack code.
+    // Verified by `a_repositorys_uploadpack_program_never_runs_on_any_git_the_gate_accepts`.
+    ("GIT_ALLOW_PROTOCOL", ""),
     // Verified (git 2.54, `git_terminal_prompt_is_off`): with a controlling terminal, git asks
     // for a username on /dev/tty when a server answers 401; with this it fails at once.
     ("GIT_TERMINAL_PROMPT", "0"),

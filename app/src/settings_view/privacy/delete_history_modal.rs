@@ -13,7 +13,9 @@ const BODY_FONT_SIZE: f32 = 13.;
 const DELETE_DESCRIPTION: &str = "This permanently deletes every command OpenRun has saved, \
     and the command text and output of every block it saved for session restore. Your window, \
     tab and pane layout is not changed, and your shell's own history file (for example \
-    ~/.zsh_history or ~/.bash_history) is not touched.";
+    ~/.zsh_history or ~/.bash_history) is not touched. If another program has OpenRun's \
+    database open, the saved text may stay in its files for a while; OpenRun tells you, and \
+    finishes the cleanup later.";
 
 const TURNED_OFF_INTRO: &str = "OpenRun has stopped saving command history. Commands and block \
     output saved earlier stay on disk until you delete them.";

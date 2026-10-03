@@ -41,6 +41,17 @@ allow = [
     "Zlib",
 ]
 
+# The crate's license files preserve its dual-license choice while spelling out
+# the deprecated GPL-3.0+ identifier in current SPDX form.
+[[licenses.clarify]]
+crate = "bounded-vec-deque"
+expression = "GPL-3.0-or-later OR BSD-3-Clause"
+license-files = [
+    { path = "LICENSE", hash = 0x40145f22 },
+    { path = "LICENSE-BSD", hash = 0xe87d5752 },
+    { path = "LICENSE-GPL", hash = 0xc5a651aa },
+]
+
 [bans]
 # We allow dependencies on multiple versions of crates.
 multiple-versions = "allow"

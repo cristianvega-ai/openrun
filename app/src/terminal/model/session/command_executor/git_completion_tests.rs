@@ -12,8 +12,7 @@
 //!
 //! Every program writes a marker file. Each command is first run without the table to show the
 //! fixture does fire, then with it and must leave no marker and make no connection. The tests run
-//! in bash. Git must be installed; with `CI` set a missing git fails the test instead of
-//! skipping.
+//! in bash. Missing required tools exit 86 and fail nextest.
 
 use std::collections::{BTreeSet, HashMap};
 use std::io::Write as _;
@@ -33,43 +32,23 @@ use warp_completer::completer::{
 };
 use warp_completer::signatures::{CommandRegistry, local_git_generators};
 
+use super::git_local_promisor_tests::{GitInstall, installs};
 use super::network_sandbox::NetworkSandbox;
 use super::{CommandExecutor, LocalCommandExecutor, offline_environment};
 use crate::completer::SessionContext;
 use crate::terminal::model::session::{Session, SessionInfo};
 use crate::terminal::shell::ShellType;
 
-fn in_ci() -> bool {
-    std::env::var("CI").is_ok_and(|ci| ci == "true")
-}
-
-fn executable_name(name: &str) -> String {
-    name.to_owned()
-}
-
-fn find_on_path(name: &str) -> Option<PathBuf> {
-    let file = executable_name(name);
-    std::env::split_paths(&std::env::var_os("PATH")?)
-        .map(|dir| dir.join(&file))
-        .find(|candidate| candidate.is_file())
-}
-
-/// Whether git is installed. A missing git fails the test on CI and skips it elsewhere.
-fn git_is_installed() -> bool {
-    let found = find_on_path("git").is_some();
-    if !found {
-        assert!(
-            !in_ci(),
-            "git is not installed on this CI runner, so the git completion tests would pass \
-             without testing anything"
-        );
-        eprintln!("SKIPPED: git is not installed on this machine");
+pub(super) fn git_is_installed() -> bool {
+    if super::test_support::find_tool("git").is_none() {
+        eprintln!("TEST SKIPPED: required real tool git is not installed");
+        std::process::exit(86);
     }
-    found
+    true
 }
 
 /// The path with forward slashes, which git and `sh` accept on every platform.
-fn slash(path: &Path) -> String {
+pub(super) fn slash(path: &Path) -> String {
     path.to_string_lossy().replace('\\', "/")
 }
 
@@ -113,7 +92,7 @@ impl Listener {
     }
 
     fn url(&self) -> String {
-        format!("http://127.0.0.1:{}/repo.git", self.port)
+        format!("git://127.0.0.1:{}/repo.git", self.port)
     }
 
     fn connections(&self) -> usize {
@@ -129,7 +108,7 @@ impl Drop for Listener {
 
 /// The environment of git invocations that set the fixture up and of the sessions under test:
 /// no user or system config, an identity, and no prompts.
-fn base_environment(home: &Path) -> HashMap<String, String> {
+pub(super) fn base_environment(home: &Path) -> HashMap<String, String> {
     [
         ("HOME", slash(home)),
         ("GIT_CONFIG_GLOBAL", null_device().to_owned()),
@@ -144,7 +123,11 @@ fn base_environment(home: &Path) -> HashMap<String, String> {
     .collect()
 }
 
-fn git_output(dir: &Path, args: &[&str], environment: &HashMap<String, String>) -> String {
+pub(super) fn git_output(
+    dir: &Path,
+    args: &[&str],
+    environment: &HashMap<String, String>,
+) -> String {
     git_with_input(dir, args, environment, "")
 }
 
@@ -191,8 +174,12 @@ struct Fixture {
 }
 
 impl Fixture {
-    /// `None` when git is not installed (and the test is skipped).
+    /// Missing Git exits 86 before a fixture can be built.
     fn new() -> Option<Self> {
+        Self::new_with_git(None)
+    }
+
+    fn new_with_git(install: Option<&GitInstall>) -> Option<Self> {
         if !git_is_installed() {
             return None;
         }
@@ -200,7 +187,11 @@ impl Fixture {
         let listener = Listener::start();
         let markers = temp.path().join("markers");
         std::fs::create_dir_all(&markers).unwrap();
-        let environment = base_environment(&temp.path().join("home"));
+        let mut environment = base_environment(&temp.path().join("home"));
+        if let Some(install) = install {
+            environment.insert("PATH".to_owned(), install.path());
+            environment.extend(install.variables());
+        }
 
         let hostile = temp.path().join("hostile");
         std::fs::create_dir_all(&hostile).unwrap();
@@ -403,7 +394,16 @@ fn run_as_generator(
     cwd: &Path,
     variables: &HashMap<String, String>,
 ) -> Ran {
-    let context = session_context(executor, cwd);
+    let path = variables
+        .get("PATH")
+        .cloned()
+        .or_else(|| std::env::var("PATH").ok());
+    let session = Session::new(SessionInfo::new_for_test().with_path(path), executor);
+    let context = SessionContext::new(
+        session,
+        CommandRegistry::global_instance(),
+        TypedPathBuf::from(cwd.to_str().unwrap()),
+    );
     let output = futures_lite::future::block_on(
         context.execute_command_at_pwd(command, Some(variables.clone())),
     )
@@ -458,7 +458,7 @@ const EXPECTED_OUTPUT: &[(&str, &str)] = &[
     ("worktree list", "worktree "),
 ];
 
-fn local_git_commands(family: Shell) -> BTreeSet<String> {
+pub(super) fn local_git_commands(family: Shell) -> BTreeSet<String> {
     local_git_generators()
         .iter()
         .map(|(spec, generator)| bundled_command(spec, generator, family))
@@ -467,57 +467,70 @@ fn local_git_commands(family: Shell) -> BTreeSet<String> {
 
 #[test]
 fn the_git_generators_run_nothing_and_connect_nowhere_through_the_production_executor() {
-    let Some(fixture) = Fixture::new() else {
-        return;
-    };
-    for shell in session_shells() {
-        let commands = local_git_commands(shell.family);
-        assert!(commands.len() > 15, "{commands:?}");
-        let mut fired_without_the_table = BTreeSet::new();
-        for (repository, root) in [("hostile", &fixture.hostile), ("partial", &fixture.partial)] {
-            for command in &commands {
-                fixture.reset();
-                run_as_generator(executor(&shell, false), command, root, &fixture.environment);
-                let control = fixture.effects();
-                fired_without_the_table.extend(control.iter().cloned());
+    for install in installs() {
+        eprintln!(
+            "Git matrix: {}",
+            git_output(
+                Path::new("/tmp"),
+                &["--version"],
+                &HashMap::from([("PATH".to_owned(), install.path())])
+            )
+        );
+        let fixture = Fixture::new_with_git(Some(&install)).expect("required Git is installed");
+        for shell in session_shells() {
+            let commands = local_git_commands(shell.family);
+            assert!(commands.len() > 15, "{commands:?}");
+            let mut fired_without_the_table = BTreeSet::new();
+            for (repository, root) in [("hostile", &fixture.hostile), ("partial", &fixture.partial)]
+            {
+                for command in &commands {
+                    fixture.reset();
+                    run_as_generator(executor(&shell, false), command, root, &fixture.environment);
+                    let control = fixture.effects();
+                    fired_without_the_table.extend(control.iter().cloned());
 
-                fixture.reset();
-                let ran =
-                    run_as_generator(executor(&shell, true), command, root, &fixture.environment);
-                let effects = fixture.effects();
-                assert!(
-                    effects.is_empty(),
-                    "{}: `{command}` in the {repository} repository ran {effects:?} with the \
-                     offline environment (without it: {control:?})\n{}",
-                    shell.label,
-                    ran.output
-                );
-                if repository == "hostile" {
-                    assert!(
-                        ran.success,
-                        "{}: `{command}` failed in the hostile repository:\n{}",
-                        shell.label, ran.output
+                    fixture.reset();
+                    let ran = run_as_generator(
+                        executor(&shell, true),
+                        command,
+                        root,
+                        &fixture.environment,
                     );
-                    for (needle, expected) in EXPECTED_OUTPUT {
-                        if command.contains(needle) {
-                            assert!(
-                                ran.output.contains(expected),
-                                "{}: `{command}` printed no {expected:?}:\n{}",
-                                shell.label,
-                                ran.output
-                            );
+                    let effects = fixture.effects();
+                    assert!(
+                        effects.is_empty(),
+                        "{}: `{command}` in the {repository} repository ran {effects:?} with the \
+                     offline environment (without it: {control:?})\n{}",
+                        shell.label,
+                        ran.output
+                    );
+                    if repository == "hostile" {
+                        assert!(
+                            ran.success,
+                            "{}: `{command}` failed in the hostile repository:\n{}",
+                            shell.label, ran.output
+                        );
+                        for (needle, expected) in EXPECTED_OUTPUT {
+                            if command.contains(needle) {
+                                assert!(
+                                    ran.output.contains(expected),
+                                    "{}: `{command}` printed no {expected:?}:\n{}",
+                                    shell.label,
+                                    ran.output
+                                );
+                            }
                         }
                     }
                 }
             }
-        }
-        for effect in ["fsmonitor", "gpg", "connection"] {
-            assert!(
-                fired_without_the_table.contains(effect),
-                "{}: the fixture is insensitive, no command ever caused {effect:?} without the \
+            for effect in ["fsmonitor", "gpg", "connection"] {
+                assert!(
+                    fired_without_the_table.contains(effect),
+                    "{}: the fixture is insensitive, no command ever caused {effect:?} without the \
                  table (saw {fired_without_the_table:?})",
-                shell.label
-            );
+                    shell.label
+                );
+            }
         }
     }
 }
@@ -534,7 +547,8 @@ fn the_engine_completes_git_words_through_the_production_executor_and_runs_no_re
         parse_quotes_as_literals: false,
     };
     let complete = |shell: &SessionShell, line: &str, root: &Path| -> Vec<String> {
-        let context = session_context(executor(shell, true), root);
+        let local = LocalCommandExecutor::new(Some(shell.path.clone()), shell.shell_type);
+        let context = session_context(Arc::new(local), root);
         futures_lite::future::block_on(suggestions(
             line,
             line.len(),
@@ -703,14 +717,14 @@ fn git_cannot_lazy_fetch_over_a_network_transport() {
         "fixture is insensitive: git did not lazy fetch the HEAD tree from the promisor remote"
     );
 
-    let mut only_local_transports = fixture.environment.clone();
-    only_local_transports.insert("GIT_ALLOW_PROTOCOL".to_owned(), "file".to_owned());
+    let mut no_transports = fixture.environment.clone();
+    no_transports.insert("GIT_ALLOW_PROTOCOL".to_owned(), String::new());
     fixture.reset();
-    run_git(&fixture.partial, args, &only_local_transports);
+    run_git(&fixture.partial, args, &no_transports);
     assert_eq!(
         fixture.effects(),
         BTreeSet::new(),
-        "GIT_ALLOW_PROTOCOL=file alone must stop the lazy fetch of a git that ignores \
+        "An empty GIT_ALLOW_PROTOCOL alone must stop the lazy fetch of a git that ignores \
          GIT_NO_LAZY_FETCH"
     );
 
@@ -737,12 +751,8 @@ fn git_no_lazy_fetch_stops_a_lazy_fetch() {
         .map_while(|part| part.parse().ok())
         .collect();
     if numbers < vec![2, 44] {
-        assert!(
-            !in_ci(),
-            "{version:?}: GIT_NO_LAZY_FETCH needs git 2.44, and this CI runner has older git"
-        );
-        eprintln!("SKIPPED: {version:?} predates GIT_NO_LAZY_FETCH (git 2.44)");
-        return;
+        eprintln!("TEST SKIPPED: {version:?} cannot verify GIT_NO_LAZY_FETCH; use patched Git");
+        std::process::exit(86);
     }
     let mut environment = fixture.environment.clone();
     environment.insert("GIT_NO_LAZY_FETCH".to_owned(), "1".to_owned());

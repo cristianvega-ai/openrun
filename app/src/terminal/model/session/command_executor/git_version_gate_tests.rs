@@ -262,3 +262,77 @@ fn the_probe_runs_through_the_offline_environment_of_the_executor() {
         "the probe did not get the offline environment table: {probe}"
     );
 }
+
+#[test]
+fn remote_and_in_band_contexts_run_no_generator_alias_or_correction_probe() {
+    use super::network_sandbox::NetworkSandbox;
+    use super::{CommandExecutor, InBandCommandExecutor, RemoteCommandExecutor};
+
+    let git = FakeGit::new("git version 2.54.0", 0);
+    let (commands_tx, commands_rx) = async_channel::unbounded();
+    let (cancelled_tx, _) = async_channel::unbounded();
+    let executors: Vec<Arc<dyn CommandExecutor>> = vec![
+        Arc::new(
+            LocalCommandExecutor::new(Some("/bin/bash".into()), ShellType::Bash)
+                .with_network_sandbox(NetworkSandbox::Unavailable),
+        ),
+        Arc::new(RemoteCommandExecutor::new(
+            git.cwd.join("unused-control-socket"),
+        )),
+        Arc::new(InBandCommandExecutor::new(commands_tx, cancelled_tx)),
+    ];
+    for executor in executors {
+        assert!(!executor.network_isolated());
+        for shell_type in [
+            ShellType::Bash,
+            ShellType::Zsh,
+            ShellType::Fish,
+            ShellType::PowerShell,
+        ] {
+            let session = Session::new(
+                SessionInfo::new_for_test()
+                    .with_path(Some(git.path()))
+                    .with_shell_type(shell_type),
+                executor.clone(),
+            );
+            assert!(
+                futures_lite::future::block_on(
+                    session.git_branches_for_command_corrections(git.cwd.to_str().unwrap())
+                )
+                .is_empty()
+            );
+            let context = SessionContext::new(
+                session,
+                CommandRegistry::global_instance(),
+                TypedPathBuf::from(git.cwd.to_str().unwrap()),
+            );
+            for line in [
+                "git checkout ",
+                "git stash apply ",
+                "git co ",
+                "uv tool uninstall ",
+            ] {
+                futures_lite::future::block_on(suggestions(
+                    line,
+                    line.len(),
+                    None,
+                    CompleterOptions {
+                        match_strategy: MatchStrategy::CaseInsensitive,
+                        fallback_strategy: CompletionsFallbackStrategy::None,
+                        suggest_file_path_completions_only: false,
+                        parse_quotes_as_literals: false,
+                    },
+                    &context,
+                ));
+            }
+        }
+    }
+    assert!(
+        git.invocations().is_empty(),
+        "neither generators nor version/correction probes may start"
+    );
+    assert!(
+        commands_rx.try_recv().is_err(),
+        "in-band execution must not be queued"
+    );
+}

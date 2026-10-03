@@ -1,7 +1,7 @@
 name: macOS test tools
 description: >-
   Installs the tools that real-tool tests run (docker command-line client, fish, PowerShell 7) and
-  fails when any tool a test needs is missing. The tests fail instead of skipping when CI=true.
+  fails when any tool a test needs is missing. Missing required tools exit 86 and fail nextest.
 
 runs:
   using: composite
@@ -28,11 +28,27 @@ runs:
           HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask powershell
         fi
 
+    - name: Install project-interpreter regression tools
+      shell: bash
+      run: |
+        set -euo pipefail
+        if ! command -v uv > /dev/null; then
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install uv
+        fi
+        if ! command -v go > /dev/null; then
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install go
+        fi
+        if ! command -v gcloud > /dev/null; then
+          HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_CLEANUP=1 brew install --cask gcloud-cli
+        fi
+        npm install --prefix "$RUNNER_TEMP/openrun-npm6" --ignore-scripts --no-audit --no-fund npm@6.14.18
+        echo "OPENRUN_TEST_NPM6=$RUNNER_TEMP/openrun-npm6/node_modules/.bin/npm" >> "$GITHUB_ENV"
+
     - name: Check the tools the real-tool tests use
       shell: bash
       run: |
         missing=0
-        for tool in git npm corepack rustup python3 docker sandbox-exec fish pwsh zsh bash; do
+        for tool in git npm corepack rustup python3 uv go gcloud docker sandbox-exec fish pwsh zsh bash; do
           if path=$(command -v "$tool"); then
             echo "$tool: $path"
           else
@@ -40,4 +56,11 @@ runs:
             missing=1
           fi
         done
+        if [ "$missing" -eq 0 ]; then
+          git --version
+          uv --version
+          rustup --version
+          docker --version
+          "$OPENRUN_TEST_NPM6" --version
+        fi
         exit "$missing"

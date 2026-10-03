@@ -53,6 +53,8 @@ pub enum ChildEvent {
 /// notified if the PTY child process does something we care about (other than writing to the TTY).
 /// In particular, this allows for race-free child exit notification on UNIX (cf. `SIGCHLD`).
 pub trait EventedPty: EventedReadWrite {
+    fn echo_enabled(&self) -> io::Result<bool>;
+
     fn child_event_token(&self) -> mio::Token;
 
     /// Tries to retrieve an event.

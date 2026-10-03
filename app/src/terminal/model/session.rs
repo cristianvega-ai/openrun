@@ -1285,9 +1285,11 @@ impl Session {
     /// Whether this session's git is known to honor the offline environment table, which
     /// `git_branches_for_command_corrections` and the git completion generators rely on.
     pub async fn git_honors_environment_overrides(&self) -> bool {
-        self.git_version()
-            .await
-            .is_some_and(GitVersion::honors_environment_overrides)
+        self.network_isolated()
+            && self
+                .git_version()
+                .await
+                .is_some_and(GitVersion::honors_environment_overrides)
     }
 
     pub async fn git_branches_for_command_corrections(&self, working_dir: &str) -> Vec<String> {

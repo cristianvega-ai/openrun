@@ -69,16 +69,6 @@ pub struct EarlyOutput {
     /// terminal view.
     event_proxy: ChannelEventListener,
     pending_background_block: Option<Block>,
-
-    /// The text the tty echoes for the input-reporting key (`^[i`, or `^[1` in PowerShell), if the
-    /// shell reports its input. The key is written when the prompt appears, and the tty echoes it
-    /// as three printable characters whenever the shell has not yet put the terminal in raw mode.
-    /// Left in the background block, the echo would put text in front of the first line of
-    /// background output (and the shell's own line clear turns it into three blanks).
-    reporting_echo: Option<[char; 3]>,
-    /// The leading characters of [`Self::reporting_echo`] that were received and are held back
-    /// until the rest arrives or turns out not to be that text.
-    reporting_echo_held: Vec<char>,
 }
 
 impl EarlyOutput {
@@ -94,8 +84,6 @@ impl EarlyOutput {
             just_matched_carriage_return: false,
             event_proxy,
             pending_background_block: None,
-            reporting_echo: None,
-            reporting_echo_held: Vec::new(),
         }
     }
 
@@ -108,36 +96,7 @@ impl EarlyOutput {
         } else {
             TypeaheadMode::InputMatching
         };
-        self.reporting_echo = session_info
-            .shell
-            .input_reporting_sequence()
-            .map(|[_escape, key]| ['^', '[', char::from(key)]);
-        self.reporting_echo_held.clear();
         log::info!("Configured typeahead mode as {:?}", self.mode);
-    }
-
-    /// Takes a character received as early output and returns the characters to treat as early
-    /// output now: the character itself, or nothing while it may be the start of the tty's echo of
-    /// the input-reporting key, which is dropped once complete.
-    fn without_reporting_echo(&mut self, ch: char) -> Vec<char> {
-        let Some(echo) = self.reporting_echo else {
-            return vec![ch];
-        };
-        let held = self.reporting_echo_held.len();
-        if echo[held] == ch {
-            self.reporting_echo_held.push(ch);
-            if self.reporting_echo_held.len() == echo.len() {
-                self.reporting_echo_held.clear();
-            }
-            return Vec::new();
-        }
-        let mut chars = mem::take(&mut self.reporting_echo_held);
-        if echo[0] == ch {
-            self.reporting_echo_held.push(ch);
-        } else {
-            chars.push(ch);
-        }
-        chars
     }
 
     /// Returns a reference to the current typeahead.
@@ -350,18 +309,16 @@ impl ansi::Handler for EarlyOutputHandler<'_> {
         if self.inner().handle_potential_typeahead(c) {
             return;
         }
-        for c in self.inner().without_reporting_echo(c) {
-            self.with_background_output(|block| {
-                // We don't start background blocks until they have content because
-                // the shell often prints control characters in between commands
-                // to reset terminal state. If we eagerly added background blocks,
-                // there would be an empty one before almost every command.
-                if !block.started() {
-                    block.start_background(session_id);
-                }
-                block.input(c);
-            })
-        }
+        self.with_background_output(|block| {
+            // We don't start background blocks until they have content because
+            // the shell often prints control characters in between commands
+            // to reset terminal state. If we eagerly added background blocks,
+            // there would be an empty one before almost every command.
+            if !block.started() {
+                block.start_background(session_id);
+            }
+            block.input(c);
+        })
     }
 
     /// Replace the current typeahead. We use this when we have complete typeahead

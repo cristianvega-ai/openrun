@@ -37,7 +37,7 @@ fn test_exact_command_before_fuzzy_command() {
     assert!(exact_match.score() > fuzzy_match.score());
 }
 
-#[ignore = "Weighting doesn't prioritize this case well"]
+#[ignore = "ENG-240: Weighting doesn't prioritize this case well"]
 #[test]
 fn test_exact_title_before_fuzzy_command() {
     // Even though the command is weighted more, an exact title match _should_ score higher.

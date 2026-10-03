@@ -2438,7 +2438,7 @@ impl BlockList {
     /// Whether the block list is in a state where it could be receiving
     /// typeahead text or background job output. This occurs when the active block
     /// has not yet started but we receive output from the shell.
-    fn is_early_output(&self) -> bool {
+    pub(super) fn is_early_output(&self) -> bool {
         let active_block = self.active_block();
         self.is_bootstrapping_precmd_done()
             && !active_block.started()

@@ -49,7 +49,7 @@ net-rust | app/src/local_control/mod.rs | axum::serve\(listener, router\) | serv
 net-rust | app/src/local_control/mod.rs | tokio::net::Unix(Listener|Stream) | Unix-socket credential broker for warpctrl
 net-rust | app/src/local_control/mod_tests.rs | ^\s*use axum::(body::Bytes|extract::State|http::header::\{AUTHORIZATION, HOST, ORIGIN\}|http::\{HeaderMap, HeaderValue\}); | axum types in the warpctrl server tests
 net-rust | app/src/local_control/mod_tests.rs | tokio::net::UnixStream::pair\(\)|axum::http::StatusCode | in-process socket pair and status codes in the warpctrl server tests
-net-rust | crates/warp_completer/src/signatures/legacy/generator_policy/allowed.rs | "hyper" | the allowed `hyper list` completion generator (the Hyper terminal's plugin lister), not the hyper crate
+net-rust | crates/warp_completer/src/signatures/legacy/generator_policy/denied.rs | ^\s*\("hyper", "list", "unverified-tool"\),$ | the denied Hyper terminal plugin lister, not the hyper crate
 net-rust | * | ^\s*(pub )?use std::net::\{?((IpAddr|Ipv4Addr|Ipv6Addr|SocketAddr)(, )?)+\}?; | address types only, no sockets
 net-rust | app/src/terminal/model/session/command_executor/test_support.rs | ^\s*use std::net::\{SocketAddr, TcpListener, TcpStream\};$ | loopback canary HTTP server of the offline-environment and network-sandbox tests (stands in for the internet; binds 127.0.0.1 only)
 net-rust | app/src/terminal/model/session/command_executor/test_support.rs | TcpListener::bind\("127\.0\.0\.1:0"\) | the canary listener, loopback only
@@ -98,7 +98,7 @@ net-dep | git-dep:warp-command-signatures/src/generators/fig_token.rs | curl -sf
 net-dep | git-dep:warp-command-signatures/src/generators/fig_token.rs | curl -sL 'https://api\.github\.com/users/ | denied generator degit/github_user_repos
 net-dep | git-dep:warp-command-signatures/src/generators/fig_token.rs | curl -s -H 'Accept: application/json' 'https://api\.npms\.io/v2/search | denied npms_search generators of bun, expo, expo-cli, ni, npm, pnpm, rush and yarn
 net-dep | git-dep:warp-command-signatures/src/generators/gh.rs | gh api graphql | denied generator gh/api_graphql_string_viewer
-net-dep | git-dep:warp-command-signatures/src/generators/hyper.rs | hyper | the allowed `hyper list` generator (the Hyper terminal's plugin lister), not the hyper crate
+net-dep | git-dep:warp-command-signatures/src/generators/hyper.rs | hyper | the denied Hyper terminal plugin lister, not the hyper crate
 net-dep | git-dep:warp-command-signatures/src/generators/mod.rs | mod hyper;|hyper::generator\(\) | registration of that generator
 net-dep | git-dep:warp-command-signatures/src/generators/npm.rs | curl -sf 'https://registry\.npmjs\.org/-/v1/search | denied generator npm/npm_registry_search
 net-dep | git-dep:warp-command-signatures/src/generators/ns.rs | curl -sfL .* https://api\.github\.com/repos/NativeScript/ | denied generators nativescript, ns and tns / nativescript_templates
@@ -111,7 +111,7 @@ net-dep | git-dep:warp-command-signatures/src/generators/vagrant.rs | "http://ex
 # --- developer and CI bootstrap (9.2) ---
 # These fetch third-party toolchains for building the app; nothing here ships in the app.
 net-script | script/install_cargo_binstall | * | fetches cargo-binstall from GitHub releases at build time
-net-script | script/offline_sandbox_macos | * | the canary: a connection to a documentation address (203.0.113.7) that the sandbox must refuse before the run
+net-script | script/offline_sandbox_macos | * | collector-owned curl canaries use only 127.0.0.1 ports 9 and 10; their launch identity and denial are required
 net-script | script/macos/bootstrap | * | Homebrew and rustup installers
 net-script | script/offline_audit | * | holds the audit patterns
 net-script | script/offline_audit.allowlist | * | documents the exceptions

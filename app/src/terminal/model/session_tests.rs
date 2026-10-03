@@ -198,6 +198,10 @@ fn killed_output() -> CommandOutput {
 
 #[async_trait]
 impl CommandExecutor for ScriptedExecutor {
+    fn network_isolated(&self) -> bool {
+        true
+    }
+
     async fn execute_command(
         &self,
         command: &str,

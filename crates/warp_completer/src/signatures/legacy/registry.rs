@@ -254,10 +254,15 @@ impl CommandRegistry {
 
     /// Whether the alias generator `alias` of spec `spec` may run a command, decided by
     /// identity like [`Self::allows_generator`].
-    pub fn allows_alias_generator(&self, spec: &str, alias: &AliasGeneratorName) -> bool {
+    pub fn allows_alias_generator(
+        &self,
+        spec: &str,
+        alias: &AliasGeneratorName,
+        containment: Containment,
+    ) -> bool {
         match self.generator_policy {
             GeneratorPolicy::AllowListed => {
-                super::generator_policy::is_alias_generator_allowed(spec, &alias.0)
+                super::generator_policy::is_alias_generator_allowed(spec, &alias.0, containment)
             }
             #[cfg(any(test, feature = "test-util"))]
             GeneratorPolicy::AllowAll => true,
@@ -417,11 +422,18 @@ impl CommandRegistry {
                 dynamic_completion_data,
             ) {
                 (Some(alias_name), Some(data)) => {
-                    self.allows_alias_generator(data.spec(), alias_name)
-                        && self.alias_tokens_permitted(
-                            context.shell_family().unwrap_or(ShellFamily::Posix),
-                            &tokens[..=token_idx],
-                        )
+                    self.allows_alias_generator(
+                        data.spec(),
+                        alias_name,
+                        context
+                            .generator_context()
+                            .map_or(Containment::Unrestricted, |generator_context| {
+                                generator_context.containment()
+                            }),
+                    ) && self.alias_tokens_permitted(
+                        context.shell_family().unwrap_or(ShellFamily::Posix),
+                        &tokens[..=token_idx],
+                    )
                 }
                 _ => false,
             };

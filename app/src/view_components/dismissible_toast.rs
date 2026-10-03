@@ -437,6 +437,12 @@ impl<A: Action + Clone> DismissibleToast<A> {
         &self.main_text
     }
 
+    /// Returns the flavor of this toast. Only available in tests.
+    #[cfg(test)]
+    pub fn flavor(&self) -> ToastFlavor {
+        self.flavor
+    }
+
     pub fn success(main_text: String) -> Self {
         Self::new(main_text, ToastFlavor::Success)
     }

@@ -504,7 +504,17 @@ impl EventedReadWrite for Pty {
     }
 }
 
+pub(super) fn pty_echo_enabled(fd: &File) -> io::Result<bool> {
+    termios::tcgetattr(fd.as_raw_fd())
+        .map(|attrs| attrs.local_flags.contains(termios::LocalFlags::ECHO))
+        .map_err(io::Error::from)
+}
+
 impl EventedPty for Pty {
+    fn echo_enabled(&self) -> io::Result<bool> {
+        pty_echo_enabled(&self.fd)
+    }
+
     #[inline]
     fn next_child_event(&mut self) -> Option<ChildEvent> {
         self.signals.pending().next().and_then(|signal| {

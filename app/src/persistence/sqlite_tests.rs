@@ -1411,9 +1411,15 @@ mod history_tests {
     use warp_core::command::ExitCode;
 
     use super::*;
-    use crate::persistence::sqlite::handle_model_event;
+    use crate::persistence::sqlite::{
+        CheckpointRow, ScrubPolicy, checkpoint_finished, compact_with_retries,
+        complete_scrub_generation, delete_saved_history, establish_connection,
+        finish_pending_scrub, handle_model_event, pending_scrub_generation, scrub_is_pending,
+        start_writer_with_scrub_retry,
+    };
     use crate::persistence::{
-        FinishedCommandMetadata, SavedHistoryDeleted, StartedCommandMetadata,
+        FinishedCommandMetadata, HistoryScrub, SavedHistoryDeleted, ScrubBlocker,
+        StartedCommandMetadata, establish_ro_connection,
     };
     use crate::terminal::model::session::SessionId;
 
@@ -1760,7 +1766,8 @@ mod history_tests {
             deleted,
             SavedHistoryDeleted {
                 commands: 3,
-                blocks: 2
+                blocks: 2,
+                scrub: HistoryScrub::Complete,
             }
         );
         assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (0, 0));
@@ -1815,7 +1822,8 @@ mod history_tests {
             deleted,
             SavedHistoryDeleted {
                 commands: 1,
-                blocks: 0
+                blocks: 0,
+                scrub: HistoryScrub::Complete,
             }
         );
         let deleted = delete_saved_history_through_the_writer(&mut conn, &off)
@@ -1853,7 +1861,8 @@ mod history_tests {
             deleted,
             SavedHistoryDeleted {
                 commands: 1,
-                blocks: 1
+                blocks: 1,
+                scrub: HistoryScrub::Complete,
             }
         );
         writer
@@ -1865,5 +1874,877 @@ mod history_tests {
         let bytes = database_bytes(&database_path);
         assert!(!contains(&bytes, SECRET_TOKEN));
         assert!(!contains(&bytes, SECRET_OUTPUT));
+    }
+
+    /// A policy that retries a few times without waiting, for tests that hold a connection open.
+    const QUICK: ScrubPolicy = ScrubPolicy {
+        attempts: 3,
+        first_delay: std::time::Duration::from_millis(1),
+        max_delay: std::time::Duration::from_millis(2),
+    };
+
+    /// A database with `commands` rows and `blocks` blocks of synthetic secrets, checkpointed
+    /// so the text sits in the main database file, as it does after any ordinary checkpoint.
+    fn database_with_history(
+        database_path: &std::path::Path,
+        commands: usize,
+        blocks: usize,
+    ) -> SqliteConnection {
+        let mut conn = setup_database(database_path).expect("database should initialize");
+        let history = HistoryPersistence::new(true);
+        for _ in 0..commands {
+            handle_model_event(
+                ModelEvent::InsertCommand {
+                    metadata: started_command(SECRET_COMMAND),
+                },
+                &mut conn,
+                &history,
+            )
+            .expect("insert should be handled");
+        }
+        for _ in 0..blocks {
+            handle_model_event(
+                ModelEvent::SaveBlock(secret_block(false)),
+                &mut conn,
+                &history,
+            )
+            .expect("block should be handled");
+        }
+        conn
+    }
+
+    fn pending_on_disk(database_path: &std::path::Path) -> bool {
+        let mut conn = establish_ro_connection(database_path.to_str().unwrap()).unwrap();
+        scrub_is_pending(&mut conn)
+    }
+
+    fn checkpoint(conn: &mut SqliteConnection) -> Vec<CheckpointRow> {
+        diesel::sql_query("PRAGMA wal_checkpoint(TRUNCATE)")
+            .load(conn)
+            .expect("checkpoint should run")
+    }
+
+    fn secret_is_on_disk(database_path: &std::path::Path) -> bool {
+        let bytes = database_bytes(database_path);
+        contains(&bytes, SECRET_TOKEN) || contains(&bytes, SECRET_OUTPUT)
+    }
+
+    fn wal_len(database_path: &std::path::Path) -> u64 {
+        std::fs::metadata(format!("{}-wal", database_path.display()))
+            .map(|meta| meta.len())
+            .unwrap_or(0)
+    }
+
+    /// Opens a second connection and holds a read snapshot of the saved history, like another
+    /// OpenRun process, the `sqlite3` tool, a database browser or a query that has not finished.
+    fn hold_a_read_snapshot(database_path: &std::path::Path) -> SqliteConnection {
+        let mut reader = establish_ro_connection(database_path.to_str().expect("utf-8 path"))
+            .expect("reader should open");
+        reader.batch_execute("BEGIN;").expect("begin");
+        assert!(
+            count_commands(&mut reader) > 0,
+            "the snapshot sees the saved commands"
+        );
+        reader
+    }
+
+    /// Runs the production function with no wait inside SQLite, so a blocked step fails at once.
+    fn delete_now(
+        conn: &mut SqliteConnection,
+        policy: &ScrubPolicy,
+    ) -> anyhow::Result<SavedHistoryDeleted> {
+        conn.batch_execute("PRAGMA busy_timeout = 0;")
+            .expect("busy_timeout");
+        delete_saved_history(conn, policy)
+    }
+
+    /// The pre-fix sequence, kept as a control: with a reader holding an older snapshot both
+    /// checkpoints return busy while every statement succeeds, and the text stays in the file.
+    /// If this ever stops being true the tests below no longer test anything.
+    #[test]
+    fn control_a_held_reader_makes_the_checkpoints_busy_while_every_statement_succeeds() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 1, 1);
+        checkpoint(&mut conn);
+        assert!(secret_is_on_disk(&database_path));
+        conn.batch_execute("PRAGMA busy_timeout = 0;")
+            .expect("pragma");
+
+        let mut reader = hold_a_read_snapshot(&database_path);
+        conn.batch_execute(
+            "PRAGMA secure_delete = ON; BEGIN; DELETE FROM commands; DELETE FROM blocks; COMMIT;",
+        )
+        .expect("delete");
+        let first = checkpoint(&mut conn);
+        conn.batch_execute("VACUUM;").expect("vacuum succeeds");
+        let second = checkpoint(&mut conn);
+        assert_eq!(first.len(), 1);
+        assert_eq!(first[0].busy, 1, "first checkpoint is busy: {first:?}");
+        assert_eq!(second[0].busy, 1, "second checkpoint is busy: {second:?}");
+        assert!(secret_is_on_disk(&database_path));
+        assert!(checkpoint_finished(&first).is_err());
+        assert!(checkpoint_finished(&second).is_err());
+
+        // And once the reader is gone the same checkpoint finishes.
+        reader.batch_execute("ROLLBACK;").expect("rollback");
+        drop(reader);
+        let third = checkpoint(&mut conn);
+        assert_eq!(checkpoint_finished(&third), Ok(()), "{third:?}");
+    }
+
+    #[test]
+    fn checkpoint_rows_are_judged_by_what_sqlite_says() {
+        let row = |busy, log, checkpointed| CheckpointRow {
+            busy,
+            log,
+            checkpointed,
+        };
+        assert_eq!(checkpoint_finished(&[row(0, 0, 0)]), Ok(()));
+        assert_eq!(
+            checkpoint_finished(&[row(0, 7, 7)]),
+            Err(ScrubBlocker::InUse)
+        );
+        for invalid in [row(0, -2, -2), row(2, 0, 0), row(0, 1, 2)] {
+            assert_eq!(checkpoint_finished(&[invalid]), Err(ScrubBlocker::Failed));
+        }
+        assert_eq!(
+            checkpoint_finished(&[row(0, -1, -1)]),
+            Ok(()),
+            "no write-ahead log at all"
+        );
+        assert_eq!(
+            checkpoint_finished(&[row(1, 2, 0)]),
+            Err(ScrubBlocker::InUse)
+        );
+        assert_eq!(
+            checkpoint_finished(&[row(1, 0, 0)]),
+            Err(ScrubBlocker::InUse),
+            "busy is busy even when the counts match"
+        );
+        assert_eq!(
+            checkpoint_finished(&[row(0, 5, 3)]),
+            Err(ScrubBlocker::InUse),
+            "a partly merged log is not finished"
+        );
+        assert_eq!(checkpoint_finished(&[]), Err(ScrubBlocker::Failed));
+        assert_eq!(
+            checkpoint_finished(&[row(0, 0, 0), row(0, 0, 0)]),
+            Err(ScrubBlocker::Failed)
+        );
+    }
+
+    /// Astra review 3, R3-04, through the production function: another connection holds a read
+    /// snapshot while the history is deleted.
+    #[test]
+    fn a_held_reader_never_leads_to_a_clean_result_while_the_text_is_still_in_the_files() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 3, 2);
+        checkpoint(&mut conn);
+        assert!(secret_is_on_disk(&database_path));
+
+        let mut reader = hold_a_read_snapshot(&database_path);
+        let deleted = delete_now(&mut conn, &QUICK).expect("the rows are deleted");
+
+        assert_eq!((deleted.commands, deleted.blocks), (3, 2));
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (0, 0));
+        // The invariant: a finished scrub means the files are clean; text in the files means the
+        // result says so.
+        let still_on_disk = secret_is_on_disk(&database_path);
+        assert!(
+            still_on_disk,
+            "control: with a reader holding the old snapshot the text cannot have been removed"
+        );
+        assert_eq!(
+            deleted.scrub,
+            HistoryScrub::Incomplete(ScrubBlocker::InUse),
+            "the text is still in the database files, and the result must say so"
+        );
+        assert!(
+            pending_on_disk(&database_path),
+            "the unfinished scrub is recorded on disk"
+        );
+        assert!(scrub_is_pending(&mut conn));
+        // The reader still sees its old data (it is a snapshot), and the live database has none.
+        assert!(count_commands(&mut reader) > 0);
+
+        // Still blocked: finishing the scrub fails and keeps the record.
+        assert!(!finish_pending_scrub(&mut conn, &QUICK));
+        assert!(pending_on_disk(&database_path));
+        assert!(secret_is_on_disk(&database_path));
+
+        // Once the reader lets go the scrub finishes, with no new delete.
+        reader.batch_execute("ROLLBACK;").expect("rollback");
+        drop(reader);
+        assert!(finish_pending_scrub(&mut conn, &QUICK));
+        assert!(!secret_is_on_disk(&database_path), "the text is gone");
+        assert!(!pending_on_disk(&database_path));
+        assert!(!scrub_is_pending(&mut conn));
+        assert_database_is_intact(&mut conn);
+    }
+
+    /// The same through `handle_model_event`, the entry point the writer thread uses, with the
+    /// production retry policy and the production busy timeout.
+    #[test]
+    fn a_held_reader_through_the_writer_entry_point_reports_the_unfinished_scrub() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 1, 1);
+        checkpoint(&mut conn);
+        let reader = hold_a_read_snapshot(&database_path);
+
+        let started = std::time::Instant::now();
+        let history = HistoryPersistence::new(true);
+        let deleted = delete_saved_history_through_the_writer(&mut conn, &history)
+            .expect("the rows are deleted");
+        assert_eq!(deleted.scrub, HistoryScrub::Incomplete(ScrubBlocker::InUse));
+        assert!(secret_is_on_disk(&database_path));
+        assert!(
+            started.elapsed() < std::time::Duration::from_secs(30),
+            "the wait is bounded: {:?}",
+            started.elapsed()
+        );
+        drop(reader);
+    }
+
+    /// A reader that goes away while the delete is retrying: the delete waits for it and reports
+    /// a finished scrub, and the files really are clean.
+    #[test]
+    fn a_reader_that_finishes_during_the_retries_lets_the_scrub_complete() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 2, 1);
+        checkpoint(&mut conn);
+        let mut reader = hold_a_read_snapshot(&database_path);
+        let releaser = std::thread::spawn(move || {
+            std::thread::sleep(std::time::Duration::from_millis(150));
+            reader.batch_execute("ROLLBACK;").expect("rollback");
+        });
+
+        let policy = ScrubPolicy {
+            attempts: 20,
+            first_delay: std::time::Duration::from_millis(20),
+            max_delay: std::time::Duration::from_millis(50),
+        };
+        let deleted = delete_now(&mut conn, &policy).expect("delete should succeed");
+        releaser.join().expect("releaser");
+        assert_eq!(deleted.scrub, HistoryScrub::Complete);
+        assert!(!secret_is_on_disk(&database_path));
+        assert!(!pending_on_disk(&database_path));
+        assert_database_is_intact(&mut conn);
+    }
+
+    /// The fixture leaves no deleted history text in either file, and a reader
+    /// that started after the delete sees.
+    #[test]
+    fn with_no_other_connection_the_scrub_completes_and_leaves_nothing_behind() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 4, 3);
+        checkpoint(&mut conn);
+        // A reader that opens only after the delete holds no old snapshot.
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete should succeed");
+        assert_eq!(deleted.scrub, HistoryScrub::Complete);
+        let mut late_reader = hold_a_read_snapshot_of_nothing(&database_path);
+        assert_eq!(count_commands(&mut late_reader), 0);
+        assert!(!secret_is_on_disk(&database_path));
+        assert!(!pending_on_disk(&database_path));
+    }
+
+    fn hold_a_read_snapshot_of_nothing(database_path: &std::path::Path) -> SqliteConnection {
+        let mut reader = establish_ro_connection(database_path.to_str().expect("utf-8 path"))
+            .expect("reader should open");
+        reader.batch_execute("BEGIN;").expect("begin");
+        reader
+    }
+
+    /// The write-ahead log holds the frames (nothing was checkpointed), and the main file holds
+    /// none of the text yet.
+    #[test]
+    fn deleting_while_the_write_ahead_log_holds_the_frames_scrubs_the_log_too() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        conn.batch_execute("PRAGMA wal_autocheckpoint = 0;")
+            .expect("pragma");
+        checkpoint(&mut conn);
+        let history = HistoryPersistence::new(true);
+        for _ in 0..20 {
+            handle_model_event(
+                ModelEvent::InsertCommand {
+                    metadata: started_command(SECRET_COMMAND),
+                },
+                &mut conn,
+                &history,
+            )
+            .expect("insert");
+            handle_model_event(
+                ModelEvent::SaveBlock(secret_block(false)),
+                &mut conn,
+                &history,
+            )
+            .expect("block");
+        }
+        assert!(wal_len(&database_path) > 0, "the log holds frames");
+        let wal = std::fs::read(format!("{}-wal", database_path.display())).expect("wal");
+        assert!(contains(&wal, SECRET_TOKEN), "the log holds the secret");
+        let main = std::fs::read(&database_path).expect("db");
+        assert!(!contains(&main, SECRET_TOKEN), "the main file does not yet");
+
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete should succeed");
+        assert_eq!(deleted.scrub, HistoryScrub::Complete);
+        assert_eq!((deleted.commands, deleted.blocks), (20, 20));
+        assert!(!secret_is_on_disk(&database_path));
+        // Clearing the durable cleanup record can add metadata frames to the WAL.
+        // The full byte scan above checks that no deleted text is in them.
+    }
+
+    /// With the same held reader but the frames only in the log: the log cannot be reset either.
+    #[test]
+    fn a_held_reader_with_the_text_only_in_the_log_is_reported_too() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        conn.batch_execute("PRAGMA wal_autocheckpoint = 0;")
+            .expect("pragma");
+        checkpoint(&mut conn);
+        let history = HistoryPersistence::new(true);
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command(SECRET_COMMAND),
+            },
+            &mut conn,
+            &history,
+        )
+        .expect("insert");
+        let reader = hold_a_read_snapshot(&database_path);
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete");
+        assert!(secret_is_on_disk(&database_path), "the log still has it");
+        assert_eq!(deleted.scrub, HistoryScrub::Incomplete(ScrubBlocker::InUse));
+        drop(reader);
+    }
+
+    /// `secure_delete` already on (the user's or a previous delete's setting) changes nothing,
+    /// and so does it being off: the function sets it itself. Both with and without a reader.
+    #[test]
+    fn deleting_works_with_secure_delete_on_and_off_to_begin_with() {
+        for preset in ["ON", "OFF"] {
+            let tempdir = tempfile::tempdir().expect("tempdir should be created");
+            let database_path = tempdir.path().join("warp.sqlite");
+            let mut conn = database_with_history(&database_path, 2, 2);
+            conn.batch_execute(&format!("PRAGMA secure_delete = {preset};"))
+                .expect("pragma");
+            checkpoint(&mut conn);
+
+            let deleted = delete_now(&mut conn, &QUICK).expect("delete should succeed");
+            assert_eq!(
+                deleted.scrub,
+                HistoryScrub::Complete,
+                "secure_delete {preset}"
+            );
+            assert!(!secret_is_on_disk(&database_path), "secure_delete {preset}");
+
+            // With a reader, the result must still be honest.
+            let mut conn = database_with_history(&tempdir.path().join("second.sqlite"), 2, 2);
+            conn.batch_execute(&format!("PRAGMA secure_delete = {preset};"))
+                .expect("pragma");
+            checkpoint(&mut conn);
+            let second_path = tempdir.path().join("second.sqlite");
+            let reader = hold_a_read_snapshot(&second_path);
+            let deleted = delete_now(&mut conn, &QUICK).expect("delete should succeed");
+            assert_eq!(
+                deleted.scrub,
+                HistoryScrub::Incomplete(ScrubBlocker::InUse),
+                "secure_delete {preset}"
+            );
+            assert!(secret_is_on_disk(&second_path), "secure_delete {preset}");
+            drop(reader);
+        }
+    }
+
+    /// Another connection holds the write lock: the delete cannot start. It reports an error,
+    /// deletes nothing, owes nothing, and works once the lock is gone.
+    #[test]
+    fn a_busy_writer_fails_the_delete_without_deleting_or_owing_anything() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 2, 1);
+        checkpoint(&mut conn);
+
+        let mut other_writer =
+            establish_connection(database_path.to_str().expect("utf-8 path"), false)
+                .expect("second writer");
+        other_writer
+            .batch_execute("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+            .expect("take the write lock");
+        let outcome = delete_now(&mut conn, &QUICK);
+        let error = outcome.expect_err("the delete cannot get the write lock");
+        assert!(
+            format!("{error:#}").contains("nothing was deleted"),
+            "the error says so: {error:#}"
+        );
+        assert!(
+            !pending_on_disk(&database_path),
+            "nothing was deleted, so nothing is owed"
+        );
+        other_writer.batch_execute("ROLLBACK;").expect("rollback");
+        drop(other_writer);
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (2, 1));
+
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete works once the lock is gone");
+        assert_eq!(
+            (deleted.commands, deleted.blocks, deleted.scrub),
+            (2, 1, HistoryScrub::Complete)
+        );
+        assert!(!secret_is_on_disk(&database_path));
+    }
+
+    /// The lock is taken after the rows are gone: the compaction cannot get through, which is
+    /// reported as an unfinished scrub rather than as a success.
+    #[test]
+    fn a_writer_that_blocks_the_compaction_is_not_a_clean_result() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 2, 1);
+        conn.batch_execute("PRAGMA busy_timeout = 0;")
+            .expect("pragma");
+        let mut other_writer =
+            establish_connection(database_path.to_str().expect("utf-8 path"), false)
+                .expect("second writer");
+        other_writer
+            .batch_execute("PRAGMA busy_timeout = 0; BEGIN IMMEDIATE;")
+            .expect("take the write lock");
+        let blocked = compact_with_retries(&mut conn, &QUICK);
+        assert!(
+            matches!(
+                blocked,
+                Err(ScrubBlocker::InUse | ScrubBlocker::DatabaseLocked)
+            ),
+            "{blocked:?}"
+        );
+        other_writer.batch_execute("ROLLBACK;").expect("rollback");
+        drop(other_writer);
+        assert_eq!(compact_with_retries(&mut conn, &QUICK), Ok(()));
+    }
+
+    /// The process quits (or is killed) before the scrub could finish. The files, with the
+    /// record of the unfinished scrub, are all that is left; the next launch finishes the job
+    /// before it reads anything.
+    #[test]
+    fn the_next_launch_finishes_a_scrub_that_was_blocked() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 2, 2);
+        checkpoint(&mut conn);
+        let reader = hold_a_read_snapshot(&database_path);
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete");
+        assert_eq!(deleted.scrub, HistoryScrub::Incomplete(ScrubBlocker::InUse));
+
+        // What is on disk at this moment is what a crash leaves behind.
+        let after_crash = tempdir.path().join("after-crash");
+        std::fs::create_dir(&after_crash).expect("dir");
+        let relaunched_path = after_crash.join("warp.sqlite");
+        for suffix in ["", "-wal"] {
+            let from = format!("{}{suffix}", database_path.display());
+            let to = format!("{}{suffix}", relaunched_path.display());
+            if std::path::Path::new(&from).exists() {
+                std::fs::copy(from, to).expect("copy");
+            }
+        }
+        drop(reader);
+        drop(conn);
+        assert!(contains(
+            &std::fs::read(&relaunched_path).expect("main file"),
+            SECRET_TOKEN
+        ));
+        assert!(pending_on_disk(&relaunched_path));
+
+        // The next launch: open the database, then scrub as `initialize` does, before reading.
+        let mut relaunched = setup_database(&relaunched_path).expect("reopen");
+        assert!(scrub_is_pending(&mut relaunched));
+        assert!(finish_pending_scrub(&mut relaunched, &ScrubPolicy::STARTUP));
+        assert!(!secret_is_on_disk(&relaunched_path));
+        assert!(!pending_on_disk(&relaunched_path));
+        let restored = read_sqlite_data(&mut relaunched, PersistedDataScope::for_gui(true))
+            .expect("persisted data should load");
+        assert!(restored.command_history.is_empty());
+        assert_database_is_intact(&mut relaunched);
+    }
+
+    /// History saved after the delete survives the later scrub, and a reader that is still
+    /// there at launch keeps the debt owed rather than losing it.
+    #[test]
+    fn a_pending_scrub_keeps_history_saved_since_and_stays_owed_while_blocked() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 1, 0);
+        checkpoint(&mut conn);
+        let reader = hold_a_read_snapshot(&database_path);
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete");
+        assert_eq!(deleted.scrub, HistoryScrub::Incomplete(ScrubBlocker::InUse));
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command("echo kept_after_the_delete"),
+            },
+            &mut conn,
+            &HistoryPersistence::new(true),
+        )
+        .expect("insert");
+        assert!(!finish_pending_scrub(&mut conn, &QUICK), "still blocked");
+        assert!(pending_on_disk(&database_path));
+        drop(reader);
+        assert!(finish_pending_scrub(&mut conn, &QUICK));
+        assert_eq!(count_commands(&mut conn), 1, "the newer command is kept");
+        assert!(!secret_is_on_disk(&database_path));
+    }
+
+    /// The writer thread retries on its own while the app runs, and a delete that was blocked
+    /// does not need to be asked for again.
+    #[test]
+    fn the_writer_thread_finishes_a_blocked_scrub_once_the_reader_is_gone() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 2, 1);
+        checkpoint(&mut conn);
+        conn.batch_execute("PRAGMA busy_timeout = 0;")
+            .expect("pragma");
+        let mut reader = hold_a_read_snapshot(&database_path);
+        let writer = start_writer_with_scrub_retry(
+            conn,
+            database_path.clone(),
+            HistoryPersistence::new(true),
+            std::time::Duration::from_millis(25),
+        )
+        .expect("writer should start");
+        let (done, outcome) = futures::channel::oneshot::channel();
+        writer
+            .sender
+            .send(ModelEvent::DeleteSavedHistory { done: Some(done) })
+            .expect("send");
+        let deleted = futures::executor::block_on(outcome)
+            .expect("outcome")
+            .expect("deleted");
+        assert!(matches!(deleted.scrub, HistoryScrub::Incomplete(_)));
+        assert!(secret_is_on_disk(&database_path));
+        assert!(pending_on_disk(&database_path));
+
+        // Still blocked a while later: the debt is still recorded.
+        std::thread::sleep(std::time::Duration::from_millis(150));
+        assert!(pending_on_disk(&database_path));
+        assert!(secret_is_on_disk(&database_path));
+
+        reader.batch_execute("ROLLBACK;").expect("rollback");
+        drop(reader);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while pending_on_disk(&database_path) {
+            assert!(
+                std::time::Instant::now() < deadline,
+                "the writer thread should have finished the scrub"
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        writer
+            .sender
+            .send(ModelEvent::Terminate)
+            .expect("terminate");
+        writer.handle.join().expect("writer should terminate");
+        assert!(!secret_is_on_disk(&database_path));
+    }
+
+    /// A scrub owed from an earlier run is picked up by a writer started on that database.
+    #[test]
+    fn a_writer_started_with_a_scrub_owed_finishes_it() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 1, 1);
+        checkpoint(&mut conn);
+        conn.batch_execute("PRAGMA busy_timeout = 0;")
+            .expect("pragma");
+        let reader = hold_a_read_snapshot(&database_path);
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete");
+        assert!(matches!(deleted.scrub, HistoryScrub::Incomplete(_)));
+        // The reader is still there at "launch", so the startup try is blocked too.
+        assert!(!finish_pending_scrub(&mut conn, &ScrubPolicy::STARTUP));
+        let writer = start_writer_with_scrub_retry(
+            conn,
+            database_path.clone(),
+            HistoryPersistence::new(true),
+            std::time::Duration::from_millis(25),
+        )
+        .expect("writer should start");
+        drop(reader);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(20);
+        while pending_on_disk(&database_path) {
+            assert!(std::time::Instant::now() < deadline, "scrub should finish");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+        writer
+            .sender
+            .send(ModelEvent::Terminate)
+            .expect("terminate");
+        writer.handle.join().expect("writer should terminate");
+        assert!(!secret_is_on_disk(&database_path));
+    }
+
+    /// Delete while history saving is off, and the leading-space exclusion, still behave: the
+    /// scrub does not depend on the setting, and excluded blocks never reach the files.
+    #[test]
+    fn the_scrub_is_independent_of_the_save_setting_and_excluded_blocks_never_land() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 1, 1);
+        checkpoint(&mut conn);
+        let off = HistoryPersistence::new(false);
+        let reader = hold_a_read_snapshot(&database_path);
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete while off");
+        assert_eq!(deleted.scrub, HistoryScrub::Incomplete(ScrubBlocker::InUse));
+        drop(reader);
+        // While off and while owed: nothing new is written.
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command("echo SHOULD_NOT_BE_SAVED_12345"),
+            },
+            &mut conn,
+            &off,
+        )
+        .expect("ignored");
+        handle_model_event(ModelEvent::SaveBlock(secret_block(false)), &mut conn, &off)
+            .expect("ignored");
+        assert_eq!((count_commands(&mut conn), count_blocks(&mut conn)), (0, 0));
+        // A leading-space (excluded) block is not saved even with saving on.
+        handle_model_event(
+            ModelEvent::SaveBlock(secret_block(true)),
+            &mut conn,
+            &HistoryPersistence::new(true),
+        )
+        .expect("ignored");
+        assert_eq!(count_blocks(&mut conn), 0);
+        assert!(finish_pending_scrub(&mut conn, &QUICK));
+        assert!(!secret_is_on_disk(&database_path));
+    }
+
+    /// A deleted command that is short and common must not make the scrub look unfinished.
+    #[test]
+    fn short_common_commands_do_not_cause_false_incomplete_results() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = setup_database(&database_path).expect("database should initialize");
+        let history = HistoryPersistence::new(true);
+        for command in ["ls", "cd", "pwd", "git", "exit"] {
+            handle_model_event(
+                ModelEvent::InsertCommand {
+                    metadata: started_command(command),
+                },
+                &mut conn,
+                &history,
+            )
+            .expect("insert");
+        }
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete");
+        assert_eq!(deleted.commands, 5);
+        assert_eq!(deleted.scrub, HistoryScrub::Complete);
+    }
+
+    /// The readers the app itself keeps (one read-only connection per terminal input) run short
+    /// queries and hold no snapshot in between, so they do not keep a scrub from completing.
+    #[test]
+    fn the_apps_own_idle_readers_do_not_block_the_scrub() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 3, 1);
+        checkpoint(&mut conn);
+        let path = database_path.to_str().expect("utf-8 path");
+        let mut readers: Vec<SqliteConnection> = (0..3)
+            .map(|_| establish_ro_connection(path).expect("reader"))
+            .collect();
+        for reader in &mut readers {
+            // The query the input's autosuggestion makes, on a connection that stays open.
+            let found = crate::persistence::commands::get_same_commands_from_history(
+                reader,
+                SECRET_COMMAND,
+                &Some("/tmp".to_owned()),
+                ExitCode::from(0),
+                None,
+                5,
+            );
+            // It matches nothing here (the rows have no exit code); the point is that it ran.
+            found.expect("the query runs");
+        }
+        let deleted = delete_now(&mut conn, &QUICK).expect("delete");
+        assert_eq!(deleted.scrub, HistoryScrub::Complete);
+        assert!(!secret_is_on_disk(&database_path));
+        // The readers are still usable and see the deletion.
+        for reader in &mut readers {
+            assert_eq!(count_commands(reader), 0);
+        }
+    }
+
+    /// A reader that keeps running short queries all the time (a worst case for the app's own
+    /// readers) can make single tries busy; the retries get through, and the result is always
+    /// consistent with the files.
+    #[test]
+    fn a_reader_running_short_queries_in_a_loop_never_gives_a_false_clean_result() {
+        let tempdir = tempfile::tempdir().expect("tempdir should be created");
+        let database_path = tempdir.path().join("warp.sqlite");
+        let mut conn = database_with_history(&database_path, 3, 1);
+        checkpoint(&mut conn);
+        let path = database_path.to_str().expect("utf-8 path").to_owned();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let reader_stop = stop.clone();
+        let reader = std::thread::spawn(move || {
+            let mut reader = establish_ro_connection(&path).expect("reader");
+            while !reader_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                let _ = count_commands(&mut reader);
+                std::thread::sleep(std::time::Duration::from_millis(2));
+            }
+        });
+        let policy = ScrubPolicy {
+            attempts: 200,
+            first_delay: std::time::Duration::from_millis(3),
+            max_delay: std::time::Duration::from_millis(5),
+        };
+        let deleted = delete_now(&mut conn, &policy).expect("delete");
+        let on_disk = secret_is_on_disk(&database_path);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        reader.join().expect("reader thread");
+        assert_eq!(
+            on_disk,
+            deleted.scrub != HistoryScrub::Complete,
+            "{deleted:?}"
+        );
+        assert_eq!(deleted.scrub, HistoryScrub::Complete);
+    }
+    #[test]
+    fn failed_second_delete_preserves_a_pending_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("warp.sqlite");
+        let mut conn = database_with_history(&path, 2, 1);
+        checkpoint(&mut conn);
+        let reader = hold_a_read_snapshot(&path);
+        assert!(matches!(
+            delete_now(&mut conn, &QUICK).unwrap().scrub,
+            HistoryScrub::Incomplete(_)
+        ));
+        let generation = pending_scrub_generation(&mut conn).unwrap().unwrap();
+        let mut writer = establish_connection(path.to_str().unwrap(), false).unwrap();
+        writer.batch_execute("BEGIN IMMEDIATE").unwrap();
+        assert!(delete_now(&mut conn, &QUICK).is_err());
+        assert_eq!(
+            pending_scrub_generation(&mut conn).unwrap(),
+            Some(generation)
+        );
+        writer.batch_execute("ROLLBACK").unwrap();
+        drop(writer);
+        drop(reader);
+        assert!(finish_pending_scrub(&mut conn, &QUICK));
+        assert!(!secret_is_on_disk(&path));
+    }
+
+    #[test]
+    fn an_older_compaction_cannot_clear_a_newer_deletion_generation() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("warp.sqlite");
+        let mut conn = database_with_history(&path, 1, 1);
+        checkpoint(&mut conn);
+        let reader = hold_a_read_snapshot(&path);
+        delete_now(&mut conn, &QUICK).unwrap();
+        let old = pending_scrub_generation(&mut conn).unwrap().unwrap();
+        drop(reader);
+        compact_with_retries(&mut conn, &QUICK).unwrap();
+        let mut other = establish_connection(path.to_str().unwrap(), false).unwrap();
+        other
+            .batch_execute("UPDATE history_scrub_pending SET generation = 'newer-deletion'")
+            .unwrap();
+        assert_eq!(
+            complete_scrub_generation(&mut conn, &old),
+            Err(ScrubBlocker::InUse)
+        );
+        assert_eq!(
+            pending_scrub_generation(&mut conn).unwrap().as_deref(),
+            Some("newer-deletion")
+        );
+        assert!(finish_pending_scrub(&mut conn, &QUICK));
+    }
+
+    #[test]
+    fn retained_layout_text_does_not_make_completed_compaction_look_pending() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("warp.sqlite");
+        let mut conn = database_with_history(&path, 1, 1);
+        save_workspace_metadata(&mut conn, test_workspace_metadata(SECRET_COMMAND)).unwrap();
+        let result = delete_now(&mut conn, &QUICK).unwrap();
+        assert_eq!(result.scrub, HistoryScrub::Complete);
+        assert_eq!(
+            get_all_workspace_metadata(&mut conn).unwrap()[0].path,
+            PathBuf::from(SECRET_COMMAND)
+        );
+        assert!(!scrub_is_pending(&mut conn));
+    }
+
+    #[test]
+    fn long_history_overflow_pages_are_removed_from_both_files() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("warp.sqlite");
+        let mut conn = setup_database(&path).unwrap();
+        let token = "OVERFLOW_HISTORY_MARKER_4f878b573fb7";
+        let command = token.repeat(20_000);
+        handle_model_event(
+            ModelEvent::InsertCommand {
+                metadata: started_command(&command),
+            },
+            &mut conn,
+            &HistoryPersistence::new(true),
+        )
+        .unwrap();
+        checkpoint(&mut conn);
+        assert!(contains(&database_bytes(&path), token.as_bytes()));
+        assert_eq!(
+            delete_now(&mut conn, &QUICK).unwrap().scrub,
+            HistoryScrub::Complete
+        );
+        assert!(!contains(&database_bytes(&path), token.as_bytes()));
+    }
+
+    #[test]
+    fn steady_events_do_not_starve_the_pending_compaction_deadline() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("warp.sqlite");
+        let mut conn = database_with_history(&path, 1, 1);
+        checkpoint(&mut conn);
+        let reader = hold_a_read_snapshot(&path);
+        delete_now(&mut conn, &QUICK).unwrap();
+        let writer = start_writer_with_scrub_retry(
+            conn,
+            path.clone(),
+            HistoryPersistence::new(true),
+            std::time::Duration::from_millis(30),
+        )
+        .unwrap();
+        let sender = writer.sender.clone();
+        let stop = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let producer_stop = stop.clone();
+        let producer = std::thread::spawn(move || {
+            while !producer_stop.load(std::sync::atomic::Ordering::Relaxed) {
+                sender
+                    .send(ModelEvent::UpsertWorkspaceMetadata {
+                        metadata: Box::new(test_workspace_metadata("/tmp/steady-events")),
+                    })
+                    .unwrap();
+                std::thread::sleep(std::time::Duration::from_millis(1));
+            }
+        });
+        drop(reader);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while pending_on_disk(&path) && std::time::Instant::now() < deadline {
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let finished = !pending_on_disk(&path);
+        stop.store(true, std::sync::atomic::Ordering::Relaxed);
+        producer.join().unwrap();
+        writer.sender.send(ModelEvent::Terminate).unwrap();
+        writer.handle.join().unwrap();
+        assert!(finished, "cleanup must run even while events keep arriving");
+        assert!(!secret_is_on_disk(&path));
     }
 }

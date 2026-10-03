@@ -255,3 +255,278 @@ fn rejected_queued_in_band_start_is_cancelled_without_writing_bytes() {
         drop(model_events_tx);
     });
 }
+
+#[test]
+fn reporting_requests_carry_the_current_prompt_instead_of_mutating_output_state() {
+    for (shell_type, expected_key) in [
+        (ShellType::Zsh, Some(*b"\x1bi")),
+        (ShellType::PowerShell, Some(*b"\x1b1")),
+        (ShellType::Bash, None),
+    ] {
+        App::test((), |mut app| async move {
+            let model = terminal_model();
+            {
+                let mut model = model.lock();
+                let blocks = model.block_list_mut();
+                blocks.bootstrapped(crate::terminal::model::ansi::BootstrappedValue::default());
+                blocks.command_finished(Default::default());
+                blocks.prompt_only_precmd(Default::default());
+            }
+            let block = model.lock().input_reporting_block().unwrap();
+            let (model_events_tx, model_events_rx) = async_channel::unbounded();
+            let (_executor_command_tx, executor_command_rx) = async_channel::unbounded();
+            let mut sessions = Sessions::new_for_test();
+            let session_id = SessionId::from(42);
+            sessions.register_session_for_test(
+                SessionInfo::new_for_test()
+                    .with_id(session_id)
+                    .with_shell_type(shell_type),
+            );
+            let sessions = app.add_model(|_| sessions);
+            let model_events = app.add_model(|ctx| {
+                let mut dispatcher =
+                    ModelEventDispatcher::new(model_events_rx, sessions.clone(), ctx);
+                dispatcher.set_active_session_id(session_id);
+                dispatcher
+            });
+            let status = app.add_model(|ctx| {
+                LineEditorStatus::new(model_events.clone(), sessions.clone(), ctx)
+            });
+            let sender = TestEventLoopSender::default();
+            let controller = app.add_model(|ctx| {
+                PtyController::new(
+                    sender.clone(),
+                    model_events,
+                    status.clone(),
+                    sessions,
+                    executor_command_rx,
+                    model.clone(),
+                    ctx,
+                )
+            });
+            status.update(&mut app, |status, ctx| status.mark_active_for_test(ctx));
+            let messages = sender.messages.lock();
+            match expected_key {
+                Some(expected_key) => assert!(
+                    matches!(messages.as_slice(), [Message::InputReportingKey { key, block: got, .. }] if *key == expected_key && got == &block)
+                ),
+                None => assert!(messages.is_empty()),
+            }
+            drop(messages);
+            model.lock().start_command_execution();
+            assert!(model.lock().input_reporting_block().is_none());
+            controller.update(&mut app, |controller, ctx| {
+                controller
+                    .send_write_to_event_loop(PtyWrite::InputReportingKey { key: *b"\x1bi" }, ctx);
+            });
+            assert_eq!(
+                sender.messages.lock().len(),
+                usize::from(expected_key.is_some()),
+                "no reporting key may be sent after command submission"
+            );
+            drop(model_events_tx);
+        });
+    }
+}
+
+#[test]
+fn a_user_command_queued_before_prompt_activation_runs_without_a_reporting_block() {
+    for outstanding_report in [false, true] {
+        App::test((), |mut app| async move {
+            let model = terminal_model();
+            {
+                let mut model = model.lock();
+                let blocks = model.block_list_mut();
+                blocks.bootstrapped(Default::default());
+                blocks.command_finished(Default::default());
+                blocks.prompt_only_precmd(Default::default());
+            }
+            let (_model_events_tx, model_events_rx) = async_channel::unbounded();
+            let (_executor_command_tx, executor_command_rx) = async_channel::unbounded();
+            let mut sessions = Sessions::new_for_test();
+            let id = SessionId::from(42);
+            sessions.register_session_for_test(
+                SessionInfo::new_for_test()
+                    .with_id(id)
+                    .with_shell_type(ShellType::Zsh),
+            );
+            let sessions = app.add_model(|_| sessions);
+            let events = app.add_model(|ctx| {
+                let mut dispatcher =
+                    ModelEventDispatcher::new(model_events_rx, sessions.clone(), ctx);
+                dispatcher.set_active_session_id(id);
+                dispatcher
+            });
+            let status =
+                app.add_model(|ctx| LineEditorStatus::new(events.clone(), sessions.clone(), ctx));
+            let sender = TestEventLoopSender::default();
+            let controller = app.add_model(|ctx| {
+                PtyController::new(
+                    sender.clone(),
+                    events,
+                    status.clone(),
+                    sessions,
+                    executor_command_rx,
+                    model.clone(),
+                    ctx,
+                )
+            });
+
+            let previous_done = if outstanding_report {
+                status.update(&mut app, |status, ctx| status.mark_active_for_test(ctx));
+                let done = match &sender.messages.lock()[0] {
+                    Message::InputReportingKey { done, .. } => done.clone(),
+                    other => panic!("expected an outstanding report: {other:?}"),
+                };
+                status.update(&mut app, |status, ctx| status.did_execute_command(ctx));
+                Some(done)
+            } else {
+                None
+            };
+            let before = sender.messages.lock().len();
+
+            assert_eq!(
+                controller.update(&mut app, |controller, ctx| {
+                    controller.write_command("printf queued-user-command", ShellType::Zsh, ctx)
+                }),
+                StartCommandOutcome::Accepted
+            );
+            assert_eq!(sender.messages.lock().len(), before);
+            assert!(model.lock().input_reporting_block().is_none());
+            status.update(&mut app, |status, ctx| status.mark_active_for_test(ctx));
+
+            {
+                let messages = sender.messages.lock();
+                let [Message::Input(bytes)] = &messages[before..] else {
+                    panic!("the queued user command was not written: {messages:?}");
+                };
+                assert!(
+                    bytes
+                        .windows(b"queued-user-command".len())
+                        .any(|part| part == b"queued-user-command")
+                );
+            }
+            controller.read(&app, |controller, _| {
+                assert!(controller.pending_writes.is_empty())
+            });
+            if let Some(done) = previous_done {
+                done.try_send(false).unwrap();
+                warpui::r#async::Timer::after(std::time::Duration::from_millis(20)).await;
+                controller.read(&app, |controller, _| {
+                    assert!(!controller.reporting_pending);
+                    assert!(controller.reporting_required);
+                });
+                assert_eq!(sender.messages.lock().len(), before + 1);
+            }
+        });
+    }
+}
+
+#[test]
+fn queued_in_band_commands_wait_for_the_reporting_write_and_a_timeout_preserves_typeahead() {
+    for first_write_succeeds in [true, false] {
+        App::test((), |mut app| async move {
+            let model = terminal_model();
+            {
+                let mut model = model.lock();
+                let blocks = model.block_list_mut();
+                blocks.bootstrapped(Default::default());
+                blocks.command_finished(Default::default());
+                blocks.prompt_only_precmd(Default::default());
+            }
+            let (model_events_tx, model_events_rx) = async_channel::unbounded();
+            let (_executor_command_tx, executor_command_rx) = async_channel::unbounded();
+            let mut sessions = Sessions::new_for_test();
+            let id = SessionId::from(42);
+            sessions.register_session_for_test(
+                SessionInfo::new_for_test()
+                    .with_id(id)
+                    .with_shell_type(ShellType::Zsh),
+            );
+            let sessions = app.add_model(|_| sessions);
+            let events = app.add_model(|ctx| {
+                let mut dispatcher =
+                    ModelEventDispatcher::new(model_events_rx, sessions.clone(), ctx);
+                dispatcher.set_active_session_id(id);
+                dispatcher
+            });
+            let status =
+                app.add_model(|ctx| LineEditorStatus::new(events.clone(), sessions.clone(), ctx));
+            let sender = TestEventLoopSender::default();
+            let controller = app.add_model(|ctx| {
+                PtyController::new(
+                    sender.clone(),
+                    events,
+                    status.clone(),
+                    sessions,
+                    executor_command_rx,
+                    model.clone(),
+                    ctx,
+                )
+            });
+            controller.update(&mut app, |controller, ctx| {
+                controller.queue_in_band_command(
+                    "in-band",
+                    ShellType::Zsh,
+                    "id".to_owned(),
+                    async_channel::unbounded().0,
+                    ctx,
+                )
+            });
+            status.update(&mut app, |status, ctx| status.mark_active_for_test(ctx));
+            assert!(model.lock().input_reporting_block().is_some());
+            assert_eq!(
+                sender.messages.lock().len(),
+                1,
+                "the command must stay queued while the event loop has not written the reporting key"
+            );
+            let done = match &sender.messages.lock()[0] {
+                Message::InputReportingKey { done, .. } => done.clone(),
+                other => panic!("{other:?}"),
+            };
+            done.try_send(first_write_succeeds).unwrap();
+            warpui::r#async::Timer::after(std::time::Duration::from_millis(20)).await;
+            if !first_write_succeeds {
+                assert_eq!(
+                    sender.messages.lock().len(),
+                    1,
+                    "a timeout cannot send a kill-buffer chord"
+                );
+                assert!(model.lock().input_reporting_block().is_some());
+                controller.update(&mut app, |controller, ctx| {
+                    controller.queue_in_band_command(
+                        "second",
+                        ShellType::Zsh,
+                        "id-2".to_owned(),
+                        async_channel::unbounded().0,
+                        ctx,
+                    );
+                    controller.run_native_shell_completions(
+                        "third".to_owned(),
+                        async_channel::unbounded().0,
+                        ctx,
+                    );
+                });
+                assert_eq!(
+                    sender.messages.lock().len(),
+                    1,
+                    "new queue entries cannot bypass the failed report"
+                );
+                assert!(model.lock().input_reporting_block().is_some());
+                status.update(&mut app, |status, ctx| status.mark_active_for_test(ctx));
+                let done = match &sender.messages.lock()[1] {
+                    Message::InputReportingKey { done, .. } => done.clone(),
+                    other => panic!("{other:?}"),
+                };
+                done.try_send(true).unwrap();
+                warpui::r#async::Timer::after(std::time::Duration::from_millis(20)).await;
+            }
+            assert!(model.lock().input_reporting_block().is_none());
+            assert!(matches!(
+                sender.messages.lock().last(),
+                Some(Message::Input(_))
+            ));
+            drop(model_events_tx);
+        });
+    }
+}

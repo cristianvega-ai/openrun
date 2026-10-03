@@ -52,7 +52,7 @@ fn test_spawn_from_view() {
     });
 }
 
-#[ignore]
+#[ignore = "ENG-241: abortable task completion is flaky"]
 #[test]
 fn test_spawn_abortable_from_view() {
     #[derive(Debug, Default, PartialEq)]

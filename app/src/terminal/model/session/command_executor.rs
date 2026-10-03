@@ -1,11 +1,15 @@
 #[cfg(test)]
 mod git_completion_tests;
 #[cfg(test)]
+mod git_local_promisor_tests;
+#[cfg(test)]
 mod git_version_gate_tests;
 mod in_band_command_executor;
 mod local_command_executor;
 mod network_sandbox;
 mod offline_environment;
+#[cfg(test)]
+mod project_code_tests;
 #[cfg(test)]
 mod restored_generators_tests;
 #[cfg(test)]

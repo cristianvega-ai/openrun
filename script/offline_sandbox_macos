@@ -20,10 +20,21 @@
 # The sandbox is inherited by every child process, but the stream holds the denials of system
 # daemons with profiles of their own too; the audit tells them apart by process id and name.
 #
-# Fail-closed: before the command starts, a canary (a connection to 203.0.113.7) runs under the same
-# profile and its denial must be readable in the log; after the command ended a second canary must
-# be readable, which proves the log is complete up to that point. If either is missing within 60
-# seconds the exit status is 125 (the command is not run, or the log is marked incomplete).
+# Fail-closed: before the command starts, a canary (a connection to 127.0.0.1 port 9) runs under
+# the same profile and its denial must be readable in the log; after the command ended a second
+# canary (port 10) must be readable, which proves the log is complete up to that point. If either is
+# missing within 60 seconds the exit status is 125 (the command is not run, or the log is marked
+# incomplete).
+#
+# Canaries are exempt by identity, never by port or program name. The collector starts each canary
+# itself, holds it before it connects, and writes a launch record for it (`# canary-launch:` in the
+# header of LOG): the process id, the parent (this script), the start time of the process and the
+# time window it lived in. The audit exempts exactly one denial per launch record, from that
+# process id, from `curl`, for that port, inside that window; every other denial counts, also one by
+# the command's own `curl` to port 9 or 10. Only the header of LOG is read for records (the part
+# before `# stream:`); the command's own words (its arguments, its log messages) can not add one.
+# Do not run two collectors at the same time on one machine: each one's log shows the other's
+# canaries, which are not its own, so the audit fails.
 #
 # LOG ends with `# end` when the run completed; a log without it is a failure for the audit.
 #
@@ -52,7 +63,9 @@ work=$(mktemp -d "${TMPDIR:-/tmp}/offline-sandbox.XXXXXX")
 profile=$work/profile.sb
 stream=$work/stream.txt
 tree=$work/tree.txt
+launches=$work/launches.txt
 : > "$tree"
+: > "$launches"
 : > "$stream"
 mode=${OFFLINE_SANDBOX_MACOS_LOG:-show}
 stream_pid=
@@ -77,6 +90,7 @@ cat > "$profile" << 'EOF'
 (deny network-outbound (remote unix-socket (path-literal "/private/var/run/mDNSResponder")))
 (deny network-outbound (remote ip))
 (allow network-outbound (remote ip "localhost:*"))
+(deny network-outbound (remote ip "localhost:9") (remote ip "localhost:10"))
 (deny mach-lookup (global-name "com.apple.dnssd.service") (global-name-prefix "com.apple.nsurlsessiond"))
 EOF
 
@@ -112,26 +126,67 @@ read_denials() {
   fi
 }
 
-# Runs a denied connection under the profile and waits until the log shows it. The port tells the
-# two canaries apart; the result is the process id of the curl that was denied.
+# Runs a canary: a `curl` that this script starts under the profile and that connects to a
+# loopback port, which the profile refuses. The canary is the only process the audit
+# exempts, and it is identified by what this script knows about it from the moment it started, not
+# by what the log says about a `curl` on port 9 or 10:
+#
+# * The canary starts as a shell that waits for a file. Its process id is `$!`, the shell becomes
+#   `curl` with `exec` (the same process, the same id) and is released only after this script has
+#   read the parent and start time of that process and checked the parent is this script.
+# * The record (`launches`: process id, port, the time window the process lived in, parent, start
+#   time) goes into the header of LOG, whatever the log shows. The audit takes the canaries from
+#   these records and nowhere else.
+# * Each launch must have a denial. A missing denial fails after 60 seconds; a second launch
+#   cannot stand in for it.
+#
+# The port tells the two canaries apart (9 before the command, 10 after it).
 canary() {
-  local port=$1 pid
-  for _ in 1 2 3 4 5 6; do
-    "$sandbox_exec" -f "$profile" /usr/bin/curl -s -m 2 -o /dev/null "http://203.0.113.7:$port/" > /dev/null 2>&1
-    for _ in 1 2 3 4 5 6; do
-      pid=$(read_denials | sed -n "s/.*Sandbox: curl(\\([0-9][0-9]*\\)) deny(1) network-outbound remote:\\*:$port\$/\\1/p" | tail -n 1)
-      if [ -n "$pid" ]; then
-        echo "$pid"
+  local port=$1 attempt poll cpid go identity ppid lstart argv from to line argv64
+  for attempt in 1; do
+    go=$work/go.$port.$attempt
+    from=$(date +%s)
+    "$sandbox_exec" -f "$profile" /bin/sh -c '
+      : > "$1.ready"
+      n=0
+      while [ ! -e "$1" ] && [ "$n" -lt 500 ]; do sleep 0.02; n=$((n + 1)); done
+      [ -e "$1" ] || exit 3
+      exec /usr/bin/curl -s -m 2 -o /dev/null "$2"' canary "$go" "http://127.0.0.1:$port/" > /dev/null 2>&1 &
+    cpid=$!
+    for poll in {1..100}; do
+      [ -e "$go.ready" ] && break
+      kill -0 "$cpid" 2> /dev/null || break
+      sleep 0.02
+    done
+    identity=$(TZ=UTC /bin/ps -o ppid=,lstart= -p "$cpid" 2> /dev/null)
+    argv=$(/bin/ps -o command= -p "$cpid" 2> /dev/null)
+    read -r ppid lstart <<< "$identity"
+    if [ -z "$lstart" ] || [ "$ppid" != "$$" ] || [ "${argv#*"$go"}" = "$argv" ]; then
+      echo "offline_sandbox_macos: the canary process $cpid is not the one this script started (parent '$ppid', command '$argv'); the command is not run" >&2
+      kill "$cpid" 2> /dev/null
+      wait "$cpid" 2> /dev/null
+      return 1
+    fi
+    argv64=$(printf '%s' "/usr/bin/curl -s -m 2 -o /dev/null http://127.0.0.1:$port/" | /usr/bin/base64 | tr -d '\n')
+    : > "$go"
+    wait "$cpid" 2> /dev/null
+    to=$(date +%s)
+    for poll in {1..30}; do
+      line=$(read_denials | grep -E "Sandbox: curl\\($cpid\\) deny\\(1\\) network-outbound remote:\\*:$port\$" | tail -n 1)
+      if [ -n "$line" ]; then
+        echo "pid=$cpid port=$port from=$from to=$to ppid=$ppid collector=$$ status=seen argv=$argv64 lstart=$lstart" >> "$launches"
         return 0
       fi
       sleep 2
     done
+    echo "pid=$cpid port=$port from=$from to=$to ppid=$ppid collector=$$ status=unseen argv=$argv64 lstart=$lstart" >> "$launches"
   done
   return 1
 }
 
-if ! canary_pid=$(canary 9); then
+if ! canary 9; then
   echo "offline_sandbox_macos: the denial of the canary connection is not in the log after 60 s ($mode mode); the command is not run" >&2
+  read_denials > "$log.partial"
   exit 125
 fi
 
@@ -175,9 +230,8 @@ tracker_pid=
 
 # A second canary after the run: the log is written a little after the event, and once this one
 # is readable everything before it is.
-end_canary_pid=
 complete=1
-if ! end_canary_pid=$(canary 10); then
+if ! canary 10; then
   echo "offline_sandbox_macos: the denial of the final canary is not in the log after 60 s; the log of this run is incomplete" >&2
   complete=0
 fi
@@ -187,16 +241,33 @@ if [ -n "$stream_pid" ]; then
   stream_pid=
 fi
 
+# What the audit reads is the header (before `# stream:`) and the stream. The command's own words
+# reach the file in two places, its arguments and the log messages it writes; neither can be allowed
+# to look like a line of the header, so the arguments are written on one line and the header ends
+# at the first `# stream:`, which the audit looks for from the top.
+command_line=$(printf '%s' "$*" | tr '\n\r' '  ')
+final=$work/final.txt
+if ! read_denials > "$final"; then
+  echo "offline_sandbox_macos: final log collection failed; the log is incomplete" >&2
+  complete=0
+fi
+# Cached canary sightings are not evidence that the final read retained the workload's reports.
+while read -r pid_field port_field rest; do
+  pid=${pid_field#pid=}
+  port=${port_field#port=}
+  if ! grep -Eq "Sandbox: curl\($pid\) deny\(1\) network-outbound remote:\*:$port\$" "$final"; then
+    echo "offline_sandbox_macos: final collection lost canary $pid on port $port" >&2
+    complete=0
+  fi
+done < "$launches"
 {
-  echo "# openrun-offline-sandbox-macos 1"
-  echo "# command: $*"
+  echo "# openrun-offline-sandbox-macos 2"
+  echo "# command: $command_line"
   echo "# mode: $mode"
-  echo "# canary: seen pid $canary_pid"
-  [ -n "$end_canary_pid" ] && echo "# canary-pid: $end_canary_pid"
-  read_denials | sed -nE 's/.*Sandbox: curl\(([0-9]+)\) deny\(1\) network-outbound remote:\*:(9|10)$/# canary-pid: \1/p' | sort -u
+  sed 's/^/# canary-launch: /' "$launches"
   sort -u "$tree" | sed 's/^/# tree: /'
   echo "# stream:"
-  read_denials
+  cat "$final"
   [ "$complete" -eq 1 ] && echo "# end"
 } > "$log"
 if [ "$complete" -ne 1 ]; then

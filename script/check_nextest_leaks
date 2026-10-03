@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Prove that nextest's configured leak policy fails a test that leaves inherited output open."""
+
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+def main():
+    with tempfile.TemporaryDirectory(prefix="openrun-nextest-leak-control-") as tmp:
+        root = Path(tmp)
+        (root / "src").mkdir()
+        (root / "Cargo.toml").write_text(
+            '[package]\nname="integration"\nversion="0.0.0"\nedition="2021"\n[workspace]\n'
+        )
+        (root / "src/lib.rs").write_text(
+            '#[test]\nfn inherited_output_is_a_leak() {\n'
+            '    let child = std::process::Command::new("/bin/sleep").arg("1").spawn().unwrap();\n'
+            '    std::fs::write(std::env::var("LEAK_CONTROL_PID").unwrap(), child.id().to_string()).unwrap();\n'
+            '}\n'
+        )
+        # The control proves the fixture triggers detection with nextest's old passing default.
+        control = root / "control.toml"
+        control.write_text('[profile.default]\nleak-timeout = { period = "100ms", result = "pass" }\n')
+        for label, config, should_fail in [
+            ("control", control, False),
+            ("repository policy", ROOT / ".config/nextest.toml", True),
+        ]:
+            pid_file = root / "child.pid"
+            result = subprocess.run(
+                ["cargo", "nextest", "run", "--offline", "--config-file", str(config),
+                 "--manifest-path", str(root / "Cargo.toml"), "--retries", "0"],
+                cwd=root, env={**os.environ, "LEAK_CONTROL_PID": str(pid_file), "CARGO_TERM_COLOR": "never", "NEXTEST_PROFILE": "default"},
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+            )
+            if pid_file.exists():
+                try:
+                    os.kill(int(pid_file.read_text()), 15)
+                except ProcessLookupError:
+                    pass
+                pid_file.unlink()
+            detected = "LEAK" in result.stdout
+            failed = result.returncode != 0
+            if not detected or failed != should_fail:
+                print(result.stdout)
+                raise SystemExit(f"{label}: expected LEAK with failure={should_fail}, got {result.returncode}")
+            print(f"{label}: intentional inherited-output failure detected; exit={result.returncode}")
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

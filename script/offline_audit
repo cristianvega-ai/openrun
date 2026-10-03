@@ -34,7 +34,9 @@ crates/warp_completer/src/signatures/legacy/generator_policy/.
 """
 
 import argparse
+import base64
 import collections
+import datetime
 import fnmatch
 import hashlib
 import json
@@ -701,7 +703,7 @@ def check_deny(_allow):
 
 # --- 9.4a: strace log ----------------------------------------------------------------------
 
-MACOS_SANDBOX_HEADER = "# openrun-offline-sandbox-macos 1"
+MACOS_SANDBOX_HEADER = "# openrun-offline-sandbox-macos 2"
 
 # A line of `log stream --predicate 'eventMessage CONTAINS "Sandbox"'`: the kernel reporting that a
 # sandbox profile denied an operation, optionally coalesced ("3 duplicate reports for ...").
@@ -718,56 +720,140 @@ def macos_denial_violation(op, detail):
     """Why a denial counts as an attempt to reach the network, or None."""
     if op == "network-outbound":
         if detail.startswith("remote:"):
-            return "connection to a non-local address (%s)" % detail
+            return "denied network connection (%s)" % detail
         return "network access (%s)" % detail
     if op == "mach-lookup" and (detail.startswith("com.apple.dnssd") or detail.startswith("com.apple.nsurlsessiond")):
         return "request to a system network service (%s)" % detail
     return None
 
 
+# A canary launch record, written by the collector into the header of the log when it starts a
+# canary (see script/offline_sandbox_macos): the process id, the port it connects to (9 before the
+# command, 10 after it), the seconds (epoch) between which the process lived, its parent (which must
+# be the collector), the collector's own id, whether the collector read the denial, and the start
+# time of the process.
+MACOS_CANARY_LAUNCH = re.compile(
+    r"^# canary-launch: pid=(?P<pid>\d+) port=(?P<port>\d+) from=(?P<start>\d+) to=(?P<end>\d+) "
+    r"ppid=(?P<ppid>\d+) collector=(?P<collector>\d+) status=(?P<status>seen|unseen) argv=(?P<argv>[A-Za-z0-9+/=]+) lstart=(?P<lstart>.+)$")
+MACOS_CANARY_PORTS = ("9", "10")
+# Seconds either side of the life of a canary in which the kernel's timestamp of its denial may lie
+# (the collector's clock reads whole seconds).
+MACOS_CANARY_SLACK = 3
+MACOS_TIMESTAMP = re.compile(r"^(\d{4}-\d\d-\d\d \d\d:\d\d:\d\d)(\.\d+)?([+-]\d{4})\s")
+MACOS_HEADER_LINES = ("# command: ", "# mode: ", "# tree: ")
+
+
+def macos_log_epoch(raw):
+    """The time of a line of the unified log in seconds since the epoch, or None."""
+    match = MACOS_TIMESTAMP.match(raw)
+    if not match:
+        return None
+    try:
+        when = datetime.datetime.strptime(match.group(1) + match.group(3), "%Y-%m-%d %H:%M:%S%z")
+    except ValueError:
+        return None
+    return when.timestamp() + (float(match.group(2)) if match.group(2) else 0.0)
+
+
 def check_net_log_macos(path, lines, result):
     """The log of script/offline_sandbox_macos: a header, the processes of the command, then the
-    unified-log stream of sandbox reports, then `# end`."""
-    meta = {"canary": None, "end": False, "canaries": set()}
+    unified-log stream of sandbox reports, then `# end`.
+
+    The header is the collector's own record; the stream holds the words of the sandboxed command
+    too (its log messages), so nothing in the stream is read as a record, and the header ends at
+    the first `# stream:`. A process is exempt as a canary only if the collector wrote a launch
+    record for it; each record exempts one denial, from that process id, by `curl`, to the record's
+    port, inside the record's time window. The records of canaries the collector saw must be
+    matched by their denial, and a canary on port 9 and one on port 10 must have been seen."""
+    texts = [raw.rstrip("\n") for raw in lines]
+    if "# stream:" not in texts:
+        result.add(path, None, "incomplete: the log has no `# stream:` line")
+        return
+    split = texts.index("# stream:")
+    launches = []
     tree_pids = set()
     tree_names = set()
-    for raw in lines:
-        text = raw.rstrip("\n")
-        if text.startswith("# canary: seen pid "):
-            meta["canary"] = text[len("# canary: seen pid "):].strip()
-        elif text.startswith("# canary-pid: "):
-            meta["canaries"].add(text[len("# canary-pid: "):].strip())
+    for number, text in enumerate(texts[1:split], 2):
+        match = MACOS_CANARY_LAUNCH.match(text)
+        if match:
+            launch = match.groupdict()
+            launch["line"] = number
+            launch["used"] = False
+            launches.append(launch)
         elif text.startswith("# tree: "):
             fields = text[len("# tree: "):].split(None, 1)
             if fields:
                 tree_pids.add(fields[0])
                 if len(fields) > 1:
                     tree_names.add(fields[1].strip("()")[:15])
-        elif text == "# end":
-            meta["end"] = True
-    if meta["canary"] is None:
-        result.add(path, None, "no canary: the sandbox did not show that it records denials")
-    if not meta["end"]:
-        result.add(path, None, "incomplete: the run did not finish writing the log (no `# end`)")
-    for number, raw in enumerate(lines, 1):
-        if raw.startswith("#"):
+        elif not text.startswith(MACOS_HEADER_LINES):
+            result.add(path, number, "unexpected line in the header: " + text[:80])
+    stream = list(enumerate(texts, 1))[split + 1:]
+    ended = bool(stream) and stream[-1][1] == "# end"
+    if ended:
+        stream = stream[:-1]
+    if not ended:
+        result.add(path, None, "incomplete: the run did not finish writing the log (no `# end` as the last line)")
+    valid = []
+    seen_pids = set()
+    for launch in launches:
+        try:
+            started = datetime.datetime.strptime(launch["lstart"], "%a %b %d %H:%M:%S %Y").replace(tzinfo=datetime.timezone.utc).timestamp()
+        except ValueError:
+            started = -1
+        if launch["pid"] in seen_pids or not int(launch["start"]) - MACOS_CANARY_SLACK <= started <= int(launch["end"]) + MACOS_CANARY_SLACK:
+            result.add(path, launch["line"], "duplicate canary pid or invalid process start time")
             continue
+        seen_pids.add(launch["pid"])
+        if launch["ppid"] != launch["collector"] or launch["port"] not in MACOS_CANARY_PORTS or int(launch["start"]) > int(launch["end"]):
+            result.add(path, launch["line"], "canary record that is not the collector's: " + texts[launch["line"] - 1][:100])
+        elif launch["argv"] != base64.b64encode(("/usr/bin/curl -s -m 2 -o /dev/null http://127.0.0.1:%s/" % launch["port"]).encode()).decode():
+            result.add(path, launch["line"], "canary argv does not match the collector command")
+        elif launch["pid"] in tree_pids:
+            result.add(path, launch["line"], "canary process %s is also a process of the command" % launch["pid"])
+        else:
+            valid.append(launch)
+    for port, what in (("9", "no canary: the sandbox did not show that it records denials"),
+                       ("10", "no final canary: the log is not shown to be complete up to the end of the run")):
+        if not any(launch["port"] == port and launch["status"] == "seen" for launch in valid):
+            result.add(path, None, what)
+
+    def canary_for(pid, name, detail, raw):
+        """The launch record that accounts for this denial, if there is one."""
+        if name != "curl" or "duplicate reports" in raw:
+            return None
+        when = macos_log_epoch(raw)
+        if when is None:
+            return None
+        for launch in valid:
+            if (not launch["used"] and launch["pid"] == pid and detail == "remote:*:" + launch["port"]
+                    and int(launch["start"]) - MACOS_CANARY_SLACK <= when <= int(launch["end"]) + MACOS_CANARY_SLACK):
+                return launch
+        return None
+
+    for number, raw in stream:
         if "Messages dropped" in raw:
             result.add(path, number, "the log stream dropped messages: denials may be missing from this log")
             continue
         match = MACOS_DENIAL.search(raw)
         if not match:
             continue
-        reason = macos_denial_violation(match.group("op"), match.group("detail").strip())
+        detail = match.group("detail").strip()
+        reason = macos_denial_violation(match.group("op"), detail)
         if not reason:
             continue
         pid = match.group("pid")
         name = match.group("name")
-        if pid == meta["canary"] or pid in meta["canaries"]:
+        launch = canary_for(pid, name, detail, raw) if match.group("op") == "network-outbound" else None
+        if launch:
+            launch["used"] = True
             continue
         if pid not in tree_pids and name[:15] not in tree_names and name in MACOS_SANDBOX_NOISE:
             continue
         result.add(path, number, "%s(%s): %s" % (name, pid, reason))
+    for launch in valid:
+        if not launch["used"]:
+            result.add(path, launch["line"], "canary %s (port %s): the collector read its denial, but the log has no such denial" % (launch["pid"], launch["port"]))
 
 
 def check_net_log(path):
@@ -925,39 +1011,98 @@ def self_test_cases():
     ]
 
 
-MAC_HEADER = MACOS_SANDBOX_HEADER + "\n# command: cargo nextest run\n"
-MAC_CANARY = "# canary: seen pid 77\n# tree: 500 integration\n# tree: 501 sandbox-exec\n# stream:\n"
-MAC_END = "# end\n"
+# The seconds (epoch) of the timestamp that `mac_denial` writes: 2026-10-02 02:08:18 -0500.
+MAC_EPOCH = 1790924898
 
 
-def mac_denial(name, pid, rest):
-    return "2026-10-02 02:08:18.959121-0500 0x594b02e  Error  0x0  0  0  kernel: (Sandbox) Sandbox: %s(%d) deny(1) %s\n" % (name, pid, rest)
+def mac_denial(name, pid, rest, when="2026-10-02 02:08:18.959121-0500"):
+    return "%s 0x594b02e  Error  0x0  0  0  kernel: (Sandbox) Sandbox: %s(%d) deny(1) %s\n" % (when, name, pid, rest)
+
+
+def mac_launch(pid, port, status="seen", ppid=100, collector=100, start=MAC_EPOCH - 1, end=MAC_EPOCH + 1):
+    """A launch record, as the collector writes it into the header."""
+    return "# canary-launch: pid=%d port=%d from=%d to=%d ppid=%d collector=%d status=%s argv=%s lstart=%s\n" % (
+        pid, port, start, end, ppid, collector, status,
+        base64.b64encode(("/usr/bin/curl -s -m 2 -o /dev/null http://127.0.0.1:%d/" % port).encode()).decode(),
+        datetime.datetime.fromtimestamp(start, datetime.timezone.utc).strftime("%a %b %d %H:%M:%S %Y"))
+
+
+MAC_LAUNCHES = mac_launch(77, 9) + mac_launch(78, 10)
+MAC_TREE = "# tree: 500 integration\n# tree: 501 sandbox-exec\n"
+MAC_CANARIES = mac_denial("curl", 77, "network-outbound remote:*:9") + mac_denial("curl", 78, "network-outbound remote:*:10")
+
+
+def mac_log(stream="", launches=MAC_LAUNCHES, tree=MAC_TREE, canaries=MAC_CANARIES, header_extra="", end="# end\n", version=MACOS_SANDBOX_HEADER):
+    """A log of the collector: the header with the launch records, then the stream (the canaries'
+    denials and the denials in `stream`), then the end marker."""
+    return (version + "\n# command: cargo nextest run\n# mode: show\n" + header_extra + launches + tree
+            + "# stream:\n" + canaries + stream + end)
 
 
 def self_test_net_log_cases():
     """(name, log text or None for a missing file, expectation): what `check_net_log` must flag or
     accept."""
+    inject = "# canary-launch: pid=500 port=9 from=%d to=%d ppid=100 collector=100 status=seen lstart=x\n" % (MAC_EPOCH - 1, MAC_EPOCH + 1)
     return [
         ("net log: missing file", None, "fail"),
         ("net log: empty file", "", "fail"),
         ("net log: not a log of the sandbox script", "1234 connect(3, {sa_family=AF_INET}, 16) = 0\n", "fail"),
-        ("net log (macOS): only the canary", MAC_HEADER + MAC_CANARY + MAC_END, "pass"),
-        ("net log (macOS): connection to a non-local address", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "network-outbound remote:*:443") + MAC_END, "fail"),
-        ("net log (macOS): datagram to port 53", MAC_HEADER + MAC_CANARY + mac_denial("integration", 501, "network-outbound remote:*:53") + MAC_END, "fail"),
-        ("net log (macOS): name lookup through the DNS daemon", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "network-outbound /private/var/run/mDNSResponder") + MAC_END, "fail"),
-        ("net log (macOS): request to the DNS service", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "mach-lookup com.apple.dnssd.service") + MAC_END, "fail"),
-        ("net log (macOS): request to nsurlsessiond", MAC_HEADER + MAC_CANARY + mac_denial("Python", 500, "mach-lookup com.apple.nsurlsessiond.xpc") + MAC_END, "fail"),
-        ("net log (macOS): coalesced denial", MAC_HEADER + MAC_CANARY + "2026-10-02 02:08:18.9-0500 0x1  Error  0x0  0  0  kernel: (Sandbox) 3 duplicate reports for Sandbox: warp(500) deny(1) network-outbound remote:*:80\n" + MAC_END, "fail"),
-        ("net log (macOS): denial by a process nobody listed", MAC_HEADER + MAC_CANARY + mac_denial("someunknownd", 9999, "network-outbound remote:*:443") + MAC_END, "fail"),
-        ("net log (macOS): denial of the canary itself", MAC_HEADER + MAC_CANARY + mac_denial("curl", 77, "network-outbound remote:*:9") + MAC_END, "pass"),
-        ("net log (macOS): other kinds of denial", MAC_HEADER + MAC_CANARY + mac_denial("integration", 500, "system-info vfs.disk-space") + mac_denial("integration", 500, "mach-lookup com.apple.diagnosticd") + MAC_END, "pass"),
-        ("net log (macOS): denial by a listed system process", MAC_HEADER + MAC_CANARY + mac_denial("languageassetd", 969, "network-outbound /private/var/run/mDNSResponder") + MAC_END, "pass"),
-        ("net log (macOS): a listed name inside the tree is still ours", MAC_HEADER + "# canary: seen pid 77\n# tree: 969 languageassetd\n# stream:\n" + mac_denial("languageassetd", 969, "network-outbound remote:*:443") + MAC_END, "fail"),
-        ("net log (macOS): no canary", MAC_HEADER + MAC_END, "fail"),
-        ("net log (macOS): dropped messages", MAC_HEADER + MAC_CANARY + "=== Messages dropped during live streaming (use `log show` to see what they were)\n" + MAC_END, "fail"),
-        ("net log (macOS): denial of an earlier canary attempt", MAC_HEADER + "# canary-pid: 76\n" + MAC_CANARY + mac_denial("curl", 76, "network-outbound remote:*:9") + MAC_END, "pass"),
-        ("net log (macOS): run did not finish", MAC_HEADER + MAC_CANARY, "fail"),
-        ("net log (macOS): unknown format version", "# openrun-offline-sandbox-macos 2\n" + MAC_CANARY + MAC_END, "fail"),
+        ("net log (macOS): only the canaries", mac_log(), "pass"),
+        ("net log (macOS): connection to a non-local address", mac_log(mac_denial("Python", 500, "network-outbound remote:*:443")), "fail"),
+        ("net log (macOS): datagram to port 53", mac_log(mac_denial("integration", 501, "network-outbound remote:*:53")), "fail"),
+        ("net log (macOS): name lookup through the DNS daemon", mac_log(mac_denial("Python", 500, "network-outbound /private/var/run/mDNSResponder")), "fail"),
+        ("net log (macOS): request to the DNS service", mac_log(mac_denial("Python", 500, "mach-lookup com.apple.dnssd.service")), "fail"),
+        ("net log (macOS): request to nsurlsessiond", mac_log(mac_denial("Python", 500, "mach-lookup com.apple.nsurlsessiond.xpc")), "fail"),
+        ("net log (macOS): coalesced denial", mac_log("2026-10-02 02:08:18.9-0500 0x1  Error  0x0  0  0  kernel: (Sandbox) 3 duplicate reports for Sandbox: warp(500) deny(1) network-outbound remote:*:80\n"), "fail"),
+        ("net log (macOS): denial by a process nobody listed", mac_log(mac_denial("someunknownd", 9999, "network-outbound remote:*:443")), "fail"),
+        ("net log (macOS): other kinds of denial", mac_log(mac_denial("integration", 500, "system-info vfs.disk-space") + mac_denial("integration", 500, "mach-lookup com.apple.diagnosticd")), "pass"),
+        ("net log (macOS): denial by a listed system process", mac_log(mac_denial("languageassetd", 969, "network-outbound /private/var/run/mDNSResponder")), "pass"),
+        ("net log (macOS): a listed name inside the tree is still ours", mac_log(mac_denial("languageassetd", 969, "network-outbound remote:*:443"), tree="# tree: 969 languageassetd\n"), "fail"),
+        ("net log (macOS): dropped messages", mac_log("=== Messages dropped during live streaming (use `log show` to see what they were)\n"), "fail"),
+        ("net log (macOS): run did not finish", mac_log(end=""), "fail"),
+        ("net log (macOS): unknown format version", mac_log(version="# openrun-offline-sandbox-macos 3"), "fail"),
+        ("net log (macOS): format of the first version", mac_log(version="# openrun-offline-sandbox-macos 1"), "fail"),
+        ("net log (macOS): old collector exempted the workload by port",
+         "# openrun-offline-sandbox-macos 1\n# command: workload\n# mode: show\n"
+         "# canary: seen pid 77\n# canary-pid: 77\n# canary-pid: 78\n# canary-pid: 500\n"
+         + MAC_TREE + "# stream:\n" + MAC_CANARIES
+         + mac_denial("curl", 500, "network-outbound remote:*:9") + "# end\n", "fail"),
+        ("net log (macOS): old parser trusted an injected workload pid",
+         "# openrun-offline-sandbox-macos 1\n# command: workload\n# mode: show\n"
+         "# canary: seen pid 77\n# canary-pid: 77\n# canary-pid: 78\n"
+         + MAC_TREE + "# stream:\n" + MAC_CANARIES + "# canary-pid: 500\n"
+         + mac_denial("curl", 500, "network-outbound remote:*:9") + "# end\n", "fail"),
+        # The canaries are the collector's own processes, found by the launch records.
+        ("net log (macOS): no canary at all", mac_log(launches="", canaries=""), "fail"),
+        ("net log (macOS): no final canary", mac_log(launches=mac_launch(77, 9), canaries=mac_denial("curl", 77, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): no first canary", mac_log(launches=mac_launch(78, 10), canaries=mac_denial("curl", 78, "network-outbound remote:*:10")), "fail"),
+        ("net log (macOS): a canary the collector saw has no denial in the log", mac_log(canaries=mac_denial("curl", 77, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): a lost canary attempt without a denial", mac_log(launches=mac_launch(76, 9, "unseen") + MAC_LAUNCHES), "fail"),
+        ("net log (macOS): a lost canary attempt whose denial shows up late", mac_log(mac_denial("curl", 76, "network-outbound remote:*:9"), launches=mac_launch(76, 9, "unseen") + MAC_LAUNCHES), "pass"),
+        ("net log (macOS): an unseen attempt is not a canary", mac_log(launches=mac_launch(76, 9, "unseen")), "fail"),
+        # A process of the command is never a canary, whatever it runs and whichever port it uses
+        # (dod.md item 9: identity, not port or name).
+        ("net log (macOS): the command's curl to port 9", mac_log(mac_denial("curl", 500, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): the command's curl to port 10", mac_log(mac_denial("curl", 500, "network-outbound remote:*:10")), "fail"),
+        ("net log (macOS): the command's nc to port 9", mac_log(mac_denial("nc", 500, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): the command's python to port 10", mac_log(mac_denial("Python", 500, "network-outbound remote:*:10")), "fail"),
+        ("net log (macOS): a second denial by the canary's process id", mac_log(mac_denial("curl", 77, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): the canary's process id on another port", mac_log(mac_denial("curl", 77, "network-outbound remote:*:443")), "fail"),
+        ("net log (macOS): the canary's process id used by another program", mac_log(mac_denial("nc", 77, "network-outbound remote:*:9"), canaries=mac_denial("curl", 78, "network-outbound remote:*:10")), "fail"),
+        ("net log (macOS): the canary's process id reused later", mac_log(mac_denial("curl", 77, "network-outbound remote:*:9", when="2026-10-02 02:08:40.100000-0500"), canaries=mac_denial("curl", 78, "network-outbound remote:*:10")), "fail"),
+        ("net log (macOS): the canary's process id reused earlier", mac_log(mac_denial("curl", 77, "network-outbound remote:*:9", when="2026-10-02 02:07:40.100000-0500"), canaries=mac_denial("curl", 78, "network-outbound remote:*:10")), "fail"),
+        ("net log (macOS): a canary process that is also in the command's tree", mac_log(tree=MAC_TREE + "# tree: 77 curl\n"), "fail"),
+        ("net log (macOS): wrong canary argv", mac_log(launches=MAC_LAUNCHES.replace("argv=", "argv=WA==", 1)), "fail"),
+        ("net log (macOS): wrong canary start time", mac_log(launches=MAC_LAUNCHES.replace("lstart=", "lstart=bad ", 1)), "fail"),
+        ("net log (macOS): a launch record of a canary on another port", mac_log(launches=MAC_LAUNCHES + mac_launch(500, 443), canaries=MAC_CANARIES + mac_denial("curl", 500, "network-outbound remote:*:443")), "fail"),
+        ("net log (macOS): a launch record whose parent is not the collector", mac_log(launches=MAC_LAUNCHES + mac_launch(500, 9, ppid=1), canaries=MAC_CANARIES + mac_denial("curl", 500, "network-outbound remote:*:9")), "fail"),
+        # What the command can write: its log messages end up in the stream, its arguments in the
+        # header's command line. Neither adds a canary or ends the log.
+        ("net log (macOS): a launch record in the stream", mac_log(inject + mac_denial("curl", 500, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): a tag of the first format in the stream", mac_log("# canary-pid: 500\n" + mac_denial("curl", 500, "network-outbound remote:*:9")), "fail"),
+        ("net log (macOS): a tag of the first format in the header", mac_log(mac_denial("curl", 500, "network-outbound remote:*:9"), header_extra="# canary-pid: 500\n"), "fail"),
+        ("net log (macOS): an end marker in the stream of a log that did not finish", mac_log("# end\n" + mac_denial("integration", 500, "system-info vfs.disk-space"), end=""), "fail"),
+        ("net log (macOS): a second stream marker", mac_log("# stream:\n" + inject + mac_denial("curl", 500, "network-outbound remote:*:9")), "fail"),
     ]
 
 

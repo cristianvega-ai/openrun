@@ -44,7 +44,7 @@ const MIME_TYPES: &[&str] = &[
 ];
 
 #[test]
-#[ignore = "memory repro; run with --ignored --nocapture in release mode"]
+#[ignore = "ENG-171: memory repro; run with --ignored --nocapture in release mode"]
 fn pasteboard_type_for_image_mime_type_memory_behavior() {
     unsafe {
         for _ in 0..OUTER {

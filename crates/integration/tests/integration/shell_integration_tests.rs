@@ -86,7 +86,7 @@ integration_tests! {
     test_warp_prompt_unsets_zsh_rprompt,
 
     // Disabled due to flakiness on CI.
-    #[ignore]
+    #[ignore = "ENG-171: right prompt clipboard assertion is flaky on CI"]
     test_copy_rprompt_from_input_honor_ps1_enabled,
 
     // Tests of subshell logic from bootstrap script.
@@ -123,20 +123,20 @@ mod bash_only {
 
     integration_tests! {
         // Test bash handling of a custom PS1 (needs the bash the job installs).
-        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        #[ignore = "ENG-233: bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_custom_ps1_expansion_bash,
-        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        #[ignore = "ENG-233: bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_bash_honor_ps1_expands_dynamic_prompt_once,
         // Tests bash-specific behavior of the tab title.
-        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        #[ignore = "ENG-233: bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_warp_honors_user_title_bash,
         // Tests bash-specific history behavior.
-        #[ignore = "bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        #[ignore = "ENG-233: bash only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_histcontrol_env_var,
         // Tests PROMPT_COMMAND arrays, which need bash 5.1 or newer.
-        #[ignore = "bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        #[ignore = "ENG-233: bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_bash_bootstraps_with_prompt_command_array,
-        #[ignore = "bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
+        #[ignore = "ENG-233: bash 5.1 or newer only: run with WARP_SHELL_PATH=<bash> and --run-ignored"]
         test_bash_bootstraps_with_prompt_command_array_that_sets_ps1,
     }
 }
@@ -152,13 +152,13 @@ mod pwsh_only {
 
     integration_tests! {
         // PowerShell ignores newlines in typeahead.
-        #[ignore = "PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
+        #[ignore = "ENG-233: PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
         test_input_reporting_powershell,
         // PSReadLine's vi edit mode.
-        #[ignore = "PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
+        #[ignore = "ENG-233: PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
         test_pwsh_vi_edit_mode_does_not_corrupt_commands,
         // Completions of member access are PowerShell's own.
-        #[ignore = "PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
+        #[ignore = "ENG-233: PowerShell only: run with WARP_SHELL_PATH=<pwsh> and --run-ignored"]
         test_native_shell_completions_powershell_member_access,
     }
 }

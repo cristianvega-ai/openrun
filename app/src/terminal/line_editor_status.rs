@@ -61,6 +61,14 @@ impl LineEditorStatus {
         self.is_line_editor_active
     }
 
+    /// Marks the line editor as active right away, as if the activation delay after a prompt had
+    /// passed.
+    #[cfg(test)]
+    pub(crate) fn mark_active_for_test(&mut self, ctx: &mut ModelContext<Self>) {
+        self.is_line_editor_active = true;
+        ctx.emit(LineEditorStatusEvent::Active);
+    }
+
     /// Marks the line editor as inactive.
     ///
     /// This is meant to be called when a command is written to the PTY.

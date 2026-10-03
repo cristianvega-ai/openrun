@@ -334,7 +334,7 @@ mod offset_point_conversion {
     }
 
     #[test]
-    #[ignore = "does not work properly; will re-enable once content offset/point conversion uses a custom type"]
+    #[ignore = "ENG-239: does not work properly; will re-enable once content offset/point conversion uses a custom type"]
     fn test_wide_char_spacer() {
         // 1: 😀😃
         // 2: 😄\n

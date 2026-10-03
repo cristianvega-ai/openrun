@@ -1896,6 +1896,11 @@ impl TerminalModel {
         self.registered_session_ids.insert(session_id);
     }
 
+    pub(crate) fn input_reporting_block(&self) -> Option<BlockId> {
+        (!self.alt_screen_active && self.block_list.is_early_output())
+            .then(|| self.block_list.active_block_id().clone())
+    }
+
     pub fn needs_bracketed_paste(&mut self) -> bool {
         delegate!(self.needs_bracketed_paste())
     }

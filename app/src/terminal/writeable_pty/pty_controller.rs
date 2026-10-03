@@ -50,6 +50,9 @@ enum PtyWrite {
         /// The bytes to be written.
         bytes: Cow<'static, [u8]>,
     },
+    InputReportingKey {
+        key: [u8; 2],
+    },
     RunNativeShellCompletions {
         command: String,
         shell_type: ShellType,
@@ -70,6 +73,8 @@ pub struct PtyController<T: EventLoopSender> {
     model_event_dispatcher: ModelHandle<ModelEventDispatcher>,
     pending_writes: VecDeque<PtyWrite>,
     is_user_command_executing: bool,
+    reporting_pending: bool,
+    reporting_required: bool,
     is_bracketed_paste_enabled: bool,
     /// If we're bootstrapping the shell by sourcing a file with the bootstrap
     /// script, this will hold the handle to the file.  Once bootstrapping is
@@ -135,10 +140,14 @@ impl<T: EventLoopSender> PtyController<T> {
                     .active_session_id()
                     .and_then(|id| me.sessions.as_ref(ctx).get(id))
                     .and_then(|session| session.shell().input_reporting_sequence());
-                if let Some(bytes) = input_reporting_seq {
-                    me.pending_writes.push_front(PtyWrite::Bytes {
-                        bytes: Cow::Owned(bytes.to_vec()),
-                    });
+                me.reporting_required = input_reporting_seq.is_some();
+                me.pending_writes
+                    .retain(|write| !matches!(write, PtyWrite::InputReportingKey { .. }));
+                if let Some(key) = input_reporting_seq
+                    && !me.is_user_command_executing
+                {
+                    me.pending_writes
+                        .push_front(PtyWrite::InputReportingKey { key });
                 }
                 me.execute_next_queued_write(ctx);
             }
@@ -171,6 +180,8 @@ impl<T: EventLoopSender> PtyController<T> {
             model_event_dispatcher,
             pending_writes: VecDeque::new(),
             is_user_command_executing: false,
+            reporting_pending: false,
+            reporting_required: false,
             is_bracketed_paste_enabled: false,
             bootstrap_file: None,
             in_flight_native_completions_results_tx: None,
@@ -293,7 +304,24 @@ impl<T: EventLoopSender> PtyController<T> {
     /// PtyController, a subscription is registered on `LineEditorStatus` which calls this function
     /// when the line editor becomes active.
     fn execute_next_queued_write(&mut self, ctx: &mut ModelContext<Self>) {
-        if !self.can_write_to_pty(ctx) {
+        // Explicit user commands own the shell buffer. They can already have started the model
+        // block before activation, so no reporting block exists for them to wait on.
+        let is_user_command = matches!(
+            self.pending_writes.front(),
+            Some(PtyWrite::Command {
+                in_band_command_id: None,
+                ..
+            })
+        );
+        if !self.can_write_to_pty(ctx)
+            || (!is_user_command
+                && (self.reporting_pending
+                    || (self.reporting_required
+                        && !matches!(
+                            self.pending_writes.front(),
+                            Some(PtyWrite::InputReportingKey { .. })
+                        ))))
+        {
             return;
         }
 
@@ -307,6 +335,16 @@ impl<T: EventLoopSender> PtyController<T> {
                 self.execute_next_queued_write(ctx);
             }
         }
+    }
+
+    fn finish_reporting_request(&mut self, written: bool, ctx: &mut ModelContext<Self>) {
+        self.reporting_pending = false;
+        // In-band commands clear the shell buffer. A failed report must keep blocking all queue
+        // entry points until a fresh activation gets a successful report of that buffer.
+        if written {
+            self.reporting_required = false;
+        }
+        self.execute_next_queued_write(ctx);
     }
 
     /// Writes a set of bytes to the PTY to begin bootstrapping a shell.
@@ -542,6 +580,24 @@ impl<T: EventLoopSender> PtyController<T> {
                 Some(shell_type),
             ),
             PtyWrite::Bytes { bytes } => (bytes, false, None, None),
+            PtyWrite::InputReportingKey { key } => {
+                let block = self.terminal_model.lock().input_reporting_block();
+                if let Some(block) = block {
+                    let (done, received) = async_channel::bounded(1);
+                    self.reporting_pending = true;
+                    self.send_message_to_event_loop(
+                        Message::InputReportingKey { key, block, done },
+                        ctx,
+                    );
+                    ctx.spawn(
+                        async move { received.recv().await.unwrap_or(false) },
+                        |me, written, ctx| {
+                            me.finish_reporting_request(written, ctx);
+                        },
+                    );
+                }
+                return true;
+            }
             PtyWrite::RunNativeShellCompletions {
                 command,
                 shell_type,

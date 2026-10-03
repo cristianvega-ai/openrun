@@ -145,6 +145,11 @@ jobs:
       - name: Audit self-test
         run: ./script/offline_audit --self-test
 
+      - name: Check ignored-test ownership
+        run: |
+          python3 script/check_ignored_tests --self-test
+          python3 script/check_ignored_tests
+
   clippy:
     name: Clippy (macOS)
     runs-on: macos-latest
@@ -184,6 +189,9 @@ jobs:
 
       - uses: ./.github/actions/build-cache
         id: cache
+
+      - name: Verify process leak policy
+        run: python3 script/check_nextest_leaks
 
       - name: Build the tests
         id: build
@@ -393,6 +401,10 @@ jobs:
         with:
           metal: "false"
       - uses: ./.github/actions/macos-test-tools
+      # git 2.31.0 (the oldest the completion gate accepts), 2.43.0 and 2.44.0 (they ignore
+      # GIT_NO_LAZY_FETCH) and 2.43.4 (a patched backport) for `git_local_promisor_tests.rs`, which
+      # also tests the runner's own git. The other jobs test the runner's git only.
+      - uses: ./.github/actions/old-git
       - uses: ./.github/actions/test-archive
 
       # The command executor tests for the macOS sandbox (`sandbox-exec` profile, the DNS daemon

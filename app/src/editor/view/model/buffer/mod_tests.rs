@@ -3961,7 +3961,7 @@ fn test_undo_should_restore_selection() {
     })
 }
 
-#[ignore = "The underlying issue here is the same as the one in test_merging_selections_with_concurrent_edits."]
+#[ignore = "ENG-171: The underlying issue here is the same as the one in test_merging_selections_with_concurrent_edits."]
 #[test]
 fn test_undo_should_not_restore_remote_selection() {
     App::test((), |mut app| async move {
@@ -4160,7 +4160,7 @@ fn test_merging_selections_with_remote_edits() {
 
 // See https://github.com/example/example-repo/pull/9249 for discussion
 // about possible strategies to address this.
-#[ignore = "The test points out an eventual consistency problem with selections."]
+#[ignore = "ENG-171: The test points out an eventual consistency problem with selections."]
 #[test]
 fn test_merging_selections_with_concurrent_edits() {
     App::test((), |mut app| async move {
