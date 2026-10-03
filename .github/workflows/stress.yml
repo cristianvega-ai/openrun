@@ -22,7 +22,7 @@ on:
         description: Shell the tests start
         default: zsh
         type: choice
-        options: [zsh, bash, pwsh]
+        options: [zsh, bash, fish, pwsh]
       run_ignored:
         description: Which ignored tests to run (nextest --run-ignored)
         default: default

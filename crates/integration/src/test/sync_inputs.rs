@@ -259,6 +259,10 @@ pub fn test_synced_inputs_terminal_mode_change_view_focus() -> Builder {
         new_step_with_default_assertions("create 2nd tab")
             .with_keystrokes(&[cmd_or_ctrl_shift("t")]),
     );
+    // The first pane of the new tab bootstraps like the others. When it finishes after the
+    // text is typed to every synced pane, the shell is not reading yet and, with fish on a loaded
+    // runner, the program never starts in the pane the test watches (seen on the hosted runner).
+    builder = builder.with_step(wait_until_bootstrapped_pane(1, 0));
 
     for i in 1..=3 {
         builder = builder
