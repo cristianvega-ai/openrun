@@ -3,6 +3,11 @@
 # The accepted license list must stay in sync with deny.toml's [licenses.allow].
 # CI enforces this via script/check_license_config_sync.
 
+# OpenRun ships for macOS only: crates that only the Windows, Linux or wasm builds of third-party
+# dependencies pull in (windows-sys, inotify, wasm-bindgen, ...) are not part of the distribution
+# and are not listed in the third-party licenses.
+targets = ["aarch64-apple-darwin", "x86_64-apple-darwin"]
+
 accepted = [
     "0BSD",
     "Apache-2.0",

@@ -57,7 +57,7 @@ deny = [
     { crate = "hyper", wrappers = ["reqwest", "axum", "hyper-util", "hyper-rustls"], reason = "transport of reqwest and the local_control axum server" },
     { crate = "axum", wrappers = ["warp"], reason = "local_control server only" },
     { crate = "tower-http", wrappers = ["reqwest"], reason = "unconditional dependency of reqwest; nothing else may use it" },
-    { crate = "interprocess", reason = "the local IPC crate was removed with the Windows single-instance service; do not reintroduce it" },
+    { crate = "interprocess", reason = "the local IPC crate was removed with the single-instance service it served; do not reintroduce it" },
     # Warp server protocols and clients.
     { crate = "cynic", reason = "GraphQL client for the removed Warp server" },
     { crate = "tungstenite", reason = "websocket transport of the removed Warp server and session sharing" },
