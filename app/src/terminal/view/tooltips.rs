@@ -78,8 +78,6 @@ fn show_in_file_explorer_tooltip(
 impl TerminalView {
     /// Renders the link and/or secrets tooltips on top of the grid
     /// Expects at least one of the two tooltips to be visible.
-    // Unused variables allowed when no local filesystem as the `app` argument
-    // is unused.
     pub(super) fn render_grid_tooltip(
         &self,
         stack: &mut Stack,

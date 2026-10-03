@@ -49,10 +49,6 @@ enum Config {
     Custom(LocalConfig),
 }
 
-// The concept of specifying an available shell does not exist on non-local filesystems. So we allow
-// dead code so that the concept of the struct can exist, but remove any methods that do anything
-// with it. That way, method calls can still take `Option<AvailableShell>` as an argument, but
-// builds without a local tty can just specify `None` for the value.
 /// Contains the config describing a 'shell' that can be launched for a new session. Currently falls
 /// into 3 categories:
 /// - Known Local: A shell that is known to be installed on the local filesystem, and can be run

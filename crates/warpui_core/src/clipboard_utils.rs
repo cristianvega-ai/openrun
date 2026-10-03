@@ -1,8 +1,5 @@
 use itertools::Itertools;
 
-#[allow(unused_imports)]
-use crate::clipboard::{Clipboard, ClipboardContent};
-
 /// Supported image file extensions for clipboard operations.
 pub const IMAGE_EXTENSIONS: &[&str] = &[".png", ".jpg", ".jpeg", ".gif", ".webp"];
 
@@ -278,7 +275,6 @@ pub fn escaped_paths_str(
     shell_family: Option<warp_util::path::ShellFamily>,
 ) -> String {
     // Handle regular file paths as text
-    #[allow(unused_mut)]
     let mut input = paths
         .iter()
         .map(|path| match shell_family {

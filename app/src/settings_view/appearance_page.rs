@@ -2448,14 +2448,11 @@ impl SettingsWidget for CustomAppIconWidget {
         appearance: &Appearance,
         app: &AppContext,
     ) -> Box<dyn Element> {
-        #[allow(unused_mut)]
         let show_bundle_warning = {
-            {
-                use objc2_app_kit::NSRunningApplication;
-                NSRunningApplication::currentApplication()
-                    .bundleIdentifier()
-                    .is_none()
-            }
+            use objc2_app_kit::NSRunningApplication;
+            NSRunningApplication::currentApplication()
+                .bundleIdentifier()
+                .is_none()
         };
 
         let dropdown = render_dropdown_item(

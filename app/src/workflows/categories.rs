@@ -1138,8 +1138,6 @@ impl VoltronFeatureViewMeta for CategoriesView {
         Some(CustomAction::Workflows)
     }
 
-    // Unused variables allowed when no local filesystem as `metadata` arg
-    // is unused.
     fn on_load(&mut self, metadata: VoltronMetadata, ctx: &mut ViewContext<Self>) {
         if let Some(active_path) = metadata.active_session_path_if_local {
             self.load_project_workflows(active_path, ctx);

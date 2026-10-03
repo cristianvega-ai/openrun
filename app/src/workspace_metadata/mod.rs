@@ -205,7 +205,6 @@ impl PersistedWorkspace {
         // Collect workspace paths before metadata is moved into Self.
         let startup_workspace_paths: Vec<PathBuf> = metadata.keys().cloned().collect();
 
-        #[allow(unused_mut)]
         let mut result = Self {
             workspaces: metadata,
             model_event_sender,

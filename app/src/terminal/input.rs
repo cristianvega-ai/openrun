@@ -102,8 +102,6 @@ use super::{
     History, HistoryEntry, SizeInfo, TerminalModel, UpArrowHistoryConfig, prompt,
     should_right_click_paste,
 };
-#[allow(unused_imports)]
-use crate::ASSETS;
 use crate::appearance::{Appearance, AppearanceEvent};
 use crate::channel::{Channel, ChannelState};
 use crate::code::editor_management::CodeSource;

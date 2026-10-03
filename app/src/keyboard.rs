@@ -98,7 +98,6 @@ pub fn keybinding_file_path() -> std::path::PathBuf {
 
 /// Save the custom keybindings map to disk.
 #[cfg(not(test))]
-// Allow unused variables when no local filesystem exists as the arg is unused.
 fn save_custom_keybindings(map: CustomKeybindings) {
     let file = match crate::util::file::create_file(keybinding_file_path()) {
         Ok(f) => f,

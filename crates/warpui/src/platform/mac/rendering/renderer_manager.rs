@@ -1,5 +1,3 @@
-use pathfinder_geometry::vector::Vector2F;
-
 use super::metal;
 use super::renderer::{Device, Renderer};
 
@@ -21,12 +19,7 @@ impl RendererManager {
     }
 
     /// Returns a [`Renderer`] that can be used to render on the given [`Device`].
-    #[allow(unused_variables)]
-    pub fn renderer_for_device(
-        &mut self,
-        device: &Device,
-        window_size: Vector2F,
-    ) -> &mut dyn Renderer {
+    pub fn renderer_for_device(&mut self, device: &Device) -> &mut dyn Renderer {
         match device {
             Device::Metal(device) => self.metal_renderer_manager.renderer_for_device(device),
         }

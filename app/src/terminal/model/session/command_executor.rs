@@ -78,7 +78,6 @@ pub trait CommandExecutor: Send + Sync + Debug {
     }
 }
 
-#[allow(unused_variables)]
 pub fn new_command_executor_for_session(
     session_info: &SessionInfo,
     executor_command_tx: &Sender<ExecutorCommandEvent>,

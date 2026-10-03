@@ -1590,7 +1590,7 @@ impl Workspace {
                 ctx.open_file_path_in_explorer(&path);
                 DismissibleToast::success(format!("Wrote heap profile to {}", path.display()))
                     .with_link(
-                        ToastLink::new("Show in file explorer".to_string())
+                        ToastLink::new("Show in Finder".to_string())
                             .with_onclick_action(WorkspaceAction::OpenInExplorer { path }),
                     )
             }
@@ -8766,7 +8766,6 @@ impl Workspace {
             CommandPaletteEvent::Close {
                 accepted_action_type,
             } => self.close_palette(true, *accepted_action_type, ctx),
-            #[allow(unused_variables)]
             CommandPaletteEvent::OpenFile {
                 path,
                 line_and_column_arg,
@@ -15146,8 +15145,7 @@ impl View for Workspace {
             stack.finish()
         };
 
-        #[allow(unused_mut)]
-        let mut event_handler = EventHandler::new(stack);
+        let event_handler = EventHandler::new(stack);
 
         let event_handler =
             event_handler.on_modifier_state_changed(|ctx, _app, key_code, state| {

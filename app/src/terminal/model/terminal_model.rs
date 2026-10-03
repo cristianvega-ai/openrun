@@ -2589,7 +2589,6 @@ impl ansi::Handler for TerminalModel {
         };
     }
 
-    #[allow(unused_variables)]
     fn end_in_band_command_output(&mut self, from_osc_sequence: bool) {
         match &mut self.is_receiving_in_band_command_output {
             IsReceivingInBandCommandOutput::Yes { output } => {

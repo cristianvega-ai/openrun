@@ -1056,7 +1056,7 @@ impl WindowState {
         if let Some((renderer_manager, device)) = self.renderer_manager.as_ref().zip(self.device())
         {
             let mut renderer_manager = renderer_manager.borrow_mut();
-            let renderer = renderer_manager.renderer_for_device(device, self.physical_size());
+            let renderer = renderer_manager.renderer_for_device(device);
 
             renderer.resize(self);
         }
@@ -1395,7 +1395,7 @@ extern "C-unwind" fn warp_update_layer(this: &Object) {
             .as_ref()
             .expect("warp_update_layer should never be called twice in parallel")
             .borrow_mut();
-        let renderer = renderer_manager.renderer_for_device(device, window.physical_size());
+        let renderer = renderer_manager.renderer_for_device(device);
 
         app::callback_dispatcher().with_mutable_app_context(|ctx| {
             renderer.render(&scene, window.as_ref(), ctx.font_cache());
