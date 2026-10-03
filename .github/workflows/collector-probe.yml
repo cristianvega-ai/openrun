@@ -1,0 +1,70 @@
+name: Collector probe (temporary)
+
+# TEMPORARY, ENG-252 / R5-COLLECTOR: measures how the unified log delivers the collector's canary
+# denials on a hosted runner, and how often the current collector fails. Removed in the same task.
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: probe or stress
+        default: probe
+        type: choice
+        options: [probe, stress]
+      count:
+        description: stress iterations per job (5 jobs)
+        default: "10"
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    if: ${{ inputs.mode == 'probe' }}
+    name: Probe (burners ${{ matrix.burners }})
+    runs-on: macos-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        burners: ["0", "3"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Probe
+        run: python3 .github/probe/probe.py 30 1 150 ${{ matrix.burners }} 2>&1 | tee probe.log
+
+  stress:
+    if: ${{ inputs.mode == 'stress' }}
+    name: Stress ${{ matrix.part }}
+    runs-on: macos-latest
+    timeout-minutes: 110
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ["1", "2", "3", "4", "5"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Run the collector test repeatedly
+        env:
+          COUNT: ${{ inputs.count }}
+        run: |
+          failed=0
+          for i in $(seq 1 "$COUNT"); do
+            mkdir -p "logs/$i"
+            start=$(date +%s)
+            if python3 script/offline_sandbox_macos_test --log-dir "logs/$i" > "logs/$i/out.txt" 2>&1; then
+              echo "iteration $i: ok ($(( $(date +%s) - start )) s)"
+            else
+              failed=$((failed + 1))
+              echo "iteration $i: FAILED ($(( $(date +%s) - start )) s)"
+              grep -E "^(FAIL|  )|status 125|not in the log" "logs/$i/out.txt" | head -20
+            fi
+          done
+          echo "failed iterations: $failed of $COUNT"
+          [ "$failed" -eq 0 ]
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: ${{ always() }}
+        with:
+          name: collector-stress-${{ matrix.part }}
+          path: logs
+          retention-days: 7
