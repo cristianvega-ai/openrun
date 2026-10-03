@@ -1,7 +1,7 @@
-//! Evidence for the git completion generators that run where no network sandbox exists (Windows;
-//! `ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT` in `warp_completer`). On Windows the offline environment
-//! table is the only layer between a repository and the network or a program it names, so each
-//! command of every generator on that list is run through the production executor
+//! Evidence that the offline environment table alone keeps a repository from reaching the network
+//! or a program it names, for the local git completion generators (`LOCAL_GIT_GENERATORS` in
+//! `warp_completer`) with the network sandbox off. Each command of every generator on that list
+//! is run through the production executor
 //! (`SessionContext::execute_command_at_pwd` into `LocalCommandExecutor`, sandbox off) against
 //!
 //! * a repository whose config names a program for `core.fsmonitor`, the `clean` filter, an
@@ -12,8 +12,8 @@
 //!
 //! Every program writes a marker file. Each command is first run without the table to show the
 //! fixture does fire, then with it and must leave no marker and make no connection. The tests run
-//! on every host: PowerShell (5.1 and 7) on Windows, bash elsewhere. Git must be installed; with
-//! `CI` set a missing git, or a missing PowerShell on Windows, fails the test instead of skipping.
+//! in bash. Git must be installed; with `CI` set a missing git fails the test instead of
+//! skipping.
 
 use std::collections::{BTreeSet, HashMap};
 use std::io::Write as _;
@@ -365,14 +365,12 @@ struct SessionShell {
 }
 
 fn session_shells() -> Vec<SessionShell> {
-    {
-        vec![SessionShell {
-            label: "bash",
-            path: PathBuf::from("/bin/bash"),
-            shell_type: ShellType::Bash,
-            family: Shell::Posix,
-        }]
-    }
+    vec![SessionShell {
+        label: "bash",
+        path: PathBuf::from("/bin/bash"),
+        shell_type: ShellType::Bash,
+        family: Shell::Posix,
+    }]
 }
 
 fn executor(shell: &SessionShell, offline_environment: bool) -> Arc<dyn CommandExecutor> {
@@ -462,7 +460,7 @@ const EXPECTED_OUTPUT: &[(&str, &str)] = &[
     ("worktree list", "worktree "),
 ];
 
-fn windows_git_commands(family: Shell) -> BTreeSet<String> {
+fn local_git_commands(family: Shell) -> BTreeSet<String> {
     local_git_generators()
         .iter()
         .map(|(spec, generator)| bundled_command(spec, generator, family))
@@ -475,7 +473,7 @@ fn the_git_generators_run_nothing_and_connect_nowhere_through_the_production_exe
         return;
     };
     for shell in session_shells() {
-        let commands = windows_git_commands(shell.family);
+        let commands = local_git_commands(shell.family);
         assert!(commands.len() > 15, "{commands:?}");
         let mut fired_without_the_table = BTreeSet::new();
         for (repository, root) in [("hostile", &fixture.hostile), ("partial", &fixture.partial)] {
@@ -584,11 +582,9 @@ fn the_engine_completes_git_words_through_the_production_executor_and_runs_no_re
     }
 }
 
-/// Environment variable names are case-insensitive on Windows, and so is git's reading of
-/// `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>` there. A session that
-/// defines them in another spelling must still have its pair counted by the table, which appends
-/// after it, and must not end up with two spellings of the count. On other hosts only the exact
-/// spelling is a git variable, so only that one is run.
+/// A session that defines `GIT_CONFIG_COUNT`, `GIT_CONFIG_KEY_<n>` and `GIT_CONFIG_VALUE_<n>` must
+/// still have its pair counted by the table, which appends after it, and must not end up with two
+/// counts.
 #[test]
 fn a_session_pair_in_any_spelling_is_counted_and_the_table_still_applies() {
     let Some(fixture) = Fixture::new() else {

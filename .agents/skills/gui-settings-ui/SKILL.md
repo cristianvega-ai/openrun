@@ -73,10 +73,7 @@ There are two mechanisms for conditionally showing a setting, and they are not i
 **1. An `if` at page-build time — never create the widget.** This is how most gating in a page's build function (for example `AppearanceSettingsPageView`, `appearance_page.rs`) is written:
 
 ```rust
-if cfg!(feature = "local_fs") {
-    widgets.extend(Self::local_file_widgets());
-}
-if ai_settings.some_setting.is_supported_on_current_platform() {
+if FeatureFlag::SomeFlag.is_enabled() {
     widgets.push(Box::new(SomeWidget::default()));
 }
 ```
@@ -85,7 +82,7 @@ if ai_settings.some_setting.is_supported_on_current_platform() {
 
 **Which one: can the value change while the app is running?**
 
-- **Fixed for the process** — a feature flag, a `cfg!` feature, a platform-support check. → **Use the build-time `if`.** This is the preferred default: the widget never exists, so there is nothing to filter, render, or reason about.
+- **Fixed for the process** — a feature flag or a `cfg!` feature. → **Use the build-time `if`.** This is the preferred default: the widget never exists, so there is nothing to filter, render, or reason about.
 - **Can change at runtime** — a setting the user toggles, auth state, an availability check that can flip mid-session. → **Use `should_render`.**
 
 The reason is *when each is evaluated*. The build-time `if` runs once, when the page is constructed, and its result is frozen until something rebuilds the page. `should_render` is re-evaluated on every filter and render pass, so it tracks a value that changes while the settings page is open. Gate a runtime-changing value with a build-time `if` and the page goes stale; gate a static flag with `should_render` and you carry a widget around for nothing.
@@ -165,7 +162,7 @@ Rules of thumb when splitting:
 
 - **One widget ≈ one setting row** (or one tightly-coupled group that always shows and hides together).
 - **Scope `search_terms` to that widget only.** Keep enough shared context that a page-level query still matches (each CLI-agent widget above keeps `"third party cli coding agent"`), then add the terms unique to the row.
-- **Give each row the right gating mechanism** (see "Two ways to gate a widget"). A row that used to sit behind an `if … { … }` inside a mega-`render` becomes its own widget: if its condition is a static feature flag or platform check, gate it with an `if` in the page's build function and never create it; if it can change at runtime, give it `should_render`. The CLI-agent rich-input rows are the runtime case — they hang off the user-toggleable footer setting — so they use `should_render` and share the predicate through a small free function (`should_render_cli_agent_rich_input(app)`) rather than duplicating the condition.
+- **Give each row the right gating mechanism** (see "Two ways to gate a widget"). A row that used to sit behind an `if … { … }` inside a mega-`render` becomes its own widget: if its condition is a static feature flag, gate it with an `if` in the page's build function and never create it; if it can change at runtime, give it `should_render`. The CLI-agent rich-input rows are the runtime case — they hang off the user-toggleable footer setting — so they use `should_render` and share the predicate through a small free function (`should_render_cli_agent_rich_input(app)`) rather than duplicating the condition.
 - **Move per-row state with the row.** Each `SwitchStateHandle` / `MouseStateHandle` moves to the widget that owns its control. Never create one inline while rendering (see `gui-ui-guidelines` and the AGENTS.md note on `MouseStateHandle`).
 - **Watch the widget ids.** `widget_id()` is `std::any::type_name::<Self>()`, so splitting a widget changes ids. `settings_widget_deeplink_target` in `app/src/settings_view/mod.rs` maps stable public slugs (`warp://settings?widget=<slug>`) onto them. The CLI-agent split deliberately kept `CLIAgentWidget` as the first widget so `cli_agent_settings_widget_id()` — the target of the `cli_agents` deeplink — stayed valid. If you rename or remove a widget that backs a deeplink, re-point the accessor.
 

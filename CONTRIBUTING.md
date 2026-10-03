@@ -70,7 +70,7 @@ You remain responsible for the change: read what the agent wrote, test it, and t
 See [README.md](README.md) and [AGENTS.md](AGENTS.md) for the full engineering guide. Quick start:
 
 ```bash
-./script/bootstrap   # platform-specific setup
+./script/bootstrap   # macOS setup
 cargo run            # build and run
 ./script/presubmit   # fmt, clippy, and tests
 ```

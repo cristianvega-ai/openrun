@@ -40,8 +40,8 @@ The core pieces are:
 - `crates/integration/tests/common/mod.rs`
   - The outer Rust test harness used by `cargo test` and `cargo nextest`.
   - Shells out to the integration binary.
-  - Forwards a limited set of env vars (`PATH`, `RUST_*`, `WARP_*`, `WARPUI_*`, `WGPU_*`, display-related vars).
-  - Re-runs tests up to 10 times when the integration binary exits with the special rerun code.
+  - Forwards a limited set of env vars (`PATH`, `RUST_*`, `WARP_*`, `WARPUI_*`).
+  - Runs the integration binary once; a failure is a failure of the test.
 - `crates/integration/src/test.rs`
   - Module hub for integration tests.
   - Add new test modules here and `pub use` their functions so the runner can see them.
@@ -174,7 +174,7 @@ This is the right tool for settings backed by user preferences rather than envir
 
 ### `set_should_run_test(...)`
 
-Use this to gate tests on shell/platform/runtime capabilities when the test genuinely cannot run everywhere.
+Use this to gate tests on shell/runtime capabilities when the test genuinely cannot run everywhere.
 
 ### `with_on_finish(...)`
 

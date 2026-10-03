@@ -24,7 +24,7 @@ Prefer unit tests for anything that fits: they are fast, deterministic, and poin
 
 ## When a unit test is the wrong level
 
-Be honest about this codebase. Warp is a terminal emulator with a GPU renderer, PTY and shell integration, and IPC. The common "80% unit tests" heuristic assumes a business-logic-heavy system where units exchange messages and transform data. Large parts of this repo are not that, and forcing them under a unit test usually means mocking away the only thing that could actually break.
+Be honest about this codebase. Warp is a terminal emulator with a GPU renderer, PTY and shell integration. The common "80% unit tests" heuristic assumes a business-logic-heavy system where units exchange messages and transform data. Large parts of this repo are not that, and forcing them under a unit test usually means mocking away the only thing that could actually break.
 
 Escalate to a higher level when any of these hold:
 
@@ -49,7 +49,7 @@ Tests cost real maintenance, and a bad test costs more than no test. Skip or del
 
 - **Change-detector tests.** A test that restates the implementation — inject two collaborators, assert they were called in order — fails on every refactor and catches no defects. It has negative value. Rewrite it as a state assertion or delete it.
 - **Trivial code with no logic.** Getters, `From`/`Into` passthroughs, `Default` impls, plain struct construction. There is nothing that can break independently.
-- **Code you don't own.** Don't test the standard library, `tokio`, or `wgpu`. Test *your usage* of them.
+- **Code you don't own.** Don't test the standard library or `tokio`. Test *your usage* of them.
 - **Redundant tests.** If a case is already covered, a near-identical test adds maintenance cost and no signal. Prune tests as ruthlessly as production code.
 
 Don't chase a coverage number. Coverage says a line executed, not that anything was verified, and a target reliably turns into a ceiling.

@@ -12,6 +12,6 @@ stages and no per-flag Cargo feature.
 To make a gated feature permanent, fold its enabled arm into the code and delete the flag. Follow the
 `remove-feature-flag` skill.
 
-To ship a feature that should only be on for some platforms or builds, keep the flag and enable it in
+To ship a feature that should only be on for some builds, keep the flag and enable it in
 `enabled_features()` in `app/src/features.rs` (or `DEBUG_FLAGS` in `crates/warp_features/src/lib.rs`). See the
 `add-feature-flag` skill.

@@ -9,10 +9,10 @@ pub enum FeatureFlag {
     /// Enables debugging aids. Enabled through [`DEBUG_FLAGS`] in debug builds.
     DebugMode,
 
-    /// Enables iTerm image rendering. Enabled on every platform except Windows.
+    /// Enables iTerm image rendering.
     ITermImages,
 
-    /// Enables Kitty image rendering. Enabled on every platform except Windows.
+    /// Enables Kitty image rendering.
     KittyImages,
 }
 

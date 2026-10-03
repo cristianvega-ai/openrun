@@ -63,12 +63,12 @@ To remove everything the app saved, quit it and delete the state directory's `.s
 
 ## Platform
 
-OpenRun runs on macOS only. The Windows, Linux and web (wasm) targets, their windowing and rendering layers (winit, wgpu), their packaging and their CI were removed; [CHANGES.md](CHANGES.md#macos-only) lists what went. SSH sessions to Linux hosts still work: the remote shell bootstrap keeps its Linux branches (bash, zsh, fish and PowerShell), and a remote Linux or Windows host is described by `TargetOS` in `crates/warp_core/src/platform.rs`.
+OpenRun runs on macOS only. The Windows, Linux and web (wasm) targets, their windowing and rendering layers (winit, wgpu), their packaging and their CI were removed; [CHANGES.md](CHANGES.md#macos-only) lists what went. SSH sessions to Linux hosts still work: the remote shell bootstrap keeps its Linux branches (bash, zsh, fish and PowerShell), and a remote Linux host is described by `TargetOS` in `crates/warp_core/src/platform.rs`.
 
 ## Building and running
 
 ```bash
-./script/bootstrap   # platform-specific setup
+./script/bootstrap   # macOS setup
 ./script/run         # build and run
 ./script/presubmit   # fmt, clippy, and tests
 ```

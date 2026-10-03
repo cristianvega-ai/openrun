@@ -101,7 +101,6 @@ pub async fn detect_main_branch(repo_path: &Path) -> Result<String> {
     run_git_command(repo_path, &["branch", "--show-current"]).await
 }
 
-/// See the no-`local_fs` stub above for documentation.
 pub async fn detect_fork_point(
     repo_path: &Path,
     current_branch_name: Option<&str>,

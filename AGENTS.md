@@ -19,8 +19,6 @@ This file provides guidance when working with code in this repository.
 - `cargo clippy -p <package> --all-targets --tests -- -D warnings` - Run targeted Clippy
 - `./script/run-clang-format.py -r --extensions 'c,h,cpp,m' ./crates/warpui/src/ ./app/src/` - Check C/C++/Obj-C formatting
 - `./script/run-clang-format.py -i -r --extensions 'c,h,cpp,m' ./crates/warpui/src/ ./app/src/` - Format C/C++/Obj-C code in place
-- `find . -name "*.wgsl" -exec wgslfmt --check {} +` - Check WGSL shader formatting
-- `find . -name "*.wgsl" -exec wgslfmt {} +` - Format WGSL shaders in place
 
 ### Implementation Validation Order
 Optimize for fast delivery and let CI catch uncommon failures outside targeted local coverage.
@@ -39,9 +37,9 @@ Run the full presubmit only when the user, task, or approved spec explicitly req
 
 ## Architecture Overview
 
-This is a Rust-based, fully offline terminal emulator with a custom UI framework called **WarpUI**. It has no accounts, no built-in AI or agents, no cloud sync, no telemetry or crash reporting and no autoupdate; `CHANGES.md` records each removal. The only network access left is opt-in language server downloads, links the user opens, the opt-in loopback `warpctrl` local control, and the user's own `git` remotes and GitHub through `gh`, which run only while a pull request chip is showing in the selected tab (the chip is in neither the default prompt nor the default CLI-agent footer, so users opt in by adding it; a full-screen program, a running command or a maximized sibling pane hides it and `gh` stops after a grace period), the code-review panel is open in the selected tab, or the vertical tabs panel shows pull request badges in its current row mode, or on an explicit user action such as push or create pull request (a repository terminal with neither runs no `gh` or remote `git`). Command completions run only the completion generators on the reviewed allow-list in `crates/warp_completer/src/signatures/legacy/generator_policy/allowed.rs`: a generator, and an alias generator, must never execute shell syntax derived from the typed tokens, touch a network, or execute code the project controls. The `ALLOWED_WHEN_ISOLATED` list in `allowed.rs` runs only where `GeneratorContext::network_isolated()` is true (macOS and Linux local sessions), and a pair is added to it only with a real-tool fixture in `restored_generators_tests.rs`. On Windows (no sandbox) `ALLOWED_ON_WINDOWS` is the file-read subset that always runs, and `ALLOWED_ON_WINDOWS_WITH_ENVIRONMENT` is the 41 local git generators (each a single read-only `git` command, the isolated-tier `ls-files`/`diff --cached` ones included; every generator that runs git, and the `git` alias generator, also needs the session's git to be 2.31 or newer, probed once per session with `git --version`, because older git ignores the table's `GIT_CONFIG_COUNT` overrides), which run only where `GeneratorContext::offline_environment_applied()` is true (the local, MSYS2 and WSL executors; a new executor reports it only if it applies `offline_environment`); a pair is added to it only with a case in `command_executor/git_completion_tests.rs` (a hostile repository and a partial clone with a counting loopback listener, run through the production executor), and the `windows-security-tests` CI job runs those tests on Windows. Typed words reach a generator's command only through the token gate (`generator_policy/token_gate.rs`: a generator that takes tokens is `Strict` unless it is listed there, and every word must be inert); anything else is denied with a class in `denied.rs`; the drift test forces a decision for every new generator, and the injection corpus in `generator_policy_tests.rs` runs hostile tokens through every allowed token-taking generator in real shells, and every generator subprocess gets the offline environment table in `app/src/terminal/model/session/command_executor/offline_environment.rs` (applied by the local, WSL, MSYS2 and, for bash and zsh, in-band executors; a new variable goes there only with a real-tool test, and `every_table_row_names_a_verification_test_that_exists` fails until the test is named), and, on macOS and Linux, runs inside the network sandbox in `app/src/terminal/model/session/command_executor/network_sandbox.rs` (a `sandbox-exec` profile or a seccomp filter; it fails closed, and an executor that cannot sandbox reports `network_isolated() == false`). `script/offline_audit` enforces that. Do not add code that calls a server. Third-party CLI agents (Claude Code, Codex, Gemini CLI, OpenCode) run inside the terminal, and the UI for them is kept.
+This is a Rust-based, fully offline terminal emulator with a custom UI framework called **WarpUI**. It has no accounts, no built-in AI or agents, no cloud sync, no telemetry or crash reporting and no autoupdate; `CHANGES.md` records each removal. The only network access left is opt-in language server downloads, links the user opens, the opt-in loopback `warpctrl` local control, and the user's own `git` remotes and GitHub through `gh`, which run only while a pull request chip is showing in the selected tab (the chip is in neither the default prompt nor the default CLI-agent footer, so users opt in by adding it; a full-screen program, a running command or a maximized sibling pane hides it and `gh` stops after a grace period), the code-review panel is open in the selected tab, or the vertical tabs panel shows pull request badges in its current row mode, or on an explicit user action such as push or create pull request (a repository terminal with neither runs no `gh` or remote `git`). Command completions run only the completion generators on the reviewed allow-list in `crates/warp_completer/src/signatures/legacy/generator_policy/allowed.rs`: a generator, and an alias generator, must never execute shell syntax derived from the typed tokens, touch a network, or execute code the project controls. The `ALLOWED_WHEN_ISOLATED` list in `allowed.rs` runs only where `GeneratorContext::network_isolated()` is true (local sessions), and a pair is added to it only with a real-tool fixture in `restored_generators_tests.rs`. `LOCAL_GIT_GENERATORS` is the list of local git generators (each a single read-only `git` command, the isolated-tier `ls-files`/`diff --cached` ones included); every generator that runs git, and the `git` alias generator, also needs the session's git to be 2.31 or newer, probed once per session with `git --version`, because older git ignores the table's `GIT_CONFIG_COUNT` overrides; a pair is added to the list only with a case in `command_executor/git_completion_tests.rs` (a hostile repository and a partial clone with a counting loopback listener, run through the production executor with the sandbox off). Typed words reach a generator's command only through the token gate (`generator_policy/token_gate.rs`: a generator that takes tokens is `Strict` unless it is listed there, and every word must be inert); anything else is denied with a class in `denied.rs`; the drift test forces a decision for every new generator, and the injection corpus in `generator_policy_tests.rs` runs hostile tokens through every allowed token-taking generator in real shells, and every generator subprocess gets the offline environment table in `app/src/terminal/model/session/command_executor/offline_environment.rs` (applied by the local and, for bash and zsh, in-band executors; a new variable goes there only with a real-tool test, and `every_table_row_names_a_verification_test_that_exists` fails until the test is named), and runs inside the network sandbox in `app/src/terminal/model/session/command_executor/network_sandbox.rs` (a `sandbox-exec` profile; it fails closed, and an executor that cannot sandbox reports `network_isolated() == false`). `script/offline_audit` enforces that. Do not add code that calls a server. Third-party CLI agents (Claude Code, Codex, Gemini CLI, OpenCode) run inside the terminal, and the UI for them is kept.
 
-The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`, `crates/warpui_core`): `Element`/`View` layout, GPU/WGSL rendering, mouse input, `.app` bundles. Run with `cargo run` / `./script/run`; verify visually with the real-display integration framework (`crates/integration`).
+The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`, `crates/warpui_core`): `Element`/`View` layout, Metal rendering, mouse input, `.app` bundles. Run with `cargo run` / `./script/run`; verify visually with the real-display integration framework (`crates/integration`).
 
 ### Key Components
 
@@ -50,7 +48,7 @@ The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`,
 - Actions system for event handling.
 
 **Rendering** (WarpUI elements):
-- `Element`s describe visual layout (Flutter-inspired), rendered on the GPU (WGSL).
+- `Element`s describe visual layout (Flutter-inspired), rendered on the GPU (Metal).
 - Mouse input uses `MouseStateHandle`: create it once during construction and reference/clone it wherever mouse input is tracked. An inline `MouseStateHandle::default()` while rendering means no mouse interactions work.
 
 **Main app** (`app/`):
@@ -64,7 +62,7 @@ The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`,
 - `warpctrl` local control server (`local_control/`)
 
 **Core Libraries**:
-- `crates/warp_core/` - Core utilities, platform abstractions and channel state (shared)
+- `crates/warp_core/` - Core utilities and channel state (shared)
 - `crates/warp_features/` - The `FeatureFlag` enum
 - `crates/warp_terminal/` - Terminal model, grid and PTY handling
 - `crates/editor/` - Text editing functionality
@@ -73,7 +71,6 @@ The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`,
 - `crates/repo_metadata/`, `crates/code_outline/`, `crates/warp_ripgrep/` - Repository tree, symbol outlines and search
 - `crates/persistence/` - Diesel models, schema and migrations
 - `crates/local_control/` and `crates/warp_cli/` - The `warpctrl` protocol and command line
-- `crates/ipc/` - Inter-process communication
 - `crates/integration/` - Integration test framework
 
 **Channels and binaries**: `Channel` is `Oss` or `Integration`. The binaries are `warp-oss` (`app/src/bin/oss.rs`) and `integration` (`app/src/bin/integration.rs`).
@@ -89,13 +86,11 @@ The desktop app is the `app/` crate on the WarpUI pixel/GPU framework (`warpui`,
 **Workspace Structure**:
 - This is a Cargo workspace with 60+ member crates
 - Main binary is in `app/`, UI framework in `crates/warpui/`
-- Platform-specific code is conditionally compiled
 - Integration tests are in `crates/integration/`
 
 **Coding Style Preferences**:
 - Avoid unnecessary type annotations, especially in closure params.
 - Avoid using too many Rust path qualifiers and use imports for concision. Place import statements at the top of the file as per convention.
-  An exception to this is inside cfg-guarded code branches. In those cases, you can either embed the import into the relevant scope or just use an absolute path for one-offs.
 - If a function takes a context parameter (`AppContext`, `ViewContext`, or `ModelContext`), it should be named `ctx` and go last. The one exception is for
   functions that take a closure parameter, in which case the closure should be last.
 - Always remove unused parameters completely rather than prefixing them with `_`. Update the function signature and all call sites accordingly.

@@ -266,7 +266,7 @@ pub(super) const ALLOWED_GENERATORS: &[(&str, &str)] = &[
 ];
 
 /// Generators that run only when the context reports that the operating system keeps the
-/// command from reaching a network (`GeneratorContext::network_isolated`: macOS and Linux local
+/// command from reaching a network (`GeneratorContext::network_isolated`: local
 /// sessions) and the offline environment table is applied. Each looks local but was shown to
 /// reach a network, or to run repository code, in the environment alone:
 ///

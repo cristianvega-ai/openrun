@@ -1,6 +1,6 @@
 ---
 name: add-feature-flag
-description: Add a new runtime feature flag in the Warp codebase, for behavior that genuinely varies by platform, build profile or debug tooling.
+description: Add a new runtime feature flag in the Warp codebase, for behavior that genuinely varies by build profile or debug tooling.
 ---
 
 # add-feature-flag
@@ -15,7 +15,6 @@ Dogfood, Preview or Release channel lists, and no per-flag Cargo features. A fla
 
 Add a flag only when behavior legitimately depends on something known at startup, for example:
 
-- the platform (`ITermImages` and `KittyImages` are enabled on every platform except Windows),
 - the build profile or debugging tools (`DebugMode` is enabled through `DEBUG_FLAGS` in debug builds of the
   `warp-oss` binary).
 
@@ -24,8 +23,8 @@ The pieces are:
 - `FeatureFlag` (an enum) and its runtime state live in `crates/warp_features/src/lib.rs`. `warp_core::features`
   and `app/src/features.rs` re-export it.
 - `init_feature_flags()` in `app/src/features.rs` enables every flag returned by `enabled_features()`. That set is
-  `ChannelState::additional_features()` (set by the binary, for example `DEBUG_FLAGS`) plus the `#[cfg(...)]`
-  entries in `enabled_features()`.
+  `ChannelState::additional_features()` (set by the binary, for example `DEBUG_FLAGS`) plus the flags that
+  `enabled_features()` adds itself.
 
 ## Steps
 
@@ -40,20 +39,19 @@ pub enum FeatureFlag {
 ```
 
 ### 2. Decide when it is enabled
-Add it to `enabled_features()` in `app/src/features.rs`, gated by a `cfg` on the condition that matters:
+Add it to `enabled_features()` in `app/src/features.rs`, gated on the condition that matters:
 
 ```rust
-flags.extend([
-    #[cfg(not(windows))]
-    FeatureFlag::YourFeatureName,
-]);
+if condition {
+    flags.insert(FeatureFlag::YourFeatureName);
+}
 ```
 
 For something that should only be on in debug builds of `warp-oss`, add it to `DEBUG_FLAGS` in
 `crates/warp_features/src/lib.rs` instead.
 
 Do not add a Cargo feature per flag. Cargo features are for optional dependencies and build modes
-(`local_fs`, `local_tty`, `release_bundle`, profiling), not for flags.
+(`release_bundle`, profiling), not for flags.
 
 ### 3. Gate code with runtime checks
 ```rust
@@ -62,8 +60,8 @@ if FeatureFlag::YourFeatureName.is_enabled() {
 }
 ```
 
-Prefer runtime checks over `#[cfg(...)]` so both arms compile everywhere; use `cfg` only when the code cannot
-compile without the condition (platform APIs, missing dependencies).
+Prefer runtime checks over `#[cfg(...)]` so both arms always compile; use `cfg` only when the code cannot
+compile without the condition (missing dependencies).
 
 ### 4. Tests
 Flags are all off in unit tests. Turn one on for the duration of a test with the thread-local override
@@ -88,6 +86,6 @@ EditableBinding::new("action:name", "Action description", YourAction::Variant)
 
 ## Best practices
 
-- Keep flags rare. If the answer is the same on every platform and build, do not add one.
+- Keep flags rare. If the answer is the same in every build, do not add one.
 - Keep flags high-level and product-focused rather than per-call-site.
 - Remove a flag (see the `remove-feature-flag` skill) as soon as the condition it captured goes away.
