@@ -53,8 +53,7 @@ fn get_gpu_device_info(device: &ProtocolObject<dyn MTLDevice>) -> GPUDeviceInfo 
     GPUDeviceInfo {
         device_type,
         device_name: device.name().to_string(),
-        // Mimic wgpu by setting the driver name and info to empty strings when
-        // rendering on Metal. See https://github.com/gfx-rs/wgpu/blob/8129897ccbff869ef48a3b53a4cdd8a8a21840f9/wgpu-hal/src/metal/mod.rs#L135.
+        // Metal exposes no driver name or info.
         driver_name: String::new(),
         driver_info: String::new(),
         backend: GPUBackend::Metal,

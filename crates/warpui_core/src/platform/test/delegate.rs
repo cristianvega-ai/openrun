@@ -301,7 +301,6 @@ impl platform::WindowContext for Window {
 
     fn max_texture_dimension_2d(&self) -> Option<u32> {
         // For tests, choose a limit so low that it can run on any device.
-        // https://github.com/gfx-rs/wgpu/blob/3b6112d45de8da75e47270fe3b0329e5d5166585/wgpu-types/src/lib.rs#L1278
         Some(2048)
     }
 
