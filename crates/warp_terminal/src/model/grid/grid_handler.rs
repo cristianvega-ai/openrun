@@ -1400,11 +1400,6 @@ impl GridHandler {
 
                 let possible_path = format!("{left}{right}");
 
-                // On Windows, reject candidates with trailing whitespace
-                // and candidates that are pure whitespace.
-                // Both are accepted by the filesystem, so `PathBuf`'s
-                // `is_dir()` returns true.
-
                 // Need to expand the path here as built-in Path lib does not understand tilde.
                 let expanded_path = shellexpand::tilde(&possible_path);
 

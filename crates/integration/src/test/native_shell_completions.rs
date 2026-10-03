@@ -2,8 +2,7 @@
 //! compute completions for the input line and renders the answer in the completions menu.
 //!
 //! These boot a real shell, so they cover the client<->shell seam unit tests cannot reach, and run
-//! once per shell the shell-integration suite covers -- zsh, bash, fish and PowerShell. Windows and
-//! its conpty stay uncovered, since CI skips shell integration there.
+//! once per shell the shell-integration suite covers -- zsh, bash, fish and PowerShell.
 
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};

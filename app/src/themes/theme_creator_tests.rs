@@ -1,7 +1,6 @@
 use super::*;
 use crate::util::color::OPAQUE;
 
-// TODO: figure out why the colors returned on Windows are slightly different.
 #[test]
 fn top_colors_jellyfish_test() {
     let jellyfish_bg_path: PathBuf = [

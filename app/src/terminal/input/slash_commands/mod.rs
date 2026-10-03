@@ -399,7 +399,7 @@ impl Input {
         true
     }
 
-    /// Handles cmd+enter (Mac) / ctrl+enter (Linux/Windows) for slash commands.
+    /// Handles cmd+enter for slash commands.
     ///
     /// Returns `true` if the keypress was handled.
     pub(super) fn maybe_handle_cmd_or_ctrl_shift_enter_for_slash_command(

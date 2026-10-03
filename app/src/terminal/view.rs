@@ -10669,12 +10669,7 @@ impl TerminalView {
 
             inline_banners.insert(
                 state.banner_id,
-                render_inline_notifications_error_banner(
-                    banner_title,
-                    state,
-                    &self.inline_banners_state.notifications_error_banner.error,
-                    appearance,
-                ),
+                render_inline_notifications_error_banner(banner_title, state, appearance),
             );
         }
 
@@ -11416,15 +11411,6 @@ impl TerminalView {
 
         match action {
             Close => self.close_notification_error_banner(ctx),
-            SetPermissions => {
-                ctx.request_desktop_notification_permissions(move |view, outcome, ctx| {
-                    // If the request was accepted, we can close the banner. Otherwise, keep it open, indicating the problem
-                    // has not been resolved.
-                    if matches!(outcome, RequestPermissionsOutcome::Accepted) {
-                        view.close_notification_error_banner(ctx);
-                    }
-                });
-            }
         }
     }
 

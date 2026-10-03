@@ -145,8 +145,7 @@ pub enum CodeViewAction {
     CloseSaved,
     ToggleMaximized,
     CopyFilePath,
-    /// Open the active code tab's file in the platform's file manager
-    /// (Finder on macOS, Explorer on Windows). No-op when the active tab has
+    /// Open the active code tab's file in Finder. No-op when the active tab has
     /// no resolvable local path.
     RevealInFinder,
     RenderMarkdown,

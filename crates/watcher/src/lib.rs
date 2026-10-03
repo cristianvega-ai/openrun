@@ -292,8 +292,8 @@ fn deduplicate_and_merge_raw_notifier_events(
         match fs_event.event.kind {
             // Create and modify should always be preserved.
             EventKind::Create(_) => created.extend(fs_event.event.paths.clone()),
-            // On Windows, ReadDirectoryChangesW emits ModifyKind::Any instead of
-            // ModifyKind::Data for file content changes. Handle both variants.
+            // Some backends emit ModifyKind::Any instead of ModifyKind::Data for file content
+            // changes. Handle both variants.
             EventKind::Modify(ModifyKind::Data(_) | ModifyKind::Any) => {
                 modified.extend(fs_event.event.paths.clone())
             }

@@ -64,38 +64,20 @@ pub(super) struct CurrentUser {
     pub(super) shell: String,
 }
 
-/// Resolves the current uid's passwd record for shell/session setup.
+/// Resolves the current uid's passwd record for shell/session setup with an in-process passwd
+/// lookup (`getpwuid_r`, via nix's safe [`nix::unistd::User::from_uid`] wrapper), which resolves
+/// directory-service users on macOS too.
 ///
-/// Resolution order, stopping at the first hit:
-/// 1. In-process passwd lookup (`getpwuid_r`, via nix) — fast, and correct
-///    wherever the process can resolve users itself (local `/etc/passwd`, or a
-///    glibc-dynamic build that can load NSS plugins).
-/// 2. `getent passwd <uid>` — delegates to the host's own NSS stack, so
-///    centrally-managed users (SSSD/LDAP/AD) still resolve even from a
-///    static/musl binary that can't `dlopen` glibc NSS plugins in-process.
-/// 3. `/etc/passwd` — last resort for minimal hosts that lack `getent`.
-///
-/// Returns `None` only if all three fail; callers then fall back to the ambient
-/// environment (`$HOME`/`$USER`) or built-in shell defaults.
+/// Returns `None` if there is no record; callers then fall back to the ambient environment
+/// (`$HOME`/`$USER`) or built-in shell defaults.
 pub(super) fn resolve_current_user() -> Option<CurrentUser> {
     let uid = nix::unistd::getuid();
-    current_user_via_getpwuid(uid)
-        .or_else(|| current_user_via_getent(uid.as_raw()))
-        .or_else(|| current_user_from_passwd_file(uid.as_raw()))
-}
-
-/// Resolve the current user with an in-process passwd lookup via nix's
-/// safe [`nix::unistd::User::from_uid`] wrapper (backed by `getpwuid_r`).
-fn current_user_via_getpwuid(uid: nix::unistd::Uid) -> Option<CurrentUser> {
     match nix::unistd::User::from_uid(uid) {
         Ok(Some(user)) => Some(CurrentUser {
             name: user.name,
             dir: user.dir.to_string_lossy().into_owned(),
             shell: user.shell.to_string_lossy().into_owned(),
         }),
-        // No passwd entry for this uid — e.g. a static/musl binary that can't
-        // resolve directory-service users in-process. Fall through to the
-        // host-delegated lookups.
         Ok(None) => None,
         Err(err) => {
             safe_error!(
@@ -105,60 +87,6 @@ fn current_user_via_getpwuid(uid: nix::unistd::Uid) -> Option<CurrentUser> {
             None
         }
     }
-}
-
-/// `getent` is the host's own (typically glibc-dynamic) binary, so it consults
-/// the host's full NSS configuration — including SSSD/LDAP/AD — which a
-/// static/musl Warp binary cannot do in-process.
-fn current_user_via_getent(uid: u32) -> Option<CurrentUser> {
-    let output = Command::new("getent")
-        .arg("passwd")
-        .arg(uid.to_string())
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    let stdout = String::from_utf8(output.stdout).ok()?;
-    stdout.lines().find_map(|line| parse_passwd_line(line, uid))
-}
-
-fn current_user_from_passwd_file(uid: u32) -> Option<CurrentUser> {
-    let contents = std::fs::read_to_string("/etc/passwd").ok()?;
-    contents
-        .lines()
-        .find_map(|line| parse_passwd_line(line, uid))
-}
-
-/// Parse a single `passwd(5)`-format line
-/// (`name:passwd:uid:gid:gecos:dir:shell`) and return it as a [`CurrentUser`]
-/// iff its uid field equals `uid`.
-fn parse_passwd_line(line: &str, uid: u32) -> Option<CurrentUser> {
-    // Strip leading blanks and ignore blank / comment lines, as glibc's passwd
-    // reader does before parsing fields.
-    let line = line.trim_start();
-    if line.is_empty() || line.starts_with('#') {
-        return None;
-    }
-
-    // `splitn(7, ':')` leaves the shell field (the 7th) as the rest of the
-    // line, including any embedded colons — matching glibc's `pw_shell = line`.
-    let mut fields = line.splitn(7, ':');
-    let name = fields.next()?;
-    let _passwd = fields.next()?;
-    let line_uid: u32 = fields.next()?.parse().ok()?;
-    let _gid = fields.next()?;
-    let _gecos = fields.next()?;
-    let dir = fields.next()?;
-    let shell = fields.next()?;
-    if line_uid != uid {
-        return None;
-    }
-    Some(CurrentUser {
-        name: name.to_owned(),
-        dir: dir.to_owned(),
-        shell: shell.to_owned(),
-    })
 }
 
 pub struct Pty {
@@ -265,10 +193,6 @@ fn build_host_shell_command(
     builder.env("TERM_PROGRAM", "WarpTerminal");
     // Advertise 24-bit color support.
     builder.env("COLORTERM", "truecolor");
-
-    // Prevent child processes from inheriting startup notification env.
-    // See: https://specifications.freedesktop.org/startup-notification-spec/startup-notification-latest.txt
-    builder.env_remove("DESKTOP_STARTUP_ID");
 
     if let Some(version) = ChannelState::app_version() {
         builder.env("TERM_PROGRAM_VERSION", version);
@@ -684,78 +608,6 @@ mod utils {
             Ok(t)
         }
     }
-}
-
-#[test]
-fn parse_passwd_line_extracts_matching_uid() {
-    let line = "alice:x:1000:1000:Alice:/home/alice:/bin/zsh";
-    assert_eq!(
-        parse_passwd_line(line, 1000),
-        Some(CurrentUser {
-            name: "alice".to_owned(),
-            dir: "/home/alice".to_owned(),
-            shell: "/bin/zsh".to_owned(),
-        })
-    );
-    // A non-matching uid or a malformed line yields None.
-    assert_eq!(parse_passwd_line(line, 1001), None);
-    assert_eq!(parse_passwd_line("not a passwd line", 1000), None);
-}
-
-#[test]
-fn parse_passwd_line_matches_glibc_edge_cases() {
-    // An empty shell field (trailing colon) is valid and yields an empty shell,
-    // just as glibc allows `pw_shell` to be empty.
-    assert_eq!(
-        parse_passwd_line("root:x:0:0:root:/root:", 0),
-        Some(CurrentUser {
-            name: "root".to_owned(),
-            dir: "/root".to_owned(),
-            shell: String::new(),
-        })
-    );
-
-    // Blank lines and `#` comment lines (even with leading blanks) are skipped.
-    assert_eq!(parse_passwd_line("", 0), None);
-    assert_eq!(parse_passwd_line("   ", 0), None);
-    assert_eq!(
-        parse_passwd_line("# alice:x:1000:1000:Alice:/home/alice:/bin/zsh", 1000),
-        None
-    );
-
-    // Leading blanks before a real entry are stripped, not treated as part of
-    // the name.
-    assert_eq!(
-        parse_passwd_line("  bob:x:1001:1001:Bob:/home/bob:/bin/bash", 1001),
-        Some(CurrentUser {
-            name: "bob".to_owned(),
-            dir: "/home/bob".to_owned(),
-            shell: "/bin/bash".to_owned(),
-        })
-    );
-
-    // The shell field keeps everything after the sixth colon, so a shell value
-    // containing a `:` is not truncated (matches glibc's `pw_shell = line`).
-    assert_eq!(
-        parse_passwd_line("carol:x:1002:1002:Carol:/home/carol:/weird/shell:arg", 1002),
-        Some(CurrentUser {
-            name: "carol".to_owned(),
-            dir: "/home/carol".to_owned(),
-            shell: "/weird/shell:arg".to_owned(),
-        })
-    );
-
-    // A line missing the shell field (only six fields) is malformed → skipped.
-    assert_eq!(
-        parse_passwd_line("dave:x:1003:1003:Dave:/home/dave", 1003),
-        None
-    );
-
-    // A non-numeric uid field is malformed → skipped.
-    assert_eq!(
-        parse_passwd_line("eve:x:notanumber:1004:Eve:/home/eve:/bin/sh", 1004),
-        None
-    );
 }
 
 #[test]

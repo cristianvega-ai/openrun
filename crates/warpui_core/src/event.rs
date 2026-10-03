@@ -165,11 +165,8 @@ pub enum Event {
     /// Gets fired when the modifier flag states changed -- this could happen either
     /// when a user presses down on or releases a modifier key.
     ModifierStateChanged {
-        // Note that in web framework modifier keypresses do not contain mouse
-        // position information. But we also have cases where modifier flag state
-        // is closely coupled with mouse position for determine whether certain events
-        // should be fired. This position meta data will be kept in the event for now,
-        // we could always remove it in the future if this does not fit.
+        // Modifier flag state is closely coupled with mouse position for determining whether
+        // certain events should be fired, so the position is kept in the event.
         mouse_position: Vector2F,
         modifiers: ModifiersState,
         /// The specific key code for the event. Can be used to identify which modifier key

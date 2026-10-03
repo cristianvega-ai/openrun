@@ -318,8 +318,7 @@ impl<T: EventLoopSender> PtyController<T> {
         let shell_type = pending_session_info.shell.shell_type();
 
         if let Some(path) = permanent_bootstrap_file(shell_type, pending_session_info) {
-            // If there is a permanent bootstrap file, source it directly. We
-            // currently only do this for local PowerShell sessions on Windows.
+            // If there is a permanent bootstrap file, source it directly.
             self.source_bootstrap_script(path, shell_type, ctx);
             return;
         }

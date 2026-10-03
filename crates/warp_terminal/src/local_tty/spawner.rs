@@ -182,7 +182,7 @@ fn is_e2big(err: &anyhow::Error) -> bool {
 
 /// Logs the names and byte-lengths (not values) of env vars passed to the
 /// shell. Called on any terminal server failure to aid diagnosis of oversized
-/// env var / secret configurations (E2BIG on Linux, socket overflow on macOS).
+/// env var / secret configurations (E2BIG, socket overflow on macOS).
 fn log_env_var_diagnostics(extra_env_vars: &HashMap<OsString, OsString>) {
     log::error!("Shell spawn env var diagnostics (names and sizes only, no values):");
 

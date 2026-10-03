@@ -69,8 +69,7 @@ const CLI_AGENT_IMAGE_PASTE_DELAY: Duration = Duration::from_millis(300);
 const CLI_AGENT_MODE_SWITCH_PREFIXES: &[u8] = &[b'!', b'&'];
 
 /// Bytes that simulate a "paste image from clipboard" keystroke for the
-/// foreground CLI agent. `0x16` is `Ctrl+V` (SYN); on Windows Claude Code
-/// listens for `Alt+V` (`ESC` + `'v'`) instead. Mirrored from the equivalent
+/// foreground CLI agent. `0x16` is `Ctrl+V` (SYN). Mirrored from the equivalent
 /// branch in `TerminalView::paste`.
 fn cli_agent_paste_keystroke_bytes() -> Vec<u8> {
     vec![0x16]

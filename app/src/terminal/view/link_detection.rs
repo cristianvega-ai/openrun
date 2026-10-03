@@ -49,11 +49,10 @@ fn is_trailing_sentence_punctuation(c: char) -> bool {
 /// punctuation is prose around the path rather than a meaningful path component.
 ///
 /// File paths written at the end of a sentence frequently capture the trailing
-/// punctuation (e.g. `notes/README.md.` or `notes/README.md，`). On Windows the
-/// NT path normalizer silently strips a trailing `.` during path resolution, so
-/// without trimming, the captured token keeps the period in both the highlight
-/// range and the file extension, defeating extension-based classification (e.g.
-/// opening markdown in the viewer instead of as raw text).
+/// punctuation (e.g. `notes/README.md.` or `notes/README.md，`). Without trimming,
+/// the captured token keeps the period in both the highlight range and the file
+/// extension, defeating extension-based classification (e.g. opening markdown in
+/// the viewer instead of as raw text).
 ///
 /// Returns `None` when there is no trailing sentence punctuation, or when a
 /// trailing period is part of a `.`/`..` path component (e.g. `.`, `..`, `foo/.`,

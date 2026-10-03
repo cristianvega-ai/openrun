@@ -285,8 +285,8 @@ fn test_resolve_file_url() {
             local_file(&test_file)
         );
 
-        // file:// URLs can have non-local hosts on Windows. If we encounter one, it should be kept a
-        // URL for the system to handle.
+        // file:// URLs can have non-local hosts. If we encounter one, it should be kept a URL for
+        // the system to handle.
         assert_eq!(
             resolve(&app, &links, "file://remote/some/path.txt").await,
             url("file://remote/some/path.txt")

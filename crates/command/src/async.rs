@@ -10,8 +10,8 @@ use std::{fmt, io};
 
 use async_process::Child;
 
-/// Wrapper around a [`async_process::Command`] that ensures any new Command is set with the windows
-/// `CREATE_NO_WINDOW` flag to avoid a console window temporarily popping up.
+/// Wrapper around a [`async_process::Command`] that does not inherit the app's stdin, stdout and
+/// stderr unless the caller configures them.
 pub struct Command {
     pub(super) inner: async_process::Command,
     stdin_is_default: bool,
@@ -81,8 +81,6 @@ impl Command {
         // Configures the new process to be the leader of a process group with its
         // process ID as the group ID. This allows for killing any other processes
         // spawned by this process when we kill this process.
-        //
-        // TODO(roland): handle for windows
         std::os::unix::process::CommandExt::process_group(&mut command, 0);
 
         let inner: async_process::Command = command.into();
@@ -159,9 +157,6 @@ impl Command {
 
     /// Configures an environment variable for the new process.
     ///
-    /// Note that environment variable names are case-insensitive (but case-preserving) on Windows,
-    /// and case-sensitive on all other platforms.
-    ///
     /// # Examples
     ///
     /// ```
@@ -180,9 +175,6 @@ impl Command {
     }
 
     /// Configures multiple environment variables for the new process.
-    ///
-    /// Note that environment variable names are case-insensitive (but case-preserving) on Windows,
-    /// and case-sensitive on all other platforms.
     ///
     /// # Examples
     ///

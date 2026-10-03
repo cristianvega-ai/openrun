@@ -117,9 +117,9 @@ pub fn is_remote_image_source(source: &str) -> bool {
 /// Whether a markdown image source names a network share or device path, such as
 /// `//host/share/a.png`, `\\host\share\a.png`, `\\?\UNC\host\share\a.png` or `\\.\pipe\x`.
 ///
-/// On Windows, stat'ing or reading such a path opens a connection to the named host (and can send
-/// the user's credentials), so it must never be touched. The check looks only at the text, so it
-/// behaves the same on every platform.
+/// On some systems (Windows UNC paths), stat'ing or reading such a path opens a connection to the
+/// named host (and can send the user's credentials), so it must never be touched. The check looks
+/// only at the text, so it behaves the same on every platform.
 fn is_network_or_device_path_source(source: &str) -> bool {
     let is_separator = |byte: u8| byte == b'/' || byte == b'\\';
     matches!(

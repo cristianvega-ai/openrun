@@ -939,13 +939,9 @@ impl AppearanceSettingsPageView {
         // have any integration tests which interact with the font dropdown, and
         // loading them in the background slows down test execution.
         if ChannelState::channel() != Channel::Integration {
-            // There's no such thing as a "system font" on the web, so the
-            // `all_system_fonts` API doesn't exist.
-            {
-                let all_system_fonts = warpui::fonts::Cache::handle(ctx)
-                    .update(ctx, |font_cache, ctx| font_cache.all_system_fonts(ctx));
-                ctx.spawn(all_system_fonts, Self::set_system_fonts);
-            }
+            let all_system_fonts = warpui::fonts::Cache::handle(ctx)
+                .update(ctx, |font_cache, ctx| font_cache.all_system_fonts(ctx));
+            ctx.spawn(all_system_fonts, Self::set_system_fonts);
         }
         let font_family_dropdown = ctx.add_typed_action_view(|ctx| {
             let mut dropdown = FilterableDropdown::new(ctx);
@@ -1751,9 +1747,7 @@ impl AppearanceSettingsPageView {
                         let mut dropdown =
                             DropdownItem::new(name, AppearancePageAction::SetFontFamily(name_move));
 
-                        // If we're on a non-Linux platform, render the dropdown item in the
-                        // actual font.  We currently don't do this on Linux because
-                        // pre-loading all of the fonts is too expensive.
+                        // Render the dropdown item in the actual font.
                         if let Some(family_id) = family {
                             dropdown = dropdown.with_font_override(*family_id)
                         }

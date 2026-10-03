@@ -101,10 +101,6 @@ pub enum NotificationSendError {
     /// App does not have permissions to send notifications.
     PermissionsDenied,
 
-    /// On web, there's a difference between permissions being default and being denied. While they are still default,
-    /// we should prompt the user to accept or block notifications, since they haven't chosen yet.
-    PermissionsNotYetGranted,
-
     /// Some unknown error occurred when sending the a notification.
     Other { error_message: String },
 }
@@ -112,8 +108,7 @@ pub enum NotificationSendError {
 impl NotificationSendError {
     pub fn notifications_error_banner_title(&self) -> &str {
         match self {
-            NotificationSendError::PermissionsDenied
-            | NotificationSendError::PermissionsNotYetGranted => {
+            NotificationSendError::PermissionsDenied => {
                 "Warp tried to send you a notification for the last block but does not have permission."
             }
             NotificationSendError::Other { .. } => {

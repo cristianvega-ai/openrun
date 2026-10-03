@@ -5845,7 +5845,7 @@ pub fn test_block_cursor_navigation_using_escape_codes() -> Builder {
 /// Similar to above, we want to make sure deleting words and lines works in REPLs and shells
 pub fn test_block_bulk_deletion_using_escape_codes() -> Builder {
     let (starter, _) = current_shell_starter_and_version();
-    // On Linux, bash will overwrite an inherited PS1 variable with its choice
+    // Bash can overwrite an inherited PS1 variable with its choice
     // of default value.  To work around this, we also set PROMPT_COMMAND
     // (which doesn't get clobbered) to set the PS1 variable, ensuring it has
     // the expected value after shell startup.

@@ -173,7 +173,6 @@ pub(super) fn load_project_workflows(path: &Path) -> Vec<Workflow> {
 }
 
 /// Runs `tail` or equivalent command on the given path.
-/// Note: On Windows this may cause a lossy conversion if the path is not valid UTF-8.
 pub fn tail_command_for_shell(shell_family: ShellFamily, path: &PathBuf) -> String {
     match shell_family {
         // Use debug formatting for `PathBuf` so that any non-Unicode components of the path get

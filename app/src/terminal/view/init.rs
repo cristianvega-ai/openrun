@@ -107,7 +107,6 @@ pub fn init(app: &mut AppContext) {
             TerminalAction::ControlSequence("\x1b[3~".as_bytes().to_vec()),
             id!("Terminal") & !id!("IMEOpen"),
         ),
-        // On the web, we get pastes from system paste events.
     ]);
     if ChannelState::channel() == Channel::Integration {
         app.register_fixed_bindings([

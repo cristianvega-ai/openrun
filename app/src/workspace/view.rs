@@ -54,7 +54,6 @@ use warpui::event::KeyState;
 use warpui::fonts::{Properties, Weight};
 use warpui::geometry::vector::{Vector2F, vec2f};
 use warpui::keymap::Context;
-use warpui::modals::{AlertDialogWithCallbacks, AppModalCallback};
 use warpui::notification::{NotificationSendError, RequestPermissionsOutcome, UserNotification};
 use warpui::platform::{
     Cursor, FilePickerConfiguration, FullscreenState, SystemTheme, TerminationMode,
@@ -80,7 +79,6 @@ use super::action::{
     WorkspaceAction,
 };
 use super::lightbox_view::{LightboxParams, LightboxView, LightboxViewEvent};
-use super::native_modal::{NativeModal, NativeModalEvent};
 use super::tab_settings::{
     HeaderToolbarChipSelection, NewTabPlacement, TabSettings, TabSettingsChangedEvent,
     VerticalTabsDisplayGranularity, WorkspaceDecorationVisibility,
@@ -599,7 +597,6 @@ pub struct Workspace {
     is_user_menu_open: bool,
     tab_bar_pinned_by_popup: bool,
     user_menu: ViewHandle<Menu<WorkspaceAction>>,
-    native_modal: ViewHandle<NativeModal>,
 
     file_upload_sessions: FileUploadSessions,
     left_panel_open: bool,
@@ -1119,14 +1116,6 @@ impl Workspace {
         });
 
         theme_deletion_modal
-    }
-
-    fn build_native_modal_view(ctx: &mut ViewContext<Self>) -> ViewHandle<NativeModal> {
-        let native_modal = ctx.add_typed_action_view(NativeModal::new);
-        ctx.subscribe_to_view(&native_modal, move |me, _, event, ctx| {
-            me.handle_native_modal_event(event, ctx);
-        });
-        native_modal
     }
 
     fn build_menus(ctx: &mut ViewContext<Self>) -> WorkspaceMenuHandles {
@@ -1846,8 +1835,6 @@ impl Workspace {
             }
         });
 
-        let native_modal = Self::build_native_modal_view(ctx);
-
         ctx.subscribe_to_model(&CLIAgentSettings::handle(ctx), |me, _, event, ctx| {
             if let CLIAgentSettingsChangedEvent::ShowAgentNotifications { .. } = event {
                 // When agent notifications are turned off, close the mailbox if it's open.
@@ -1912,7 +1899,6 @@ impl Workspace {
             is_user_menu_open: false,
             tab_bar_pinned_by_popup: false,
             user_menu,
-            native_modal,
             file_upload_sessions: Default::default(),
             left_panel_open: false,
             vertical_tabs_panel_open: false,
@@ -7652,8 +7638,7 @@ impl Workspace {
             let summary = UnsavedStateSummary::for_tabs(tabs, ctx);
 
             if summary.save_unsaved_code_and_should_warn(ctx) {
-                // The quit-warning dialog uses app-scoped callbacks (ironically, because that's
-                // what Self::show_native_modal expects). That means we need a handle to the
+                // The quit-warning dialog uses app-scoped callbacks, so we need a handle to the
                 // current workspace here.
                 let confirm_self = ctx.handle();
                 let navigate_self = ctx.handle();
@@ -10163,8 +10148,6 @@ impl Workspace {
                 self.focus_theme_chooser(ctx);
             } else if self.current_workspace_state.is_resource_center_open {
                 ctx.focus(&self.resource_center_view);
-            } else if self.current_workspace_state.is_native_quit_modal_open {
-                ctx.focus(&self.native_modal);
             } else {
                 ctx.focus_self();
             }
@@ -10232,50 +10215,6 @@ impl Workspace {
                         })
                 })
             })
-    }
-
-    pub fn show_native_modal(
-        &mut self,
-        dialog: AlertDialogWithCallbacks<AppModalCallback>,
-        ctx: &mut ViewContext<Self>,
-    ) {
-        self.native_modal.update(ctx, |view, ctx| {
-            view.set_alert_dialog(dialog);
-            ctx.notify();
-        });
-        self.current_workspace_state.is_native_quit_modal_open = true;
-        ctx.focus(&self.native_modal);
-        ctx.notify();
-    }
-
-    fn handle_native_modal_event(&mut self, event: &NativeModalEvent, ctx: &mut ViewContext<Self>) {
-        match event {
-            NativeModalEvent::Close => {
-                self.current_workspace_state.is_native_quit_modal_open = false;
-                ctx.notify();
-            }
-        }
-    }
-
-    /// Mock pressing a button on the native quit modal. This function has an unusual signature so
-    /// that the workspace view is not borrowed while the button press is handled.
-    #[cfg(any(test, feature = "integration_tests"))]
-    pub fn press_native_modal_button(
-        handle: &ViewHandle<Self>,
-        button_index: usize,
-        app: &mut AppContext,
-    ) {
-        use super::native_modal::NativeModalAction;
-        let modal_handle = handle.as_ref(app).native_modal.clone();
-        modal_handle.update(app, |modal, ctx| {
-            modal.handle_action(&NativeModalAction::TriggerButtonCallback(button_index), ctx);
-        });
-    }
-
-    #[cfg(any(test, feature = "integration_tests"))]
-    pub fn is_native_quit_modal_open(&self, ctx: &AppContext) -> bool {
-        self.current_workspace_state.is_native_quit_modal_open
-            && self.native_modal.as_ref(ctx).has_alert_dialog()
     }
 
     fn show_settings(&mut self, ctx: &mut ViewContext<Self>) {
@@ -15027,18 +14966,6 @@ impl View for Workspace {
 
         if let Some(lightbox_view) = &self.lightbox_view {
             stack.add_child(ChildView::new(lightbox_view).finish());
-        }
-
-        if self.current_workspace_state.is_native_quit_modal_open {
-            stack.add_positioned_overlay_child(
-                ChildView::new(&self.native_modal).finish(),
-                OffsetPositioning::offset_from_parent(
-                    Vector2F::zero(),
-                    ParentOffsetBounds::WindowByPosition,
-                    ParentAnchor::Center,
-                    ChildAnchor::Center,
-                ),
-            );
         }
 
         if self

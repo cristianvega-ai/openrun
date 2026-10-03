@@ -566,7 +566,7 @@ impl CommandRegistry {
         // If we are treating this as a case-sensitive lookup, `signature.name` will contain the
         // canonical stylization of the name, and so we compare what the user typed, `first_token`,
         // to that.
-        // For example, on Linux (case-sensitive by default), "GIT" should not match the spec for
+        // For example, on a case-sensitive file system, "GIT" should not match the spec for
         // "git". `first_token` will be "GIT" and `signature.name` will be "git". We return `None`.
         // However, if the user is running PowerShell and calls "set-location", this _should_ match
         // the spec for "Set-Location", so we skip the `signature.name != first_token` check. FYI

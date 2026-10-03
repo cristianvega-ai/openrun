@@ -7,8 +7,8 @@ use std::io;
 use std::path::Path;
 use std::process::{Child, CommandArgs, CommandEnvs, ExitStatus, Output, Stdio};
 
-/// Wrapper around a [`std::process::Command`] that ensures any new Command is set with the windows
-/// `CREATE_NO_WINDOW` flag to avoid a console window temporarily popping up.
+/// Wrapper around a [`std::process::Command`] that does not inherit the app's stdin, stdout and
+/// stderr unless the caller configures them.
 #[derive(Debug)]
 pub struct Command {
     pub(super) inner: std::process::Command,
@@ -37,17 +37,7 @@ impl Command {
     /// an OS-defined way.
     ///
     /// The search path to be used may be controlled by setting the
-    /// `PATH` environment variable on the Command,
-    /// but this has some implementation limitations on Windows
-    /// (see issue #37519).
-    ///
-    /// # Platform-specific behavior
-    ///
-    /// Note on Windows: For executable files with the .exe extension,
-    /// it can be omitted when specifying the program for this Command.
-    /// However, if the file has a different extension,
-    /// a filename including the extension needs to be provided,
-    /// otherwise the file won't be found.
+    /// `PATH` environment variable on the Command.
     ///
     /// # Examples
     ///
@@ -99,25 +89,6 @@ impl Command {
     /// escaped characters, word splitting, glob patterns, variable substitution,
     /// etc. have no effect.
     ///
-    /// <div class="warning">
-    ///
-    /// On Windows, use caution with untrusted inputs. Most applications use the
-    /// standard convention for decoding arguments passed to them. These are safe to
-    /// use with `arg`. However, some applications such as `cmd.exe` and `.bat` files
-    /// use a non-standard way of decoding arguments. They are therefore vulnerable
-    /// to malicious input.
-    ///
-    /// In the case of `cmd.exe` this is especially important because a malicious
-    /// argument can potentially run arbitrary shell commands.
-    ///
-    /// See [Windows argument splitting][windows-args] for more details
-    /// or [`raw_arg`] for manually implementing non-standard argument encoding.
-    ///
-    /// [`raw_arg`]: crate::os::windows::process::CommandExt::raw_arg
-    /// [windows-args]: crate::process#windows-argument-splitting
-    ///
-    /// </div>
-    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -146,25 +117,6 @@ impl Command {
     /// literally to the program. This means that shell syntax like quotes,
     /// escaped characters, word splitting, glob patterns, variable substitution, etc.
     /// have no effect.
-    ///
-    /// <div class="warning">
-    ///
-    /// On Windows, use caution with untrusted inputs. Most applications use the
-    /// standard convention for decoding arguments passed to them. These are safe to
-    /// use with `arg`. However, some applications such as `cmd.exe` and `.bat` files
-    /// use a non-standard way of decoding arguments. They are therefore vulnerable
-    /// to malicious input.
-    ///
-    /// In the case of `cmd.exe` this is especially important because a malicious
-    /// argument can potentially run arbitrary shell commands.
-    ///
-    /// See [Windows argument splitting][windows-args] for more details
-    /// or [`raw_arg`] for manually implementing non-standard argument encoding.
-    ///
-    /// [`raw_arg`]: crate::os::windows::process::CommandExt::raw_arg
-    /// [windows-args]: crate::process#windows-argument-splitting
-    ///
-    /// </div>
     ///
     /// # Examples
     ///
@@ -198,9 +150,6 @@ impl Command {
     /// variables. You can disable environment variable inheritance entirely using
     /// [`std::process::Command::env_clear`] or for a single key using [`std::process::Command::env_remove`].
     ///
-    /// Note that environment variable names are case-insensitive (but
-    /// case-preserving) on Windows and case-sensitive on all other platforms.
-    ///
     /// # Examples
     ///
     /// Basic usage:
@@ -232,9 +181,6 @@ impl Command {
     /// Environment variables explicitly set using [`std::process::Command::envs`] take precedence over inherited
     /// variables. You can disable environment variable inheritance entirely using
     /// [`std::process::Command::env_clear`] or for a single key using [`std::process::Command::env_remove`].
-    ///
-    /// Note that environment variable names are case-insensitive (but case-preserving) on Windows
-    /// and case-sensitive on all other platforms.
     ///
     /// # Examples
     ///
