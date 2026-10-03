@@ -6,10 +6,10 @@ on:
   workflow_dispatch:
     inputs:
       mode:
-        description: probe or stress
+        description: probe, burst or stress
         default: probe
         type: choice
-        options: [probe, stress]
+        options: [probe, burst, stress]
       count:
         description: stress iterations per job (5 jobs)
         default: "10"
@@ -32,6 +32,21 @@ jobs:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
       - name: Probe
         run: python3 .github/probe/probe.py 30 1 150 ${{ matrix.burners }} 2>&1 | tee probe.log
+
+  burst:
+    if: ${{ inputs.mode == 'burst' }}
+    name: Burst ${{ matrix.args }}
+    runs-on: macos-latest
+    timeout-minutes: 40
+    strategy:
+      fail-fast: false
+      matrix:
+        # BURST SPREAD_S DURATION_S INTERVAL_S
+        args: ["0 0 120 3", "6 1 150 3", "24 1 150 3", "60 1 150 3", "60 20 150 3"]
+    steps:
+      - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+      - name: Probe
+        run: python3 .github/probe/probe2.py ${{ matrix.args }} 2>&1 | tee probe2.log
 
   stress:
     if: ${{ inputs.mode == 'stress' }}
