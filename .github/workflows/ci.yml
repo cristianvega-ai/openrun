@@ -193,14 +193,14 @@ jobs:
           cargo nextest list --locked --workspace --message-format json > "$RUNNER_TEMP/tests-list/tests-list.json"
           (cd "$GITHUB_WORKSPACE" && pwd -P) > "$RUNNER_TEMP/test-archive/workspace-path.txt"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: test-archive
           path: ${{ runner.temp }}/test-archive
           retention-days: 3
           compression-level: 0
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: tests-list
           path: ${{ runner.temp }}/tests-list
@@ -278,7 +278,7 @@ jobs:
         with:
           name: unit-idle
           logs: net-unit.log net-idle.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
         with:
           name: junit-sandboxed
@@ -333,7 +333,7 @@ jobs:
         with:
           name: integration-${{ matrix.shard }}
           logs: net-integration-${{ matrix.shard }}.log
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
         with:
           name: junit-integration-${{ matrix.shard }}
@@ -408,7 +408,7 @@ jobs:
           export WARP_SHELL_PATH
           ./script/ci_nextest plain-shells-zsh --no-fail-fast -E "package(integration) and ($CORE_TESTS | test(=shell_integration_tests::test_auto_title) | test(=shell_integration_tests::test_can_bootstrap_local_zsh_subshell))"
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
         with:
           name: junit-plain
@@ -462,7 +462,7 @@ jobs:
       - name: Run the integration suite with ${{ matrix.shell }}
         run: script/ci_shell_matrix ${{ matrix.shell }}
 
-      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         if: ${{ always() }}
         with:
           name: junit-shells-${{ matrix.shell }}-${{ strategy.job-index }}
