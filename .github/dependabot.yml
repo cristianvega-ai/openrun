@@ -2,8 +2,8 @@
 # https://docs.github.com/en/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
 #
 # A pull request runs the whole CI workflow on hosted macOS runners, and a public repository has five
-# of them at a time, so there is one grouped pull request per ecosystem per week, and at most two
-# open per ecosystem.
+# of them at a time, so GitHub Actions updates come as one grouped pull request per week, at most two
+# open. Cargo gets security updates only.
 
 version: 2
 updates:
@@ -11,11 +11,8 @@ updates:
     directory: "/"
     schedule:
       interval: "weekly"
-    open-pull-requests-limit: 2
-    groups:
-      cargo:
-        patterns:
-          - "*"
+    # Only send security updates, not general version updates: no routine dependency churn.
+    open-pull-requests-limit: 0
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
