@@ -12,74 +12,68 @@ use warp_util::path::app_target_dir;
 
 fn main() -> Result<()> {
     println!("cargo:rerun-if-changed=build.rs");
-    println!("cargo:rerun-if-env-changed=CARGO_CFG_TARGET_OS");
 
-    let target_os = env::var("CARGO_CFG_TARGET_OS")?;
+    println!("cargo:rustc-link-lib=framework=MetalKit");
+    println!("cargo:rustc-link-lib=framework=UserNotifications");
 
-    if target_os == "macos" {
-        println!("cargo:rustc-link-lib=framework=MetalKit");
-        println!("cargo:rustc-link-lib=framework=UserNotifications");
+    println!("cargo:rerun-if-changed=src/platform/mac/objc/services.h");
+    println!("cargo:rerun-if-changed=src/platform/mac/objc/services.m");
 
-        println!("cargo:rerun-if-changed=src/platform/mac/objc/services.h");
-        println!("cargo:rerun-if-changed=src/platform/mac/objc/services.m");
+    cc::Build::new()
+        .file("src/platform/mac/objc/services.m")
+        .compile("warp_objc");
 
-        cc::Build::new()
-            .file("src/platform/mac/objc/services.m")
-            .compile("warp_objc");
+    // Build the dock tile plugin
+    println!("cargo:rerun-if-changed=DockTilePlugin/WarpDockTilePlugin.m");
+    println!("cargo:rerun-if-changed=DockTilePlugin/WarpDockTilePlugin.h");
+    println!("cargo:rerun-if-changed=DockTilePlugin/Info.plist");
+    println!("cargo:rerun-if-changed=DockTilePlugin/Makefile");
 
-        // Build the dock tile plugin
-        println!("cargo:rerun-if-changed=DockTilePlugin/WarpDockTilePlugin.m");
-        println!("cargo:rerun-if-changed=DockTilePlugin/WarpDockTilePlugin.h");
-        println!("cargo:rerun-if-changed=DockTilePlugin/Info.plist");
-        println!("cargo:rerun-if-changed=DockTilePlugin/Makefile");
-
-        let min_macos_version = env::var("MACOSX_DEPLOYMENT_TARGET")
-            .expect("MACOSX_DEPLOYMENT_TARGET must be set for macos builds");
-        let status = Command::new("make")
-            .current_dir("DockTilePlugin")
-            .env("MACOSX_DEPLOYMENT_TARGET", min_macos_version)
-            .status()
-            .expect("Failed to build dock tile plugin");
-        if !status.success() {
-            panic!("Dock tile plugin build failed");
-        }
-
-        // Copy the dock tile plugin to the output directory
-        let profile = get_build_profile_name();
-        let target_dir = app_target_dir(&profile).expect("Failed to get app target directory");
-        let plugin_src = Path::new("DockTilePlugin/WarpDockTilePlugin.docktileplugin");
-        let plugin_dst = target_dir.join("WarpDockTilePlugin.docktileplugin");
-
-        if !status.success() {
-            fs::remove_dir_all(plugin_src).expect("Failed to clean up plugin directory");
-            panic!("Dock tile plugin build failed");
-        }
-
-        if plugin_src.exists() {
-            fs::remove_dir_all(&plugin_dst).ok(); // Remove existing if any
-            fs::create_dir_all(&plugin_dst).expect("Failed to create plugin directory");
-
-            // Copy the plugin directory recursively
-            for entry in WalkDir::new(plugin_src) {
-                let entry = entry.expect("Failed to read plugin directory");
-                let path = entry.path();
-                let relative = path
-                    .strip_prefix(plugin_src)
-                    .expect("Failed to strip path prefix");
-                let target = plugin_dst.join(relative);
-
-                if path.is_dir() {
-                    fs::create_dir_all(target).expect("Failed to create plugin subdirectory");
-                } else {
-                    fs::copy(path, target).expect("Failed to copy plugin file");
-                }
-            }
-
-            // Clean up the source plugin directory after copying
-            fs::remove_dir_all(plugin_src).expect("Failed to clean up plugin directory");
-        }
+    let min_macos_version = env::var("MACOSX_DEPLOYMENT_TARGET")
+        .expect("MACOSX_DEPLOYMENT_TARGET must be set for macos builds");
+    let status = Command::new("make")
+        .current_dir("DockTilePlugin")
+        .env("MACOSX_DEPLOYMENT_TARGET", min_macos_version)
+        .status()
+        .expect("Failed to build dock tile plugin");
+    if !status.success() {
+        panic!("Dock tile plugin build failed");
     }
 
+    // Copy the dock tile plugin to the output directory
+    let profile = get_build_profile_name();
+    let target_dir = app_target_dir(&profile).expect("Failed to get app target directory");
+    let plugin_src = Path::new("DockTilePlugin/WarpDockTilePlugin.docktileplugin");
+    let plugin_dst = target_dir.join("WarpDockTilePlugin.docktileplugin");
+
+    if !status.success() {
+        fs::remove_dir_all(plugin_src).expect("Failed to clean up plugin directory");
+        panic!("Dock tile plugin build failed");
+    }
+
+    if plugin_src.exists() {
+        fs::remove_dir_all(&plugin_dst).ok(); // Remove existing if any
+        fs::create_dir_all(&plugin_dst).expect("Failed to create plugin directory");
+
+        // Copy the plugin directory recursively
+        for entry in WalkDir::new(plugin_src) {
+            let entry = entry.expect("Failed to read plugin directory");
+            let path = entry.path();
+            let relative = path
+                .strip_prefix(plugin_src)
+                .expect("Failed to strip path prefix");
+            let target = plugin_dst.join(relative);
+
+            if path.is_dir() {
+                fs::create_dir_all(target).expect("Failed to create plugin subdirectory");
+            } else {
+                fs::copy(path, target).expect("Failed to copy plugin file");
+            }
+        }
+
+        // Clean up the source plugin directory after copying
+        fs::remove_dir_all(plugin_src).expect("Failed to clean up plugin directory");
+    }
     Ok(())
 }
 

@@ -12,6 +12,4 @@ if [ "${GITHUB_ACTIONS}" != "true" ]; then
     cargo binstall --force -y diesel_cli
 fi
 
-if [ "$(uname -s)" = "Darwin" ]; then
-    "$PWD"/script/macos/install_build_deps
-fi
+"$PWD"/script/macos/install_build_deps
