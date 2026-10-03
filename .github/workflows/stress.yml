@@ -19,10 +19,10 @@ on:
         default: "20"
         type: string
       shell:
-        description: Shell the tests start
+        description: Shell the tests start (bash3 is the bash 3.2 of macOS, /bin/bash; bash is the first one on the PATH)
         default: zsh
         type: choice
-        options: [zsh, bash, fish, pwsh]
+        options: [zsh, bash, bash3, fish, pwsh]
       run_ignored:
         description: Which ignored tests to run (nextest --run-ignored)
         default: default
@@ -30,6 +30,10 @@ on:
         options: [default, all, only]
       rust_log:
         description: RUST_LOG for the tests (empty keeps the default)
+        default: ""
+        type: string
+      ref:
+        description: Commit to test, to compare commits with the same workflow (empty tests the one the workflow was started on)
         default: ""
         type: string
 
@@ -49,6 +53,8 @@ jobs:
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          ref: ${{ inputs.ref }}
 
       - uses: ./.github/actions/rust-macos
 
@@ -67,8 +73,15 @@ jobs:
           RUN_IGNORED: ${{ inputs.run_ignored }}
           STRESS_RUST_LOG: ${{ inputs.rust_log }}
         run: |
-          WARP_SHELL_PATH=$(command -v "$SHELL_NAME")
+          if [ "$SHELL_NAME" = bash3 ]; then
+            WARP_SHELL_PATH=/bin/bash
+          else
+            WARP_SHELL_PATH=$(command -v "$SHELL_NAME")
+          fi
           export WARP_SHELL_PATH
+          echo "tested commit: $(git rev-parse HEAD)"
+          echo "shell: $WARP_SHELL_PATH"
+          "$WARP_SHELL_PATH" --version | head -1
           if [ -n "$STRESS_RUST_LOG" ]; then
             export RUST_LOG="$STRESS_RUST_LOG"
           fi
