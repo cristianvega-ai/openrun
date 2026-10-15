@@ -41,6 +41,19 @@ public final class Terminal {
         )
     }
 
+    /// The cursor position in the active screen.
+    public var cursorPosition: TerminalCursorPosition {
+        TerminalCursorPosition(
+            column: (try? value(GHOSTTY_TERMINAL_DATA_CURSOR_X, as: UInt16.self)) ?? 0,
+            row: (try? value(GHOSTTY_TERMINAL_DATA_CURSOR_Y, as: UInt16.self)) ?? 0
+        )
+    }
+
+
+    /// The number of lines that scrolled off the top of the primary screen.
+    public var scrollbackLineCount: Int {
+        (try? value(GHOSTTY_TERMINAL_DATA_SCROLLBACK_ROWS, as: Int.self)) ?? 0
+    }
 
     /// Parses output bytes from the program in the terminal.
     ///
