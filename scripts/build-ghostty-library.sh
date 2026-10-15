@@ -6,12 +6,53 @@ set -euo pipefail
 GHOSTTY_COMMIT="a2e440396403385680008e456a741a7776091412"
 GHOSTTY_REPOSITORY="https://github.com/ghostty-org/ghostty"
 
+# Ghostty accepts one Zig version, and this script accepts only that exact
+# release. The checksums live here, not in a file the download supplies: a
+# download can only be as trustworthy as the values that check it. Each
+# platform has two: the archive that ziglang.org serves, and the `zig` program
+# inside it, which checks the program after the archive is extracted.
+# To change the version, take the values from https://ziglang.org/download/
+# and hash the program in each extracted archive with `shasum -a 256`.
+ZIG_VERSION="0.16.0"
+# OTHER_PROCESSOR means the Intel processor (x86_64), the only one besides Apple silicon.
+ZIG_ARCHIVE_CHECKSUM_APPLE_SILICON="b23d70deaa879b5c2d486ed3316f7eaa53e84acf6fc9cc747de152450d401489"
+ZIG_PROGRAM_CHECKSUM_APPLE_SILICON="e6cd688d25664983833aae272f501d4bceeae304875b8f1741209d15fd13a4ec"
+ZIG_ARCHIVE_CHECKSUM_OTHER_PROCESSOR="0387557ed1877bc6a2e1802c8391953baddba76081876301c522f52977b52ba7"
+ZIG_PROGRAM_CHECKSUM_OTHER_PROCESSOR="5597fba0eb9d8f1f5331e3e5822e7e96e4a12eeb6f4939781bd8e2c13b15e8b5"
+
 repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 libraries_folder="$repository_root/Libraries"
 source_folder="$libraries_folder/ghostty"
+zig_folder="$libraries_folder/zig"
 
 step() { printf '\n==> %s\n' "$*"; }
 
+checksum_of() { shasum -a 256 "$1" | cut -d' ' -f1; }
+
+# Sets the platform name and the two checksums for this processor.
+choose_zig_platform() {
+  case "$(uname -m)" in
+    arm64)
+      zig_platform="aarch64-macos"
+      zig_archive_checksum="$ZIG_ARCHIVE_CHECKSUM_APPLE_SILICON"
+      zig_program_checksum="$ZIG_PROGRAM_CHECKSUM_APPLE_SILICON" ;;
+    x86_64)
+      zig_platform="x86_64-macos"
+      zig_archive_checksum="$ZIG_ARCHIVE_CHECKSUM_OTHER_PROCESSOR"
+      zig_program_checksum="$ZIG_PROGRAM_CHECKSUM_OTHER_PROCESSOR" ;;
+    *) echo "Unsupported processor: $(uname -m)" >&2; return 1 ;;
+  esac
+}
+
+# Succeeds when the file is the pinned Zig program. It hashes the file before
+# anything runs it, so a Zig that is not the pinned release never executes.
+# The program is only part of Zig: the standard library sits beside it. So
+# `install_pinned_zig` never trusts a tree that an earlier run left behind.
+is_pinned_zig() {
+  [ -f "$1" ] && [ -x "$1" ] || return 1
+  [ "$(checksum_of "$1")" = "$zig_program_checksum" ] || return 1
+  [ "$("$1" version)" = "$ZIG_VERSION" ]
+}
 
 # Refuses a Ghostty tree with changes, because the library would then not be
 # the pinned commit. A previous build leaves only ignored files behind.
@@ -26,6 +67,54 @@ refuse_dirty_tree() {
   fi
 }
 
+# Extracts the pinned Zig into a fresh folder and sets `installed_zig_command`
+# to its program. Every run does this, so the standard library that the build
+# uses always comes from an archive whose checksum matched the pin. A copy of
+# Zig that sits elsewhere, or that an earlier run extracted, is not trusted:
+# its checksum covers the program and not the files beside it.
+install_pinned_zig() {
+  choose_zig_platform
+  mkdir -p "$zig_folder"
+  local archive_path="$zig_folder/zig-$zig_platform-$ZIG_VERSION.tar.xz"
+  local actual_checksum=""
+  if [ -f "$archive_path" ]; then
+    actual_checksum="$(checksum_of "$archive_path")"
+  fi
+  if [ "$actual_checksum" = "$zig_archive_checksum" ]; then
+    echo "Using the Zig archive in $archive_path (checksum verified)"
+  else
+    if [ -f "$archive_path" ]; then
+      echo "Skipping $archive_path: its checksum is not the pinned one."
+    fi
+    step "Downloading Zig $ZIG_VERSION from ziglang.org"
+    # A partial download never takes the place of the archive in the folder.
+    local incoming_archive_path="$archive_path.download"
+    rm -f "$incoming_archive_path"
+    curl --fail --silent --show-error --location \
+      "https://ziglang.org/download/$ZIG_VERSION/zig-$zig_platform-$ZIG_VERSION.tar.xz" --output "$incoming_archive_path"
+    actual_checksum="$(checksum_of "$incoming_archive_path")"
+    if [ "$actual_checksum" != "$zig_archive_checksum" ]; then
+      echo "Checksum mismatch for the downloaded Zig archive" >&2
+      echo "  expected $zig_archive_checksum" >&2
+      echo "  actual   $actual_checksum" >&2
+      rm -f "$incoming_archive_path"
+      return 1
+    fi
+    echo "Checksum verified: $actual_checksum"
+    mv -f "$incoming_archive_path" "$archive_path"
+  fi
+
+  local extracted_folder="$zig_folder/zig-$ZIG_VERSION"
+  rm -rf "$extracted_folder"
+  mkdir -p "$extracted_folder"
+  tar -xf "$archive_path" -C "$extracted_folder" --strip-components 1
+  installed_zig_command="$extracted_folder/zig"
+  if ! is_pinned_zig "$installed_zig_command"; then
+    echo "The Zig program in the archive is not the pinned release." >&2
+    return 1
+  fi
+  echo "Extracted Zig $ZIG_VERSION at $installed_zig_command"
+}
 
 build_library() {
   step "Fetching Ghostty at $GHOSTTY_COMMIT"
@@ -44,6 +133,12 @@ build_library() {
   fi
   git -C "$source_folder" log --oneline -1
   refuse_dirty_tree "$source_folder"
+
+  step "Choosing a Zig compiler"
+  choose_zig_platform
+
+  install_pinned_zig
+  local zig_command="$installed_zig_command"
 }
 
 # A test can source this file to call the functions above.
