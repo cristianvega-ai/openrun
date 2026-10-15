@@ -6,4 +6,6 @@ public enum ScreenFormat: Equatable, Sendable {
     /// modes, and tab stops. Writing this output into a fresh terminal of the
     /// same size reproduces the screen.
     case virtualTerminalSequences
+    /// Styled markup for display in a browser.
+    case hypertextMarkup
 }

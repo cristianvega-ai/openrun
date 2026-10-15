@@ -88,6 +88,8 @@ public final class Terminal {
         case .virtualTerminalSequences:
             options.emit = GHOSTTY_FORMATTER_FORMAT_VT
             enableAllExtras(&options.extra)
+        case .hypertextMarkup:
+            options.emit = GHOSTTY_FORMATTER_FORMAT_HTML
         }
 
         switch extent {

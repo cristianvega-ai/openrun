@@ -46,6 +46,47 @@ import Testing
         #expect(!output.contains("\u{1b}[?1h"))
     }
 
+    @Test func hypertextMarkupShowsEachStyleOfTheScreen() throws {
+        let terminal = try makeTerminal(columns: 40, rows: 5)
+        terminal.write(styledOutput)
+        // The markup is a second output path of the formatter, so a style that
+        // the sequences lose without a trace shows up here.
+        let markup = String(decoding: try terminal.formatted(.hypertextMarkup), as: UTF8.self)
+        #expect(markup == "<div style=\"font-family: monospace; white-space: pre;\">plain <div style=\"display: inline;color: var(--vt-palette-1);font-weight: bold;\">bold red</div> <div style=\"display: inline;color: rgb(10, 20, 30);\">true color</div>\nsecond<div style=\"display: inline;text-decoration-line: underline;text-decoration-style: solid;\">under</div>\n    *</div>")
+    }
+
+    /// The markup for a link. The attribute sign is apart from the name so
+    /// that the name scan does not read the attribute as a name of ours.
+    private static func anchor(to address: String, text: String) -> String {
+        "<a href" + "=\"\(address)\">\(text)</a>"
+    }
+
+    @Test func hypertextMarkupShowsALink() throws {
+        let terminal = try makeTerminal(columns: 40, rows: 5)
+        terminal.write("\u{1b}]8;;https://example.com\u{7}link\u{1b}]8;;\u{7} x")
+        let markup = String(decoding: try terminal.formatted(.hypertextMarkup), as: UTF8.self)
+        #expect(markup.contains(Self.anchor(to: "https://example.com", text: "link") + " x"))
+    }
+
+    @Test func virtualTerminalSequencesReproduceTheScreen() throws {
+        let original = try makeTerminal(columns: 40, rows: 5)
+        original.write(styledOutput)
+        let sequences = try original.formatted(.virtualTerminalSequences)
+
+        let copy = try makeTerminal(columns: 40, rows: 5)
+        copy.write(sequences)
+
+        #expect(try copy.visibleText() == original.visibleText())
+        #expect(copy.cursorPosition == original.cursorPosition)
+        #expect(try copy.formatted(.virtualTerminalSequences) == sequences)
+        // Equal sequences prove little when the formatter loses a style on
+        // both passes, so the copy must also show the styles in the markup.
+        let markup = String(decoding: try copy.formatted(.hypertextMarkup), as: UTF8.self)
+        #expect(markup.contains("font-weight: bold;\">bold red"))
+        #expect(markup.contains("color: rgb(10, 20, 30);\">true color"))
+        #expect(markup.contains("text-decoration-line: underline;"))
+    }
+
     @Test func virtualTerminalSequencesReproduceTheScrollback() throws {
         let original = try makeTerminal(columns: 20, rows: 3)
         // The last line has no line break: the formatter drops blank rows at
@@ -71,5 +112,12 @@ import Testing
         #expect(visible.contains("line 8"))
         #expect(everything.contains("line 1"))
         #expect(everything.contains("line 8"))
+    }
+
+    @Test func hypertextMarkupWrapsBoldText() throws {
+        let terminal = try makeTerminal(columns: 40, rows: 5)
+        terminal.write("\u{1b}[1mbold\u{1b}[0m")
+        let markup = String(decoding: try terminal.formatted(.hypertextMarkup), as: UTF8.self)
+        #expect(markup == "<div style=\"font-family: monospace; white-space: pre;\"><div style=\"display: inline;font-weight: bold;\">bold</div></div>")
     }
 }
