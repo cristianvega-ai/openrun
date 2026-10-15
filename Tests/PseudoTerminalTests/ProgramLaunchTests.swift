@@ -31,8 +31,49 @@ private func launch(_ name: String, searchPath: String?, folder: URL) -> Program
     )
 }
 
+/// A launch of a program that ends at once, with the given values.
+private func trueProgram(
+    executablePath: String = "/usr/bin/true",
+    argumentZero: String? = nil,
+    arguments: [String] = [],
+    folder: String = "/",
+    environment: [String: String] = [:]
+) -> ProgramLaunch {
+    ProgramLaunch(
+        executablePath: executablePath,
+        argumentZero: argumentZero,
+        arguments: arguments,
+        folder: folder,
+        environment: environment.merging(["PATH": "/usr/bin:/bin"]) { given, _ in given },
+        size: PseudoTerminalSize(columns: 80, rows: 24)
+    )
+}
+
+/// Launches the program and returns the error of the launch, or `nil` when
+/// the program started. A program that started is ended at once.
+private func launchError(_ launching: ProgramLaunch) async -> PseudoTerminalError? {
+    do {
+        let terminal = try PseudoTerminal(launching: launching)
+        await terminal.terminate()
+        return nil
+    } catch {
+        return error as? PseudoTerminalError
+    }
+}
 
 @Suite struct ProgramLaunchTests {
+    /// A name with "=" made a second entry for a name that
+    /// OpenRun sets, and a NUL cut a name or a value short without a word.
+    @Test(arguments: [
+        (["": "value"], "an environment variable has an empty name"),
+        (["OPENRUN_SOCKET=/tmp/elsewhere": "value"], "an environment variable name holds an equals sign (=)"),
+        (["NAME\u{0}HIDDEN": "value"], "an environment variable name holds a NUL character"),
+        (["NAME": "value\u{0}hidden"], "the value of an environment variable holds a NUL character"),
+    ])
+    func anEnvironmentThatWouldReachTheProgramChangedIsRefused(environment: [String: String], problem: String) async {
+        let error = await launchError(trueProgram(environment: environment))
+        #expect(error?.description == "The program was not started: \(problem).")
+    }
 
     @Test func aRelativePathEntryIsSearchedInTheLaunchFolder() throws {
         let folder = try makeLaunchFolder()

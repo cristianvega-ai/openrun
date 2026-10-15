@@ -8,6 +8,10 @@ public enum PseudoTerminalError: Error, Equatable, Sendable, CustomStringConvert
     case programNotFound(name: String)
     /// The program ended, or closed its terminal, before input could reach it.
     case programEnded
+    /// A value of the launch would reach the program changed, so the program
+    /// was not started. `problem` names the value and what is wrong with it,
+    /// and never repeats the value, which can be a secret.
+    case invalidLaunchValue(problem: String)
 
     public var description: String {
         switch self {
@@ -17,6 +21,8 @@ public enum PseudoTerminalError: Error, Equatable, Sendable, CustomStringConvert
             "No program named \(name) was found in the search path."
         case .programEnded:
             "The program ended before it could take the input."
+        case .invalidLaunchValue(let problem):
+            "The program was not started: \(problem)."
         }
     }
 

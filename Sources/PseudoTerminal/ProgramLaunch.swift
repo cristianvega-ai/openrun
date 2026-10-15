@@ -59,6 +59,7 @@ extension ProgramLaunch {
     /// before the fork, and it calls only system functions with plain numbers
     /// and pointers until `execve` replaces it.
     func start() throws -> StartedProgram {
+        try checkValues()
         let program = try resolvedExecutablePath()
         let programString = strdup(program)
         let folderString = strdup(folder)
@@ -164,6 +165,36 @@ extension ProgramLaunch {
             if result == -1 && errno == EINTR { continue }
             return result == processIdentifier
         }
+    }
+
+    /// Refuses a value that would reach the program changed. A C string ends
+    /// at its first NUL, so the program would get a shorter value, or another
+    /// folder. The system splits an environment entry at its first `=`, so a
+    /// name with `=` would set a variable of another name, such as one that
+    /// OpenRun sets itself. A name that is empty sets no variable at all.
+    private func checkValues() throws {
+        func refuse(_ problem: String) -> PseudoTerminalError {
+            .invalidLaunchValue(problem: problem)
+        }
+        if Self.holdsNull(executablePath) { throw refuse("the program name holds a NUL character") }
+        if Self.holdsNull(argumentZero) { throw refuse("the name the program sees for itself holds a NUL character") }
+        if let index = arguments.firstIndex(where: Self.holdsNull) {
+            throw refuse("argument \(index + 1) holds a NUL character")
+        }
+        if Self.holdsNull(folder) { throw refuse("the folder holds a NUL character") }
+        // Sorted, so the same environment always gets the same answer.
+        for name in environment.keys.sorted() {
+            if name.isEmpty { throw refuse("an environment variable has an empty name") }
+            if name.utf8.contains(UInt8(ascii: "=")) { throw refuse("an environment variable name holds an equals sign (=)") }
+            if Self.holdsNull(name) { throw refuse("an environment variable name holds a NUL character") }
+        }
+        if environment.values.contains(where: Self.holdsNull) {
+            throw refuse("the value of an environment variable holds a NUL character")
+        }
+    }
+
+    private static func holdsNull(_ text: String) -> Bool {
+        text.utf8.contains(0)
     }
 
     // MARK: - The child
