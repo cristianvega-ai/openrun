@@ -28,6 +28,9 @@ public final class PseudoTerminal: @unchecked Sendable {
     /// unknown. A shell's `wait` reports 127 for a process whose status it
     /// does not know. A clean 0 would claim a success that nobody saw.
     static let unknownExitStatus: Int32 = 127
+    /// How long `terminate` goes on killing processes that a signal reaches
+    /// and that do not end, such as one that keeps starting new ones.
+    static let killingLimit: Duration = .seconds(1)
 
     private let queue = DispatchQueue(label: "PseudoTerminal")
     private let outputContinuation: AsyncStream<[UInt8]>.Continuation
@@ -167,5 +170,26 @@ public final class PseudoTerminal: @unchecked Sendable {
     /// use it to check that the descriptor does not outlive the program.
     var masterDescriptorForTesting: Int32 {
         queue.sync { master }
+    }
+
+    private var hasExited: Bool {
+        queue.sync { exit != nil }
+    }
+
+    private static func pause(for duration: Duration) async {
+        let parts = duration.components
+        let delay = DispatchTimeInterval.nanoseconds(Int(parts.seconds) * 1_000_000_000 + Int(parts.attoseconds / 1_000_000_000))
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) { continuation.resume() }
+        }
+    }
+
+    // The program is reaped on the queue, so while `exit` is empty the
+    // process identifier cannot belong to another process.
+    private func sendSignalToProgramGroup(_ signal: Int32) {
+        queue.sync {
+            guard exit == nil else { return }
+            killpg(processIdentifier, signal)
+        }
     }
 }
