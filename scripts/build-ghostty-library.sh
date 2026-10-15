@@ -1,10 +1,17 @@
 #!/usr/bin/env bash
+# Builds libghostty-vt as an XCFramework from one pinned Ghostty commit.
+# Package.swift names the output path. Run this once before `swift build`,
+# and again whenever the pinned commit changes. It is safe to run again.
 set -euo pipefail
 
 # Pin an exact commit so every build uses the same terminal behavior.
 # libghostty-vt signatures and the snapshot format still change upstream.
 GHOSTTY_COMMIT="a2e440396403385680008e456a741a7776091412"
 GHOSTTY_REPOSITORY="https://github.com/ghostty-org/ghostty"
+# The mode that Ghostty ships. Zig's default is Debug, which turns on safety
+# checks and takes minutes to parse 16 MB of text. Change this only with the
+# measured throughput of the session tests in hand.
+OPTIMIZE_MODE="ReleaseFast"
 
 # Ghostty accepts one Zig version, and this script accepts only that exact
 # release. The checksums live here, not in a file the download supplies: a
@@ -24,6 +31,11 @@ repository_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 libraries_folder="$repository_root/Libraries"
 source_folder="$libraries_folder/ghostty"
 zig_folder="$libraries_folder/zig"
+framework_path="$libraries_folder/ghostty-vt.xcframework"
+# Names the mode of the framework that is in place now. Zig caches by mode, but
+# its output folder keeps the last result, and this script must not leave a
+# framework of the wrong mode behind.
+mode_stamp="$libraries_folder/ghostty-vt.optimize-mode"
 
 step() { printf '\n==> %s\n' "$*"; }
 
@@ -117,6 +129,12 @@ install_pinned_zig() {
 }
 
 build_library() {
+  # Keep every cache inside the repository so a build never touches the
+  # user's global Zig cache, and a clean checkout starts from nothing.
+  export ZIG_GLOBAL_CACHE_DIR="$libraries_folder/cache/global"
+  export ZIG_LOCAL_CACHE_DIR="$libraries_folder/cache/local"
+  mkdir -p "$ZIG_GLOBAL_CACHE_DIR" "$ZIG_LOCAL_CACHE_DIR"
+
   step "Fetching Ghostty at $GHOSTTY_COMMIT"
   if [ ! -d "$source_folder/.git" ]; then
     git init --quiet "$source_folder"
@@ -134,11 +152,35 @@ build_library() {
   git -C "$source_folder" log --oneline -1
   refuse_dirty_tree "$source_folder"
 
+  # Ghostty names the Zig version it needs. The pin in this script must agree,
+  # or the checksums above belong to the wrong release.
   step "Choosing a Zig compiler"
   choose_zig_platform
+  local needed_version
+  needed_version="$(sed -n 's/.*\.minimum_zig_version = "\([0-9.]*\)".*/\1/p' "$source_folder/build.zig.zon")"
+  if [ "$needed_version" != "$ZIG_VERSION" ]; then
+    echo "Ghostty at $GHOSTTY_COMMIT needs Zig $needed_version, and this script pins Zig $ZIG_VERSION." >&2
+    echo "Update ZIG_VERSION and the four checksums together." >&2
+    return 1
+  fi
 
   install_pinned_zig
   local zig_command="$installed_zig_command"
+
+  step "Building libghostty-vt in $OPTIMIZE_MODE mode"
+  if [ "$(cat "$mode_stamp" 2>/dev/null || true)" != "$OPTIMIZE_MODE" ]; then
+    echo "The framework in place was not built in $OPTIMIZE_MODE mode. Building again."
+    rm -rf "$source_folder/zig-out" "$framework_path" "$mode_stamp"
+  fi
+  (cd "$source_folder" && "$zig_command" build -Demit-lib-vt -Doptimize="$OPTIMIZE_MODE")
+
+  step "Placing the XCFramework at $framework_path"
+  rm -rf "$framework_path"
+  cp -R "$source_folder/zig-out/lib/ghostty-vt.xcframework" "$framework_path"
+  printf '%s\n' "$OPTIMIZE_MODE" > "$mode_stamp"
+  ls "$framework_path"
+  echo
+  echo "Done. Run swift build next."
 }
 
 # A test can source this file to call the functions above.
