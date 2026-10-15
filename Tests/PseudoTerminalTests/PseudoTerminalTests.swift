@@ -132,6 +132,12 @@ func lines(_ text: String) -> [String] {
         #expect(throws: PseudoTerminalError.self) { _ = try PseudoTerminal(launching: launch) }
     }
 
+    @Test func aMissingFolderFailsToLaunch() {
+        #expect(throws: PseudoTerminalError.self) {
+            _ = try PseudoTerminal(launching: shell("true", folder: "/no/such/folder"))
+        }
+    }
+
     @Test func aBareNameIsFoundInTheLaunchPath() async throws {
         var launch = shell("")
         launch.executablePath = "echo"

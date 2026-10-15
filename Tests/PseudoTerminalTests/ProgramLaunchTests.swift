@@ -115,6 +115,22 @@ private func launch(_ name: String, searchPath: String?, folder: URL) -> Program
         #expect(try launch("./tool", searchPath: "/usr/bin", folder: folder).resolvedExecutablePath() == "./tool")
     }
 
+    @Test func anExecutableWithoutAShebangRunsThroughTheShell() async throws {
+        let folder = try makeLaunchFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let script = folder.appendingPathComponent("plain-script")
+        try Data("echo plain-$0-$1\n".utf8).write(to: script)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: script.path)
+
+        var launching = launch("./plain-script", searchPath: "/usr/bin:/bin", folder: folder)
+        launching.arguments = ["argument"]
+        let terminal = try PseudoTerminal(launching: launching)
+        var collected: [UInt8] = []
+        for await chunk in terminal.output { collected += chunk }
+        #expect(String(decoding: collected, as: UTF8.self).contains("plain-./plain-script-argument"))
+        #expect(await terminal.waitForExit() == .exited(status: 0))
+    }
+
     @Test func reapingRetriesAfterAnInterruption() {
         var calls = 0
         let reaped = ProgramLaunch.reap(processIdentifier: 4242) { identifier, _, _ in

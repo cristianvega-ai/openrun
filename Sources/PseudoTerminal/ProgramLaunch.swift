@@ -64,22 +64,43 @@ extension ProgramLaunch {
         let folderString = strdup(folder)
         let argumentStrings = ([argumentZero] + arguments).map { strdup($0) }
         let environmentStrings = environment.map { strdup("\($0.key)=\($0.value)") }
+        // A file that the kernel cannot run and that has no `#!` line fails
+        // with ENOEXEC. Shells then run it as a script, and so do we.
+        let shellString = strdup(Self.shellPath)
+        let shellArgumentStrings = (["sh", "--", program] + arguments).map { strdup($0) }
+        let shellArgumentVector = Self.makeVector(of: shellArgumentStrings)
         let argumentVector = Self.makeVector(of: argumentStrings)
         let environmentVector = Self.makeVector(of: environmentStrings)
         defer {
             free(programString)
             free(folderString)
+            free(shellString)
+            shellArgumentStrings.forEach { free($0) }
+            shellArgumentVector.deallocate()
             argumentStrings.forEach { free($0) }
             environmentStrings.forEach { free($0) }
             argumentVector.deallocate()
             environmentVector.deallocate()
         }
 
+        // The child reports a failed step through this pipe. A successful
+        // `execve` closes it, so the parent reads nothing.
+        var pipeDescriptors: [Int32] = [-1, -1]
+        guard pipe(&pipeDescriptors) == 0 else { throw PseudoTerminalError.failure(of: "pipe") }
+        let reportReader = pipeDescriptors[0]
+        let reportWriter = pipeDescriptors[1]
+        _ = fcntl(reportReader, F_SETFD, FD_CLOEXEC)
+        _ = fcntl(reportWriter, F_SETFD, FD_CLOEXEC)
+        defer { close(reportReader) }
+
         let child = ChildArguments(
             program: programString!,
             folder: folderString!,
+            shell: shellString!,
+            shellArgumentVector: shellArgumentVector,
             argumentVector: argumentVector,
             environmentVector: environmentVector,
+            reportDescriptor: reportWriter,
         )
         var windowSize = winsize(ws_row: size.rows, ws_col: size.columns, ws_xpixel: 0, ws_ypixel: 0)
         var master: Int32 = -1
@@ -87,8 +108,14 @@ extension ProgramLaunch {
         processIdentifier = forkpty(&master, nil, nil, &windowSize)
         if processIdentifier == 0 { Self.runChild(child) }
         let forkFailure = PseudoTerminalError.failure(of: "forkpty")
+        close(reportWriter)
         guard processIdentifier > 0 else { throw forkFailure }
 
+        if let failure = Self.readReport(from: reportReader) {
+            close(master)
+            Self.reap(processIdentifier: processIdentifier)
+            throw failure
+        }
         // Keep the descriptor out of programs that other threads start, and
         // let reads return at once when no output waits.
         _ = fcntl(master, F_SETFD, FD_CLOEXEC)
@@ -129,21 +156,62 @@ extension ProgramLaunch {
         }
     }
 
+    // MARK: - The child
+
+    private static let shellPath = "/bin/sh"
+
+
+    /// The two steps that can fail in the child, as the pipe reports them. An
+    /// enumeration needs no lazy set-up, which the child must not trigger.
+    private enum ChildStep: Int32 {
+        case changeFolder = 1
+        case execute = 2
+    }
+
     /// Plain pointers and numbers, so the child touches no reference counts.
     private struct ChildArguments {
         var program: UnsafeMutablePointer<CChar>
         var folder: UnsafeMutablePointer<CChar>
+        var shell: UnsafeMutablePointer<CChar>
+        var shellArgumentVector: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
         var argumentVector: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
         var environmentVector: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
+        var reportDescriptor: Int32
     }
 
     /// Runs in the child, right after `forkpty` made the new session and the
     /// controlling terminal. See `start` for the rules of this function.
     @inline(never)
     private static func runChild(_ child: ChildArguments) -> Never {
-        if chdir(child.folder) != 0 { _exit(127) }
+        if chdir(child.folder) != 0 { reportFailure(.changeFolder, errorNumber: errno, to: child.reportDescriptor) }
         execve(child.program, child.argumentVector, child.environmentVector)
+        let executeError = errno
+        if executeError == ENOEXEC {
+            execve(child.shell, child.shellArgumentVector, child.environmentVector)
+        }
+        // Report the first error: it names the program, not the fallback.
+        reportFailure(.execute, errorNumber: executeError, to: child.reportDescriptor)
+    }
+
+    private static func reportFailure(_ step: ChildStep, errorNumber: Int32, to descriptor: Int32) -> Never {
+        var report: (Int32, Int32) = (step.rawValue, errorNumber)
+        write(descriptor, &report, MemoryLayout<(Int32, Int32)>.size)
         _exit(127)
+    }
+
+    // MARK: - The parent
+
+    /// The failure that the child reported, or `nil` when the pipe closed
+    /// without a report because `execve` worked.
+    private static func readReport(from descriptor: Int32) -> PseudoTerminalError? {
+        var report: (Int32, Int32) = (0, 0)
+        var count = 0
+        repeat {
+            count = read(descriptor, &report, MemoryLayout<(Int32, Int32)>.size)
+        } while count < 0 && errno == EINTR
+        guard count == MemoryLayout<(Int32, Int32)>.size else { return nil }
+        let function = report.0 == ChildStep.changeFolder.rawValue ? "chdir" : "execve"
+        return .systemCallFailed(function: function, code: report.1)
     }
 
     private static func makeVector(of strings: [UnsafeMutablePointer<CChar>?]) -> UnsafeMutablePointer<UnsafeMutablePointer<CChar>?> {
