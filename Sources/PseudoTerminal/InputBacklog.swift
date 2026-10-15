@@ -124,6 +124,30 @@ struct InputBacklog {
         }
     }
 
+    /// Removes the owner's input that has not gone to the terminal yet: the
+    /// input that waits, and the pieces in the backlog that have not started.
+    mutating func withdraw(owner: ObjectIdentifier) -> [Notice] {
+        var notices: [Notice] = []
+        // An answer has no owner, so it stays and moves up behind the rest.
+        waiting = Array(waiting.filter { input in
+            guard input.owner == owner, let completion = input.completion else { return true }
+            notices.append(Notice(completion: completion, outcome: .withdrawn))
+            return false
+        })
+        // A front piece that started stays, so `frontHasStarted` still
+        // describes the front. A front piece that goes had not started.
+        var kept: [Piece] = []
+        for (index, piece) in pieces.enumerated() {
+            if piece.owner == owner, !(index == 0 && frontHasStarted) {
+                pendingByteCount -= piece.bytes.count
+            } else {
+                kept.append(piece)
+            }
+        }
+        pieces = kept
+        return notices
+    }
+
     /// Ends all input: the backlog goes, and all typed input that waits fails.
     mutating func close() -> [Notice] {
         isClosed = true

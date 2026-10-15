@@ -108,6 +108,68 @@ private func drain(_ backlog: inout InputBacklog) -> [UInt8] {
         #expect(backlog.pendingAnswerByteCount == 0)
     }
 
+    /// An answer behind waiting input never waits for room itself: it goes in
+    /// with the input in front of it, also past the limit of typed input.
+    @Test func anAnswerThatWaitsGoesInPastTheLimitWithTheInputInFrontOfIt() {
+        var backlog = InputBacklog()
+        let owner = ObjectIdentifier(firstOwner)
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 1), owner: owner, staysWithoutOwner: true) { _ in }
+        _ = backlog.addTyped(bytes(4, 2), owner: owner, staysWithoutOwner: true) { _ in }
+        _ = backlog.admitWaiting()
+        backlog.addAnswer(bytes(3, 9))
+        #expect(backlog.hasWaitingInput)
+        #expect(backlog.answersAreWithinLimit)
+
+        // Four bytes out make room for the typed bytes, and the answer follows.
+        backlog.removeFromFront(4)
+        _ = backlog.admitWaiting()
+        #expect(!backlog.hasWaitingInput)
+        #expect(backlog.pendingByteCount == InputBacklog.typedLimit + 3)
+    }
+
+    /// Answers that wait count toward the answer limit, so a program that asks
+    /// without end while typed input waits still stops in its own output.
+    @Test func answersThatWaitCountTowardTheAnswerLimit() {
+        var backlog = InputBacklog()
+        let owner = ObjectIdentifier(firstOwner)
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 1), owner: owner, staysWithoutOwner: true) { _ in }
+        _ = backlog.addTyped(bytes(4, 2), owner: owner, staysWithoutOwner: true) { _ in }
+        _ = backlog.admitWaiting()
+        backlog.addAnswer(bytes(InputBacklog.answerLimit + 1, 9))
+        #expect(backlog.hasWaitingInput)
+        #expect(!backlog.answersAreWithinLimit)
+        _ = drain(&backlog)
+        _ = backlog.admitWaiting()
+        _ = drain(&backlog)
+        #expect(backlog.answersAreWithinLimit)
+        #expect(backlog.pendingByteCount == 0)
+    }
+
+    @Test func withdrawingRemovesTheWaitingInputAndTheUnstartedPiecesOfOneOwner() {
+        var backlog = InputBacklog()
+        let log = OutcomeLog()
+        let leaving = ObjectIdentifier(firstOwner)
+        let staying = ObjectIdentifier(secondOwner)
+        // The leaving owner's first piece is at the front and starts to go out.
+        _ = backlog.addTyped(bytes(4, 1), owner: leaving, staysWithoutOwner: false, completion: log.completion("started"))
+        _ = backlog.addTyped(bytes(4, 2), owner: staying, staysWithoutOwner: false, completion: log.completion("other"))
+        _ = backlog.addTyped(bytes(4, 3), owner: leaving, staysWithoutOwner: false, completion: log.completion("unstarted"))
+        // Text that a client was told has arrived stays without its owner.
+        _ = backlog.addTyped(bytes(4, 4), owner: leaving, staysWithoutOwner: true, completion: log.completion("acknowledged"))
+        _ = backlog.admitWaiting()
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 5), owner: leaving, staysWithoutOwner: false, completion: log.completion("waiting"))
+        backlog.admitWaiting().forEach { $0.deliver() }
+        #expect(backlog.hasWaitingInput)
+        backlog.removeFromFront(1)
+
+        let notices = backlog.withdraw(owner: leaving)
+        notices.forEach { $0.deliver() }
+        #expect(log.all.contains("waiting:withdrawn"))
+        #expect(!backlog.hasWaitingInput)
+        // The started piece goes out whole. The unstarted piece is gone.
+        #expect(drain(&backlog) == [1, 1, 1] + bytes(4, 2) + bytes(4, 4))
+    }
+
     @Test func closingFailsTheWaitingInputAndRefusesMore() {
         var backlog = InputBacklog()
         let log = OutcomeLog()
