@@ -27,6 +27,10 @@ public final class Terminal {
 
     let handle: GhosttyTerminal
 
+    /// The installed reply handler. It lives here because an extension cannot
+    /// hold stored properties. See `setReplyHandler`.
+    var replyBox: TerminalReplyBox?
+
     /// Creates an empty terminal.
     ///
     /// - Parameters:
