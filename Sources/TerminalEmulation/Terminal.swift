@@ -41,7 +41,61 @@ public final class Terminal {
         )
     }
 
+
+    /// Parses output bytes from the program in the terminal.
+    ///
+    /// A call can end inside an escape sequence or a UTF-8 character. The next
+    /// call continues it.
+    public func write(_ bytes: some ContiguousBytes) {
+        bytes.withUnsafeBytes { buffer in
+            guard !buffer.isEmpty else { return }
+            parse(buffer)
+        }
+    }
+
+    private func parse(_ buffer: UnsafeRawBufferPointer) {
+        guard let start = buffer.baseAddress, !buffer.isEmpty else { return }
+        ghostty_terminal_vt_write(handle, start.assumingMemoryBound(to: UInt8.self), buffer.count)
+    }
+
+    /// Parses text as UTF-8 output bytes.
+    public func write(_ text: String) {
+        write(Array(text.utf8))
+    }
+
+
+    /// Formats the active screen.
+    public func formatted(_ format: ScreenFormat, extent: ScreenExtent = .visible) throws -> [UInt8] {
+        var options = GhosttyFormatterTerminalOptions()
+        options.size = MemoryLayout<GhosttyFormatterTerminalOptions>.size
+        switch format {
+        case .plainText:
+            options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN
+            options.trim = true
+        }
+
+        switch extent {
+        case .withScrollback:
+            return try run(options)
+        case .visible:
+            var selection = try visibleSelection()
+            return try withUnsafePointer(to: &selection) { pointer in
+                options.selection = pointer
+                return try run(options)
+            }
+        }
+    }
+
     // MARK: - Private
+
+    /// The bottom right cell of a grid. An empty grid has none, and the
+    /// subtraction would trap on an unsigned number.
+    static func lastCell(of size: TerminalSize) throws -> GhosttyPointCoordinate {
+        guard size.columns > 0, size.rows > 0 else {
+            throw TerminalEmulationError.invalidValue(in: "Terminal.lastCell")
+        }
+        return GhosttyPointCoordinate(x: size.columns - 1, y: UInt32(size.rows - 1))
+    }
 
     private func configure(scrollbackLimit: Int) throws {
         // The default byte limit would hide the line limit, so remove it.
@@ -64,5 +118,46 @@ public final class Terminal {
             from: "ghostty_terminal_get"
         )
         return storage.pointee
+    }
+
+    private func visibleSelection() throws -> GhosttySelection {
+        let size = size
+        var selection = GhosttySelection()
+        selection.size = MemoryLayout<GhosttySelection>.size
+        for (point, destination) in [
+            (GhosttyPointCoordinate(x: 0, y: 0), \GhosttySelection.start),
+            (try Terminal.lastCell(of: size), \GhosttySelection.end),
+        ] {
+            var reference = GhosttyGridRef()
+            reference.size = MemoryLayout<GhosttyGridRef>.size
+            var corner = GhosttyPoint()
+            corner.tag = GHOSTTY_POINT_TAG_ACTIVE
+            corner.value.coordinate = point
+            try TerminalEmulationError.check(
+                ghostty_terminal_grid_ref(handle, corner, &reference),
+                from: "ghostty_terminal_grid_ref"
+            )
+            selection[keyPath: destination] = reference
+        }
+        return selection
+    }
+
+    private func run(_ options: GhosttyFormatterTerminalOptions) throws -> [UInt8] {
+        var formatter: GhosttyFormatter?
+        try TerminalEmulationError.check(
+            ghostty_formatter_terminal_new(nil, &formatter, handle, options),
+            from: "ghostty_formatter_terminal_new"
+        )
+        defer { ghostty_formatter_free(formatter) }
+
+        var output: UnsafeMutablePointer<UInt8>?
+        var length = 0
+        try TerminalEmulationError.check(
+            ghostty_formatter_format_alloc(formatter, nil, &output, &length),
+            from: "ghostty_formatter_format_alloc"
+        )
+        defer { ghostty_free(nil, output, length) }
+        guard let output else { return [] }
+        return Array(UnsafeBufferPointer(start: output, count: length))
     }
 }
