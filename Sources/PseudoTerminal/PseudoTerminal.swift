@@ -73,6 +73,59 @@ public final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
+    public func terminate(gracePeriod: Duration = .seconds(1)) async {
+        await terminate(gracePeriod: gracePeriod, session: TerminalSessionProcesses(sessionIdentifier: processIdentifier))
+    }
+
+    /// `session` is a parameter only so that a test can make the listing of
+    /// processes fail.
+    func terminate(gracePeriod: Duration, session: TerminalSessionProcesses) async {
+        // Until the program is reaped, its identifier, and so the session
+        // identifier, cannot belong to anything else. After that, the number
+        // stays this session's only while a process of the session lives. So
+        // the work starts only while the program is unreaped, looks again at
+        // least every 20 milliseconds, and stops for good once the session has
+        // no process left. Another session could take the number only after
+        // every other process identifier, about 100,000 of them, was handed
+        // out in between.
+        guard !hasExited else { return }
+        // Nil means that the list failed and the members are unknown.
+        var members = try? session.members()
+        if let known = members {
+            session.sendToEachGroup(SIGHUP, of: known)
+            session.sendToEachGroup(SIGCONT, of: known.filter(\.isStopped))
+        } else {
+            sendSignalToProgramGroup(SIGHUP)
+        }
+        let deadline = ContinuousClock.now + gracePeriod
+        while members.map({ !$0.isEmpty }) ?? true || !hasExited, ContinuousClock.now < deadline {
+            // A cancelled task must not turn this wait into a busy loop, and
+            // a cancelled task makes Task.sleep return at once.
+            await Self.pause(for: .milliseconds(20))
+            members = try? session.members()
+            if members == nil { sendSignalToProgramGroup(SIGHUP) }
+        }
+        // A process can start another one while the first is killed, so look
+        // again until no process is left that a signal can reach.
+        let killingDeadline = ContinuousClock.now + Self.killingLimit
+        while members.map({ !$0.isEmpty }) ?? true, ContinuousClock.now < killingDeadline {
+            if let known = members {
+                guard session.send(SIGKILL, to: known) > 0 else { break }
+            } else {
+                sendSignalToProgramGroup(SIGKILL)
+            }
+            await Self.pause(for: .milliseconds(20))
+            members = try? session.members()
+        }
+        // The program's own group gets SIGKILL in any case while the program
+        // is unreaped, so the wait below ends even when the list of processes
+        // missed the program.
+        if !hasExited {
+            sendSignalToProgramGroup(SIGKILL)
+        }
+        _ = await waitForExit()
+    }
+
     // MARK: - Starting
 
 

@@ -28,6 +28,38 @@ struct TerminalSessionProcesses {
         return identifiers.compactMap(member(withIdentifier:))
     }
 
+    /// Sends `signal` to each process group that `members` belong to, the
+    /// group of the session leader first, as a terminal sends SIGHUP to its
+    /// foreground group first.
+    ///
+    /// A group gets the signal only when one of its members is still in this
+    /// session and in that group right before the signal. A group cannot leave
+    /// its session, and its identifier is not reused while it has a member.
+    func sendToEachGroup(_ signal: Int32, of members: [Member]) {
+        let groups = Dictionary(grouping: members, by: \.groupIdentifier)
+        let order = groups.keys.sorted { first, second in
+            if first == sessionIdentifier || second == sessionIdentifier { return first == sessionIdentifier }
+            return first < second
+        }
+        for group in order {
+            let vouched = groups[group, default: []].contains { member in
+                isInSession(member.processIdentifier) && getpgid(member.processIdentifier) == group
+            }
+            if vouched { killpg(group, signal) }
+        }
+    }
+
+    /// Sends `signal` to each of `members` that is still in this session right
+    /// before the signal. Returns how many processes took it.
+    @discardableResult
+    func send(_ signal: Int32, to members: [Member]) -> Int {
+        var delivered = 0
+        for member in members where isInSession(member.processIdentifier) {
+            if kill(member.processIdentifier, signal) == 0 { delivered += 1 }
+        }
+        return delivered
+    }
+
     // MARK: - Private
 
     /// `getsid` fails for a zombie and for a process that is gone.

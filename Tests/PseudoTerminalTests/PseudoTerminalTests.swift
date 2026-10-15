@@ -162,6 +162,13 @@ func lines(_ text: String) -> [String] {
         #expect(exit != .exited(status: 0))
     }
 
+    @Test func terminateEndsAProgramWithHangUp() async throws {
+        let terminal = try PseudoTerminal(launching: shell("sleep 60"))
+        await terminal.terminate()
+        let exit = await terminal.waitForExit()
+        #expect(exit == .signaled(signal: SIGHUP))
+    }
+
     @Test func aMissingProgramFailsToLaunch() {
         var launch = shell("")
         launch.executablePath = "no-such-program-here"
