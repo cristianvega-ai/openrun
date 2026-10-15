@@ -35,6 +35,11 @@ The owner makes each decision. Record a new decision in its decision log.
 - The app uses AppKit only, not SwiftUI.
 - OpenRun supports macOS 26 and later.
 
+## Build and test
+
+- `scripts/build-ghostty-library.sh` builds libghostty-vt from the Ghostty commit pinned in the script. Run it once before you build.
+- `swift build` builds every module. `swift test` runs every test.
+
 ## Comments and documents
 
 - Write comments that explain why the code does something, not what it does.
