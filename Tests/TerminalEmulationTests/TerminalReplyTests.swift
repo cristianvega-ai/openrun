@@ -160,6 +160,79 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         #expect(recorder.replies.isEmpty)
     }
 
+    // MARK: - Reading the appearance
+
+    private final class FakeAppearance: Sendable {
+        private let state = Mutex((style: String?.none, reads: 0, seconds: 0.0))
+        var reads: Int { state.withLock { $0.reads } }
+        func set(style: String?) { state.withLock { $0.style = style } }
+        func advance(by seconds: Double) { state.withLock { $0.seconds += seconds } }
+        func read() -> String? { state.withLock { $0.reads += 1; return $0.style } }
+        func now(from start: ContinuousClock.Instant) -> ContinuousClock.Instant {
+            start + .seconds(state.withLock { $0.seconds })
+        }
+    }
+
+    private func makeReader(_ fake: FakeAppearance) -> TerminalColorScheme.AppearanceReader {
+        let start = ContinuousClock.now
+        return TerminalColorScheme.AppearanceReader(readStyle: { fake.read() }, now: { fake.now(from: start) })
+    }
+
+    @Test func theAppearanceIsReadFreshWithinAboutOneSecond() {
+        let fake = FakeAppearance()
+        let reader = makeReader(fake)
+        #expect(reader.scheme() == .light)
+        fake.set(style: "Dark")
+        fake.advance(by: 1.1)
+        #expect(reader.scheme() == .dark)
+        fake.set(style: nil)
+        fake.advance(by: 1.1)
+        #expect(reader.scheme() == .light)
+    }
+
+    @Test func theAppearanceIsReadAtMostOnceEachSecond() {
+        let fake = FakeAppearance()
+        let reader = makeReader(fake)
+        _ = reader.scheme()
+        fake.set(style: "Dark")
+        for _ in 0..<100 {
+            fake.advance(by: 0.009)
+            #expect(reader.scheme() == .light)
+        }
+        #expect(fake.reads == 1)
+        fake.advance(by: 0.2)
+        #expect(reader.scheme() == .dark)
+        #expect(fake.reads == 2)
+    }
+
+    @Test func aStoredStyleOtherThanDarkMeansLight() {
+        let fake = FakeAppearance()
+        fake.set(style: "Unknown")
+        #expect(makeReader(fake).scheme() == .light)
+    }
+
+    @Test func theSystemReaderSeesAChangeMadeByAnotherProcess() throws {
+        // A domain of its own, so the real appearance stays as it is.
+        let domain = "ai.cristianvega.openrun.tests.appearance-\(UUID().uuidString)"
+        func defaults(_ arguments: [String]) throws {
+            let process = Process()
+            process.executableURL = URL(fileURLWithPath: "/usr/bin/defaults")
+            process.arguments = arguments
+            process.standardError = FileHandle.nullDevice
+            try process.run()
+            process.waitUntilExit()
+        }
+        defer { try? defaults(["delete", domain]) }
+        func style() -> String? {
+            TerminalColorScheme.AppearanceReader.readStyle(key: "AppleInterfaceStyle", applicationIdentifier: domain as CFString)
+        }
+        #expect(style() == nil)
+        try defaults(["write", domain, "AppleInterfaceStyle", "Dark"])
+        #expect(style() == "Dark")
+        try defaults(["delete", domain, "AppleInterfaceStyle"])
+        #expect(style() == nil)
+    }
+
     // MARK: - Installing
 
     @Test func theBoxIsStoredBeforeLibghosttyReceivesItsPointer() throws {
