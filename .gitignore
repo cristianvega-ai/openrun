@@ -1,0 +1,11 @@
+# Swift build output
+.build/
+.swiftpm/
+*.xcodeproj
+*.xcworkspace
+
+# Downloads and build output of scripts/build-ghostty-library.sh
+Libraries/
+
+# macOS
+.DS_Store
