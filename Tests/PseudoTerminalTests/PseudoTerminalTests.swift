@@ -95,6 +95,42 @@ func lines(_ text: String) -> [String] {
         #expect(terminal.terminalPath.hasPrefix("/dev/tty"))
     }
 
+    @Test func noOtherDescriptorLeaksIntoTheProgram() async throws {
+        // Descriptors that the test process holds open and does not mark
+        // close-on-exec, low and high, so the child must close them itself.
+        // The soft limit is raised for the test, because the child closes
+        // only up to that number.
+        var limits = rlimit()
+        #expect(getrlimit(RLIMIT_NOFILE, &limits) == 0)
+        let original = limits
+        limits.rlim_cur = max(limits.rlim_cur, min(limits.rlim_max, 4096))
+        #expect(setrlimit(RLIMIT_NOFILE, &limits) == 0)
+        defer {
+            var restored = original
+            setrlimit(RLIMIT_NOFILE, &restored)
+        }
+        let lowest = open("/dev/null", O_RDONLY)
+        #expect(lowest >= 3)
+        var sentinels = [lowest]
+        for minimum in [40, 300, 3000] {
+            sentinels.append(fcntl(lowest, F_DUPFD, Int32(minimum)))
+        }
+        defer { sentinels.filter { $0 >= 0 }.forEach { close($0) } }
+        for sentinel in sentinels {
+            // A sentinel that did not open, or that closes on exec, would
+            // let a leak pass unseen.
+            #expect(sentinel >= 3)
+            #expect(fcntl(sentinel, F_GETFD) >= 0 && fcntl(sentinel, F_GETFD) & FD_CLOEXEC == 0, "descriptor \(sentinel) is not usable as a sentinel")
+        }
+
+        // The program lists every descriptor from 3 up to 4095 that it holds.
+        // The first line opens 7 on purpose, so a program that sees nothing,
+        // because the scan itself is wrong, fails the test.
+        let scan = #"/usr/bin/perl -MPOSIX -e 'for my $number (3 .. 4095) { print "open-$number\n" if defined POSIX::dup($number) }'"#
+        let result = try await run(shell("exec 7</dev/null; \(scan); echo done"))
+        #expect(lines(result.text) == ["open-7", "done"], "the program saw: \(lines(result.text))")
+    }
+
     @Test func masterDescriptorClosesAfterTheProgramEnds() async throws {
         let terminal = try PseudoTerminal(launching: shell("echo done"))
         #expect(terminal.masterDescriptorForTesting >= 0)

@@ -101,12 +101,22 @@ extension ProgramLaunch {
             argumentVector: argumentVector,
             environmentVector: environmentVector,
             reportDescriptor: reportWriter,
+            descriptorLimit: min(getdtablesize(), Self.descriptorLimitCeiling)
         )
         var windowSize = winsize(ws_row: size.rows, ws_col: size.columns, ws_xpixel: 0, ws_ypixel: 0)
         var master: Int32 = -1
         var processIdentifier: pid_t = -1
-        processIdentifier = forkpty(&master, nil, nil, &windowSize)
-        if processIdentifier == 0 { Self.runChild(child) }
+        // When several threads open pseudo terminals at once, the kernel can
+        // fail an open with an internal restart code instead of an error
+        // number. The same call succeeds when repeated. Nothing has forked yet
+        // when the call fails, so repeating it is safe.
+        for _ in 0..<5 {
+            processIdentifier = forkpty(&master, nil, nil, &windowSize)
+            if processIdentifier == 0 { Self.runChild(child) }
+            if processIdentifier > 0 { break }
+            if errno > 0 && errno != EAGAIN && errno != EINTR { break }
+            usleep(1000)
+        }
         let forkFailure = PseudoTerminalError.failure(of: "forkpty")
         close(reportWriter)
         guard processIdentifier > 0 else { throw forkFailure }
@@ -160,6 +170,9 @@ extension ProgramLaunch {
 
     private static let shellPath = "/bin/sh"
 
+    /// Descriptors above this number are not closed in the child. They were
+    /// opened by this process, which marks its own descriptors close-on-exec.
+    private static let descriptorLimitCeiling: Int32 = 10_240
 
     /// The two steps that can fail in the child, as the pipe reports them. An
     /// enumeration needs no lazy set-up, which the child must not trigger.
@@ -177,13 +190,37 @@ extension ProgramLaunch {
         var argumentVector: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
         var environmentVector: UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>
         var reportDescriptor: Int32
+        var descriptorLimit: Int32
     }
 
     /// Runs in the child, right after `forkpty` made the new session and the
     /// controlling terminal. See `start` for the rules of this function.
     @inline(never)
     private static func runChild(_ child: ChildArguments) -> Never {
+        // Lets the line editor of a terminal in cooked mode erase a whole
+        // multibyte character with one backspace. Failure only loses that nicety.
+        var attributes = termios()
+        if tcgetattr(0, &attributes) == 0 {
+            attributes.c_iflag |= tcflag_t(IUTF8)
+            tcsetattr(0, TCSANOW, &attributes)
+        }
+        // The session process ignores some signals and blocks others. Both
+        // settings survive exec, so the program gets the defaults back.
+        var noSignals = sigset_t()
+        sigemptyset(&noSignals)
+        sigprocmask(SIG_SETMASK, &noSignals, nil)
+        var number: Int32 = 1
+        while number < 32 {
+            if number != SIGKILL && number != SIGSTOP { signal(number, SIG_DFL) }
+            number += 1
+        }
         if chdir(child.folder) != 0 { reportFailure(.changeFolder, errorNumber: errno, to: child.reportDescriptor) }
+        // No descriptor of the session process may leak into the program.
+        var descriptor: Int32 = 3
+        while descriptor < child.descriptorLimit {
+            if descriptor != child.reportDescriptor { close(descriptor) }
+            descriptor += 1
+        }
         execve(child.program, child.argumentVector, child.environmentVector)
         let executeError = errno
         if executeError == ENOEXEC {
