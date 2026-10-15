@@ -78,6 +78,15 @@ public final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
+    /// Tells the program its terminal has a new size. The kernel sends it
+    /// SIGWINCH.
+    public func resize(to size: PseudoTerminalSize) throws {
+        try queue.sync {
+            guard exit == nil, master >= 0 else { return }
+            try Self.setSize(size, on: master)
+        }
+    }
+
     /// Waits for the program to end and returns how.
     public func waitForExit() async -> ProgramExit {
         await withCheckedContinuation { continuation in
@@ -164,6 +173,10 @@ public final class PseudoTerminal: @unchecked Sendable {
 
     // MARK: - Starting
 
+    private static func setSize(_ size: PseudoTerminalSize, on descriptor: Int32) throws {
+        var windowSize = winsize(ws_row: size.rows, ws_col: size.columns, ws_xpixel: 0, ws_ypixel: 0)
+        guard ioctl(descriptor, TIOCSWINSZ, &windowSize) == 0 else { throw PseudoTerminalError.failure(of: "ioctl") }
+    }
 
     private func startWatching() {
         let reader = DispatchSource.makeReadSource(fileDescriptor: master, queue: queue)

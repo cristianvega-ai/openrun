@@ -144,6 +144,16 @@ func lines(_ text: String) -> [String] {
         #expect(lines(result.text) == ["30 100"])
     }
 
+    @Test func resizeChangesTheSizeTheProgramReads() async throws {
+        let launch = shell("read line; stty size")
+        let terminal = try PseudoTerminal(launching: launch)
+        try terminal.resize(to: PseudoTerminalSize(columns: 120, rows: 40))
+        terminal.write(Array("go\n".utf8))
+        var collected: [UInt8] = []
+        for await chunk in terminal.output { collected += chunk }
+        #expect(lines(String(decoding: collected, as: UTF8.self)).last == "40 120")
+    }
+
     @Test func theProgramGetsExactlyTheGivenEnvironment() async throws {
         // Run env itself, because a shell adds variables of its own.
         var launch = shell("")
