@@ -47,6 +47,7 @@ public final class PseudoTerminal: @unchecked Sendable {
         processIdentifier = started.processIdentifier
         terminalPath = started.terminalPath
         (output, outputContinuation) = AsyncStream.makeStream(of: [UInt8].self)
+        startWatching()
     }
 
 
@@ -61,5 +62,96 @@ public final class PseudoTerminal: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    // MARK: - Starting
+
+
+    private func startWatching() {
+        let reader = DispatchSource.makeReadSource(fileDescriptor: master, queue: queue)
+        reader.setEventHandler { [self] in readAvailableOutput() }
+        reader.setCancelHandler { [self] in releaseMaster() }
+        readSource = reader
+
+        let watcher = DispatchSource.makeProcessSource(identifier: processIdentifier, eventMask: .exit, queue: queue)
+        watcher.setEventHandler { [self] in reapIfExited(retryingWhileExiting: true) }
+        exitSource = watcher
+
+        reader.resume()
+        watcher.resume()
+        // The program may have ended before the watcher existed.
+        queue.async { self.reapIfExited() }
+    }
+
+    // MARK: - Output (on the queue)
+
+    private func readAvailableOutput(honoringBackpressure: Bool = true) {
+        guard master >= 0 else { return }
+        var buffer = [UInt8](repeating: 0, count: Self.readChunkSize)
+        while true {
+            let count = read(master, &buffer, buffer.count)
+            if count > 0 {
+                outputContinuation.yield(Array(buffer[0..<count]))
+                continue
+            }
+            if count == 0 || (count < 0 && errno != EAGAIN && errno != EINTR) {
+                // Every holder of the terminal closed it. The source would
+                // fire forever, so stop it. The exit watcher finishes the job.
+                readSource?.cancel()
+            }
+            if count < 0 && errno == EINTR { continue }
+            return
+        }
+    }
+
+    // MARK: - Exit (on the queue)
+
+    private func reapIfExited(retryingWhileExiting: Bool = false) {
+        guard exit == nil else { return }
+        var status: Int32 = 0
+        var result: pid_t
+        repeat {
+            result = waitpid(processIdentifier, &status, WNOHANG)
+        } while result < 0 && errno == EINTR
+        guard result != 0 else {
+            // The system reports the exit before the program counts as ended.
+            // A session leader with a controlling terminal takes longer, because
+            // the kernel hangs up the terminal first. The event comes only once,
+            // so ask again until the program can be reaped.
+            if retryingWhileExiting {
+                queue.asyncAfter(deadline: .now() + .milliseconds(5)) { [self] in
+                    reapIfExited(retryingWhileExiting: true)
+                }
+            }
+            return
+        }
+        // On another waitpid error, such as ECHILD after another waiter reaped
+        // the child, the status is lost and no later call can learn it. Report
+        // an unknown status instead of waiting forever.
+        let reason = result < 0 ? ProgramExit.exited(status: Self.unknownExitStatus) : ProgramExit(waitStatus: status)
+
+        // Output the program wrote before it ended can still sit in the
+        // kernel buffer. Deliver it before the stream finishes.
+        readAvailableOutput(honoringBackpressure: false)
+        outputContinuation.finish()
+        exit = reason
+
+        exitSource?.cancel()
+        exitSource = nil
+        readSource?.cancel()
+        for waiter in exitWaiters {
+            waiter.resume(returning: reason)
+        }
+        exitWaiters.removeAll()
+    }
+
+    // The descriptor closes when the last source that watched it is gone,
+    // because closing it earlier would break a source that still runs.
+    private func releaseMaster() {
+        sourcesStillUsingMaster -= 1
+        guard sourcesStillUsingMaster == 0, master >= 0 else { return }
+        close(master)
+        master = -1
+        readSource = nil
     }
 }
