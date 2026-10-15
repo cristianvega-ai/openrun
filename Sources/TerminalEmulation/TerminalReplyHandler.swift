@@ -92,6 +92,29 @@ extension Terminal {
         return true
     }
 
+    /// A cell is a fixed size of pixels, because a session has no window.
+    /// Programs use the size to scale images, and any plausible cell works.
+    static let nominalCellWidth: UInt32 = 8
+    static let nominalCellHeight: UInt32 = 16
+
+    // Like device attributes, the size queries (and the in-band size reports
+    // of mode 2048) are answered only when this callback fills in a size.
+    private static let sizeCallback: GhosttyTerminalSizeFn = { terminal, _, size in
+        guard let terminal, let size else { return false }
+        var columns: UInt16 = 0
+        var rows: UInt16 = 0
+        guard ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLS, &columns) == GHOSTTY_SUCCESS,
+              ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_ROWS, &rows) == GHOSTTY_SUCCESS
+        else { return false }
+        size.pointee = GhosttySizeReportSize(
+            rows: rows,
+            columns: columns,
+            cell_width: nominalCellWidth,
+            cell_height: nominalCellHeight
+        )
+        return true
+    }
+
     /// Sets or clears every callback that answers a query.
     private func installCallbacks(userdata: UnsafeMutableRawPointer?, enabled: Bool) throws {
         // Clear the callbacks before the userdata changes, so none runs with
@@ -99,6 +122,7 @@ extension Terminal {
         let callbacks: [(GhosttyTerminalOption, UnsafeRawPointer)] = [
             (GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(Self.replyWriteCallback, to: UnsafeRawPointer.self)),
             (GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, unsafeBitCast(Self.deviceAttributesCallback, to: UnsafeRawPointer.self)),
+            (GHOSTTY_TERMINAL_OPT_SIZE, unsafeBitCast(Self.sizeCallback, to: UnsafeRawPointer.self)),
         ]
         for (option, _) in callbacks {
             try TerminalEmulationError.check(ghostty_terminal_set(handle, option, nil), from: "ghostty_terminal_set")

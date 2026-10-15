@@ -72,4 +72,47 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         terminal.write("\u{1B}[c\u{1B}[6n")
         #expect(recorder.replies.isEmpty)
     }
+
+    @Test func aRestoredTerminalInstallsNoHandler() throws {
+        let (original, recorder) = try makeRecordingTerminal()
+        original.write("hello")
+        let restored = try TerminalSnapshot(capturing: original).restoreTerminal(scrollbackLimit: 100)
+        #expect(!restored.hasReplyHandler)
+        // Both terminals see the query, and only the original answers.
+        original.write("\u{1B}[c")
+        restored.write("\u{1B}[c")
+        #expect(recorder.replies.count == 1)
+    }
+
+    @Test func replacingTheHandlerSendsRepliesToTheNewOne() throws {
+        let (terminal, first) = try makeRecordingTerminal()
+        let second = ReplyRecorder()
+        try terminal.setReplyHandler { second.replies.append($0) }
+        terminal.write("\u{1B}[6n")
+        #expect(first.replies.isEmpty)
+        #expect(second.replies.count == 1)
+    }
+
+    // MARK: - Size and color-scheme queries
+
+    @Test func charactersSizeQueriesReportTheGrid() throws {
+        let (terminal, recorder) = try makeRecordingTerminal()
+        terminal.write("\u{1B}[18t")
+        #expect(recorder.replies.count == 1)
+        #expect(recorder.text == "\u{1B}[8;5;20t")
+        terminal.write("\u{1B}[19t")
+        #expect(recorder.replies.count == 2)
+        #expect(String(decoding: recorder.replies.dropFirst().first ?? [], as: UTF8.self) == "\u{1B}[9;5;20t")
+    }
+
+    @Test func textAreaSizeQueriesUseTheNominalCell() throws {
+        let (terminal, recorder) = try makeRecordingTerminal()
+        terminal.write("\u{1B}[14t")
+        // 5 rows of 16 pixels and 20 columns of 8 pixels.
+        #expect(recorder.replies.count == 1)
+        #expect(recorder.text == "\u{1B}[4;80;160t")
+        terminal.write("\u{1B}[16t")
+        #expect(recorder.replies.count == 2)
+        #expect(String(decoding: recorder.replies.dropFirst().first ?? [], as: UTF8.self) == "\u{1B}[6;16;8t")
+    }
 }
