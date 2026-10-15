@@ -169,6 +169,23 @@ func lines(_ text: String) -> [String] {
         #expect(terminal.terminalPath.hasPrefix("/dev/tty"))
     }
 
+    @Test func inputReachesTheProgram() async throws {
+        let result = try await run(shell("read word; echo got-$word"), input: "typed\n")
+        #expect(lines(result.text).contains("got-typed"))
+    }
+
+    @Test func largeInputReachesAProgramThatReadsSlowly() async throws {
+        // 100 thousand bytes is far more than the kernel buffers, so the
+        // write must wait without blocking the caller.
+        let count = 100_000
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 0.3; head -c \(count) | wc -c"))
+        var collected = await waitForText("ready", in: terminal)
+        terminal.write(Array(repeating: UInt8(ascii: "x"), count: count))
+        for await chunk in terminal.output { collected += chunk }
+        let text = String(decoding: collected, as: UTF8.self)
+        #expect(lines(text).last?.trimmingCharacters(in: .whitespaces) == "\(count)")
+    }
+
     @Test func noOtherDescriptorLeaksIntoTheProgram() async throws {
         // Descriptors that the test process holds open and does not mark
         // close-on-exec, low and high, so the child must close them itself.
