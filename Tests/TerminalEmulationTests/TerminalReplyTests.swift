@@ -205,6 +205,42 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         #expect(recorder.replies.isEmpty)
     }
 
+    @Test func theScreenSizeInDotsUsesTheNominalCell() throws {
+        // 5 rows of 16 pixels and 20 columns of 8 pixels.
+        #expect(try answers(to: "\u{1B}[15t") == ["\u{1B}[5;80;160t"])
+        #expect(try answers(to: "\u{1B}[15t", columns: 100, rows: 40) == ["\u{1B}[5;640;800t"])
+    }
+
+    @Test func theScreenSizeInDotsFollowsAResize() throws {
+        let terminal = try makeTerminal()
+        let recorder = ReplyRecorder()
+        try terminal.setReplyHandler { recorder.replies.append($0) }
+        try terminal.resize(to: TerminalSize(columns: 100, rows: 40))
+        terminal.write("\u{1B}[15t")
+        #expect(recorder.text == "\u{1B}[5;640;800t")
+    }
+
+    @Test func aScreenSizeQuerySplitAcrossWritesGetsOneReply() throws {
+        let terminal = try makeTerminal()
+        let recorder = ReplyRecorder()
+        try terminal.setReplyHandler { recorder.replies.append($0) }
+        for piece in ["x\u{1B}", "[1", "5", "t", "y"] { terminal.write(piece) }
+        #expect(recorder.text == "\u{1B}[5;80;160t")
+        #expect(try terminal.visibleText() == "xy")
+    }
+
+    @Test func repliesComeInTheOrderOfTheQueries() throws {
+        #expect(try answers(to: "\u{1B}[6n\u{1B}[15t\u{1B}[18t\u{1B}[15t") == [
+            "\u{1B}[1;1R", "\u{1B}[5;80;160t", "\u{1B}[8;5;20t", "\u{1B}[5;80;160t",
+        ])
+    }
+
+    @Test func sequencesThatLookLikeTheScreenSizeQueryGetNoReply() throws {
+        for text in ["\u{1B}[?15t", "\u{1B}[1;15t", "\u{1B}[115t", "\u{1B}[15u", "\u{1B}[1\u{1B}[5t", "[15t", "\u{1B}[15", "\u{1B}[1\u{18}5t"] {
+            #expect(try answers(to: text).isEmpty, "text: \(text.debugDescription)")
+        }
+    }
+
     // MARK: - Reading the appearance
 
     private final class FakeAppearance: Sendable {

@@ -14,10 +14,45 @@ final class TerminalReplyBox {
 
     /// The scheme whose colors are now the defaults of the terminal.
     var appliedScheme: TerminalColorScheme?
+    /// How many bytes of `ESC [ 1 5 t` the end of the last write matched.
+    private var matchedQueryBytes = 0
 
     init(handler: @escaping TerminalReplyHandler, colorScheme: @escaping @Sendable () -> TerminalColorScheme) {
         self.handler = handler
         self.colorScheme = colorScheme
+    }
+
+    private static let screenSizeQuery: [UInt8] = [0x1B, 0x5B, 0x31, 0x35, 0x74]
+
+    /// Finds the end of the first `CSI 15 t` (the size of the screen in
+    /// pixels) in the bytes, counting from the start of the bytes. The query
+    /// can span two writes, so the box remembers a partial match.
+    /// libghostty-vt does not parse this query at all, so nothing else can
+    /// tell us about it.
+    func endOfScreenSizeQuery(in bytes: UnsafeRawBufferPointer) -> Int? {
+        var index = 0
+        while index < bytes.count {
+            if matchedQueryBytes == 0 {
+                // Dense output holds few escapes, so jump to the next one.
+                guard let base = bytes.baseAddress,
+                      let found = memchr(base + index, 0x1B, bytes.count - index)
+                else { return nil }
+                index = base.distance(to: UnsafeRawPointer(found))
+            }
+            let byte = bytes[index]
+            index += 1
+            if byte == Self.screenSizeQuery[matchedQueryBytes] {
+                matchedQueryBytes += 1
+                if matchedQueryBytes == Self.screenSizeQuery.count {
+                    matchedQueryBytes = 0
+                    return index
+                }
+            } else {
+                // An escape starts a new sequence wherever it comes.
+                matchedQueryBytes = byte == 0x1B ? 1 : 0
+            }
+        }
+        return nil
     }
 }
 
@@ -82,6 +117,14 @@ extension Terminal {
             throw error
         }
         withExtendedLifetime(previous) {}
+    }
+
+    /// Answers `CSI 15 t` from the nominal cell, like the other size queries.
+    func answerScreenSizeQuery(for box: TerminalReplyBox) {
+        let grid = size
+        let height = UInt32(grid.rows) * Self.nominalCellHeight
+        let width = UInt32(grid.columns) * Self.nominalCellWidth
+        box.handler(Array("\u{1B}[5;\(height);\(width)t".utf8))
     }
 
     /// Sets the default foreground and background to the colors of the

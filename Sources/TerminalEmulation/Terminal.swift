@@ -106,7 +106,16 @@ public final class Terminal {
             // libghostty-vt answers colors from the defaults of the terminal,
             // so they must match the appearance at the moment of the query.
             applyDefaultColors(for: box)
-            parse(buffer)
+            // libghostty-vt has no callback for the screen size query, so the
+            // reply goes out at the end of the query, in order with the
+            // replies that libghostty-vt gives for the bytes before it.
+            var start = 0
+            while let end = box.endOfScreenSizeQuery(in: UnsafeRawBufferPointer(rebasing: buffer[start...])) {
+                parse(UnsafeRawBufferPointer(rebasing: buffer[start..<(start + end)]))
+                answerScreenSizeQuery(for: box)
+                start += end
+            }
+            parse(UnsafeRawBufferPointer(rebasing: buffer[start...]))
         }
     }
 
