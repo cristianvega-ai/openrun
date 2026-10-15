@@ -115,4 +115,37 @@ private struct Observation: Equatable {
             _ = try truncated.restoreTerminal(scrollbackLimit: 10)
         }
     }
+
+    @Test func snapshotInsideAnEscapeSequenceContinues() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 3)
+        terminal.write("before \u{1b}[3")
+
+        let restored = try restore(terminal)
+        restored.write("1mred\u{1b}[0m after")
+
+        let reference = try makeTerminal(columns: 20, rows: 3)
+        reference.write("before \u{1b}[31mred\u{1b}[0m after")
+
+        #expect(try Observation(restored) == Observation(reference))
+        #expect(try restored.visibleText() == "before red after")
+    }
+
+    @Test func snapshotInsideAMultibyteCharacterContinues() throws {
+        let bytes = Array("a\u{1F600}b".utf8)
+        // Cut after the first two bytes of the four-byte emoji.
+        let cut = 3
+
+        let terminal = try makeTerminal(columns: 20, rows: 3)
+        terminal.write(Array(bytes[..<cut]))
+
+        let restored = try restore(terminal)
+        restored.write(Array(bytes[cut...]))
+
+        let reference = try makeTerminal(columns: 20, rows: 3)
+        reference.write(bytes)
+
+        #expect(try Observation(restored) == Observation(reference))
+        #expect(try restored.visibleText() == "a\u{1F600}b")
+    }
+
 }

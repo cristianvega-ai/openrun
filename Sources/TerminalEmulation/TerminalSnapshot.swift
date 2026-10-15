@@ -1,5 +1,13 @@
 import GhosttyVt
 
+/// The complete state of a terminal as bytes: the screens, the scrollback,
+/// the cursor, the modes, and any unfinished escape sequence or UTF-8
+/// character.
+///
+/// A session process takes a snapshot at any point in the output. A client
+/// restores it and then writes the bytes that follow. The restored terminal
+/// ends in the same state as a terminal that received every byte, even when
+/// the snapshot fell inside a sequence.
 public struct TerminalSnapshot: Equatable, Sendable {
     /// The encoded state. libghostty-vt does not yet promise to read bytes
     /// from another version, so keep them only for the same OpenRun build.
@@ -42,6 +50,18 @@ public struct TerminalSnapshot: Equatable, Sendable {
             )
             defer { ghostty_snapshot_decoder_free(decoder) }
 
+            // Keep tracking the unfinished sequence, so the restored terminal
+            // can take its own snapshot before the next sequence ends.
+            var continuationLimit = Terminal.continuationByteLimit
+            try TerminalEmulationError.check(
+                ghostty_snapshot_decoder_set(decoder, GHOSTTY_SNAPSHOT_DECODER_OPT_MAX_CONTINUATION_BYTES, &continuationLimit),
+                from: "ghostty_snapshot_decoder_set"
+            )
+            var retainContinuation = true
+            try TerminalEmulationError.check(
+                ghostty_snapshot_decoder_set(decoder, GHOSTTY_SNAPSHOT_DECODER_OPT_RETAIN_CONTINUATION, &retainContinuation),
+                from: "ghostty_snapshot_decoder_set"
+            )
 
             var restored: GhosttyTerminal?
             try TerminalEmulationError.check(

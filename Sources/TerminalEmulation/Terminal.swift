@@ -7,6 +7,15 @@ import GhosttyVt
 /// A `Terminal` is not thread-safe. Call it from one thread at a time.
 /// It owns one libghostty-vt terminal and frees it when it is released.
 public final class Terminal {
+    /// Bytes of an unfinished escape sequence that a snapshot may carry.
+    /// A snapshot taken inside a longer sequence fails instead of losing it.
+    ///
+    /// The socket protocol refuses frames above 64 MiB, and a snapshot also
+    /// holds the screens and the scrollback (more than 15 MiB for a full,
+    /// densely styled scrollback). The cap must leave room for both, or a
+    /// snapshot that the terminal can take could never reach a client.
+    static let continuationByteLimit = 32 * 1024 * 1024
+
     /// The most scrollback lines a terminal accepts. It is far above what a
     /// session needs, and it stops a wrong number from asking for memory
     /// without limit.
@@ -152,6 +161,13 @@ public final class Terminal {
         guard (0...Terminal.maximumScrollbackLines).contains(scrollbackLimit) else {
             throw TerminalEmulationError.invalidValue(in: "Terminal.init")
         }
+        // Snapshots can hold an unfinished escape sequence only when the
+        // terminal tracked it from its first byte, so tracking starts now.
+        var continuationLimit = Terminal.continuationByteLimit
+        try TerminalEmulationError.check(
+            ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_CONTINUATION_MAX_BYTES, &continuationLimit),
+            from: "ghostty_terminal_set"
+        )
         // The default byte limit would hide the line limit, so remove it.
         try TerminalEmulationError.check(
             ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, nil),

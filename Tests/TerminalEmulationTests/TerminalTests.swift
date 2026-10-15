@@ -100,6 +100,13 @@ extension Terminal {
         #expect(terminal.size.columns == side)
     }
 
+    @Test func theUnfinishedSequenceCapLeavesRoomInTheSnapshotFrame() {
+        // The socket protocol refuses frames above 64 MiB. A snapshot also
+        // holds the screens and the scrollback, so the cap must stay well
+        // below that.
+        #expect(Terminal.continuationByteLimit <= 32 * 1024 * 1024)
+    }
+
     @Test func theVisibleCornersOfAnEmptyGridAreRefusedInsteadOfUnderflowing() throws {
         #expect(throws: TerminalEmulationError.self) {
             _ = try Terminal.lastCell(of: TerminalSize(columns: 0, rows: 5))
