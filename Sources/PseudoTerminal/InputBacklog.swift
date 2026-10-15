@@ -65,13 +65,54 @@ struct InputBacklog {
         var isAnswer: Bool { owner == nil }
     }
 
+    /// A first-in first-out queue whose start moves up when the front goes,
+    /// so taking from the front does not move the elements behind it. The
+    /// unused head of the storage is dropped once it is half of the storage,
+    /// which keeps the cost of each removal constant on average.
+    private struct FrontQueue<Element> {
+        private var storage: [Element] = []
+        private var start = 0
+
+        var isEmpty: Bool { start == storage.count }
+        var first: Element? { isEmpty ? nil : storage[start] }
+        /// The elements from the front to the back.
+        var elements: ArraySlice<Element> { storage[start...] }
+
+        init(_ elements: [Element] = []) {
+            storage = elements
+        }
+
+        mutating func append(_ element: Element) {
+            storage.append(element)
+        }
+
+        mutating func replaceFirst(with element: Element) {
+            storage[start] = element
+        }
+
+        mutating func removeFirst() {
+            start += 1
+            if start == storage.count {
+                removeAll()
+            } else if start >= 64, start * 2 >= storage.count {
+                storage.removeFirst(start)
+                start = 0
+            }
+        }
+
+        mutating func removeAll() {
+            storage.removeAll()
+            start = 0
+        }
+    }
+
     /// Each piece keeps its own storage, so writing the front costs nothing
     /// for the bytes behind it.
-    private var pieces: [Piece] = []
+    private var pieces = FrontQueue<Piece>()
     /// Whether some bytes of the front piece went out. A piece that started
     /// goes out whole, so the program never gets half of a key sequence.
     private var frontHasStarted = false
-    private var waiting: [WaitingInput] = []
+    private var waiting = FrontQueue<WaitingInput>()
     private(set) var pendingByteCount = 0
     /// Answers in the backlog and answers that wait behind typed input.
     private(set) var pendingAnswerByteCount = 0
@@ -137,7 +178,7 @@ struct InputBacklog {
             pieces.removeFirst()
             frontHasStarted = false
         } else {
-            pieces[0] = piece
+            pieces.replaceFirst(with: piece)
             frontHasStarted = true
         }
     }
@@ -147,7 +188,7 @@ struct InputBacklog {
     mutating func withdraw(owner: ObjectIdentifier) -> [Notice] {
         var notices: [Notice] = []
         // An answer has no owner, so it stays and moves up behind the rest.
-        waiting = Array(waiting.filter { input in
+        waiting = FrontQueue(waiting.elements.filter { input in
             guard input.owner == owner, let completion = input.completion else { return true }
             notices.append(Notice(completion: completion, outcome: .withdrawn))
             return false
@@ -155,14 +196,14 @@ struct InputBacklog {
         // A front piece that started stays, so `frontHasStarted` still
         // describes the front. A front piece that goes had not started.
         var kept: [Piece] = []
-        for (index, piece) in pieces.enumerated() {
+        for (index, piece) in pieces.elements.enumerated() {
             if piece.owner == owner, !(index == 0 && frontHasStarted) {
                 pendingByteCount -= piece.bytes.count
             } else {
                 kept.append(piece)
             }
         }
-        pieces = kept
+        pieces = FrontQueue(kept)
         return notices
     }
 
@@ -173,7 +214,7 @@ struct InputBacklog {
         frontHasStarted = false
         pendingByteCount = 0
         pendingAnswerByteCount = 0
-        let notices = waiting.compactMap { input in
+        let notices = waiting.elements.compactMap { input in
             input.completion.map { Notice(completion: $0, outcome: .programEnded) }
         }
         waiting.removeAll()

@@ -208,4 +208,34 @@ private func drain(_ backlog: inout InputBacklog) -> [UInt8] {
         #expect(backlog.front == nil)
         #expect(backlog.pendingByteCount == 0)
     }
+
+    /// Taking from the front of a queue of many small
+    /// pieces cost time in proportion to the queue, so the whole run cost
+    /// the square of the count. At 100,000 pieces that took about eight
+    /// seconds in a debug build. A queue with a moving start takes well under one.
+    @Test func manyOneBytePiecesWaitAndDrainInLinearTime() {
+        var backlog = InputBacklog()
+        let owner = ObjectIdentifier(firstOwner)
+        let count = 100_000
+        let clock = ContinuousClock()
+        let elapsed = clock.measure {
+            _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 0), owner: owner, staysWithoutOwner: true) { _ in }
+            for index in 0..<count {
+                _ = backlog.addTyped([UInt8(truncatingIfNeeded: index)], owner: owner, staysWithoutOwner: true) { _ in }
+            }
+            _ = backlog.admitWaiting()
+            #expect(backlog.hasWaitingInput)
+            backlog.removeFromFront(InputBacklog.typedLimit)
+            _ = backlog.admitWaiting()
+            #expect(!backlog.hasWaitingInput)
+        }
+        var taken: [UInt8] = []
+        let drained = clock.measure { taken = drain(&backlog) }
+        #expect(taken.count == count)
+        #expect(taken == (0..<count).map { UInt8(truncatingIfNeeded: $0) })
+        #expect(backlog.isEmpty)
+        // Far below the old cost of about four seconds for each step.
+        #expect(elapsed < .seconds(1), "waiting took \(elapsed)")
+        #expect(drained < .seconds(1), "draining took \(drained)")
+    }
 }
