@@ -93,4 +93,19 @@ struct InputBacklog {
         }
         return notices
     }
+
+    /// Records that the terminal took this many bytes from the front.
+    mutating func removeFromFront(_ count: Int) {
+        guard count > 0, var piece = pieces.first else { return }
+        piece.bytes = piece.bytes.dropFirst(count)
+        pendingByteCount -= count
+        if piece.isAnswer { pendingAnswerByteCount -= count }
+        if piece.bytes.isEmpty {
+            pieces.removeFirst()
+            frontHasStarted = false
+        } else {
+            pieces[0] = piece
+            frontHasStarted = true
+        }
+    }
 }
