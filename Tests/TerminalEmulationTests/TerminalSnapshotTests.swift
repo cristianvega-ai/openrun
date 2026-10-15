@@ -183,4 +183,53 @@ private struct Observation: Equatable {
         #expect(try Observation(second) == Observation(reference))
     }
 
+    /// Lines of scrollback in many colors, then an escape sequence that is
+    /// not finished yet. On the alternate screen the primary screen keeps the
+    /// scrollback.
+    private func colorfulTerminal(onAlternateScreen: Bool) throws -> Terminal {
+        let terminal = try makeTerminal(columns: 400, rows: 6, scrollbackLimit: 10_000)
+        for number in 1...2000 {
+            terminal.write("\u{1b}[38;5;\(number % 256)mline \(number) " + String(repeating: "x", count: 300) + "\u{1b}[0m\r\n")
+        }
+        if onAlternateScreen { terminal.write("\u{1b}[?1049halternate text\r\n") }
+        terminal.write("prompt> \u{1b}[3")
+        return terminal
+    }
+
+    @Test func aCaptureWithinTheLimitIsTheWholeCapture() throws {
+        let terminal = try colorfulTerminal(onAlternateScreen: false)
+        let whole = try TerminalSnapshot(capturing: terminal)
+        #expect(try TerminalSnapshot(capturing: terminal, byteLimit: whole.bytes.count) == whole)
+    }
+
+    @Test(arguments: [false, true])
+    func aCaptureOverTheLimitKeepsTheNewestScrollbackAndTheWholeScreen(onAlternateScreen: Bool) throws {
+        let terminal = try colorfulTerminal(onAlternateScreen: onAlternateScreen)
+        let whole = try TerminalSnapshot(capturing: terminal)
+        let limit = whole.bytes.count / 2
+        let fitted = try #require(try TerminalSnapshot(capturing: terminal, byteLimit: limit))
+        #expect(fitted.bytes.count <= limit)
+
+        let restored = try fitted.restoreTerminal(scrollbackLimit: 10_000)
+        #expect(try UnfinishedSequence(of: restored).bytes == [0x1B, 0x5B, 0x33])
+        for copy in [terminal, restored] { copy.write("1mred\u{1b}[0m") }
+        #expect(try restored.formatted(.virtualTerminalSequences) == terminal.formatted(.virtualTerminalSequences))
+        #expect(restored.cursorPosition == terminal.cursorPosition)
+        #expect(restored.isAlternateScreenActive == onAlternateScreen)
+
+        // The terminal keeps its whole scrollback. The snapshot keeps the
+        // newest lines, about half of them.
+        for copy in [terminal, restored] where onAlternateScreen { copy.write("\u{1b}[?1049l") }
+        let original = String(decoding: try terminal.formatted(.plainText, extent: .withScrollback), as: UTF8.self)
+        let kept = String(decoding: try restored.formatted(.plainText, extent: .withScrollback), as: UTF8.self)
+        #expect(original.hasPrefix("line 1 "))
+        #expect(original.hasSuffix(kept))
+        let lineCount = kept.split(separator: "\n").count
+        #expect(lineCount > 700 && lineCount < 1000, "kept \(lineCount) lines")
+    }
+
+    @Test func noCaptureFitsWhenTheScreensAloneAreLarger() throws {
+        let terminal = try colorfulTerminal(onAlternateScreen: false)
+        #expect(try TerminalSnapshot(capturing: terminal, byteLimit: 100) == nil)
+    }
 }

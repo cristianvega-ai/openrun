@@ -33,6 +33,39 @@ public struct TerminalSnapshot: Equatable, Sendable {
         bytes = Array(UnsafeBufferPointer(start: encoded, count: length))
     }
 
+    /// Captures the state of a terminal in at most `byteLimit` bytes.
+    ///
+    /// A larger state loses its oldest lines of scrollback until it fits,
+    /// and keeps as many lines as fit. The screens, the cursor, the modes and
+    /// an unfinished sequence stay whole, so the bytes that follow the
+    /// snapshot still continue it. The terminal itself keeps its scrollback,
+    /// because the lines go from a copy of it.
+    ///
+    /// - Returns: `nil` when the state does not fit even without scrollback.
+    public init?(capturing terminal: Terminal, byteLimit: Int) throws {
+        var snapshot = try TerminalSnapshot(capturing: terminal)
+        guard snapshot.bytes.count > byteLimit else {
+            self = snapshot
+            return
+        }
+        let (copy, scrollbackLines) = try snapshot.decode(scrollbackLimit: Terminal.maximumScrollbackLines)
+        var lineLimit = scrollbackLines
+        while snapshot.bytes.count > byteLimit {
+            guard lineLimit > 0 else { return nil }
+            // Lines of scrollback cost about the same, so the share of the
+            // lines that fit is near the share of the bytes. The screens make
+            // that guess too high, so the loop goes on with fewer lines.
+            lineLimit = min(lineLimit - 1, lineLimit * max(byteLimit, 0) / snapshot.bytes.count)
+            // libghostty-vt drops the oldest whole pages over the new limit.
+            try TerminalEmulationError.check(
+                ghostty_terminal_set(copy.handle, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &lineLimit),
+                from: "ghostty_terminal_set"
+            )
+            snapshot = try TerminalSnapshot(capturing: copy)
+        }
+        self = snapshot
+    }
+
     /// Creates a terminal in the captured state.
     ///
     /// - Parameter scrollbackLimit: The most lines of scrollback to keep after
@@ -41,6 +74,9 @@ public struct TerminalSnapshot: Equatable, Sendable {
         try decode(scrollbackLimit: scrollbackLimit).terminal
     }
 
+    /// Restores the terminal, and counts the lines of scrollback of its
+    /// primary screen in the snapshot. Without a count from libghostty-vt,
+    /// the count is the most that a terminal holds, so a fit starts high.
     private func decode(scrollbackLimit: Int) throws -> (terminal: Terminal, scrollbackLines: Int) {
         try bytes.withUnsafeBufferPointer { buffer in
             var decoder: GhosttySnapshotDecoder?
