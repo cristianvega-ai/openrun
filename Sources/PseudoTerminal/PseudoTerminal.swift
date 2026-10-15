@@ -50,6 +50,12 @@ public final class PseudoTerminal: @unchecked Sendable {
         startWatching()
     }
 
+    public func write(_ bytes: [UInt8]) {
+        guard !bytes.isEmpty else { return }
+        queue.async {
+            _ = bytes.withUnsafeBytes { Darwin.write(self.master, $0.baseAddress, $0.count) }
+        }
+    }
 
     /// Waits for the program to end and returns how.
     public func waitForExit() async -> ProgramExit {
