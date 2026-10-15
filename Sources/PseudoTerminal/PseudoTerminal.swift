@@ -44,6 +44,7 @@ public final class PseudoTerminal: @unchecked Sendable {
     private var sourcesStillUsingMaster = 2
     /// Input that has not gone to the terminal yet. See `InputBacklog`.
     private var input = InputBacklog()
+    private var answerRoomWaiters: [CheckedContinuation<Void, Never>] = []
     private var exit: ProgramExit?
     private var exitWaiters: [CheckedContinuation<ProgramExit, Never>] = []
 
@@ -75,6 +76,21 @@ public final class PseudoTerminal: @unchecked Sendable {
             guard !self.input.isClosed else { return }
             self.input.addAnswer(bytes)
             self.pumpInput()
+        }
+    }
+
+    /// Returns when the answers that wait are within their limit, or the
+    /// program has ended. A program that does not read its answers then stops
+    /// in its own output, as it would at a terminal that waits for it.
+    public func waitForAnswerRoom() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            queue.async {
+                if self.input.isClosed || self.input.answersAreWithinLimit {
+                    continuation.resume()
+                } else {
+                    self.answerRoomWaiters.append(continuation)
+                }
+            }
         }
     }
 
@@ -233,6 +249,9 @@ public final class PseudoTerminal: @unchecked Sendable {
             // Writing makes room, and room can let more waiting input in.
             progressed = writePendingInput(notices: &notices) && input.hasWaitingInput
         }
+        if input.isClosed || input.answersAreWithinLimit {
+            resumeAnswerRoomWaiters()
+        }
         // The write source fires whenever the terminal can take bytes, so it
         // runs only while input waits.
         if input.isEmpty, !writeSourceIsSuspended {
@@ -271,6 +290,13 @@ public final class PseudoTerminal: @unchecked Sendable {
     /// Ends all input: the backlog goes, and all typed input that waits fails.
     private func closeInput() {
         input.close().forEach { $0.deliver() }
+        resumeAnswerRoomWaiters()
+    }
+
+    private func resumeAnswerRoomWaiters() {
+        let waiters = answerRoomWaiters
+        answerRoomWaiters.removeAll()
+        for waiter in waiters { waiter.resume() }
     }
 
     // MARK: - Exit (on the queue)

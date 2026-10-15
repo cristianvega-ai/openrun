@@ -65,6 +65,19 @@ final class OutputCollector: Sendable {
     }
 }
 
+/// Letters and digits in a fixed order, so that a lost or moved piece changes
+/// the checksum.
+func patternBytes(count: Int) -> [UInt8] {
+    let alphabet = Array("abcdefghijklmnopqrstuvwxyz0123456789".utf8)
+    var bytes = [UInt8](repeating: 0, count: count)
+    var state: UInt32 = 12345
+    for index in 0..<count {
+        state = state &* 1_103_515_245 &+ 12345
+        bytes[index] = alphabet[Int((state >> 16) % UInt32(alphabet.count))]
+    }
+    return bytes
+}
+
 /// Polls until the condition holds, for at most five seconds.
 func eventuallyTrue(_ condition: () -> Bool) async -> Bool {
     let deadline = ContinuousClock.now + .seconds(5)
@@ -194,6 +207,25 @@ func lines(_ text: String) -> [String] {
         for await chunk in terminal.output { collected += chunk }
         let text = String(decoding: collected, as: UTF8.self)
         #expect(lines(text).last?.trimmingCharacters(in: .whitespaces) == "\(count)")
+    }
+
+    @Test func answersNeverWaitButHoldTheOutputReaderPastTheirLimit() async throws {
+        let total = 2 * 1024 * 1024
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 1.5; head -c \(total) > /dev/null; echo drained; sleep 60"))
+        let output = OutputCollector(reading: terminal)
+        #expect(await output.waitFor("ready", timeout: .seconds(10)))
+
+        // Answers go into the backlog at once, past the limit of typed input.
+        for _ in 0..<(total / (64 * 1024)) {
+            terminal.write(patternBytes(count: 64 * 1024))
+        }
+        // More answers wait than their limit, so the reader of the output must
+        // wait until the program reads them.
+        let start = ContinuousClock.now
+        await terminal.waitForAnswerRoom()
+        #expect(ContinuousClock.now - start > .milliseconds(500))
+        #expect(await output.waitFor("drained", timeout: .seconds(20)))
+        await terminal.terminate()
     }
 
     @Test func noOtherDescriptorLeaksIntoTheProgram() async throws {
