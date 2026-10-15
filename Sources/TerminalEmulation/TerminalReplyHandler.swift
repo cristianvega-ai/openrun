@@ -16,6 +16,15 @@ final class TerminalReplyBox {
 }
 
 extension Terminal {
+    /// Whether the terminal answers the queries its program sends.
+    ///
+    /// A terminal answers nothing until a handler is installed. The session
+    /// process installs one and writes the bytes to the pseudo terminal. A
+    /// client that restores a snapshot installs none. Both terminals parse
+    /// the same output, so a second handler would answer each query twice.
+    public var hasReplyHandler: Bool {
+        replyBox != nil
+    }
 
     /// Installs the handler that receives the terminal's replies, or removes
     /// it when `handler` is `nil`.
@@ -69,12 +78,27 @@ extension Terminal {
         box.handler(Array(UnsafeBufferPointer(start: bytes, count: length)))
     }
 
+    // libghostty-vt answers a device attributes query only when it can ask
+    // for the answer, so a handler alone would leave these queries silent.
+    private static let deviceAttributesCallback: GhosttyTerminalDeviceAttributesFn = { _, _, attributes in
+        guard let attributes else { return false }
+        attributes.pointee = GhosttyDeviceAttributes()
+        // Level 2 with ANSI color: it matches what the screen can show and
+        // makes programs expect nothing newer.
+        attributes.pointee.primary.conformance_level = UInt16(GHOSTTY_DA_CONFORMANCE_LEVEL_2)
+        attributes.pointee.primary.features.0 = UInt16(GHOSTTY_DA_FEATURE_ANSI_COLOR)
+        attributes.pointee.primary.num_features = 1
+        attributes.pointee.secondary.device_type = UInt16(GHOSTTY_DA_DEVICE_TYPE_VT220)
+        return true
+    }
+
     /// Sets or clears every callback that answers a query.
     private func installCallbacks(userdata: UnsafeMutableRawPointer?, enabled: Bool) throws {
         // Clear the callbacks before the userdata changes, so none runs with
         // a pointer to a box that is gone.
         let callbacks: [(GhosttyTerminalOption, UnsafeRawPointer)] = [
             (GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(Self.replyWriteCallback, to: UnsafeRawPointer.self)),
+            (GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, unsafeBitCast(Self.deviceAttributesCallback, to: UnsafeRawPointer.self)),
         ]
         for (option, _) in callbacks {
             try TerminalEmulationError.check(ghostty_terminal_set(handle, option, nil), from: "ghostty_terminal_set")
