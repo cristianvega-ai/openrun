@@ -75,6 +75,30 @@ private func launchError(_ launching: ProgramLaunch) async -> PseudoTerminalErro
         #expect(error?.description == "The program was not started: \(problem).")
     }
 
+    /// A NUL ended the C string of a value, so the program
+    /// ran with a shorter argument, another program name, or another folder.
+    @Test(arguments: [
+        (trueProgram(executablePath: "/usr/bin/true\u{0}/hidden"), "the program name holds a NUL character"),
+        (trueProgram(argumentZero: "true\u{0}hidden"), "the name the program sees for itself holds a NUL character"),
+        (trueProgram(arguments: ["first", "sec\u{0}ond"]), "argument 2 holds a NUL character"),
+        (trueProgram(folder: "/tmp\u{0}/hidden"), "the folder holds a NUL character"),
+    ])
+    func aNullCharacterInALaunchValueIsRefused(launching: ProgramLaunch, problem: String) async {
+        let error = await launchError(launching)
+        #expect(error?.description == "The program was not started: \(problem).")
+    }
+
+    /// Only names are split at "=", so a value may hold one.
+    @Test func aValueWithAnEqualsSignReachesTheProgramWhole() async throws {
+        var launching = trueProgram(executablePath: "/usr/bin/env", environment: ["EQUATION": "one=two"])
+        launching.environment = ["EQUATION": "one=two"]
+        let terminal = try PseudoTerminal(launching: launching)
+        var collected: [UInt8] = []
+        for await chunk in terminal.output { collected += chunk }
+        let printed = String(decoding: collected, as: UTF8.self).split(whereSeparator: \.isNewline)
+        #expect(printed == ["EQUATION=one=two"])
+    }
+
     @Test func aRelativePathEntryIsSearchedInTheLaunchFolder() throws {
         let folder = try makeLaunchFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
