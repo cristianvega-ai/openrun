@@ -77,3 +77,102 @@ The suite goals also apply until a phase changes them:
 | Themes that color the whole window as one, as in Bear | 1 | Accepted |
 | Claude Code Projects features: coordinator, threads, shared memory, library, and routines | 2 | Moved to version 2. Questions 7 to 9 remain open. |
 | iOS companion | Later | Accepted for a later version |
+
+## Decision log
+
+Each row holds the date, the decision, and the reason.
+
+| Date | Decision | Reason |
+|---|---|---|
+| 2026-10-11 | OpenRun is a new terminal built on libghostty, with the approach of cmux. It replaces the plan to fork Warp. | The Warp fork was too large and had license problems. It carried Windows and Linux work and a different user experience. The owner wants to understand the codebase from the start. |
+| 2026-10-11 | OpenRun supports only macOS. | The suite supports only macOS. |
+| 2026-10-11 | OpenRun's documents live in `documentation/`. | Full words match the owner's naming goal. The documentation standard still names `docs/`. |
+| 2026-10-11 | One living product document holds every decision during the design. | Earlier rounds wrote each decision in up to eight places. |
+| 2026-10-11 | The rules of the old OpenRun no longer apply: no accounts, no built-in agent, no telemetry, and no server calls. | OpenRun takes a new approach. It stays a terminal app where users choose their agents. |
+| 2026-10-11 | OpenRun brings the Claude Code Projects feature set to the user's own terminal, with any model. | The owner has not seen this product yet. |
+| 2026-10-11 | OpenRun looks like a polished web app. | This is the owner's user experience goal. |
+| 2026-10-11 | Version 1 has vertical tabs, notifications, an in-app browser, split panes, a command-line tool, and a socket interface. | The owner chose these from the cmux feature set. |
+| 2026-10-11 | The iOS companion comes in a later version. | Version 1 supports only macOS. |
+| 2026-10-11 | The license choice waits. Until then, cmux is a source of ideas only, and OpenRun copies no cmux code. | The owner chooses the license later. cmux code brings the GPL with it. |
+| 2026-10-12 | For each thread, the user chooses an agent and one of their accounts for it. The model comes from that agent. OpenRun has no agent of its own. | The owner controls AI spend through subscriptions and wants no new subscription and no API key. The owner picks a session by its model and by the usage left on each account. |
+| 2026-10-12 | OpenRun aims to keep the work in its sessions across a restart. | Today a terminal restart loses the work, and starting each session again takes time. |
+| 2026-10-12 | OpenRun looks like a polished Mac app. This replaces the goal of a polished web app. | OpenRun is Mac first. The owner corrected the earlier goal. |
+| 2026-10-12 | Bear is the model for OpenRun's look and ease of use: simple to use, themes that color the whole window as one, and a three-pane window. | The owner loves these parts of Bear. Ghostty themes only the terminal. |
+| 2026-10-12 | Version 1 is the terminal: libghostty with a polished interface and the version 1 features. The Claude Code Projects features move to version 2. | The owner wants the core and the visuals built first. Coordinating threads raises open problems, such as how a waiting coordinator learns that a thread needs it. |
+| 2026-10-15 | The three panes hold projects, then the sessions in a project, then one session. The sessions list is the vertical tabs. The third pane splits, and the browser opens as one of its splits. | It follows Bear's order from tags, to notes, to one note. In version 2, the sessions list can become a project's threads. |
+| 2026-10-15 | OpenRun uses the MIT license. It copies no cmux code. This settles the license choice that waited on 2026-10-11. | MIT matches Ghostty. The owner writes the codebase and understands it from the start, so OpenRun does not need cmux code. |
+| 2026-10-15 | The owner is the only user until version 1 works for daily use. Then OpenRun ships free and open source to Mac developers who run coding agents. | Until then, the design serves only the owner. This closes phase 1. |
+| 2026-10-15 | A background session process owns every shell and agent. The app, the command-line tool, and the socket are its clients. Closing or quitting the app leaves the sessions running, and reopening it reattaches them. | It follows the suite rule of a headless core. It keeps agents working when the window closes or the app updates. The cost is two processes and a protocol between them. A Mac restart still ends the sessions. |
+| 2026-10-15 | The session process keeps each screen with libghostty-vt. The app draws the screens with its own Metal and CoreText renderer, and encodes input with libghostty-vt. If Ghostty's announced Swift Metal renderer ships and fits, OpenRun switches to it. OpenRun does not embed the full Ghostty core. | Ghostty's maintainers point embedders to libghostty-vt. The full core's API is not stable and serves mainly Ghostty's own app. libghostty-vt draws nothing, so it fits the headless session process. The owner understands every line of the drawing code. |
+| 2026-10-15 | After the Mac restarts, OpenRun rebuilds each session: its project, splits, folder, and saved screen text. It runs each agent's resume command with the saved conversation, such as `claude --resume <id>` or `codex resume <id>`. A plain shell reopens in the same folder with its old output above the prompt. | Today a restart loses the work, and starting each session again takes time. The agents already save their conversations. |
+| 2026-10-15 | The interface uses only AppKit, with no SwiftUI. The terminal views draw with Metal, and the in-app browser is a WKWebView. | The owner wants one toolkit to understand and the most control over the window, the panes, and keyboard focus. The terminal views need AppKit either way. |
+| 2026-10-15 | OpenRun never creates git worktrees, in version 1 or version 2. The user or the agent decides. OpenRun shows the folder and branch of each session. | OpenRun stays out of git. Some agents already make their own worktrees. |
+| 2026-10-15 | The app, the session process, and the command-line tool are all Swift, in one package that shares the protocol types. Swift calls libghostty-vt through its C API. | One language to understand. It follows the suite goal of native Apple tools. |
+| 2026-10-15 | The app registers the session process as a launch agent with SMAppService. launchd starts it when the app or the command-line tool first connects to its socket, and restarts it after a crash. It exits when the last session closes. It does not start at login, so agents resume after a Mac restart only when the user opens OpenRun or uses the command-line tool. | Agents use the user's subscriptions only after the user opens OpenRun. launchd handles start and crash recovery, so OpenRun needs no code for them. |
+| 2026-10-15 | When the app attaches to a session, the session process sends a libghostty-vt snapshot of the screen and scrollback, then forwards the shell's raw output. The app restores the snapshot into its own libghostty-vt and draws from it. Input and commands go back as messages on the Unix socket that the command-line tool also uses. The session process saves the same snapshots to disk for a Mac restart. | The protocol stays small, and OpenRun designs no screen protocol of its own. Parsing each screen twice costs little. |
+| 2026-10-15 | OpenRun supports macOS 26 and later. It uses newer APIs behind version checks. | macOS 26 and 27 share the Liquid Glass design, so OpenRun builds one look. It covers most developers' Macs at the public release. This closes phase 2. |
+| 2026-10-15 | The session process catches the alert sequences that agents print (OSC 9, OSC 99, OSC 777, and the bell). For agents with hooks, a hook calls `openrun notify` with the reason. Each session's environment names the session and the socket, and the hook does nothing outside OpenRun. OpenRun offers to add the hooks and never edits an agent's settings without asking. | The alert sequences work with any agent and need no setup. Hooks add the reason, such as a permission request or a finished turn. |
+| 2026-10-15 | At session start, the hooks tell the session process the conversation ID and the agent's account, through its `CLAUDE_CONFIG_DIR` or `CODEX_HOME`. A resume runs under the same account. A session with no hook comes back as a shell in its folder, and OpenRun does not guess its conversation. | Hooks work whether the user or OpenRun started the agent. The user runs several accounts, and each account keeps its own conversations. A wrong guess would resume the wrong conversation. |
+| 2026-10-15 | In version 1, agents act on OpenRun through the `openrun` command-line tool, with a short skill file that teaches its commands. OpenRun has no MCP server. Question 8 decides the Agent Client Protocol. | Any agent can run a command. A skill file costs less context than an MCP tool list, and OpenRun keeps one interface. The Agent Client Protocol matters only if version 2 draws a chat view. |
+| 2026-10-15 | OpenRun adds no command rules. Each agent's own permissions and sandbox apply, and its permission prompts reach the user as alerts. The `openrun` tool lets an agent act freely on its own session. Typing into or reading another session asks the user first. | OpenRun does not become a security layer it must get right. The user runs several accounts, so one agent must not drive another without the user's approval. |
+| 2026-10-15 | OpenRun runs only the unmodified `claude` and `codex` programs. The user signs in through each agent's own login. OpenRun never reads, stores, or forwards their credentials or tokens, and never uses the Agent SDK with a subscription login. It drives agents only through documented command-line options, hooks, and protocols. It may start them headless, such as with `claude -p` or `codex exec`. Usage figures come only from what the agents report. | Anthropic's terms allow a user to sign in to the unmodified Claude Code with their own subscription, and forbid apps that handle Claude credentials or tokens. OpenAI has stated no rule for apps that drive the official Codex. This closes phase 3 for version 1. |
+| 2026-10-15 | In version 1, a project is a folder that the user adds, usually a repository. New sessions in a project start in its folder. The first pane lists the projects and one entry for sessions outside any project. | Agents already keep their conversations by folder. Version 2 can add a goal, instructions, and more repositories to a project. |
+| 2026-10-15 | OpenRun keeps its data in `~/Library/Application Support/OpenRun` as readable JSON: projects, layout, session records, and settings. Screen snapshots are encrypted with a key in the Keychain that only OpenRun can read. They have a size limit, and OpenRun deletes them when their session closes. The data is ready to sync later: each record has a stable ID, and data that belongs to one Mac, such as sessions, snapshots, and folder paths, is kept apart from data that can sync. | Every agent runs as the user and can read the user's files. Without encryption, an agent could read another session's output from disk, around the rule that asks the user first. The owner expects synced data later. |
+| 2026-10-15 | When OpenRun syncs, it uses iCloud through CloudKit. Shared data syncs: projects without their folder paths, settings, and themes, and later memory, the library, and routines. Sessions, screen snapshots, and folder paths stay on their Mac. Sensitive fields use CloudKit's encrypted values. | CloudKit needs no OpenRun account and no server, so full local use still needs no account. It is Apple's own tool, and the iOS companion can read the same data. |
+| 2026-10-15 | Settings live in a native AppKit settings window. OpenRun stores them with its other data and syncs them through CloudKit. Agents and scripts read and change them with `openrun settings get` and `openrun settings set`. There is no config file. | Bear is the model for simple use. Agents can still change settings from day 1. OpenRun parses no file and keeps no file in step. |
+| 2026-10-15 | Apart from iCloud sync, OpenRun sends only update checks. Sparkle checks the GitHub release feed, and the user can turn that off. OpenRun has no telemetry and no crash-reporting service. | Local use is the primary product value. Crash reports stay in macOS's own reports, which users can attach to an issue. |
+| 2026-10-15 | Version 1 shows the 5-hour and weekly usage left on each account, with reset times. Claude Code reports it through a status line command that OpenRun offers to add, which still shows the user's own status line. For Codex, OpenRun reads it from Codex's app-server. OpenRun shows no cost figures. | The owner picks an account for a session by the usage left on it. Cost estimates use list prices and mean little on a subscription. This closes phase 4 for version 1. |
+| 2026-10-15 | All code lives in one Swift package, built and tested with `swift build` and `swift test`. libghostty-vt is a binary target. A short shell script assembles and signs the app bundle. OpenRun has no Xcode project file. | The whole build is `Package.swift` and one script that the owner can read. |
+| 2026-10-15 | Version 1 is built in six milestones: the core, the terminal view, the window, agents, restart, and finish. The owner reviews each milestone before the next one starts. | The owner understands the codebase from the start. |
+| 2026-10-15 | The code is organized by feature: each feature is its own Swift module. Names use full words, with no acronyms or abbreviations. `AGENTS.md` holds these code standards. | The owner wants to find each feature in the code by its name. The owner dislikes acronyms. |
+| 2026-10-17 | `openrun kill` and the shutdown of the session process end every process in the program's terminal session, also processes that moved to another process group: SIGHUP to each process group (SIGCONT too for a stopped one), then SIGKILL after a second to every process still alive. A process that starts a session of its own escapes. A program that exits by itself leaves its background processes running. | A killed session should leave nothing behind, as a closed terminal window does for its jobs. A process that starts its own session has asked to outlive its terminal, as a daemon does. A program that ends by itself has finished its own work, and its background jobs may be meant to go on. |
+| 2026-10-17 | With no relaying client attached, the session process answers the OSC 10 and OSC 11 color queries from the macOS appearance (black on white in light mode, white on black in dark mode), and `CSI 15 t` from the nominal cell size of 8 by 16 pixels. | Programs ask for the colors to choose a readable theme and for the pixel size to draw images. Without an answer they wait or guess. The appearance is the only color setting a session has. A window has no real size yet, so the nominal cell gives a stable answer. |
+| 2026-10-19 | The socket protocol grows only by addition inside version 1: a new optional field, or a new message that only a client that asks for it receives. The version number changes only when a change would confuse an older program. | A client that does not ask never meets a message it does not know. Older clients and older session processes keep working, and the app and the command-line tool can change at their own pace. |
+| 2026-10-19 | A client that attaches while `openrun kill` waits for a program that ignores SIGHUP gets `attached`, the last screen, and then the exit status. | The session is still there until the program ends. The client sees the last screen and how the program ended, as it would for an attach just before the kill. A refusal would show a session that is about to disappear as one that never existed. |
+| 2026-10-19 | `AGENTS.md` gets a Commits section: at most 100 changed lines in at most 10 files, one logical slice that builds, a subject of at most 50 characters, and a body in ASD-STE100. Milestone 1, which is to land on `main`, is cut again into small commits. | There are no pull requests, so each commit is the unit of review. The owner can read a small commit alone. The first milestone was one large change that is hard to review. |
+
+## Open questions
+
+### Version 2
+
+**Question 7: Who coordinates the threads?**
+
+1. An agent that the user chooses. It uses OpenRun's command-line tool to start threads and send them work.
+2. OpenRun's own orchestrator, with a model that the user chooses.
+3. The user. OpenRun shows every thread and its status in one place.
+
+The owner leans to option 1: the coordinator is the main agent session, such as `claude`, with instructions for the role.
+
+**Question 8: What does a thread look like?**
+
+1. A terminal pane that shows the agent's own screen, as in cmux.
+2. A chat view that OpenRun draws from the agent's structured output. The terminal stays one action away.
+3. Both: the chat view by default, and the terminal on request.
+
+The answer also decides whether OpenRun uses the Agent Client Protocol.
+
+**Question 9: Which Claude Code Projects features does version 2 need first?**
+The candidates are the coordinator, parallel threads, shared memory, the library, routines, and work that continues after the user leaves.
+
+### Later versions
+
+- Version 2: Where do memory and the library live?
+- Later version: How does the iOS companion see and steer live sessions? CloudKit syncs data, but it does not carry a live terminal.
+
+## Glossary
+
+- OpenRun: the terminal product in this repository.
+- The suite: OpenWrite, OpenSay, OpenAct, and OpenRun.
+- Ghostty: the open source terminal app that OpenRun builds on.
+- libghostty: the libraries taken from Ghostty's core for use in other apps.
+- libghostty-vt: the public libghostty library for terminal parsing and terminal state.
+- cmux: a native macOS terminal built on Ghostty. It is OpenRun's main reference.
+- Bear: a Mac notes app. It is the model for OpenRun's look and ease of use.
+- Claude Code Projects: Anthropic's project feature with a coordinator and threads. It is OpenRun's feature reference.
+- Agent: a coding agent program, such as Claude Code or Codex.
+- Account: a login to an agent's subscription, such as a Claude Max plan or a ChatGPT plan.
+- Project: a folder that the user adds, usually a repository. Its sessions start in that folder. The first pane lists the projects.
+- Session: one terminal and its splits. The second pane lists the sessions in a project.
+- Session process: the background process that owns every session. The app, the command-line tool, and the socket are its clients.
+- Thread: one unit of agent work inside a project.
+- Coordinator: the part that splits a goal into threads and assembles the results.
