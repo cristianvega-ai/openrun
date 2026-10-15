@@ -65,6 +65,16 @@ final class OutputCollector: Sendable {
     }
 }
 
+/// Polls until the condition holds, for at most five seconds.
+func eventuallyTrue(_ condition: () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + .seconds(5)
+    while !condition() {
+        guard ContinuousClock.now < deadline else { return false }
+        try? await Task.sleep(for: .milliseconds(20))
+    }
+    return true
+}
+
 func lines(_ text: String) -> [String] {
     text.split(whereSeparator: \.isNewline).map(String.init)
 }

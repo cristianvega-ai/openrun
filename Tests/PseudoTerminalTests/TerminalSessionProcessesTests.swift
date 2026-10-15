@@ -31,6 +31,37 @@ private struct SessionFamily {
         sleep 300;
         """#
 
+    /// Forks a child that ignores SIGHUP, which forks a grandchild that moves
+    /// to a group of its own and stops itself. The child reports once the
+    /// grandchild has stopped.
+    static let stoppedScript = #"""
+        use POSIX ();
+        $| = 1;
+        my $ignoring = fork();
+        if ($ignoring == 0) {
+            $SIG{HUP} = "IGNORE";
+            my $stopped = fork();
+            if ($stopped == 0) { $SIG{HUP} = "DEFAULT"; setpgrp(0, 0); kill "STOP", $$; sleep 300; exit 0; }
+            waitpid($stopped, POSIX::WUNTRACED());
+            print "stopped=$stopped\n";
+            print "ignoring-ready\n";
+            sleep 300; exit 0;
+        }
+        print "leader=$$ grouped=0 ignoring=$ignoring\n";
+        sleep 300;
+        """#
+
+    /// The script above, but the stopped grandchild catches SIGHUP and writes
+    /// a marker file. A caught signal stays pending while the process is
+    /// stopped, so the handler runs only after a SIGCONT. A stopped process
+    /// whose SIGHUP keeps its default action would end on this system without
+    /// one, so it cannot show whether the SIGCONT was sent.
+    static func stoppedScriptCatchingHangUp(markerPath: String) -> String {
+        stoppedScript.replacingOccurrences(
+            of: #"$SIG{HUP} = "DEFAULT";"#,
+            with: #"$SIG{HUP} = sub { open(my $marker, ">", "\#(markerPath)"); print $marker "ran\n"; close $marker; exit 0 };"#
+        )
+    }
 
     let leader: pid_t
     let grouped: pid_t
@@ -69,6 +100,13 @@ private struct SessionFamily {
         getsid(processIdentifier) == leader
     }
 
+    static func isStopped(_ processIdentifier: pid_t) -> Bool {
+        var information = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        return proc_pidinfo(processIdentifier, PROC_PIDTBSDINFO, 0, &information, size) == size
+            && information.pbi_status == UInt32(SSTOP)
+    }
+
     /// The processes still in the session once `limit` has passed, or as soon
     /// as none is left.
     func survivors(after limit: Duration) async -> [pid_t] {
@@ -102,6 +140,55 @@ private struct SessionFamily {
         #expect(await terminal.waitForExit() == .signaled(signal: SIGHUP))
         let survivors = await family.survivors(after: .seconds(5))
         #expect(survivors.isEmpty, "still in the session: \(survivors)")
+    }
+
+    /// A stopped process acts on SIGHUP only when it runs, so its group gets
+    /// SIGCONT too. Its parent ignores SIGHUP and stays in the program's
+    /// group, so the system itself does not continue the stopped group when
+    /// the program ends.
+    @Test func terminateContinuesAStoppedGroupSoItEndsOnTheHangUp() async throws {
+        let marker = NSTemporaryDirectory() + "hangup-handler-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: marker) }
+        let script = SessionFamily.stoppedScriptCatchingHangUp(markerPath: marker)
+        #expect(script != SessionFamily.stoppedScript, "the handler was not put into the script")
+        let (terminal, family) = try await SessionFamily.start(script)
+        defer { family.killSurvivors() }
+        let stopped = try #require(family.stopped)
+        #expect(await eventuallyTrue { SessionFamily.isStopped(stopped) }, "the child never stopped")
+
+        let ending = Task { await terminal.terminate(gracePeriod: .seconds(4)) }
+        // The parent of the stopped process ignores SIGHUP, so terminate waits
+        // the whole grace period. The stopped process must not wait for it.
+        let start = ContinuousClock.now
+        while family.isInSession(stopped), ContinuousClock.now - start < .seconds(2) {
+            try await Task.sleep(for: .milliseconds(20))
+        }
+        let endedEarly = !family.isInSession(stopped)
+        await ending.value
+        #expect(endedEarly, "the stopped process waited for SIGKILL")
+        // Only a continued process runs its handler, before any forced kill.
+        #expect(FileManager.default.fileExists(atPath: marker), "the stopped process never ran its SIGHUP handler")
+        let survivors = await family.survivors(after: .seconds(5))
+        #expect(survivors.isEmpty, "still in the session: \(survivors)")
+    }
+
+    @Test func membersAreTheLiveProcessesOfTheSessionInEveryGroup() async throws {
+        let (terminal, family) = try await SessionFamily.start(SessionFamily.stoppedScript)
+        defer {
+            family.killSurvivors()
+            Task { await terminal.terminate(gracePeriod: .milliseconds(100)) }
+        }
+        let stopped = try #require(family.stopped)
+        let leader = family.leader
+
+        let members = try TerminalSessionProcesses(sessionIdentifier: leader).members()
+        let byProcess = Dictionary(uniqueKeysWithValues: members.map { ($0.processIdentifier, $0) })
+        #expect(byProcess[leader] == .init(processIdentifier: leader, groupIdentifier: leader, isStopped: false))
+        #expect(byProcess[family.ignoring] == .init(processIdentifier: family.ignoring, groupIdentifier: leader, isStopped: false))
+        #expect(byProcess[stopped] == .init(processIdentifier: stopped, groupIdentifier: stopped, isStopped: true))
+        // The test process is in another session.
+        #expect(byProcess[getpid()] == nil)
+        #expect(members.allSatisfy { getsid($0.processIdentifier) == leader })
     }
 
     /// A failed process list is unknown, not empty.
