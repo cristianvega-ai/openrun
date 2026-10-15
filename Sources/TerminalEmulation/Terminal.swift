@@ -85,6 +85,9 @@ public final class Terminal {
         case .plainText:
             options.emit = GHOSTTY_FORMATTER_FORMAT_PLAIN
             options.trim = true
+        case .virtualTerminalSequences:
+            options.emit = GHOSTTY_FORMATTER_FORMAT_VT
+            enableAllExtras(&options.extra)
         }
 
         switch extent {
@@ -153,6 +156,25 @@ public final class Terminal {
             selection[keyPath: destination] = reference
         }
         return selection
+    }
+
+    private func enableAllExtras(_ extra: inout GhosttyFormatterTerminalExtra) {
+        // Without these extras a restored screen would lose its colors,
+        // modes, and tab stops.
+        extra.size = MemoryLayout<GhosttyFormatterTerminalExtra>.size
+        extra.palette = true
+        extra.modes = true
+        extra.scrolling_region = true
+        extra.tabstops = true
+        extra.pwd = true
+        extra.keyboard = true
+        extra.screen.size = MemoryLayout<GhosttyFormatterScreenExtra>.size
+        extra.screen.cursor = true
+        extra.screen.style = true
+        extra.screen.hyperlink = true
+        extra.screen.protection = true
+        extra.screen.kitty_keyboard = true
+        extra.screen.charsets = true
     }
 
     private func run(_ options: GhosttyFormatterTerminalOptions) throws -> [UInt8] {
