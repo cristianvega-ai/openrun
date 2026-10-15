@@ -75,6 +75,21 @@ struct InputBacklog {
         return []
     }
 
+    /// Puts an answer behind all earlier input. It goes into the backlog at
+    /// once, even past the limit, unless typed input waits for room. Then it
+    /// waits behind that input and goes in right after it, also past the
+    /// limit. Either way it counts toward `answerLimit` at once.
+    mutating func addAnswer(_ bytes: [UInt8]) {
+        guard !isClosed, !bytes.isEmpty else { return }
+        pendingAnswerByteCount += bytes.count
+        if waiting.isEmpty {
+            pieces.append(Piece(bytes: bytes[...], isAnswer: true, owner: nil))
+            pendingByteCount += bytes.count
+        } else {
+            waiting.append(WaitingInput(bytes: bytes, owner: nil, staysWithoutOwner: false, completion: nil))
+        }
+    }
+
     /// Moves input that waits into the backlog: typed input while it fits,
     /// and an answer as soon as the input in front of it is in.
     mutating func admitWaiting() -> [Notice] {
@@ -107,5 +122,19 @@ struct InputBacklog {
             pieces[0] = piece
             frontHasStarted = true
         }
+    }
+
+    /// Ends all input: the backlog goes, and all typed input that waits fails.
+    mutating func close() -> [Notice] {
+        isClosed = true
+        pieces.removeAll()
+        frontHasStarted = false
+        pendingByteCount = 0
+        pendingAnswerByteCount = 0
+        let notices = waiting.compactMap { input in
+            input.completion.map { Notice(completion: $0, outcome: .programEnded) }
+        }
+        waiting.removeAll()
+        return notices
     }
 }

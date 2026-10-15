@@ -68,4 +68,58 @@ private func drain(_ backlog: inout InputBacklog) -> [UInt8] {
         #expect(log.all == ["small:taken", "large:taken"])
     }
 
+    @Test func answersGoInAtOnceAndCountApart() {
+        var backlog = InputBacklog()
+        let owner = ObjectIdentifier(firstOwner)
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 1), owner: owner, staysWithoutOwner: true) { _ in }
+        _ = backlog.admitWaiting()
+        backlog.addAnswer(bytes(InputBacklog.answerLimit + 1, 2))
+        #expect(backlog.pendingByteCount == InputBacklog.typedLimit + InputBacklog.answerLimit + 1)
+        #expect(!backlog.answersAreWithinLimit)
+        _ = drain(&backlog)
+        #expect(backlog.answersAreWithinLimit)
+        #expect(backlog.pendingByteCount == 0)
+    }
+
+    /// An answer went into the backlog at once, so it passed
+    /// typed input that waited for room, and the program read it first.
+    @Test func anAnswerGoesBehindTypedInputThatWaits() {
+        var backlog = InputBacklog()
+        let log = OutcomeLog()
+        let owner = ObjectIdentifier(firstOwner)
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 1), owner: owner, staysWithoutOwner: true, completion: log.completion("full"))
+        _ = backlog.addTyped(bytes(4, 2), owner: owner, staysWithoutOwner: true, completion: log.completion("waiting"))
+        backlog.admitWaiting().forEach { $0.deliver() }
+        #expect(log.all == ["full:taken"])
+        backlog.addAnswer(bytes(3, 9))
+        // The answer counts toward its own limit while it waits.
+        #expect(backlog.pendingAnswerByteCount == 3)
+
+        // The program reads everything, as a terminal that reads at once would.
+        var taken: [UInt8] = []
+        while let front = backlog.front {
+            taken += front
+            backlog.removeFromFront(front.count)
+            backlog.admitWaiting().forEach { $0.deliver() }
+        }
+        #expect(taken.count == InputBacklog.typedLimit + 7)
+        #expect(Array(taken.suffix(7)) == [2, 2, 2, 2, 9, 9, 9])
+        #expect(log.all == ["full:taken", "waiting:taken"])
+        #expect(backlog.pendingAnswerByteCount == 0)
+    }
+
+    @Test func closingFailsTheWaitingInputAndRefusesMore() {
+        var backlog = InputBacklog()
+        let log = OutcomeLog()
+        let owner = ObjectIdentifier(firstOwner)
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 1), owner: owner, staysWithoutOwner: true, completion: log.completion("in"))
+        _ = backlog.addTyped(bytes(1, 2), owner: owner, staysWithoutOwner: true, completion: log.completion("waiting"))
+        backlog.admitWaiting().forEach { $0.deliver() }
+        backlog.close().forEach { $0.deliver() }
+        backlog.addTyped(bytes(1, 3), owner: owner, staysWithoutOwner: true, completion: log.completion("late")).forEach { $0.deliver() }
+        #expect(log.all == ["in:taken", "waiting:programEnded", "late:programEnded"])
+        #expect(backlog.isClosed)
+        #expect(backlog.front == nil)
+        #expect(backlog.pendingByteCount == 0)
+    }
 }
