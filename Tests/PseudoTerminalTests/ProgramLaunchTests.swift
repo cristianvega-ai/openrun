@@ -180,6 +180,21 @@ private func launchError(_ launching: ProgramLaunch) async -> PseudoTerminalErro
         #expect(try launch("./tool", searchPath: "/usr/bin", folder: folder).resolvedExecutablePath() == "./tool")
     }
 
+    @Test func aRelativePathEntryProgramReallyRunsAfterTheFolderChange() async throws {
+        let folder = try makeLaunchFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let tool = folder.appendingPathComponent("tools/tool")
+        try FileManager.default.createDirectory(at: tool.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("#!/bin/sh\necho ran-from-launch-folder\n".utf8).write(to: tool)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: tool.path)
+
+        let terminal = try PseudoTerminal(launching: launch("tool", searchPath: "tools", folder: folder))
+        var collected: [UInt8] = []
+        for await chunk in terminal.output { collected += chunk }
+        #expect(String(decoding: collected, as: UTF8.self).contains("ran-from-launch-folder"))
+        #expect(await terminal.waitForExit() == .exited(status: 0))
+    }
+
     @Test func anExecutableWithoutAShebangRunsThroughTheShell() async throws {
         let folder = try makeLaunchFolder()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -194,6 +209,26 @@ private func launchError(_ launching: ProgramLaunch) async -> PseudoTerminalErro
         for await chunk in terminal.output { collected += chunk }
         #expect(String(decoding: collected, as: UTF8.self).contains("plain-./plain-script-argument"))
         #expect(await terminal.waitForExit() == .exited(status: 0))
+    }
+
+    @Test func aMissingFolderIsNamedAsTheFolderEvenWithARelativePath() throws {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent("missing-" + UUID().uuidString)
+        #expect(throws: PseudoTerminalError.systemCallFailed(function: "chdir", code: ENOENT)) {
+            _ = try PseudoTerminal(launching: launch("tool", searchPath: "tools", folder: missing))
+        }
+        #expect(throws: PseudoTerminalError.systemCallFailed(function: "chdir", code: ENOENT)) {
+            _ = try PseudoTerminal(launching: launch("tool", searchPath: nil, folder: missing))
+        }
+    }
+
+    @Test func aFolderThatIsAFileIsNamedAsNotAFolder() throws {
+        let folder = try makeLaunchFolder()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent("file")
+        try Data().write(to: file)
+        #expect(throws: PseudoTerminalError.systemCallFailed(function: "chdir", code: ENOTDIR)) {
+            _ = try PseudoTerminal(launching: launch("tool", searchPath: "tools", folder: file))
+        }
     }
 
     @Test func reapingRetriesAfterAnInterruption() {

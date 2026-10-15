@@ -60,6 +60,7 @@ extension ProgramLaunch {
     /// and pointers until `execve` replaces it.
     func start() throws -> StartedProgram {
         try checkValues()
+        try checkFolder()
         let program = try resolvedExecutablePath()
         let programString = strdup(program)
         let folderString = strdup(folder)
@@ -195,6 +196,22 @@ extension ProgramLaunch {
 
     private static func holdsNull(_ text: String) -> Bool {
         text.utf8.contains(0)
+    }
+
+    /// The folder must exist before the program name is looked up. A relative
+    /// `PATH` entry is searched inside it, so a missing folder would
+    /// otherwise show as a program that cannot be found.
+    private func checkFolder() throws {
+        var information = stat()
+        guard stat(folder, &information) == 0 else {
+            throw PseudoTerminalError.systemCallFailed(function: "chdir", code: errno)
+        }
+        guard information.st_mode & S_IFMT == S_IFDIR else {
+            throw PseudoTerminalError.systemCallFailed(function: "chdir", code: ENOTDIR)
+        }
+        guard access(folder, X_OK) == 0 else {
+            throw PseudoTerminalError.systemCallFailed(function: "chdir", code: errno)
+        }
     }
 
     // MARK: - The child
