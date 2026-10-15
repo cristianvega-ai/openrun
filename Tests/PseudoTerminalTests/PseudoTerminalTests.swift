@@ -407,6 +407,35 @@ func lines(_ text: String) -> [String] {
         #expect(exit == .signaled(signal: SIGKILL))
     }
 
+    /// An answer went into the backlog at once and passed
+    /// typed input that waited for room. A real terminal sends its bytes in
+    /// the order it made them, so the program must read the answer last.
+    @Test func anAnswerReachesTheProgramBehindTypedInputThatWaits() async throws {
+        let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: goFile) }
+        let piece = patternBytes(count: 1024 * 1024)
+        let waitingText = [UInt8](repeating: UInt8(ascii: "T"), count: 64 * 1024)
+        let answer = Array("ANSWER-MARK".utf8)
+        let total = 8 * piece.count + waitingText.count + answer.count
+        let terminal = try PseudoTerminal(launching: shell(
+            "stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; head -c \(total) | tail -c 40; echo; echo finished; sleep 60"
+        ))
+        let output = OutputCollector(reading: terminal)
+        #expect(await output.waitFor("ready", timeout: .seconds(10)))
+        // The program reads nothing yet. This fills the backlog.
+        for _ in 0..<8 { try await terminal.type(piece) }
+        let waiting = Task { try await terminal.type(waitingText) }
+        try await Task.sleep(for: .milliseconds(200))
+        terminal.write(answer)
+
+        FileManager.default.createFile(atPath: goFile, contents: nil)
+        try await waiting.value
+        #expect(await output.waitFor("finished", timeout: .seconds(30)))
+        await terminal.terminate()
+        let expectedEnd = String(repeating: "T", count: 40 - answer.count) + "ANSWER-MARK"
+        #expect(output.text.contains(expectedEnd), "the last 40 bytes the program read: \(output.text.suffix(80))")
+    }
+
     @Test func terminateAfterTheExitDoesNothing() async throws {
         let terminal = try PseudoTerminal(launching: shell("exit 0"))
         _ = await terminal.waitForExit()
