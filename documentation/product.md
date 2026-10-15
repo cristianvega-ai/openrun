@@ -131,6 +131,89 @@ Each row holds the date, the decision, and the reason.
 | 2026-10-19 | A client that attaches while `openrun kill` waits for a program that ignores SIGHUP gets `attached`, the last screen, and then the exit status. | The session is still there until the program ends. The client sees the last screen and how the program ended, as it would for an attach just before the kill. A refusal would show a session that is about to disappear as one that never existed. |
 | 2026-10-19 | `AGENTS.md` gets a Commits section: at most 100 changed lines in at most 10 files, one logical slice that builds, a subject of at most 50 characters, and a body in ASD-STE100. Milestone 1, which is to land on `main`, is cut again into small commits. | There are no pull requests, so each commit is the unit of review. The owner can read a small commit alone. The first milestone was one large change that is hard to review. |
 
+## Reference: libghostty and cmux
+
+The assistant checked these facts on 2026-10-11.
+
+- Ghostty uses the MIT license. A product that embeds it can choose its own license.
+- The public library is libghostty-vt. It parses terminal sequences and keeps the terminal state.
+- libghostty-vt draws nothing. The app supplies the renderer.
+- Ghostty proves the behavior of libghostty-vt, but its function signatures still change.
+- cmux embeds the full Ghostty core, with Ghostty's own graphics renderer.
+- cmux builds that core from its own Ghostty fork. The fork was 781 commits ahead of Ghostty and 1,482 behind.
+- cmux uses the GPL-3.0-or-later license for its Mac app and its command-line tool.
+- Its server parts use the Business Source License 1.1.
+- Code copied from cmux brings the GPL with it.
+- cmux is mostly Swift. It offers a command-line tool and a Unix socket interface for automation.
+
+The assistant checked these facts on 2026-10-15.
+
+- libghostty-vt builds as an XCFramework that a Swift package can use. Ghostty's `example/swift-vt-xcframework` shows how.
+- libghostty-vt has a render-state API. It gives rows, cells, styles, colors, the cursor, the selection, and dirty tracking to an app's renderer.
+- libghostty-vt encodes keys, mouse input, focus, and paste for the program in the terminal.
+- libghostty-vt can encode a terminal's full state, with its scrollback, as a snapshot and restore it in another terminal.
+- In March 2026, a Ghostty maintainer said libghostty-vt supersedes the embedded API for terminal emulation.
+- The embedded API is the full Ghostty core that Ghostty's macOS app uses. It is not stable for other apps. An app can build it from a pinned Ghostty commit. cmux keeps a fork to carry its own patches.
+- In July 2026, Mitchell Hashimoto announced a pure Swift Metal renderer and Swift bindings for libghostty-vt, for macOS and iOS. It was not released on 2026-10-15.
+
+Sources: the [Ghostty README](https://github.com/ghostty-org/ghostty), Ghostty's `example` folder, [Ghostty discussion 11722](https://github.com/ghostty-org/ghostty/discussions/11722), [the Swift renderer announcement](https://x.com/mitchellh/status/2072724957902381319), [Ghostling](https://github.com/ghostty-org/ghostling), the [cmux repository](https://github.com/manaflow-ai/cmux) and its `LICENSE` and `.gitmodules` files, and [cmux is built on Ghostty](https://cmux.com/built-on-ghostty.md).
+
+## Reference: Claude Code Projects
+
+The owner supplied the announcement and screenshots on 2026-10-11. The announcement is dated 2026-09-17.
+
+- A project has a goal, repositories or other context, instructions, connectors, plugins, and a model.
+- A coordinator chat scopes each request, starts threads, routes messages, reviews outputs, and assembles results.
+- Each thread is a full Claude Code session on its own branch and its own copy of the repository.
+- When threads change the same code, the overlap resolves as a merge conflict.
+- A thread can split its work further with subagents, loops, and workflows.
+- Threads add to a shared project memory and read from it.
+- A library collects the files that the user adds and the artifacts that threads produce. It can link local folders.
+- Routines put recurring work on a schedule.
+- The coordinator and each thread have their own model and effort setting.
+- The user can steer from a phone, and the work continues after the user leaves.
+- Threads run in the cloud. The announcement says local threads come soon.
+
+The screens have three areas:
+
+- A sidebar holds navigation, pinned projects, and earlier sessions.
+- The center holds the coordinator chat. Each thread appears there as a card with its status and files.
+- A side panel holds the Threads, Library, and Routines views. Threads group into "Waiting on you" and "Resolved".
+
+A thread opens in the side panel as its own chat, with its own model setting.
+A file opens in a preview with the thread beside it.
+
+## Reference: agent protocols
+
+The Agent Client Protocol connects an app to a coding agent through JSON-RPC over standard input and output.
+Zed created it in August 2025.
+Zed runs Gemini CLI, Claude Code, and Codex through it. Claude Code and Codex need adapters.
+The assistant checked these facts on 2026-10-15 with the installed agents.
+
+- Claude Code 2.1.300 resumes a conversation with `claude --resume <id>`. It can start one with a chosen ID through `--session-id <uuid>`. Its hooks report the session ID.
+- Claude Code 2.1.300 can also run sessions in the background with `--bg`, and reattach with `claude attach`.
+- Codex 0.162.1 resumes a conversation with `codex resume <id or name>`, or the latest with `--last`. It has no flag that chooses the ID at start.
+- Codex 0.162.1 has hooks as a stable feature. It also has a shared local app-server daemon for its sessions.
+- Claude Code sends a status line command JSON that includes `rate_limits.five_hour` and `rate_limits.seven_day`, each with `used_percentage` and `resets_at`. Its `cost.total_cost_usd` is an estimate at list price.
+- Codex's app-server, marked experimental, answers `account/rateLimits/read` and sends `account/rateLimits/updated`.
+
+Sources: [Claude Code status line](https://code.claude.com/docs/en/statusline), `codex app-server generate-json-schema`, [Zed external agents](https://zed.dev/docs/ai/external-agents) and [Codex is live in Zed](https://zed.dev/blog/codex-is-live-in-zed).
+
+## Reference: subscription terms
+
+The assistant checked these facts on 2026-10-15.
+
+- Anthropic's Claude Code legal page says subscription sign-in supports ordinary use of Claude Code and Anthropic's own apps.
+- Anthropic does not permit other apps to offer Claude sign-in, to route requests through Free, Pro, or Max credentials for their users, or to collect, store, or intermediate Claude credentials or session tokens.
+- The same page says this does not prevent a user from signing in to the unmodified Claude Code program with their own subscription, even when another platform runs it.
+- Products built on the Agent SDK must use an API key or a cloud provider.
+- Plan limits assume ordinary, individual use of Claude Code and the Agent SDK.
+- A product may say in plain text that it runs Claude Code. It may not use the Claude Code or Anthropic names or logos in its own name or logo.
+- Reports say Anthropic began blocking third-party tools that used subscription sign-in in January 2026, and stopped covering them with subscriptions in April 2026.
+- OpenAI lets some third-party apps use a ChatGPT plan through "Sign in with ChatGPT". OpenAI has stated no rule for an app that runs the official Codex program with the user's own sign-in.
+
+Sources: [Claude Code legal and compliance](https://code.claude.com/docs/en/legal-and-compliance), [The Register on the third-party tool ban](https://www.theregister.com/software/2026/02/20/anthropic-clarifies-ban-on-third-party-tool-access-to-claude/5014546), [Using Codex with your ChatGPT plan](https://help.openai.com/en/articles/11369540-using-codex-with-your-chatgpt-plan), and [Codex discussion 48837](https://github.com/openai/codex/discussions/48837).
+
 ## Open questions
 
 ### Version 2
