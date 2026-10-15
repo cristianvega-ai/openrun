@@ -32,7 +32,34 @@ public struct ProgramLaunch: Equatable, Sendable {
     }
 }
 
+/// A program that was started on a new pseudo terminal.
+struct StartedProgram {
+    var processIdentifier: pid_t
+    /// The controlling side of the pseudo terminal. It does not stay open in
+    /// other programs, and reading from it never blocks.
+    var masterDescriptor: Int32
+    var terminalPath: String
+}
+
 extension ProgramLaunch {
+
+    /// Waits for a child that this process started and no longer needs. A
+    /// signal can interrupt the wait, so it repeats until the child is gone.
+    ///
+    /// - Parameter wait: The system call. Tests replace it.
+    /// - Returns: Whether the child was reaped.
+    @discardableResult
+    static func reap(
+        processIdentifier: pid_t,
+        using wait: (pid_t, UnsafeMutablePointer<Int32>?, Int32) -> pid_t = { waitpid($0, $1, $2) }
+    ) -> Bool {
+        var status: Int32 = 0
+        while true {
+            let result = wait(processIdentifier, &status, 0)
+            if result == -1 && errno == EINTR { continue }
+            return result == processIdentifier
+        }
+    }
 
     /// Finds the file to run. A name with no slash is searched in the `PATH`
     /// of the launch environment, then in the system default.
