@@ -26,4 +26,26 @@ import Testing
         #expect(restored.defaultForegroundColor == TerminalColor(red: 255, green: 255, blue: 255))
         #expect(restored.defaultBackgroundColor == TerminalColor(red: 0, green: 0, blue: 0))
     }
+
+    @Test func aRestoredTerminalTakesNewDefaultColors() throws {
+        let restored = try restoredTerminal()
+        #expect(!restored.hasReplyHandler)
+        try restored.setDefaultForegroundColor(red)
+        try restored.setDefaultBackgroundColor(blue)
+        try restored.setDefaultCursorColor(red)
+        #expect(restored.defaultForegroundColor == red)
+        #expect(restored.defaultBackgroundColor == blue)
+        #expect(restored.defaultCursorColor == red)
+    }
+
+    @Test func aNilColorClearsTheDefault() throws {
+        let restored = try restoredTerminal()
+        try restored.setDefaultCursorColor(red)
+        try restored.setDefaultForegroundColor(nil)
+        try restored.setDefaultBackgroundColor(nil)
+        try restored.setDefaultCursorColor(nil)
+        #expect(restored.defaultForegroundColor == nil)
+        #expect(restored.defaultBackgroundColor == nil)
+        #expect(restored.defaultCursorColor == nil)
+    }
 }

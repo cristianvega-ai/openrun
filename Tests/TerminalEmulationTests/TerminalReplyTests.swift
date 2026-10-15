@@ -241,6 +241,54 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         }
     }
 
+    @Test func theQueriesChangeNoPictureOrText() throws {
+        // The colors that answer OSC 10 and OSC 11 are a setting of the
+        // terminal. What `openrun attach` draws (the visible screen as
+        // sequences, from a restored snapshot) and what `openrun read` prints
+        // (plain text) must not depend on it. The terminal without a handler
+        // is the reference. Each scheme gets the same output in both.
+        let escape = "\u{1B}"
+        let outputs = [
+            "hi \(escape)[31mred\(escape)[0m\r\nthere",
+            "\(escape)[38;2;0;0;0mblack\(escape)[48;2;255;255;255mwhite\(escape)[0m",
+            "\(escape)[7mreverse\(escape)[0m \(escape)[39;49mdefault",
+            "\(escape)]10;rgb:ff/00/00\(escape)\\\(escape)]11;rgb:00/ff/00\(escape)\\ x",
+            "\(escape)]10;rgb:ff/00/00\(escape)\\\(escape)]110\(escape)\\ x",
+            "\(escape)]11;rgb:00/ff/00\(escape)\\\(escape)]111\(escape)\\ x",
+            "\(escape)]4;1;rgb:12/34/56\(escape)\\\(escape)[31mx\(escape)]104\(escape)\\",
+            "abc\(escape)c def",
+            "\(escape)[?1049hALT\(escape)[7m rev",
+            "\(escape)[44m\(escape)[2J\(escape)[K\(escape)[0m",
+            "\(escape)]11;?\(escape)\\\(escape)]10;?\(escape)\\\(escape)[15t text",
+        ]
+        let after = "\(escape)]111\(escape)\\\(escape)[0m more\(escape)[31m"
+        for scheme in [TerminalColorScheme.light, .dark] {
+            for output in outputs {
+                let reference = try makeTerminal()
+                let answering = try makeTerminal()
+                try answering.setReplyHandler({ _ in }, colorScheme: { scheme })
+                let restoredReference = try { () -> Terminal in
+                    reference.write(output)
+                    return try TerminalSnapshot(capturing: reference).restoreTerminal(scrollbackLimit: 10)
+                }()
+                answering.write(output)
+                let restoredAnswering = try TerminalSnapshot(capturing: answering).restoreTerminal(scrollbackLimit: 10)
+                restoredReference.write(after)
+                restoredAnswering.write(after)
+                for (left, right) in [(reference, answering), (restoredReference, restoredAnswering)] {
+                    for format in [ScreenFormat.plainText, .virtualTerminalSequences, .hypertextMarkup] {
+                        for extent in [ScreenExtent.visible, .withScrollback] {
+                            #expect(
+                                try left.formatted(format, extent: extent) == right.formatted(format, extent: extent),
+                                "\(scheme) \(format) \(extent): \(output.debugDescription)"
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+
     // MARK: - Reading the appearance
 
     private final class FakeAppearance: Sendable {
