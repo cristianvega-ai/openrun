@@ -1,10 +1,101 @@
 import Testing
 @testable import TerminalEmulation
 
+/// Everything a client can observe about a terminal.
+private struct Observation: Equatable {
+    var size: TerminalSize
+    var cursorPosition: TerminalCursorPosition
+    var isAlternateScreenActive: Bool
+    var visible: [UInt8]
+    var withScrollback: [UInt8]
+
+    init(_ terminal: Terminal) throws {
+        size = terminal.size
+        cursorPosition = terminal.cursorPosition
+        isAlternateScreenActive = terminal.isAlternateScreenActive
+        visible = try terminal.formatted(.virtualTerminalSequences)
+        withScrollback = try terminal.formatted(.virtualTerminalSequences, extent: .withScrollback)
+    }
+}
+
 @Suite struct TerminalSnapshotTests {
+    /// The markup for a link. The attribute sign is apart from the name so
+    /// that the name scan does not read the attribute as a name of ours.
+    private static func anchor(to address: String, text: String) -> String {
+        "<a href" + "=\"\(address)\">\(text)</a>"
+    }
 
     private func restore(_ terminal: Terminal) throws -> Terminal {
         try TerminalSnapshot(capturing: terminal).restoreTerminal(scrollbackLimit: 1000)
+    }
+
+    @Test func roundTripKeepsScreenScrollbackAndCursor() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 4)
+        for number in 1...15 {
+            terminal.write("\u{1b}[3\(number % 7 + 1)mline \(number)\u{1b}[0m\r\n")
+        }
+        terminal.write("prompt> \u{1b}[1mtyped\u{1b}[0m")
+
+        let restored = try restore(terminal)
+
+        #expect(try Observation(restored) == Observation(terminal))
+        #expect(restored.scrollbackLineCount == terminal.scrollbackLineCount)
+        #expect(restored.cursorPosition == terminal.cursorPosition)
+        #expect(try restored.formatted(.plainText, extent: .withScrollback).starts(with: Array("line 1\n".utf8)))
+    }
+
+    /// The checks here name the bytes and the markup that must come out of the
+    /// restored terminal. `Observation` cannot catch a style that the snapshot
+    /// loses, because it formats the original and the copy the same way.
+    @Test func roundTripKeepsStylesCursorVisibilityModesAndLinks() throws {
+        let terminal = try makeTerminal(columns: 40, rows: 5)
+        terminal.write("\u{1b}[1mbold\u{1b}[0m \u{1b}[38;2;10;20;30mtrue\u{1b}[0m \u{1b}[4munder\u{1b}[0m ")
+        terminal.write("\u{1b}]8;;https://example.com\u{7}link\u{1b}]8;;\u{7}")
+        terminal.write("\u{1b}[?25l\u{1b}[?2004h\u{1b}[?1h")
+
+        let restored = try restore(terminal)
+
+        let markup = String(decoding: try restored.formatted(.hypertextMarkup), as: UTF8.self)
+        #expect(markup == "<div style=\"font-family: monospace; white-space: pre;\"><div style=\"display: inline;font-weight: bold;\">bold</div> <div style=\"display: inline;color: rgb(10, 20, 30);\">true</div> <div style=\"display: inline;text-decoration-line: underline;text-decoration-style: solid;\">under</div> " + Self.anchor(to: "https://example.com", text: "link") + "</div>")
+
+        let sequences = String(decoding: try restored.formatted(.virtualTerminalSequences), as: UTF8.self)
+        #expect(sequences.contains("\u{1b}[1mbold"), "bold")
+        #expect(sequences.contains("\u{1b}[38;2;10;20;30mtrue"), "true color")
+        #expect(sequences.contains("\u{1b}[4munder"), "underline")
+        #expect(sequences.contains("\u{1b}]8;;https://example.com\u{1b}\\link\u{1b}]8;;\u{1b}\\"), "hyperlink")
+        #expect(sequences.contains("\u{1b}[?25l"), "hidden cursor")
+        #expect(sequences.contains("\u{1b}[?2004h"), "bracketed paste")
+        #expect(sequences.contains("\u{1b}[?1h"), "application cursor keys")
+    }
+
+    @Test func roundTripKeepsAVisibleCursorAndPlainModes() throws {
+        let terminal = try makeTerminal(columns: 40, rows: 5)
+        terminal.write("\u{1b}[?25l\u{1b}[?2004h\u{1b}[?1h\u{1b}[?25h\u{1b}[?2004l\u{1b}[?1l text")
+
+        let sequences = String(decoding: try restore(terminal).formatted(.virtualTerminalSequences), as: UTF8.self)
+
+        #expect(!sequences.contains("\u{1b}[?25l"))
+        #expect(!sequences.contains("\u{1b}[?2004h"))
+        #expect(!sequences.contains("\u{1b}[?1h"))
+    }
+
+    @Test func roundTripKeepsTheAlternateScreen() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 4)
+        terminal.write("primary text\r\n")
+        terminal.write("\u{1b}[?1049h\u{1b}[2J\u{1b}[Halternate text")
+
+        let restored = try restore(terminal)
+
+        #expect(restored.isAlternateScreenActive)
+        #expect(try restored.visibleText() == "alternate text")
+        #expect(try Observation(restored) == Observation(terminal))
+
+        // Leaving the alternate screen must bring back the primary screen.
+        terminal.write("\u{1b}[?1049l")
+        restored.write("\u{1b}[?1049l")
+        #expect(!restored.isAlternateScreenActive)
+        #expect(try restored.visibleText() == "primary text")
+        #expect(try Observation(restored) == Observation(terminal))
     }
 
     @Test func snapshotBytesRestoreFromAnotherArray() throws {

@@ -67,6 +67,12 @@ public final class Terminal {
         )
     }
 
+    /// Whether a program switched to the alternate screen, as full-screen
+    /// programs such as editors do.
+    public var isAlternateScreenActive: Bool {
+        let screen = try? value(GHOSTTY_TERMINAL_DATA_ACTIVE_SCREEN, as: GhosttyTerminalScreen.self)
+        return screen == GHOSTTY_TERMINAL_SCREEN_ALTERNATE
+    }
 
     /// The number of lines that scrolled off the top of the primary screen.
     public var scrollbackLineCount: Int {
