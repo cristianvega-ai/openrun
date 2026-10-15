@@ -12,6 +12,9 @@ final class TerminalReplyBox {
     /// Asked at each color-scheme query, because the appearance can change.
     let colorScheme: @Sendable () -> TerminalColorScheme
 
+    /// The scheme whose colors are now the defaults of the terminal.
+    var appliedScheme: TerminalColorScheme?
+
     init(handler: @escaping TerminalReplyHandler, colorScheme: @escaping @Sendable () -> TerminalColorScheme) {
         self.handler = handler
         self.colorScheme = colorScheme
@@ -49,6 +52,7 @@ extension Terminal {
             let previous = replyBox
             try installCallbacks(userdata: nil, enabled: false)
             replyBox = nil
+            clearDefaultColors()
             withExtendedLifetime(previous) {}
             return
         }
@@ -78,6 +82,30 @@ extension Terminal {
             throw error
         }
         withExtendedLifetime(previous) {}
+    }
+
+    /// Sets the default foreground and background to the colors of the
+    /// appearance, when the appearance changed. Programs ask for them with
+    /// OSC 10 and OSC 11, and libghostty-vt answers from these defaults.
+    ///
+    /// A default color is a setting of the terminal, not output. The snapshot
+    /// carries it, but the picture of `openrun attach` and the text of
+    /// `openrun read` do not: tests compare them with and without the colors.
+    func applyDefaultColors(for box: TerminalReplyBox) {
+        let scheme = box.colorScheme()
+        guard scheme != box.appliedScheme else { return }
+        var foreground = scheme == .dark ? GhosttyColorRgb(r: 255, g: 255, b: 255) : GhosttyColorRgb(r: 0, g: 0, b: 0)
+        var background = scheme == .dark ? GhosttyColorRgb(r: 0, g: 0, b: 0) : GhosttyColorRgb(r: 255, g: 255, b: 255)
+        // A failure leaves the old colors, and the next write tries again.
+        guard ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &foreground) == GHOSTTY_SUCCESS,
+              ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &background) == GHOSTTY_SUCCESS
+        else { return }
+        box.appliedScheme = scheme
+    }
+
+    private func clearDefaultColors() {
+        _ = ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, nil)
+        _ = ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, nil)
     }
 
     // MARK: - Private

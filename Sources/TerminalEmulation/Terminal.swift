@@ -99,6 +99,13 @@ public final class Terminal {
     public func write(_ bytes: some ContiguousBytes) {
         bytes.withUnsafeBytes { buffer in
             guard !buffer.isEmpty else { return }
+            guard let box = replyBox else {
+                parse(buffer)
+                return
+            }
+            // libghostty-vt answers colors from the defaults of the terminal,
+            // so they must match the appearance at the moment of the query.
+            applyDefaultColors(for: box)
             parse(buffer)
         }
     }

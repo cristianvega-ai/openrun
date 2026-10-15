@@ -160,6 +160,51 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         #expect(recorder.replies.isEmpty)
     }
 
+    // MARK: - Colors and pixel size
+
+    private func answers(to query: String, scheme: TerminalColorScheme = .light, columns: UInt16 = 20, rows: UInt16 = 5) throws -> [String] {
+        let terminal = try makeTerminal(columns: columns, rows: rows)
+        let recorder = ReplyRecorder()
+        try terminal.setReplyHandler({ recorder.replies.append($0) }, colorScheme: { scheme })
+        terminal.write(query)
+        return recorder.replies.map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    @Test func foregroundAndBackgroundQueriesAreAnsweredFromTheLightAppearance() throws {
+        #expect(try answers(to: "\u{1B}]10;?\u{07}") == ["\u{1B}]10;rgb:0000/0000/0000\u{07}"])
+        #expect(try answers(to: "\u{1B}]11;?\u{07}") == ["\u{1B}]11;rgb:ffff/ffff/ffff\u{07}"])
+    }
+
+    @Test func foregroundAndBackgroundQueriesAreAnsweredFromTheDarkAppearance() throws {
+        #expect(try answers(to: "\u{1B}]10;?\u{07}", scheme: .dark) == ["\u{1B}]10;rgb:ffff/ffff/ffff\u{07}"])
+        #expect(try answers(to: "\u{1B}]11;?\u{07}", scheme: .dark) == ["\u{1B}]11;rgb:0000/0000/0000\u{07}"])
+    }
+
+    @Test func aColorQueryEndedByStringTerminatorGetsOneReply() throws {
+        #expect(try answers(to: "\u{1B}]11;?\u{1B}\\", scheme: .dark) == ["\u{1B}]11;rgb:0000/0000/0000\u{1B}\\"])
+    }
+
+    @Test func theColorsFollowTheAppearanceAtEachQuery() throws {
+        let terminal = try makeTerminal()
+        let recorder = ReplyRecorder()
+        let scheme = SchemeBox()
+        try terminal.setReplyHandler({ recorder.replies.append($0) }, colorScheme: { scheme.value })
+        terminal.write("\u{1B}]11;?\u{07}")
+        scheme.value = .light
+        terminal.write("\u{1B}]11;?\u{07}")
+        #expect(recorder.replies.map { String(decoding: $0, as: UTF8.self) } == ["\u{1B}]11;rgb:0000/0000/0000\u{07}", "\u{1B}]11;rgb:ffff/ffff/ffff\u{07}"])
+    }
+
+    @Test func aTerminalWithoutAHandlerStaysSilentForColorAndDotSizeQueries() throws {
+        let terminal = try makeTerminal()
+        terminal.write("\u{1B}]10;?\u{07}\u{1B}]11;?\u{07}\u{1B}[15t")
+        let recorder = ReplyRecorder()
+        try terminal.setReplyHandler({ recorder.replies.append($0) })
+        try terminal.setReplyHandler(nil)
+        terminal.write("\u{1B}]10;?\u{07}\u{1B}]11;?\u{07}\u{1B}[15t")
+        #expect(recorder.replies.isEmpty)
+    }
+
     // MARK: - Reading the appearance
 
     private final class FakeAppearance: Sendable {
