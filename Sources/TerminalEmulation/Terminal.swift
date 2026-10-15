@@ -7,10 +7,28 @@ import GhosttyVt
 /// A `Terminal` is not thread-safe. Call it from one thread at a time.
 /// It owns one libghostty-vt terminal and frees it when it is released.
 public final class Terminal {
+    /// The most scrollback lines a terminal accepts. It is far above what a
+    /// session needs, and it stops a wrong number from asking for memory
+    /// without limit.
+    public static let maximumScrollbackLines = 1_000_000
+
+    /// The most columns or rows a terminal accepts. A real window is far
+    /// smaller. The bound keeps a wrong size from asking for gigabytes.
+    public static let maximumGridDimension: UInt16 = 10_000
+
     let handle: GhosttyTerminal
 
     /// Creates an empty terminal.
+    ///
+    /// - Parameters:
+    ///   - size: The grid size. Both values must be greater than zero and
+    ///     at most `maximumGridDimension`.
+    ///   - scrollbackLimit: The most lines of scrollback to keep, from zero to
+    ///     `maximumScrollbackLines`. libghostty-vt prunes whole pages, so the
+    ///     terminal can keep somewhat more lines.
+    /// - Throws: `TerminalEmulationError` when a value is out of range.
     public convenience init(size: TerminalSize, scrollbackLimit: Int) throws {
+        try Terminal.validate(size, in: "Terminal.init")
         var created: GhosttyTerminal?
         try TerminalEmulationError.check(
             ghostty_terminal_new(nil, &created, size.columns, size.rows),
@@ -106,6 +124,13 @@ public final class Terminal {
 
     // MARK: - Private
 
+    /// Refuses sizes that libghostty-vt cannot hold or that no window has.
+    private static func validate(_ size: TerminalSize, in function: String) throws {
+        guard (1...maximumGridDimension).contains(size.columns),
+              (1...maximumGridDimension).contains(size.rows)
+        else { throw TerminalEmulationError.invalidValue(in: function) }
+    }
+
     /// The bottom right cell of a grid. An empty grid has none, and the
     /// subtraction would trap on an unsigned number.
     static func lastCell(of size: TerminalSize) throws -> GhosttyPointCoordinate {
@@ -116,6 +141,11 @@ public final class Terminal {
     }
 
     private func configure(scrollbackLimit: Int) throws {
+        // A negative number would reach libghostty-vt as an enormous unsigned
+        // one, and the byte limit that could stop it is removed below.
+        guard (0...Terminal.maximumScrollbackLines).contains(scrollbackLimit) else {
+            throw TerminalEmulationError.invalidValue(in: "Terminal.init")
+        }
         // The default byte limit would hide the line limit, so remove it.
         try TerminalEmulationError.check(
             ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_BYTES, nil),

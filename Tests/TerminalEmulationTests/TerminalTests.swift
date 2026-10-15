@@ -49,6 +49,50 @@ extension Terminal {
         #expect(try terminal.visibleText() == "")
     }
 
+    // MARK: - Validation
+
+    @Test func aNegativeScrollbackLimitIsRefused() {
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try makeTerminal(scrollbackLimit: -1)
+        }
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try makeTerminal(scrollbackLimit: Int.min)
+        }
+    }
+
+    @Test func anExcessiveScrollbackLimitIsRefused() {
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try makeTerminal(scrollbackLimit: Terminal.maximumScrollbackLines + 1)
+        }
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try makeTerminal(scrollbackLimit: Int.max)
+        }
+    }
+
+    @Test func scrollbackLimitsFromZeroToTheMaximumAreAccepted() throws {
+        _ = try makeTerminal(scrollbackLimit: 0)
+        _ = try makeTerminal(scrollbackLimit: Terminal.maximumScrollbackLines)
+    }
+
+    @Test func anOversizedGridIsRefusedOnCreation() {
+        let tooLarge = Terminal.maximumGridDimension + 1
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try Terminal(size: TerminalSize(columns: tooLarge, rows: 5), scrollbackLimit: 10)
+        }
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try Terminal(size: TerminalSize(columns: 5, rows: tooLarge), scrollbackLimit: 10)
+        }
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try Terminal(size: TerminalSize(columns: UInt16.max, rows: UInt16.max), scrollbackLimit: 10)
+        }
+    }
+
+    @Test func theLargestAllowedGridWorks() throws {
+        let side = Terminal.maximumGridDimension
+        let terminal = try Terminal(size: TerminalSize(columns: side, rows: 4), scrollbackLimit: 10)
+        #expect(terminal.size.columns == side)
+    }
+
     @Test func theVisibleCornersOfAnEmptyGridAreRefusedInsteadOfUnderflowing() throws {
         #expect(throws: TerminalEmulationError.self) {
             _ = try Terminal.lastCell(of: TerminalSize(columns: 0, rows: 5))
