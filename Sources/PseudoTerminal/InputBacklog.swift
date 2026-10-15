@@ -1,3 +1,21 @@
+/// Input on its way to a program, in the order it goes to the terminal.
+///
+/// It has two parts. The backlog holds the bytes that the terminal takes as
+/// fast as the program reads. Typed input that does not fit waits for room,
+/// in the order it was typed. The backlog holds at most `typedLimit` bytes
+/// before typed input waits, so a program that never reads cannot make the
+/// session process grow. Answers to the program's queries never wait for room,
+/// because a terminal must not wait while it parses output. An answer goes
+/// behind typed input that already waits, as a real terminal sends its bytes
+/// in the order it made them, and joins the backlog together with that input.
+///
+/// Typed input has an owner. The owner can withdraw its input that has not
+/// gone to the terminal yet, so a client that leaves holds no memory. Bytes
+/// marked to stay without their owner leave only the waiting part: they are
+/// text that a client was told has arrived.
+///
+/// The type only keeps the books. `PseudoTerminal` keeps one on its queue,
+/// writes the bytes, and calls the completions that the methods return.
 struct InputBacklog {
     /// What happened to typed input.
     enum Outcome: Sendable {

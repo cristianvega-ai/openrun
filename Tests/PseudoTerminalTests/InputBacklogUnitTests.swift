@@ -145,6 +145,30 @@ private func drain(_ backlog: inout InputBacklog) -> [UInt8] {
         #expect(backlog.pendingByteCount == 0)
     }
 
+    /// An answer has no owner. When the input in front of it is withdrawn, it
+    /// moves up and goes in, and closing drops it with the rest.
+    @Test func anAnswerStaysWhenTheInputInFrontOfItIsWithdrawn() {
+        var backlog = InputBacklog()
+        let log = OutcomeLog()
+        let leaving = ObjectIdentifier(firstOwner)
+        _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 1), owner: ObjectIdentifier(secondOwner), staysWithoutOwner: true) { _ in }
+        _ = backlog.addTyped(bytes(4, 2), owner: leaving, staysWithoutOwner: false, completion: log.completion("waiting"))
+        _ = backlog.admitWaiting()
+        backlog.addAnswer(bytes(3, 9))
+
+        backlog.withdraw(owner: leaving).forEach { $0.deliver() }
+        _ = backlog.admitWaiting()
+        #expect(log.all == ["waiting:withdrawn"])
+        #expect(!backlog.hasWaitingInput)
+        let taken = drain(&backlog)
+        #expect(Array(taken.suffix(4)) == [1, 9, 9, 9])
+
+        backlog.addAnswer(bytes(3, 8))
+        backlog.close().forEach { $0.deliver() }
+        #expect(backlog.pendingAnswerByteCount == 0)
+        #expect(backlog.front == nil)
+    }
+
     @Test func withdrawingRemovesTheWaitingInputAndTheUnstartedPiecesOfOneOwner() {
         var backlog = InputBacklog()
         let log = OutcomeLog()
