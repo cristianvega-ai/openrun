@@ -122,4 +122,56 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         terminal.write("\u{1B}[18t")
         #expect(recorder.text == "\u{1B}[8;40;100t")
     }
+
+    @Test func theColorSchemeQueryGetsOneReplyFromTheCurrentAppearance() throws {
+        let (terminal, recorder) = try makeRecordingTerminal()
+        terminal.write("\u{1B}[?996n")
+        #expect(recorder.replies.count == 1)
+        let expected = TerminalColorScheme.current() == .dark ? "\u{1B}[?997;1n" : "\u{1B}[?997;2n"
+        #expect(recorder.text == expected)
+    }
+
+    @Test func theColorSchemeReplyNamesDarkAndLight() throws {
+        for (scheme, expected) in [(TerminalColorScheme.dark, "\u{1B}[?997;1n"), (.light, "\u{1B}[?997;2n")] {
+            let terminal = try makeTerminal()
+            let recorder = ReplyRecorder()
+            try terminal.setReplyHandler({ recorder.replies.append($0) }, colorScheme: { scheme })
+            terminal.write("\u{1B}[?996n")
+            #expect(recorder.replies.count == 1)
+            #expect(recorder.text == expected)
+        }
+    }
+
+    @Test func theColorSchemeIsReadAtEachQuery() throws {
+        let terminal = try makeTerminal()
+        let recorder = ReplyRecorder()
+        let scheme = SchemeBox()
+        try terminal.setReplyHandler({ recorder.replies.append($0) }, colorScheme: { scheme.value })
+        terminal.write("\u{1B}[?996n")
+        scheme.value = .light
+        terminal.write("\u{1B}[?996n")
+        #expect(recorder.replies.map { String(decoding: $0, as: UTF8.self) } == ["\u{1B}[?997;1n", "\u{1B}[?997;2n"])
+    }
+
+    @Test func removingTheHandlerSilencesSizeAndColorSchemeQueries() throws {
+        let (terminal, recorder) = try makeRecordingTerminal()
+        try terminal.setReplyHandler(nil)
+        terminal.write("\u{1B}[18t\u{1B}[14t\u{1B}[?996n")
+        #expect(recorder.replies.isEmpty)
+    }
+
+    // MARK: - Installing
+
+    @Test func theBoxIsStoredBeforeLibghosttyReceivesItsPointer() throws {
+        let terminal = try makeTerminal()
+        let box = TerminalReplyBox(handler: { _ in }, colorScheme: { .dark })
+        var storedWhenInstalling = false
+        try terminal.install(box) { storedWhenInstalling = terminal.replyBox === box }
+        #expect(storedWhenInstalling)
+        #expect(terminal.hasReplyHandler)
+    }
+}
+
+private final class SchemeBox: @unchecked Sendable {
+    var value = TerminalColorScheme.dark
 }

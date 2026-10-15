@@ -9,9 +9,12 @@ public typealias TerminalReplyHandler = (_ bytes: [UInt8]) -> Void
 /// pointer to it. The terminal owns the box and frees it after the terminal.
 final class TerminalReplyBox {
     let handler: TerminalReplyHandler
+    /// Asked at each color-scheme query, because the appearance can change.
+    let colorScheme: @Sendable () -> TerminalColorScheme
 
-    init(handler: @escaping TerminalReplyHandler) {
+    init(handler: @escaping TerminalReplyHandler, colorScheme: @escaping @Sendable () -> TerminalColorScheme) {
         self.handler = handler
+        self.colorScheme = colorScheme
     }
 }
 
@@ -32,8 +35,15 @@ extension Terminal {
     /// The terminal calls the handler while it parses output, on the thread
     /// that called `write`. The handler must not write to this terminal.
     ///
+    /// Besides the cursor position and device attributes, the terminal answers
+    /// the size queries (`CSI 14 t`, `16 t`, `18 t`, `19 t`) from its own grid,
+    /// and the color-scheme query (`CSI ? 996 n`) from `colorScheme`.
+    ///
+    /// - Parameter colorScheme: The scheme to report. The default is the macOS
+    ///   appearance of the current user.
     public func setReplyHandler(
         _ handler: TerminalReplyHandler?,
+        colorScheme: @escaping @Sendable () -> TerminalColorScheme = { TerminalColorScheme.current() }
     ) throws {
         guard let handler else {
             let previous = replyBox
@@ -42,7 +52,7 @@ extension Terminal {
             withExtendedLifetime(previous) {}
             return
         }
-        try install(TerminalReplyBox(handler: handler))
+        try install(TerminalReplyBox(handler: handler, colorScheme: colorScheme))
     }
 
     /// Stores the box, then points libghostty-vt at it.
@@ -115,6 +125,13 @@ extension Terminal {
         return true
     }
 
+    private static let colorSchemeCallback: GhosttyTerminalColorSchemeFn = { _, userdata, scheme in
+        guard let userdata, let scheme else { return false }
+        let box = Unmanaged<TerminalReplyBox>.fromOpaque(userdata).takeUnretainedValue()
+        scheme.pointee = box.colorScheme() == .dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
+        return true
+    }
+
     /// Sets or clears every callback that answers a query.
     private func installCallbacks(userdata: UnsafeMutableRawPointer?, enabled: Bool) throws {
         // Clear the callbacks before the userdata changes, so none runs with
@@ -123,6 +140,7 @@ extension Terminal {
             (GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(Self.replyWriteCallback, to: UnsafeRawPointer.self)),
             (GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, unsafeBitCast(Self.deviceAttributesCallback, to: UnsafeRawPointer.self)),
             (GHOSTTY_TERMINAL_OPT_SIZE, unsafeBitCast(Self.sizeCallback, to: UnsafeRawPointer.self)),
+            (GHOSTTY_TERMINAL_OPT_COLOR_SCHEME, unsafeBitCast(Self.colorSchemeCallback, to: UnsafeRawPointer.self)),
         ]
         for (option, _) in callbacks {
             try TerminalEmulationError.check(ghostty_terminal_set(handle, option, nil), from: "ghostty_terminal_set")
