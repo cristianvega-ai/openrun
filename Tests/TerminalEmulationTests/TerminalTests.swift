@@ -74,6 +74,13 @@ extension Terminal {
         _ = try makeTerminal(scrollbackLimit: Terminal.maximumScrollbackLines)
     }
 
+    @Test func aRestoredTerminalAlsoValidatesTheScrollbackLimit() throws {
+        let snapshot = try TerminalSnapshot(capturing: makeTerminal())
+        #expect(throws: TerminalEmulationError.self) {
+            _ = try snapshot.restoreTerminal(scrollbackLimit: -5)
+        }
+    }
+
     @Test func anOversizedGridIsRefusedOnCreation() {
         let tooLarge = Terminal.maximumGridDimension + 1
         #expect(throws: TerminalEmulationError.self) {
