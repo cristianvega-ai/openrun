@@ -160,4 +160,12 @@ public final class PseudoTerminal: @unchecked Sendable {
         master = -1
         readSource = nil
     }
+
+    // MARK: - Signals
+
+    /// The descriptor of the controlling side, or -1 once it is closed. Tests
+    /// use it to check that the descriptor does not outlive the program.
+    var masterDescriptorForTesting: Int32 {
+        queue.sync { master }
+    }
 }

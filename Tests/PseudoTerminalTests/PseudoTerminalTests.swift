@@ -86,4 +86,57 @@ func lines(_ text: String) -> [String] {
         let result = try await run(shell("pwd", folder: folder))
         #expect(lines(result.text) == [folder])
     }
+
+    @Test func theTerminalPathNamesTheDeviceOfTheProgram() async throws {
+        let terminal = try PseudoTerminal(launching: shell("tty"))
+        var collected: [UInt8] = []
+        for await chunk in terminal.output { collected += chunk }
+        #expect(lines(String(decoding: collected, as: UTF8.self)) == [terminal.terminalPath])
+        #expect(terminal.terminalPath.hasPrefix("/dev/tty"))
+    }
+
+    @Test func masterDescriptorClosesAfterTheProgramEnds() async throws {
+        let terminal = try PseudoTerminal(launching: shell("echo done"))
+        #expect(terminal.masterDescriptorForTesting >= 0)
+        for await _ in terminal.output {}
+        _ = await terminal.waitForExit()
+        // The sources close the descriptor asynchronously after the exit.
+        for _ in 0..<100 where terminal.masterDescriptorForTesting >= 0 {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(terminal.masterDescriptorForTesting == -1)
+    }
+
+    /// When waitpid failed, the program was reported as ended
+    /// with status 0, a success that nobody saw.
+    @Test func aProgramThatAnotherWaiterReapedIsNotReportedAsASuccess() async throws {
+        let terminal = try PseudoTerminal(launching: shell("sleep 0.3; exit 3"))
+        let processIdentifier = terminal.processIdentifier
+        // Another waiter reaps the program first, so the waitpid of the pseudo
+        // terminal fails. When the pseudo terminal wins instead, it sees the
+        // real status, which is not a success either.
+        let reaped = await withCheckedContinuation { (continuation: CheckedContinuation<pid_t, Never>) in
+            Thread {
+                var status: Int32 = 0
+                continuation.resume(returning: waitpid(processIdentifier, &status, 0))
+            }.start()
+        }
+        let exit = await terminal.waitForExit()
+        print("reaped-elsewhere: the test's waitpid returned \(reaped); the pseudo terminal reported \(exit)")
+        #expect(exit != .exited(status: 0))
+    }
+
+    @Test func aMissingProgramFailsToLaunch() {
+        var launch = shell("")
+        launch.executablePath = "no-such-program-here"
+        #expect(throws: PseudoTerminalError.self) { _ = try PseudoTerminal(launching: launch) }
+    }
+
+    @Test func aBareNameIsFoundInTheLaunchPath() async throws {
+        var launch = shell("")
+        launch.executablePath = "echo"
+        launch.arguments = ["found"]
+        let result = try await run(launch)
+        #expect(lines(result.text) == ["found"])
+    }
 }
