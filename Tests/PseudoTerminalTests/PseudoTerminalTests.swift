@@ -324,6 +324,31 @@ func lines(_ text: String) -> [String] {
         await terminal.terminate()
     }
 
+    @Test func aSlowReaderMakesTheProgramWaitInsteadOfFillingMemory() async throws {
+        let total = 24 * 1024 * 1024
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; dd if=/dev/zero bs=1048576 count=24 2>/dev/null | tr '\\0' 'x'; echo FINISHED"))
+        // Nobody reads. The backlog grows to the high mark and stops there.
+        // A busy machine takes longer to get there, so wait for the mark
+        // instead of for a fixed time.
+        let deadline = ContinuousClock.now + .seconds(20)
+        while terminal.unconsumedByteCountForTesting < PseudoTerminal.unconsumedHighMark, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(50))
+        }
+        try await Task.sleep(for: .milliseconds(300))
+        let waiting = terminal.unconsumedByteCountForTesting
+        #expect(waiting >= PseudoTerminal.unconsumedHighMark)
+        #expect(waiting < PseudoTerminal.unconsumedHighMark + 1024 * 1024)
+
+        var received = 0
+        for await chunk in terminal.output {
+            received += chunk.count
+            terminal.markOutputConsumed(chunk.count)
+        }
+        // The program added "FINISHED" and a line end.
+        #expect(received >= total)
+        #expect(await terminal.waitForExit() == .exited(status: 0))
+    }
+
     @Test func noOtherDescriptorLeaksIntoTheProgram() async throws {
         // Descriptors that the test process holds open and does not mark
         // close-on-exec, low and high, so the child must close them itself.

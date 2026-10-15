@@ -21,6 +21,10 @@ public final class PseudoTerminal: @unchecked Sendable {
     /// The bytes the program writes, in order. The stream finishes after the
     /// last byte of a program that has ended, and before `waitForExit` returns.
     /// Only one task may read it.
+    ///
+    /// Call `markOutputConsumed` for each chunk that has been dealt with. The
+    /// pseudo terminal stops reading when too many bytes wait, and the program
+    /// then blocks in its own write, as it would at a slow terminal.
     public let output: AsyncStream<[UInt8]>
 
     private static let readChunkSize = 64 * 1024
@@ -28,6 +32,10 @@ public final class PseudoTerminal: @unchecked Sendable {
     /// unknown. A shell's `wait` reports 127 for a process whose status it
     /// does not know. A clean 0 would claim a success that nobody saw.
     static let unknownExitStatus: Int32 = 127
+    /// Reading stops above the high mark and starts again below the low mark.
+    /// The gap keeps the source from switching on and off for every chunk.
+    static let unconsumedHighMark = 4 * 1024 * 1024
+    static let unconsumedLowMark = 1 * 1024 * 1024
     /// How long `terminate` goes on killing processes that a signal reaches
     /// and that do not end, such as one that keeps starting new ones.
     static let killingLimit: Duration = .seconds(1)
@@ -41,6 +49,8 @@ public final class PseudoTerminal: @unchecked Sendable {
     private var writeSource: DispatchSourceWrite?
     private var exitSource: DispatchSourceProcess?
     private var writeSourceIsSuspended = true
+    private var readSourceIsSuspended = false
+    private var unconsumedBytes = 0
     private var sourcesStillUsingMaster = 2
     /// Input that has not gone to the terminal yet. See `InputBacklog`.
     private var input = InputBacklog()
@@ -56,6 +66,18 @@ public final class PseudoTerminal: @unchecked Sendable {
         terminalPath = started.terminalPath
         (output, outputContinuation) = AsyncStream.makeStream(of: [UInt8].self)
         startWatching()
+    }
+
+    /// Tells the pseudo terminal that the reader dealt with this many bytes of
+    /// output. It reads on when the backlog is small enough.
+    public func markOutputConsumed(_ byteCount: Int) {
+        queue.async {
+            self.unconsumedBytes -= byteCount
+            if self.readSourceIsSuspended, self.unconsumedBytes <= Self.unconsumedLowMark {
+                self.readSource?.resume()
+                self.readSourceIsSuspended = false
+            }
+        }
     }
 
     /// Sends bytes to the program as if the user typed them.
@@ -296,6 +318,12 @@ public final class PseudoTerminal: @unchecked Sendable {
             let count = read(master, &buffer, buffer.count)
             if count > 0 {
                 outputContinuation.yield(Array(buffer[0..<count]))
+                unconsumedBytes += count
+                if honoringBackpressure, unconsumedBytes >= Self.unconsumedHighMark, !readSourceIsSuspended {
+                    readSource?.suspend()
+                    readSourceIsSuspended = true
+                    return
+                }
                 continue
             }
             if count == 0 || (count < 0 && errno != EAGAIN && errno != EINTR) {
@@ -410,6 +438,11 @@ public final class PseudoTerminal: @unchecked Sendable {
 
         exitSource?.cancel()
         exitSource = nil
+        // A suspended source runs its cancel handler only after a resume.
+        if readSourceIsSuspended {
+            readSource?.resume()
+            readSourceIsSuspended = false
+        }
         readSource?.cancel()
         if writeSourceIsSuspended {
             writeSource?.resume()
@@ -439,6 +472,11 @@ public final class PseudoTerminal: @unchecked Sendable {
     /// use it to check that the descriptor does not outlive the program.
     var masterDescriptorForTesting: Int32 {
         queue.sync { master }
+    }
+
+    /// The output bytes that were read and not yet marked as consumed.
+    var unconsumedByteCountForTesting: Int {
+        queue.sync { unconsumedBytes }
     }
 
     private var hasExited: Bool {
