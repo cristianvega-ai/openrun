@@ -38,8 +38,12 @@ public final class PseudoTerminal: @unchecked Sendable {
     // Everything below belongs to `queue`. No other thread touches it.
     private var master: Int32
     private var readSource: DispatchSourceRead?
+    private var writeSource: DispatchSourceWrite?
     private var exitSource: DispatchSourceProcess?
-    private var sourcesStillUsingMaster = 1
+    private var writeSourceIsSuspended = true
+    private var sourcesStillUsingMaster = 2
+    /// Input that has not gone to the terminal yet. See `InputBacklog`.
+    private var input = InputBacklog()
     private var exit: ProgramExit?
     private var exitWaiters: [CheckedContinuation<ProgramExit, Never>] = []
 
@@ -53,10 +57,24 @@ public final class PseudoTerminal: @unchecked Sendable {
         startWatching()
     }
 
+
+    /// Sends bytes to the program at once. It is meant for a terminal's answer
+    /// to a query of the program, such as a cursor position report.
+    ///
+    /// The call never waits: a terminal answers while it parses output, and
+    /// parsing must not stop in the middle of a write. The bytes join the
+    /// backlog even when the backlog is full, and count as answers. When typed
+    /// input waits for room, the bytes go in right behind it, in the order a
+    /// real terminal would send them. The reader of the output calls
+    /// `waitForAnswerRoom` between chunks, which stops a program that asks
+    /// without end and never reads from growing the backlog without limit.
+    /// Typed input goes through `type` instead.
     public func write(_ bytes: [UInt8]) {
         guard !bytes.isEmpty else { return }
         queue.async {
-            _ = bytes.withUnsafeBytes { Darwin.write(self.master, $0.baseAddress, $0.count) }
+            guard !self.input.isClosed else { return }
+            self.input.addAnswer(bytes)
+            self.pumpInput()
         }
     }
 
@@ -153,6 +171,11 @@ public final class PseudoTerminal: @unchecked Sendable {
         reader.setCancelHandler { [self] in releaseMaster() }
         readSource = reader
 
+        let writer = DispatchSource.makeWriteSource(fileDescriptor: master, queue: queue)
+        writer.setEventHandler { [self] in pumpInput() }
+        writer.setCancelHandler { [self] in releaseMaster() }
+        writeSource = writer
+
         let watcher = DispatchSource.makeProcessSource(identifier: processIdentifier, eventMask: .exit, queue: queue)
         watcher.setEventHandler { [self] in reapIfExited(retryingWhileExiting: true) }
         exitSource = watcher
@@ -182,6 +205,59 @@ public final class PseudoTerminal: @unchecked Sendable {
             if count < 0 && errno == EINTR { continue }
             return
         }
+    }
+
+    // MARK: - Input (on the queue)
+
+
+    /// Moves typed input that waits into the backlog while it fits, and
+    /// writes the backlog to the terminal while it takes bytes.
+    private func pumpInput() {
+        var notices: [InputBacklog.Notice] = []
+        var progressed = true
+        while progressed {
+            notices += input.admitWaiting()
+            // Writing makes room, and room can let more waiting input in.
+            progressed = writePendingInput(notices: &notices) && input.hasWaitingInput
+        }
+        // The write source fires whenever the terminal can take bytes, so it
+        // runs only while input waits.
+        if input.isEmpty, !writeSourceIsSuspended {
+            writeSource?.suspend()
+            writeSourceIsSuspended = true
+        } else if !input.isEmpty, writeSourceIsSuspended {
+            writeSource?.resume()
+            writeSourceIsSuspended = false
+        }
+        notices.forEach { $0.deliver() }
+    }
+
+    /// Writes from the front of the backlog until the terminal takes no more.
+    /// Returns whether any byte went out.
+    private func writePendingInput(notices: inout [InputBacklog.Notice]) -> Bool {
+        var wroteAny = false
+        while let front = input.front, master >= 0 {
+            let count = front.withUnsafeBytes { Darwin.write(master, $0.baseAddress, $0.count) }
+            if count > 0 {
+                wroteAny = true
+                input.removeFromFront(count)
+            } else if count < 0 && errno == EINTR {
+                continue
+            } else if count < 0 && errno == EAGAIN {
+                break
+            } else {
+                // Nobody holds the terminal open any more, so no input can
+                // reach the program again.
+                notices += input.close()
+                break
+            }
+        }
+        return wroteAny
+    }
+
+    /// Ends all input: the backlog goes, and all typed input that waits fails.
+    private func closeInput() {
+        input.close().forEach { $0.deliver() }
     }
 
     // MARK: - Exit (on the queue)
@@ -215,10 +291,16 @@ public final class PseudoTerminal: @unchecked Sendable {
         readAvailableOutput(honoringBackpressure: false)
         outputContinuation.finish()
         exit = reason
+        closeInput()
 
         exitSource?.cancel()
         exitSource = nil
         readSource?.cancel()
+        if writeSourceIsSuspended {
+            writeSource?.resume()
+            writeSourceIsSuspended = false
+        }
+        writeSource?.cancel()
         for waiter in exitWaiters {
             waiter.resume(returning: reason)
         }
@@ -233,6 +315,7 @@ public final class PseudoTerminal: @unchecked Sendable {
         close(master)
         master = -1
         readSource = nil
+        writeSource = nil
     }
 
     // MARK: - Signals
