@@ -191,6 +191,51 @@ private struct SessionFamily {
         #expect(members.allSatisfy { getsid($0.processIdentifier) == leader })
     }
 
+    @Test func aProcessOutsideTheSessionIsNeverSignalled() async throws {
+        let (terminal, family) = try await SessionFamily.start(SessionFamily.groupedAndIgnoringScript)
+        defer {
+            family.killSurvivors()
+            Task { await terminal.terminate(gracePeriod: .milliseconds(100)) }
+        }
+        let session = TerminalSessionProcesses(sessionIdentifier: family.leader)
+
+        // A process of the test's own session, listed as if it were a member,
+        // as a process whose identifier went to another program would be. It
+        // leads a group of its own, so a wrong signal reaches only itself.
+        let outsider = Process()
+        outsider.executableURL = URL(fileURLWithPath: "/usr/bin/perl")
+        outsider.arguments = ["-e", "setpgrp(0, 0); sleep 30"]
+        try outsider.run()
+        defer {
+            outsider.terminate()
+            outsider.waitUntilExit()
+        }
+        let outsiderIdentifier = outsider.processIdentifier
+        let deadline = ContinuousClock.now + .seconds(5)
+        while getpgid(outsiderIdentifier) != outsiderIdentifier, ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        try #require(getpgid(outsiderIdentifier) == outsiderIdentifier, "the outsider did not get a group of its own")
+        let impostor = TerminalSessionProcesses.Member(
+            processIdentifier: outsiderIdentifier,
+            groupIdentifier: outsiderIdentifier,
+            isStopped: false
+        )
+        #expect(session.send(SIGKILL, to: [impostor]) == 0)
+        session.sendToEachGroup(SIGKILL, of: [impostor])
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(outsider.isRunning)
+    }
+
+    @Test func aSessionWhoseProcessesEndedHasNoMembers() async throws {
+        let (terminal, family) = try await SessionFamily.start(SessionFamily.groupedAndIgnoringScript)
+        defer { family.killSurvivors() }
+        let session = TerminalSessionProcesses(sessionIdentifier: family.leader)
+        #expect(try session.members().count == 3)
+        await terminal.terminate(gracePeriod: .milliseconds(200))
+        #expect(try session.members().isEmpty)
+    }
+
     /// A failed process list is unknown, not empty.
     @Test func aFailedProcessListIsReportedNotTakenForAnEmptySession() throws {
         var session = TerminalSessionProcesses(sessionIdentifier: getpid())
