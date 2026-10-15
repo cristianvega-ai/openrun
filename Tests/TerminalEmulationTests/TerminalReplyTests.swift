@@ -115,4 +115,11 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         #expect(recorder.replies.count == 2)
         #expect(String(decoding: recorder.replies.dropFirst().first ?? [], as: UTF8.self) == "\u{1B}[6;16;8t")
     }
+
+    @Test func sizeReportsFollowAResize() throws {
+        let (terminal, recorder) = try makeRecordingTerminal()
+        try terminal.resize(to: TerminalSize(columns: 100, rows: 40))
+        terminal.write("\u{1B}[18t")
+        #expect(recorder.text == "\u{1B}[8;40;100t")
+    }
 }

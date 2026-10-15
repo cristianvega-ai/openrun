@@ -113,6 +113,19 @@ public final class Terminal {
         write(Array(text.utf8))
     }
 
+    /// Changes the grid size. The primary screen reflows its text.
+    public func resize(to size: TerminalSize) throws {
+        try Terminal.validate(size, in: "Terminal.resize")
+        // libghostty-vt takes the pixel size of one cell and keeps the pixel
+        // size of the whole grid from it. It builds the resize report of
+        // mode 2048 from that stored size, so a zero would report a window of
+        // no pixels. The nominal cell is the one the size queries use (see
+        // `setReplyHandler`).
+        try TerminalEmulationError.check(
+            ghostty_terminal_resize(handle, size.columns, size.rows, Terminal.nominalCellWidth, Terminal.nominalCellHeight),
+            from: "ghostty_terminal_resize"
+        )
+    }
 
     /// Formats the active screen.
     public func formatted(_ format: ScreenFormat, extent: ScreenExtent = .visible) throws -> [UInt8] {
