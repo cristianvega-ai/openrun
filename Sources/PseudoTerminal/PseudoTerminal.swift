@@ -104,6 +104,32 @@ public final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
+    /// Sends bytes that `owner` typed, behind every earlier input, and returns
+    /// at once. `whenSettled` runs once, on an internal queue, when the bytes
+    /// are in the backlog or will never get there.
+    ///
+    /// The bytes belong to their owner until they go to the terminal.
+    /// `withdrawTypedInput(from:)` removes them when the owner leaves, so a
+    /// client that typed into a program that reads nothing holds no memory
+    /// after it has gone.
+    public func type(_ bytes: [UInt8], from owner: ObjectIdentifier, whenSettled: @escaping @Sendable () -> Void) {
+        queue.async {
+            let notices = self.input.addTyped(bytes, owner: owner, staysWithoutOwner: false) { _ in whenSettled() }
+            notices.forEach { $0.deliver() }
+            self.pumpInput()
+        }
+    }
+
+    /// Removes the input of `owner` that has not gone to the terminal: the
+    /// input that waits for room, and the pieces in the backlog that have not
+    /// started to go out. A piece that started goes out whole.
+    public func withdrawTypedInput(from owner: ObjectIdentifier) {
+        queue.async {
+            self.input.withdraw(owner: owner).forEach { $0.deliver() }
+            // The room it freed can let other waiting input in.
+            self.pumpInput()
+        }
+    }
 
     /// Sends bytes to the program at once. It is meant for a terminal's answer
     /// to a query of the program, such as a cursor position report.

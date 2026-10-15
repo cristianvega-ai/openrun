@@ -253,6 +253,58 @@ func lines(_ text: String) -> [String] {
         }
     }
 
+    /// A program that reads 8 MiB after a go file, then counts what else
+    /// arrives until no byte comes for a second.
+    private static func countingReader(goFile: String) -> ProgramLaunch {
+        shell("stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; head -c \(8 * 1024 * 1024) > /dev/null; stty min 0 time 10; printf 'extra=%s\\n' \"$(dd bs=65536 2>/dev/null | wc -c | tr -d ' ')\"; sleep 60")
+    }
+
+    @Test func cancellingATypeThatWaitsWithdrawsItsBytes() async throws {
+        let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: goFile) }
+        let terminal = try PseudoTerminal(launching: Self.countingReader(goFile: goFile))
+        let output = OutputCollector(reading: terminal)
+        #expect(await output.waitFor("ready", timeout: .seconds(10)))
+        for _ in 0..<8 { try await terminal.type(patternBytes(count: 1024 * 1024)) }
+
+        // This waits for room, and the task that waits is cancelled.
+        let waiting = Task { try await terminal.type(patternBytes(count: 64 * 1024)) }
+        try await Task.sleep(for: .milliseconds(200))
+        waiting.cancel()
+        await #expect(throws: CancellationError.self) { try await waiting.value }
+
+        FileManager.default.createFile(atPath: goFile, contents: nil)
+        #expect(await output.waitFor("extra=", timeout: .seconds(30)))
+        await terminal.terminate()
+        #expect(lines(output.text).contains("extra=0"), "output: \(output.text.suffix(200))")
+    }
+
+    @Test func withdrawingTheInputOfAnOwnerRemovesWhatHasNotGoneOut() async throws {
+        let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: goFile) }
+        let terminal = try PseudoTerminal(launching: Self.countingReader(goFile: goFile))
+        let output = OutputCollector(reading: terminal)
+        #expect(await output.waitFor("ready", timeout: .seconds(10)))
+        for _ in 0..<8 { try await terminal.type(patternBytes(count: 1024 * 1024)) }
+
+        // The owner types twice. Neither fits, so both wait.
+        let owner = NSObject()
+        let settled = Mutex(0)
+        for _ in 0..<2 {
+            terminal.type(patternBytes(count: 64 * 1024), from: ObjectIdentifier(owner)) { settled.withLock { $0 += 1 } }
+        }
+        try await Task.sleep(for: .milliseconds(200))
+        #expect(settled.withLock { $0 } == 0)
+        terminal.withdrawTypedInput(from: ObjectIdentifier(owner))
+        #expect(await eventuallyTrue { settled.withLock { $0 } == 2 })
+
+        FileManager.default.createFile(atPath: goFile, contents: nil)
+        #expect(await output.waitFor("extra=", timeout: .seconds(30)))
+        await terminal.terminate()
+        withExtendedLifetime(owner) {}
+        #expect(lines(output.text).contains("extra=0"), "output: \(output.text.suffix(200))")
+    }
+
     @Test func answersNeverWaitButHoldTheOutputReaderPastTheirLimit() async throws {
         let total = 2 * 1024 * 1024
         let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 1.5; head -c \(total) > /dev/null; echo drained; sleep 60"))
