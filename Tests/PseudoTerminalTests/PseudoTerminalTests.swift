@@ -88,6 +88,10 @@ func eventuallyTrue(_ condition: () -> Bool) async -> Bool {
     return true
 }
 
+func checksum(_ bytes: [UInt8]) -> String {
+    SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined()
+}
+
 func lines(_ text: String) -> [String] {
     text.split(whereSeparator: \.isNewline).map(String.init)
 }
@@ -207,6 +211,46 @@ func lines(_ text: String) -> [String] {
         for await chunk in terminal.output { collected += chunk }
         let text = String(decoding: collected, as: UTF8.self)
         #expect(lines(text).last?.trimmingCharacters(in: .whitespaces) == "\(count)")
+    }
+
+    @Test func inputPastTheBacklogLimitWaitsAndArrivesCompleteAndInOrder() async throws {
+        // 12 MiB is more than the 8 MiB backlog. The program reads nothing for
+        // a second, so the later writes must wait for room instead of being lost.
+        let total = 12 * 1024 * 1024
+        let input = patternBytes(count: total)
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 1; head -c \(total) | shasum -a 256; sleep 60"))
+        let output = OutputCollector(reading: terminal)
+        #expect(await output.waitFor("ready", timeout: .seconds(10)))
+
+        let start = ContinuousClock.now
+        for offset in stride(from: 0, to: total, by: 256 * 1024) {
+            try await terminal.type(Array(input[offset..<offset + 256 * 1024]))
+        }
+        // The last writes waited until the program began to read.
+        #expect(ContinuousClock.now - start > .milliseconds(500))
+        let arrived = await output.waitFor(checksum(input), timeout: .seconds(30))
+        await terminal.terminate()
+        #expect(arrived, "output: \(output.text)")
+    }
+
+    @Test func typedInputThatWaitsFailsWhenTheProgramEnds() async throws {
+        let piece = patternBytes(count: 1024 * 1024)
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 2"))
+        let output = OutputCollector(reading: terminal)
+        #expect(await output.waitFor("ready", timeout: .seconds(10)))
+        // The program never reads. This fills the backlog.
+        for _ in 0..<8 {
+            try await terminal.type(piece)
+        }
+        // This write waits for room until the program ends.
+        await #expect(throws: PseudoTerminalError.self) {
+            try await terminal.type(patternBytes(count: 64 * 1024))
+        }
+        _ = await terminal.waitForExit()
+        // A write after the end fails at once.
+        await #expect(throws: PseudoTerminalError.self) {
+            try await terminal.type(Array("late".utf8))
+        }
     }
 
     @Test func answersNeverWaitButHoldTheOutputReaderPastTheirLimit() async throws {

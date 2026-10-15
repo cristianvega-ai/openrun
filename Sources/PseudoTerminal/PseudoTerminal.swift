@@ -58,6 +58,52 @@ public final class PseudoTerminal: @unchecked Sendable {
         startWatching()
     }
 
+    /// Sends bytes to the program as if the user typed them.
+    ///
+    /// Returns once the bytes are in the backlog. While the backlog is full,
+    /// the call waits for the program to read, without blocking a thread.
+    /// Calls that wait go in, whole, in the order they were made. Once in the
+    /// backlog, the bytes reach the program even when the caller leaves.
+    ///
+    /// Cancelling the calling task withdraws bytes that still wait for room.
+    ///
+    /// - Throws: `PseudoTerminalError.programEnded` when the program ends, or
+    ///   closes its terminal, before the bytes are in the backlog.
+    ///   `CancellationError` when the task is cancelled first.
+    public func type(_ bytes: [UInt8]) async throws {
+        guard !bytes.isEmpty else { return }
+        // The ticket owns the bytes while they wait, so the cancel handler can
+        // find them. The queue orders the two closures, whichever runs first.
+        let ticket = WithdrawalTicket()
+        let owner = ObjectIdentifier(ticket)
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
+                queue.async {
+                    guard !ticket.isWithdrawn else {
+                        continuation.resume(throwing: CancellationError())
+                        return
+                    }
+                    let notices = self.input.addTyped(bytes, owner: owner, staysWithoutOwner: true) { outcome in
+                        switch outcome {
+                        case .taken: continuation.resume()
+                        case .programEnded: continuation.resume(throwing: PseudoTerminalError.programEnded)
+                        case .withdrawn: continuation.resume(throwing: CancellationError())
+                        }
+                    }
+                    notices.forEach { $0.deliver() }
+                    self.pumpInput()
+                }
+            }
+        } onCancel: {
+            queue.async {
+                ticket.isWithdrawn = true
+                self.input.withdraw(owner: owner).forEach { $0.deliver() }
+                // An answer that waited behind the withdrawn bytes goes in now.
+                self.pumpInput()
+            }
+        }
+    }
+
 
     /// Sends bytes to the program at once. It is meant for a terminal's answer
     /// to a query of the program, such as a cursor position report.
@@ -238,6 +284,10 @@ public final class PseudoTerminal: @unchecked Sendable {
 
     // MARK: - Input (on the queue)
 
+    /// Marks bytes that `type` waits to put in. The queue owns the flag.
+    private final class WithdrawalTicket: @unchecked Sendable {
+        var isWithdrawn = false
+    }
 
     /// Moves typed input that waits into the backlog while it fits, and
     /// writes the backlog to the terminal while it takes bytes.
