@@ -37,6 +37,34 @@ private func waitForText(_ marker: String, in terminal: PseudoTerminal) async ->
     return collected
 }
 
+/// Collects the output of a program in the background, so a test can wait
+/// for it with a time limit and end the program when the limit passes.
+final class OutputCollector: Sendable {
+    private let collected = Mutex<[UInt8]>([])
+
+    init(reading terminal: PseudoTerminal) {
+        Task { [self] in
+            for await chunk in terminal.output {
+                collected.withLock { $0 += chunk }
+            }
+        }
+    }
+
+    var text: String {
+        collected.withLock { String(decoding: $0, as: UTF8.self) }
+    }
+
+    /// Waits until the output contains `marker`, for at most `timeout`.
+    func waitFor(_ marker: String, timeout: Duration) async -> Bool {
+        let deadline = ContinuousClock.now + timeout
+        while !text.contains(marker) {
+            guard ContinuousClock.now < deadline else { return false }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+        return true
+    }
+}
+
 func lines(_ text: String) -> [String] {
     text.split(whereSeparator: \.isNewline).map(String.init)
 }
@@ -52,6 +80,21 @@ func lines(_ text: String) -> [String] {
         let result = try await run(shell("kill -KILL $$"))
         #expect(result.exit == .signaled(signal: SIGKILL))
         #expect(result.exit.shellStatus == 128 + SIGKILL)
+    }
+
+    @Test func theProgramIsASessionLeaderWithAControllingTerminal() async throws {
+        let terminal = try PseudoTerminal(launching: shell("test -r /dev/tty && echo controlling; sleep 30"))
+        let output = OutputCollector(reading: terminal)
+        defer { Task { await terminal.terminate() } }
+        // The program runs, so the child has done its set-up.
+        #expect(await output.waitFor("controlling", timeout: .seconds(10)), "output: \(output.text)")
+        let program = terminal.processIdentifier
+        // Leading a process group is not enough: a program that only called
+        // setpgid would lead its group but stay in the session of its parent.
+        // A session leader names the session after itself.
+        #expect(getsid(program) == program, "the session is \(getsid(program)), the program is \(program)")
+        #expect(getpgid(program) == program)
+        #expect(getsid(program) != getsid(0), "the program shares the session of the test")
     }
 
     @Test func theTerminalPathIsTheControllingTerminalOfTheProgram() async throws {
@@ -167,6 +210,22 @@ func lines(_ text: String) -> [String] {
         await terminal.terminate()
         let exit = await terminal.waitForExit()
         #expect(exit == .signaled(signal: SIGHUP))
+    }
+
+    @Test func terminateKillsAProgramThatIgnoresHangUp() async throws {
+        let terminal = try PseudoTerminal(launching: shell("trap '' HUP; echo ready; while true; do sleep 1; done"))
+        // The shell must have installed its trap before the hang-up arrives.
+        _ = await waitForText("ready", in: terminal)
+        await terminal.terminate(gracePeriod: .milliseconds(200))
+        let exit = await terminal.waitForExit()
+        #expect(exit == .signaled(signal: SIGKILL))
+    }
+
+    @Test func terminateAfterTheExitDoesNothing() async throws {
+        let terminal = try PseudoTerminal(launching: shell("exit 0"))
+        _ = await terminal.waitForExit()
+        await terminal.terminate()
+        #expect(await terminal.waitForExit() == .exited(status: 0))
     }
 
     @Test func aMissingProgramFailsToLaunch() {

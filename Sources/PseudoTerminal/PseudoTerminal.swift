@@ -73,6 +73,24 @@ public final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
+    /// Ends the program and every other process of its terminal session.
+    ///
+    /// SIGHUP goes to the program's process group, which is what a closed
+    /// terminal window sends, and then to each other process group of the
+    /// session. A group with a stopped process also gets SIGCONT, because a
+    /// stopped process acts on the hang-up only when it runs. After
+    /// `gracePeriod`, SIGKILL goes to every process of the session that is
+    /// still alive, also when the program itself has already ended. Returns
+    /// after the program has ended.
+    ///
+    /// A process that started a session of its own is not in this session and
+    /// keeps running. A program that has already ended by itself leaves its
+    /// background processes running.
+    ///
+    /// When the system cannot list the processes, nobody knows what the
+    /// session holds. Then `terminate` signals the program's process group
+    /// instead, and keeps waiting and signalling until the grace period and
+    /// the killing limit have passed.
     public func terminate(gracePeriod: Duration = .seconds(1)) async {
         await terminate(gracePeriod: gracePeriod, session: TerminalSessionProcesses(sessionIdentifier: processIdentifier))
     }

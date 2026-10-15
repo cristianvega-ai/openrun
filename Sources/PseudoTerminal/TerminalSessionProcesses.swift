@@ -1,5 +1,27 @@
 import Darwin
 
+/// The processes of the terminal session that a program leads.
+///
+/// `forkpty` makes the program the leader of a new session, so the session
+/// identifier is the program's process identifier. Every process that the
+/// program starts stays in that session, also one that moves to another
+/// process group, until it starts a session of its own. Kill and shutdown end
+/// all of them, as the owner decided. A process that starts a session of its
+/// own escapes.
+///
+/// Darwin lists no processes by session: `sysctl` with `KERN_PROC_SESSION`
+/// fails with ENOENT on macOS. So this lists every process and asks each one
+/// for its session.
+///
+/// A session identifier is the process identifier of the process that made
+/// the session (`setsid`), and XNU gives a new process an identifier only when
+/// no process, also a zombie, uses that number as its process, process group
+/// or session identifier (`forkproc` in bsd/kern/kern_fork.c, which keeps the
+/// rule of the 4.4BSD `fork`). So while one process of this session lives, no
+/// other session can have its number, and a process that reports this session
+/// identifier belongs to this session. The check runs right before each
+/// signal. A process that ended in between, and whose identifier went to
+/// another program, then fails the check instead of getting the signal.
 struct TerminalSessionProcesses {
     /// A live process of the session. Zombies are left out: they have ended,
     /// and no signal reaches them.
