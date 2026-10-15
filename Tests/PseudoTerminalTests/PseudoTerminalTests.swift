@@ -108,6 +108,27 @@ func lines(_ text: String) -> [String] {
         #expect(reported.last == terminal.terminalPath)
     }
 
+    @Test func aProgramThatIsNotAShellHasTheControllingTerminalToo() async throws {
+        // sleep never opens the terminal itself. Only the launch can give it
+        // a controlling terminal, so ps, run from outside, shows the device.
+        var launch = shell("")
+        launch.executablePath = "/bin/sleep"
+        launch.argumentZero = "sleep"
+        launch.arguments = ["30"]
+        let terminal = try PseudoTerminal(launching: launch)
+        let status = Process()
+        status.executableURL = URL(fileURLWithPath: "/bin/ps")
+        status.arguments = ["-o", "tty=", "-p", String(terminal.processIdentifier)]
+        let pipe = Pipe()
+        status.standardOutput = pipe
+        try status.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        status.waitUntilExit()
+        await terminal.terminate()
+        let reported = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        #expect("/dev/" + reported == terminal.terminalPath)
+    }
+
     @Test func theProgramSeesTheGivenSize() async throws {
         let result = try await run(shell("stty size", size: PseudoTerminalSize(columns: 100, rows: 30)))
         #expect(lines(result.text) == ["30 100"])
