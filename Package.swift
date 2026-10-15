@@ -25,6 +25,7 @@ let package = Package(
             name: "TerminalEmulationTests",
             dependencies: ["TerminalEmulation"]
         ),
+        .target(name: "PseudoTerminal"),
     ],
     swiftLanguageModes: [.v6]
 )
