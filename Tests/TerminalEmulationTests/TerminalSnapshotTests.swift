@@ -148,4 +148,39 @@ private struct Observation: Equatable {
         #expect(try restored.visibleText() == "a\u{1F600}b")
     }
 
+    @Test func snapshotAtEveryByteBoundaryContinues() throws {
+        let stream = Array(
+            ("héllo \u{1b}[1;38;5;196mwörld\u{1b}[0m \u{1F600}\u{1b}]8;;https://example.com\u{7}link\u{1b}]8;;\u{7}\r\n"
+                + "日本語\u{1b}[2;3Hx\u{1b}[?1049halt\u{1b}[?1049l\r\ntail").utf8
+        )
+        let reference = try makeTerminal(columns: 12, rows: 3)
+        reference.write(stream)
+        let expected = try Observation(reference)
+        // The reference formats itself, so pin its markup to a fixed text.
+        // Each restored terminal must produce the same text.
+        let expectedMarkup = "<div style=\"font-family: monospace; white-space: pre;\">h&#233;llo <div style=\"display: inline;color: var(--vt-palette-196);font-weight: bold;\">w&#246;rld</div> \n&#128512;x" + Self.anchor(to: "https://example.com", text: "ink\n") + "tail&#35486;</div>"
+        #expect(String(decoding: try reference.formatted(.hypertextMarkup), as: UTF8.self) == expectedMarkup)
+
+        for cut in 0...stream.count {
+            let first = try makeTerminal(columns: 12, rows: 3)
+            first.write(Array(stream[..<cut]))
+            let restored = try restore(first)
+            restored.write(Array(stream[cut...]))
+            #expect(try Observation(restored) == expected, "snapshot at byte \(cut)")
+            #expect(String(decoding: try restored.formatted(.hypertextMarkup), as: UTF8.self) == expectedMarkup, "markup after a snapshot at byte \(cut)")
+        }
+    }
+
+    @Test func restoredTerminalCanTakeAnotherSnapshotInsideASequence() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 3)
+        terminal.write("x\u{1b}[")
+
+        let second = try restore(try restore(terminal))
+        second.write("31mred")
+
+        let reference = try makeTerminal(columns: 20, rows: 3)
+        reference.write("x\u{1b}[31mred")
+        #expect(try Observation(second) == Observation(reference))
+    }
+
 }
