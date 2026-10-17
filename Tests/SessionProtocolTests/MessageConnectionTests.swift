@@ -4,6 +4,65 @@ import Synchronization
 import Testing
 @testable import SessionProtocol
 
+/// Runs one `receive` on a thread of its own and keeps how it ended.
+private final class BlockedReader: Sendable {
+    enum Ending: Sendable, Equatable {
+        /// `receive` returned `nil`: the connection ended between two frames.
+        case cleanEnd
+        /// `receive` returned a message, which no test here expects.
+        case message
+        /// `receive` threw; the text is the description of the error.
+        case failed(String)
+    }
+
+    private let state = Mutex<(threadIdentifier: UInt64, ending: Ending?)>((0, nil))
+    private let work: @Sendable () throws -> Bool
+
+    /// - Parameter receive: One receive call; the result says whether a
+    ///   message arrived.
+    init<Message: Sendable>(_ receive: @escaping @Sendable () throws -> Message?) {
+        work = { try receive() != nil }
+    }
+
+    func start() {
+        let thread = Thread { [self] in
+            var identifier: UInt64 = 0
+            pthread_threadid_np(nil, &identifier)
+            state.withLock { $0.threadIdentifier = identifier }
+            let result: Ending
+            do {
+                result = try work() ? .message : .cleanEnd
+            } catch {
+                result = .failed("\(error)")
+            }
+            state.withLock { $0.ending = result }
+        }
+        thread.start()
+    }
+
+    var ending: Ending? { state.withLock { $0.ending } }
+
+    /// Whether the system shows the thread waiting in a system call.
+    var isBlocked: Bool {
+        let identifier = state.withLock { $0.threadIdentifier }
+        guard identifier != 0 else { return false }
+        var information = proc_threadinfo()
+        let size = Int32(MemoryLayout<proc_threadinfo>.size)
+        guard proc_pidinfo(getpid(), PROC_PIDTHREADID64INFO, identifier, &information, size) == size else { return false }
+        return information.pth_run_state == TH_STATE_WAITING
+    }
+}
+
+/// Polls until the condition holds or the timeout passes.
+private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if condition() { return true }
+        try? await Task.sleep(for: .milliseconds(10))
+    }
+    return condition()
+}
+
 @Suite struct MessageConnectionTests {
     @Test func messagesTravelInBothDirections() throws {
         let (client, server) = try MessageConnection.makePair()
@@ -57,6 +116,43 @@ import Testing
         let huge: [UInt8] = [0xFF, 0xFF, 0xFF, 0xFF]
         #expect(write(descriptors[0], huge, huge.count) == huge.count)
         #expect(throws: SessionProtocolError.self) { try receiver.receive(ClientMessage.self) }
+    }
+
+    @Test func shutdownWakesAThreadThatIsWaitingWithACleanEnd() async throws {
+        let (client, server) = try MessageConnection.makePair()
+        let reader = BlockedReader { try server.receive(ClientMessage.self) }
+        reader.start()
+
+        // The peer is open and sends nothing, so the reader can only be
+        // blocked in its read. Asking the system for the state of the thread
+        // proves it, where a sleep would only hope for it.
+        #expect(await poll(timeout: .seconds(10)) { reader.isBlocked }, "the reader never blocked")
+        #expect(reader.ending == nil, "the reader ended before the shutdown: \(String(describing: reader.ending))")
+
+        server.shutdown()
+        #expect(await poll(timeout: .seconds(10)) { reader.ending != nil }, "the shutdown did not wake the reader")
+        // A throw would also end the reader. The contract is a clean end,
+        // which the session process reads as a client that left.
+        #expect(reader.ending == .cleanEnd)
+        withExtendedLifetime(client) {}
+    }
+
+    @Test func shutdownWakesAThreadInTheMiddleOfAFrameWithAnError() async throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        // A length field that promises 10 bytes, and only 2 follow.
+        let partial: [UInt8] = [0, 0, 0, 10, 2, 7]
+        #expect(write(descriptors[0], partial, partial.count) == partial.count)
+        let reader = BlockedReader { try receiver.receive(ServerMessage.self) }
+        reader.start()
+        #expect(await poll(timeout: .seconds(10)) { reader.isBlocked }, "the reader never blocked")
+        #expect(reader.ending == nil)
+
+        receiver.shutdown()
+        #expect(await poll(timeout: .seconds(10)) { reader.ending != nil }, "the shutdown did not wake the reader")
+        #expect(reader.ending == .failed("\(SessionProtocolError.connectionClosed)"))
     }
 
     @Test func writingToAClosedPeerThrowsInsteadOfEndingTheProcess() throws {
