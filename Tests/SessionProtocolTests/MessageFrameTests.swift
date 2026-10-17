@@ -61,10 +61,37 @@ import Testing
         #expect(text.contains(identifier.uuidString))
     }
 
+    @Test func terminalBytesAreRawFrames() throws {
+        #expect(try ClientMessage.input(Data([1, 2])).frame() == MessageFrame(kind: .input, payload: Data([1, 2])))
+        #expect(try ServerMessage.output(Data([3])).frame() == MessageFrame(kind: .output, payload: Data([3])))
+        #expect(try ServerMessage.snapshot(Data([4])).frame() == MessageFrame(kind: .snapshot, payload: Data([4])))
+    }
+
+    @Test func aFrameForTheOtherDirectionIsRefused() {
+        #expect(throws: SessionProtocolError.self) {
+            try ClientMessage(frame: MessageFrame(kind: .output, payload: Data()))
+        }
+        #expect(throws: SessionProtocolError.self) {
+            try ServerMessage(frame: MessageFrame(kind: .input, payload: Data()))
+        }
+    }
+
     @Test func keysInsideATextFrameAreRefused() throws {
         let encodedMessage = try JSONEncoder().encode(ClientMessage.input(Data([1])))
         #expect(throws: SessionProtocolError.self) {
             try ClientMessage(frame: MessageFrame(kind: .control, payload: encodedMessage))
+        }
+    }
+
+    @Test func garbageInAControlFrameThrows() {
+        #expect(throws: (any Error).self) {
+            try ServerMessage(frame: MessageFrame(kind: .control, payload: Data("not json".utf8)))
+        }
+    }
+
+    @Test func anAnswerThatCannotBeDecodedIsDescribedWithoutItsBytes() {
+        #expect(throws: SessionProtocolError.malformedFrame(reason: "the control message is not valid JSON, or nests too deeply")) {
+            try ServerMessage(frame: MessageFrame(kind: .control, payload: Data("\u{1B}[2J not json".utf8)))
         }
     }
 
