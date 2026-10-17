@@ -57,4 +57,38 @@ public struct MessageFrame: Equatable, Sendable {
         bytes.append(payload)
         return bytes
     }
+
+    /// Reads the length field and returns how many bytes follow it. The check
+    /// happens before the caller allocates anything.
+    public static func bodyLength(fromLengthField field: Data) throws -> Int {
+        guard field.count == lengthFieldSize else {
+            throw SessionProtocolError.malformedFrame(reason: "the length field has \(field.count) bytes")
+        }
+        let length = field.reduce(0) { ($0 << 8) | Int($1) }
+        guard length >= 1 else {
+            throw SessionProtocolError.malformedFrame(reason: "the length is zero, so the kind is missing")
+        }
+        guard length - 1 <= maximumPayloadLength else {
+            throw SessionProtocolError.frameTooLarge(length: length - 1, limit: maximumPayloadLength)
+        }
+        return length
+    }
+
+    /// Splits the bytes after the length field into kind and payload.
+    public init(body: Data) throws {
+        guard let first = body.first else {
+            throw SessionProtocolError.malformedFrame(reason: "the kind byte is missing")
+        }
+        self.kind = try Self.kind(fromByte: first)
+        self.payload = body.dropFirst()
+    }
+
+    /// The kind that a kind byte names. A receiver reads the kind before it
+    /// decides whether a frame has room, so it checks the byte on its own.
+    static func kind(fromByte byte: UInt8) throws -> Kind {
+        guard let kind = Kind(rawValue: byte) else {
+            throw SessionProtocolError.malformedFrame(reason: "the kind byte \(byte) is unknown")
+        }
+        return kind
+    }
 }
