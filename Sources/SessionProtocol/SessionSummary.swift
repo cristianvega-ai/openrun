@@ -18,4 +18,14 @@ public struct SessionSummary: Codable, Equatable, Sendable {
         self.size = size
         self.createdAt = createdAt
     }
+
+    /// The identifier as people see it and as programs in the session read it:
+    /// lowercase, so a prefix typed in either case matches.
+    public var identifierText: String {
+        Self.text(for: identifier)
+    }
+
+    public static func text(for identifier: UUID) -> String {
+        identifier.uuidString.lowercased()
+    }
 }
