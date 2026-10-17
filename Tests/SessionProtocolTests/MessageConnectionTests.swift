@@ -191,6 +191,36 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         }
     }
 
+    /// A client that the session process refused for its
+    /// version said that the session process speaks version 0.
+    @Test func aRefusedClientNamesTheVersionThatTheSessionProcessSpeaks() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try server.send(ServerMessage.failure(SessionFailure(
+            reason: .incompatibleProtocol,
+            message: "This session process speaks protocol version 2, not 1."
+        )))
+        #expect(throws: SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: 2)) {
+            try client.greetSessionProcess()
+        }
+    }
+
+    @Test func theRefusalOfTheSessionProcessNamesItsOwnVersion() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try client.send(ClientMessage.hello(protocolVersion: 99))
+        _ = try? server.greetClient()
+        guard case .failure(let failure) = try client.receive(ServerMessage.self) else {
+            Issue.record("The client received no failure.")
+            return
+        }
+        #expect(failure.message.contains("protocol version \(MessageFrame.protocolVersion),"))
+    }
+
+    @Test func aConversationThatDoesNotStartWithHelloIsRefused() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try client.send(ClientMessage.listSessions)
+        #expect(throws: SessionProtocolError.self) { try server.greetClient() }
+    }
+
     @Test func aFrameThatStallsEndsTheReceiveAfterTheStallLimit() throws {
         var descriptors: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
@@ -271,6 +301,36 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         #expect(admissions == 0)
     }
 
+    // The errors embedded the whole unexpected message. A
+    // screen can be 64 MiB, and a request can hold text that a user typed or
+    // escape sequences that drive the terminal that shows the error.
+
+    @Test func anUnexpectedAnswerToHelloIsNamedWithoutItsContents() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try server.send(ServerMessage.screen(text: "\u{1B}]52;c;screen-secret\u{07}"))
+        do {
+            try client.greetSessionProcess()
+            Issue.record("A screen in place of hello was accepted.")
+        } catch let error as SessionProtocolError {
+            #expect(error == .unexpectedMessage(description: "screen arrived instead of hello"))
+            #expect(!"\(error)".contains("screen-secret"), "error: \(error)")
+            #expect(!"\(error)".contains("\u{1B}"), "error: \(error)")
+        }
+    }
+
+    @Test func anUnexpectedFirstRequestIsNamedWithoutItsContents() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try client.send(ClientMessage.sendText(identifier: UUID(), text: "typed-secret\u{1B}[31m"))
+        do {
+            try server.greetClient()
+            Issue.record("A request in place of hello was accepted.")
+        } catch let error as SessionProtocolError {
+            #expect(error == .unexpectedMessage(description: "sendText arrived instead of hello"))
+            #expect(!"\(error)".contains("typed-secret"), "error: \(error)")
+            #expect(!"\(error)".contains("\u{1B}"), "error: \(error)")
+        }
+    }
+
     @Test func aControlFrameThatCannotBeParsedIsDescribedWithoutItsBytes() throws {
         var descriptors: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
@@ -286,6 +346,27 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
             #expect(!"\(error)".contains("\u{1B}"), "error: \(error)")
             #expect(!"\(error)".contains("payload-secret"), "error: \(error)")
         }
+    }
+
+    /// A request that could not be decoded closed the
+    /// connection without a word. The first frame gets the failure too.
+    @Test func aFirstFrameThatCannotBeDecodedGetsAFailureThatNamesTheProblem() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        let client = MessageConnection(descriptor: descriptors[0])
+        let server = MessageConnection(descriptor: descriptors[1])
+        let payload = Array(#"{"hello":{"protocolVersion":"one"}}"#.utf8)
+        let frame: [UInt8] = [0, 0, 0, UInt8(payload.count + 1), 1] + payload
+        #expect(write(descriptors[0], frame, frame.count) == frame.count)
+        #expect(throws: SessionProtocolError.malformedFrame(reason: "the field hello.protocolVersion has the wrong type")) {
+            try server.greetClient()
+        }
+        server.shutdown()
+        let answer = try client.receive(ServerMessage.self)
+        #expect(answer == .failure(SessionFailure(
+            reason: .invalidRequest,
+            message: "A frame is malformed: the field hello.protocolVersion has the wrong type."
+        )))
     }
 
     /// The session process closes a client's descriptor
@@ -327,6 +408,16 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         #expect(shutdown(descriptors[0], SHUT_WR) == 0)
         #expect(server.peerHasClosed)
         try server.send(ServerMessage.acknowledged)
+    }
+
+    @Test func aHelloThatDoesNotArriveInTimeEndsTheGreeting() throws {
+        let (client, server) = try MessageConnection.makePair()
+        _ = client
+        let start = ContinuousClock.now
+        #expect(throws: SessionProtocolError.timedOut(waitingFor: "the rest of a frame")) {
+            try server.greetClient(within: .milliseconds(200))
+        }
+        #expect(ContinuousClock.now - start < .seconds(5))
     }
 
     @Test func aWriteThatMakesNoProgressEndsAfterTheStallLimit() throws {
