@@ -66,4 +66,87 @@ import Testing
         #expect((path as NSString).deletingLastPathComponent == FileManager.default.currentDirectoryPath)
     }
 
+    @Test func theDefaultIsRecognizedInOtherSpellings() throws {
+        let home = NSHomeDirectory()
+        let file = "/Library/Application Support/OpenRun/session.socket"
+        #expect(try SocketLocation(path: home + "/Library/Application Support/OpenRun/./session.socket").isDefault)
+        #expect(try SocketLocation(path: home + "/Library/../Library/Application Support/OpenRun/session.socket").isDefault)
+        #expect(try SocketLocation(path: "/" + home + "//Library/Application Support//OpenRun/session.socket").isDefault)
+        #expect(try SocketLocation(path: home + file).isDefault)
+        #expect(try !SocketLocation(path: home + "/Library/Application Support/OpenRun/other.socket").isDefault)
+        #expect(try !SocketLocation(path: home + "/Library/Application Support/OpenRun/session.socket/inside").isDefault)
+    }
+
+    /// architecture.md promises that a symbolic link spelling counts. The
+    /// links live in a temporary folder and lead to folders of the home
+    /// folder. Nothing is created in the home folder itself.
+    @Test func theDefaultIsRecognizedThroughSymbolicLinks() throws {
+        // A short folder, because a socket path may hold only 103 bytes.
+        let base = "/tmp/default-links-\(UInt32.random(in: 0...UInt32.max))"
+        // Mode 0700, because /tmp is shared and another user must not be able
+        // to put a link or a file into the folder.
+        try FileManager.default.createDirectory(
+            atPath: base,
+            withIntermediateDirectories: true,
+            attributes: [.posixPermissions: 0o700]
+        )
+        defer { try? FileManager.default.removeItem(atPath: base) }
+        var folderStatus = stat()
+        #expect(stat(base, &folderStatus) == 0)
+        #expect(folderStatus.st_mode & 0o7777 == 0o700)
+        let home = NSHomeDirectory()
+        #expect(symlink(home, base + "/home") == 0)
+        #expect(symlink(home + "/Library/Application Support", base + "/support") == 0)
+
+        let throughHome = try SocketLocation(path: base + "/home/Library/Application Support/OpenRun/session.socket")
+        // The link keeps its name, so only the comparison can see the default.
+        #expect(throughHome.path.hasPrefix(base + "/home/"))
+        #expect(throughHome.isDefault)
+        #expect(try SocketLocation(path: base + "/support/OpenRun/session.socket").isDefault)
+        #expect(try !SocketLocation(path: base + "/home/Library/Application Support/OpenRun/other.socket").isDefault)
+        #expect(try !SocketLocation(path: base + "/support/session.socket").isDefault)
+    }
+
+    // MARK: - Absolute paths
+
+    /// Only a relative path lost its "." and "..", so a
+    /// long spelling of a short absolute path failed the length check.
+    @Test func anAbsolutePathLosesItsDotsBeforeTheLengthCheck() throws {
+        let long = "/run" + String(repeating: "/.", count: 60) + "/openrun//session.socket"
+        #expect(long.utf8.count > SocketLocation.pathByteLimit)
+        #expect(try SocketLocation(path: long).path == "/run/openrun/session.socket")
+        #expect(try SocketLocation(path: "/run/missing/../openrun/./session.socket").path == "/run/openrun/session.socket")
+        #expect(try SocketLocation(path: "/../run/session.socket").path == "/run/session.socket")
+        #expect(try SocketLocation(path: "/run/openrun/session.socket/").path == "/run/openrun/session.socket")
+        let flagged = try SocketLocation.resolve(flag: "/run/./openrun/session.socket", environment: [:])
+        #expect(flagged.path == "/run/openrun/session.socket")
+    }
+
+    /// A symbolic link keeps its name, so a plain path reaches programs as
+    /// the user wrote it. A ".." right after a link climbs out of the folder
+    /// that the link leads to, as the system reads it.
+    @Test func anAbsolutePathKeepsItsSymbolicLinksAndClimbsOutOfThemAsTheSystemDoes() throws {
+        let base = NSTemporaryDirectory() + "links-\(UInt32.random(in: 0...UInt32.max))"
+        try FileManager.default.createDirectory(atPath: base + "/real/inner", withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: base) }
+        #expect(symlink(base + "/real/inner", base + "/link") == 0)
+        #expect(try SocketLocation(path: base + "/link/session.socket").path == base + "/link/session.socket")
+        #expect(try SocketLocation(path: base + "//link/./session.socket").path == base + "/link/session.socket")
+
+        let realFolder = try #require(realpath(base + "/real", nil))
+        defer { free(realFolder) }
+        #expect(try SocketLocation(path: base + "/link/../session.socket").path == String(cString: realFolder) + "/session.socket")
+    }
+
+    @Test func aSymbolicLinkResolvesToTheFolderItLeadsTo() throws {
+        let base = NSTemporaryDirectory() + "resolve-\(UInt32.random(in: 0...UInt32.max))"
+        let folder = base + "/real"
+        try FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(atPath: base) }
+        #expect(symlink(folder, base + "/link") == 0)
+        let real = SocketLocation.resolvedPath(folder + "/missing/session.socket")
+        #expect(SocketLocation.resolvedPath(base + "/link/missing/session.socket") == real)
+        #expect(SocketLocation.resolvedPath(base + "/link/./missing/../missing/session.socket") == real)
+        #expect(SocketLocation.resolvedPath(base + "/real/other.socket") != real)
+    }
 }
