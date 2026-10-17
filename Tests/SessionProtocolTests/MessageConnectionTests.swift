@@ -1,0 +1,86 @@
+import Darwin
+import Foundation
+import Synchronization
+import Testing
+@testable import SessionProtocol
+
+@Suite struct MessageConnectionTests {
+    @Test func messagesTravelInBothDirections() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try client.send(ClientMessage.listSessions)
+        #expect(try server.receive(ClientMessage.self) == .listSessions)
+        try server.send(ServerMessage.acknowledged)
+        #expect(try client.receive(ServerMessage.self) == .acknowledged)
+    }
+
+    @Test func framesKeepTheirOrder() throws {
+        let (client, server) = try MessageConnection.makePair()
+        for number in 0..<50 {
+            try client.send(ClientMessage.input(Data([UInt8(number)])))
+        }
+        for number in 0..<50 {
+            #expect(try server.receive(ClientMessage.self) == .input(Data([UInt8(number)])))
+        }
+    }
+
+    @Test func aLargePayloadArrivesWhole() throws {
+        let (client, server) = try MessageConnection.makePair()
+        let payload = Data((0..<2_000_000).map { UInt8(truncatingIfNeeded: $0) })
+        // The socket buffer is smaller, so sending needs a reader at the same time.
+        let sender = Thread { try? client.send(ServerMessage.snapshot(payload)) }
+        sender.start()
+        #expect(try server.receive(ServerMessage.self) == .snapshot(payload))
+    }
+
+    @Test func aCleanCloseBetweenFramesGivesNil() throws {
+        let (client, server) = try MessageConnection.makePair()
+        client.shutdown()
+        #expect(try server.receive(ClientMessage.self) == nil)
+    }
+
+    @Test func aCloseInTheMiddleOfAFrameThrows() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        // A length field that promises 10 bytes, and only 2 follow.
+        let partial: [UInt8] = [0, 0, 0, 10, 2, 7]
+        #expect(write(descriptors[0], partial, partial.count) == partial.count)
+        close(descriptors[0])
+        #expect(throws: SessionProtocolError.connectionClosed) { try receiver.receive(ServerMessage.self) }
+    }
+
+    @Test func anOversizedLengthIsRejectedWithoutReadingTheBody() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        defer { close(descriptors[0]) }
+        let huge: [UInt8] = [0xFF, 0xFF, 0xFF, 0xFF]
+        #expect(write(descriptors[0], huge, huge.count) == huge.count)
+        #expect(throws: SessionProtocolError.self) { try receiver.receive(ClientMessage.self) }
+    }
+
+    @Test func writingToAClosedPeerThrowsInsteadOfEndingTheProcess() throws {
+        // Dropping the other end closes its descriptor.
+        let (client, _) = try MessageConnection.makePair()
+        #expect(throws: SessionProtocolError.self) {
+            for _ in 0..<10 { try client.send(ClientMessage.listSessions) }
+        }
+    }
+
+    @Test func aControlFrameThatCannotBeParsedIsDescribedWithoutItsBytes() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        let payload = Array("\u{1B}]52;c;payload-secret\u{07}".utf8)
+        let frame: [UInt8] = [0, 0, 0, UInt8(payload.count + 1), 1] + payload
+        #expect(write(descriptors[0], frame, frame.count) == frame.count)
+        do {
+            _ = try receiver.receive(ServerMessage.self)
+            Issue.record("Bytes that are not JSON were decoded.")
+        } catch {
+            #expect(!"\(error)".contains("\u{1B}"), "error: \(error)")
+            #expect(!"\(error)".contains("payload-secret"), "error: \(error)")
+        }
+    }
+}
