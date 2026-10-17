@@ -14,6 +14,12 @@ public struct SocketLocation: Equatable, Sendable {
         NSHomeDirectory() + "/Library/Application Support/OpenRun/session.socket"
     }
 
+    /// Whether this is the default location, in a folder that OpenRun owns.
+    /// Other spellings of the same path count too, such as one through a
+    /// symbolic link to the home folder.
+    public var isDefault: Bool {
+        Self.resolvedPath(path) == Self.resolvedPath(Self.defaultPath)
+    }
 
     /// The folder that holds the socket file.
     public var folder: String {
@@ -36,6 +42,16 @@ public struct SocketLocation: Equatable, Sendable {
             throw SessionProtocolError.socketPathTooLong(path: standardized, limit: Self.pathByteLimit)
         }
         self.path = standardized
+    }
+
+    /// Chooses the socket. The `--socket` flag wins, then `OPENRUN_SOCKET`,
+    /// then the default path.
+    public static func resolve(flag: String?, environment: [String: String]) throws -> SocketLocation {
+        if let flag, !flag.isEmpty { return try SocketLocation(path: flag) }
+        if let override = environment[SessionEnvironment.socketName], !override.isEmpty {
+            return try SocketLocation(path: override)
+        }
+        return try SocketLocation(path: defaultPath)
     }
 
     /// An absolute path without empty, "." and ".." components.
@@ -65,5 +81,31 @@ public struct SocketLocation: Equatable, Sendable {
             }
         }
         return "/" + components.joined(separator: "/")
+    }
+
+    /// The path with its symbolic links, "." and ".." resolved as far as its
+    /// folders exist, so two spellings of one file compare equal. The part
+    /// that does not exist yet keeps its names.
+    static func resolvedPath(_ path: String) -> String {
+        var existing = path
+        var missing: [String] = []
+        while true {
+            if let resolved = realpath(existing, nil) {
+                defer { free(resolved) }
+                var components = (String(cString: resolved) as NSString).pathComponents
+                for name in missing {
+                    switch name {
+                    case ".", "/": continue
+                    case "..": if components.count > 1 { components.removeLast() }
+                    default: components.append(name)
+                    }
+                }
+                return NSString.path(withComponents: components)
+            }
+            let parent = (existing as NSString).deletingLastPathComponent
+            guard !parent.isEmpty, parent != existing else { return path }
+            missing.insert((existing as NSString).lastPathComponent, at: 0)
+            existing = parent
+        }
     }
 }
