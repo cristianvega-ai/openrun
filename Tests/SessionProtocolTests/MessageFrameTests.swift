@@ -67,6 +67,52 @@ import Testing
         #expect(try ServerMessage.snapshot(Data([4])).frame() == MessageFrame(kind: .snapshot, payload: Data([4])))
     }
 
+    @Test func everyMessageSurvivesEncodingAndDecoding() throws {
+        let identifier = UUID()
+        let size = SessionSize(columns: 80, rows: 24)
+        let summary = SessionSummary(
+            identifier: identifier,
+            folder: "/work",
+            command: ["/bin/zsh", "-l"],
+            size: size,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let clientMessages: [ClientMessage] = [
+            .hello(protocolVersion: 1),
+            .createSession(folder: "/work", command: nil, size: size, environment: ["PATH": "/bin"]),
+            .createSession(folder: "/work", command: ["ls", "-l"], size: size, environment: [:]),
+            .listSessions,
+            .readScreen(identifier: identifier, includeScrollback: true),
+            .sendText(identifier: identifier, text: "echo \"quoted\" \u{1F600}"),
+            .killSession(identifier: identifier),
+            .attach(identifier: identifier, size: size),
+            .attach(identifier: identifier, size: size, relaysRawOutput: false, receivesSizeChanges: true),
+            .input(Data([0x1B, 0x5B, 0x41])),
+            .resize(size),
+            .detach,
+        ]
+        for message in clientMessages {
+            #expect(try ClientMessage(frame: message.frame()) == message)
+        }
+        let serverMessages: [ServerMessage] = [
+            .hello(protocolVersion: 1),
+            .sessionCreated(summary),
+            .sessionList([summary, summary]),
+            .attached(summary),
+            .snapshot(Data([1, 2, 3])),
+            .output(Data([0xE2, 0x82])),
+            .sizeChanged(SessionSize(columns: 100, rows: 30)),
+            .screen(text: "line\nline"),
+            .exited(.exited(status: 3)),
+            .exited(.signaled(signal: 9)),
+            .acknowledged,
+            .failure(SessionFailure(reason: .unknownSession, message: "No session.")),
+        ]
+        for message in serverMessages {
+            #expect(try ServerMessage(frame: message.frame()) == message)
+        }
+    }
+
     @Test func aFrameForTheOtherDirectionIsRefused() {
         #expect(throws: SessionProtocolError.self) {
             try ClientMessage(frame: MessageFrame(kind: .output, payload: Data()))
@@ -89,9 +135,40 @@ import Testing
         }
     }
 
+    /// A request that cannot be decoded gets a
+    /// failure that names the problem. The reason uses the words of the
+    /// protocol and never the bytes of the request, which can hold escape
+    /// sequences.
+    @Test(arguments: [
+        ("\u{1B}]52;c;secret\u{07}", "the control message is not valid JSON, or nests too deeply"),
+        (#"{"noSuchMessage":{}}"#, "the control message is not a JSON object with the name of one message of the protocol"),
+        (#"{"resize":{"_0":{"columns":999999,"rows":24}}}"#, "the field resize._0.columns holds a value that is out of range or in the wrong form"),
+        (#"{"resize":{"_0":{"columns":80,"rows":-1}}}"#, "the field resize._0.rows holds a value that is out of range or in the wrong form"),
+        (#"{"hello":{"protocolVersion":1e300}}"#, "a value in the control message is out of range"),
+        (#"{"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}"#, "the field attach.size is missing"),
+        (#"{"readScreen":{"identifier":"\u001b[31mnot-an-identifier","includeScrollback":false}}"#, "the field readScreen.identifier holds a value that is out of range or in the wrong form"),
+        (#"{"hello":{"protocolVersion":null}}"#, "the field hello.protocolVersion is null"),
+        (#"{"createSession":{"folder":"/","size":{"columns":80,"rows":24},"environment":{"\u001b[31mNAME":5}}}"#, "the field createSession.environment.(a name) has the wrong type"),
+        (#"{"input":{"_0":"\#(Data([1]).base64EncodedString())"}}"#, "input must be a raw frame"),
+    ])
+    func aRequestThatCannotBeDecodedIsDescribedInTheWordsOfTheProtocol(payload: String, reason: String) {
+        #expect(throws: SessionProtocolError.malformedFrame(reason: reason)) {
+            try ClientMessage(frame: MessageFrame(kind: .control, payload: Data(payload.utf8)))
+        }
+    }
+
     @Test func anAnswerThatCannotBeDecodedIsDescribedWithoutItsBytes() {
         #expect(throws: SessionProtocolError.malformedFrame(reason: "the control message is not valid JSON, or nests too deeply")) {
             try ServerMessage(frame: MessageFrame(kind: .control, payload: Data("\u{1B}[2J not json".utf8)))
+        }
+    }
+
+    @Test func aSizeKeepsItsTextAndRefusesWhatDoesNotFit() throws {
+        let encoded = try JSONEncoder.messages.encode(SessionSize(columns: 65535, rows: 0))
+        #expect(String(decoding: encoded, as: UTF8.self) == #"{"columns":65535,"rows":0}"#)
+        #expect(try JSONDecoder.messages.decode(SessionSize.self, from: encoded) == SessionSize(columns: 65535, rows: 0))
+        #expect(throws: DecodingError.self) {
+            try JSONDecoder.messages.decode(SessionSize.self, from: Data(#"{"columns":65536,"rows":1}"#.utf8))
         }
     }
 
