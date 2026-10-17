@@ -43,6 +43,7 @@ The owner makes each decision. Record a new decision in its decision log.
 ## Comments and documents
 
 - Write comments that explain why the code does something, not what it does.
+- `documentation/architecture.md` describes the modules and the socket protocol. Update it when you add a module or change the protocol.
 - Write documents in plain English with short sentences and full words.
 
 ## Commits
