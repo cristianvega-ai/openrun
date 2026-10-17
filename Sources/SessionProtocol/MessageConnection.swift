@@ -139,6 +139,22 @@ public final class MessageConnection: Sendable {
         defer { chunk.deallocate() }
         var lastProgress = ContinuousClock.now
         while bytes.count < count {
+            let waitLimit: Duration?
+            switch timeLimit {
+            case .unlimited:
+                waitLimit = nil
+            case .wholeFrame(let deadline):
+                waitLimit = deadline - .now
+            case .stall(let limit):
+                waitLimit = startsFrame && bytes.isEmpty ? nil : lastProgress + limit - .now
+            }
+            if let waitLimit {
+                guard waitLimit > .zero else {
+                    throw SessionProtocolError.timedOut(waitingFor: "the rest of a frame")
+                }
+                // The loop checks the time again, after a signal as well.
+                guard Self.wait(for: descriptor, until: Int16(POLLIN), atMost: waitLimit) else { continue }
+            }
             let offset = bytes.count
             let received = Darwin.read(descriptor, chunk.baseAddress!, min(count - offset, chunk.count))
             let code = errno
@@ -159,6 +175,16 @@ public final class MessageConnection: Sendable {
             }
         }
         return bytes
+    }
+
+    /// Waits until the socket is ready or the time passes. Returns whether
+    /// it became ready. A local `shutdown` makes it ready.
+    private static func wait(for descriptor: Int32, until events: Int16, atMost limit: Duration) -> Bool {
+        let parts = limit.components
+        // Rounded up, so the wait never ends before the time is over.
+        let milliseconds = parts.seconds * 1000 + (parts.attoseconds + 999_999_999_999_999) / 1_000_000_000_000_000
+        var entry = pollfd(fd: descriptor, events: events, revents: 0)
+        return poll(&entry, 1, Int32(clamping: milliseconds)) > 0
     }
 
     /// Sets how long a send may wait without progress. Nil waits forever.

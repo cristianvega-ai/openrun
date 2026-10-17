@@ -67,6 +67,32 @@ import Testing
         }
     }
 
+    @Test func aFrameThatStallsEndsTheReceiveAfterTheStallLimit() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        // A length field that promises 64 MiB, and ten bytes of it.
+        let partial: [UInt8] = [0x04, 0x00, 0x00, 0x01, 3] + [UInt8](repeating: 0x61, count: 10)
+        #expect(write(descriptors[0], partial, partial.count) == partial.count)
+        let start = ContinuousClock.now
+        #expect(throws: SessionProtocolError.timedOut(waitingFor: "the rest of a frame")) {
+            try receiver.receive(ClientMessage.self, timeLimit: .stall(.milliseconds(200)))
+        }
+        #expect(ContinuousClock.now - start >= .milliseconds(200))
+        #expect(ContinuousClock.now - start < .seconds(5))
+    }
+
+    @Test func aStallLimitDoesNotEndTheWaitBetweenFrames() throws {
+        let (client, server) = try MessageConnection.makePair()
+        let sender = Thread {
+            Thread.sleep(forTimeInterval: 0.4)
+            try? client.send(ClientMessage.listSessions)
+        }
+        sender.start()
+        #expect(try server.receive(ClientMessage.self, timeLimit: .stall(.milliseconds(100))) == .listSessions)
+    }
+
     @Test func aControlFrameThatCannotBeParsedIsDescribedWithoutItsBytes() throws {
         var descriptors: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
@@ -82,5 +108,16 @@ import Testing
             #expect(!"\(error)".contains("\u{1B}"), "error: \(error)")
             #expect(!"\(error)".contains("payload-secret"), "error: \(error)")
         }
+    }
+
+    @Test func aWriteThatMakesNoProgressEndsAfterTheStallLimit() throws {
+        let (client, server) = try MessageConnection.makePair()
+        _ = server
+        // Nobody reads, so the socket fills up and the write stalls.
+        let start = ContinuousClock.now
+        #expect(throws: SessionProtocolError.timedOut(waitingFor: "the other side to take a frame")) {
+            try client.send(ServerMessage.output(Data(count: 1024 * 1024)), stallLimit: .milliseconds(200))
+        }
+        #expect(ContinuousClock.now - start < .seconds(5))
     }
 }
