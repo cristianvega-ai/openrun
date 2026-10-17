@@ -65,11 +65,100 @@ public final class MessageConnection: Sendable {
         return (MessageConnection(descriptor: descriptors[0]), MessageConnection(descriptor: descriptors[1]))
     }
 
+    /// Writes one whole frame.
+    ///
+    /// - Parameter stallLimit: When it is set, the write ends with
+    ///   `SessionProtocolError.timedOut` once the other side has taken no
+    ///   byte for this long. Without it, the write waits as long as it takes.
+    public func send(_ message: some FramedMessage, stallLimit: Duration? = nil) throws {
+        let bytes = try message.frame().encoded()
+        try sendLock.withLock { sendTimeout in
+            // MSG_DONTWAIT does not keep a send on a Unix socket of macOS from
+            // blocking. A send timeout does: a send that takes no byte for this
+            // long returns what it sent, or EAGAIN.
+            if sendTimeout != stallLimit {
+                Self.setSendTimeout(stallLimit, on: descriptor)
+                sendTimeout = stallLimit
+            }
+            try bytes.withUnsafeBytes { buffer in
+                var offset = 0
+                while offset < buffer.count {
+                    let started = ContinuousClock.now
+                    let count = Darwin.send(descriptor, buffer.baseAddress! + offset, buffer.count - offset, MSG_NOSIGNAL)
+                    let code = errno
+                    if count > 0 {
+                        offset += count
+                    } else if count < 0 && code == EINTR {
+                        continue
+                    } else if !(count < 0 && code == EAGAIN && stallLimit != nil) {
+                        throw SessionProtocolError.systemCallFailed(function: "write", code: code)
+                    }
+                    // A send with a timeout returns before the end only when a
+                    // wait for room took the whole limit without a byte, or
+                    // when a signal came. The time it took tells them apart.
+                    if offset < buffer.count, let stallLimit, ContinuousClock.now - started >= stallLimit {
+                        throw SessionProtocolError.timedOut(waitingFor: "the other side to take a frame")
+                    }
+                }
+            }
+        }
+    }
+
+    /// Reads one whole frame and decodes it. Returns `nil` when the peer
+    /// closed the connection between two frames.
+    public func receive<Message: FramedMessage>(
+        _ type: Message.Type = Message.self,
+        timeLimit: TimeLimit = .unlimited,
+    ) throws -> Message? {
+        guard let field = try read(MessageFrame.lengthFieldSize, startsFrame: true, timeLimit: timeLimit) else {
+            return nil
+        }
+        let length = try MessageFrame.bodyLength(fromLengthField: field)
+        guard let kindByte = try read(1, startsFrame: false, timeLimit: timeLimit)?.first else {
+            throw SessionProtocolError.connectionClosed
+        }
+        let kind = try MessageFrame.kind(fromByte: kindByte)
+        guard let payload = try read(length - 1, startsFrame: false, timeLimit: timeLimit) else {
+            throw SessionProtocolError.connectionClosed
+        }
+        return try Message(frame: MessageFrame(kind: kind, payload: payload))
+    }
+
     /// Ends both directions at once. A thread blocked in `receive` or `send`
     /// returns. The descriptor itself closes when the last reference goes
     /// away, so a thread that still uses it never meets a reused number.
     public func shutdown() {
         Darwin.shutdown(descriptor, SHUT_RDWR)
+    }
+
+    /// Reads `count` bytes. The buffer grows as the bytes arrive, so a frame
+    /// that announces 64 MiB and sends little costs little.
+    private func read(_ count: Int, startsFrame: Bool, timeLimit: TimeLimit) throws -> Data? {
+        var bytes = Data()
+        let chunk = UnsafeMutableRawBufferPointer.allocate(byteCount: max(1, min(count, Self.readChunkSize)), alignment: 1)
+        defer { chunk.deallocate() }
+        var lastProgress = ContinuousClock.now
+        while bytes.count < count {
+            let offset = bytes.count
+            let received = Darwin.read(descriptor, chunk.baseAddress!, min(count - offset, chunk.count))
+            let code = errno
+            if received > 0 {
+                bytes.append(chunk.baseAddress!.assumingMemoryBound(to: UInt8.self), count: received)
+                lastProgress = .now
+            } else if received == 0 {
+                if offset == 0 && startsFrame { return nil }
+                throw SessionProtocolError.connectionClosed
+            } else if code == EINTR || code == EAGAIN {
+                continue
+            } else if code == ECONNRESET || code == EBADF || code == EINVAL {
+                // The peer or a local shutdown ended the connection.
+                if offset == 0 && startsFrame { return nil }
+                throw SessionProtocolError.connectionClosed
+            } else {
+                throw SessionProtocolError.systemCallFailed(function: "read", code: code)
+            }
+        }
+        return bytes
     }
 
     /// Sets how long a send may wait without progress. Nil waits forever.

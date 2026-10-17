@@ -8,10 +8,14 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
     case frameTooLarge(length: Int, limit: Int)
     /// A frame did not follow the format.
     case malformedFrame(reason: String)
+    /// The other side closed the connection in the middle of a frame.
+    case connectionClosed
     /// A system call failed. `code` is the `errno` value.
     case systemCallFailed(function: String, code: Int32)
     /// A message arrived that does not fit this point of the conversation.
     case unexpectedMessage(description: String)
+    /// The other side made no progress within the time limit.
+    case timedOut(waitingFor: String)
     /// The folder of the socket belongs to another user, who could put a
     /// socket of their own at the path.
     case socketFolderOfAnotherUser(folder: String, owner: uid_t)
@@ -33,10 +37,14 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
             "A frame of \(length) bytes is larger than the limit of \(limit) bytes."
         case .malformedFrame(let reason):
             "A frame is malformed: \(reason)."
+        case .connectionClosed:
+            "The connection closed."
         case .systemCallFailed(let function, let code):
             "\(function) failed: \(String(cString: strerror(code)))"
         case .unexpectedMessage(let description):
             "An unexpected message arrived: \(description)."
+        case .timedOut(let waitingFor):
+            "The connection made no progress in time while it waited for \(waitingFor)."
         case .socketFolderOfAnotherUser(let folder, let owner):
             "The socket folder \(folder) belongs to another user (user \(owner)), who could put a socket of their own there. Choose a socket in a folder of your own with --socket."
         case .socketFolderWritableByOthers(let folder, let mode):
