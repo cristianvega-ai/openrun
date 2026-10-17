@@ -3,6 +3,28 @@ import Foundation
 import Testing
 @testable import SessionProtocol
 
+/// Adds an entry to the access control list of a file or folder, such as
+/// "everyone allow add_file", with `chmod +a`.
+func addAccessControlEntry(_ entry: String, to path: String) throws {
+    #expect(try changeMode(["+a", entry, path]) == 0, "chmod +a '\(entry)' failed")
+}
+
+/// Removes a folder after its access control list, whose entries could
+/// keep it from being removed.
+func removeFolderAndItsAccessControlList(_ path: String) {
+    _ = try? changeMode(["-R", "-N", path])
+    try? FileManager.default.removeItem(atPath: path)
+}
+
+private func changeMode(_ arguments: [String]) throws -> Int32 {
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/chmod")
+    process.arguments = arguments
+    try process.run()
+    process.waitUntilExit()
+    return process.terminationStatus
+}
+
 @Suite struct SocketLocationTests {
     /// The absolute path that `resolve` makes. A folder with a long path pushes
     /// the result over the byte limit, and the error then carries that same
