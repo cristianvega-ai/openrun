@@ -56,6 +56,35 @@ public final class MessageConnection: Sendable {
         if closing >= 0 { Darwin.close(closing) }
     }
 
+    /// Connects to a session process.
+    ///
+    /// Refuses a folder that other users can change, and a program at the
+    /// other end that runs as another user, before a single byte goes out. A
+    /// client sends its environment, folder and typed text, which belong to
+    /// no one else. See `SocketLocation.checkFolder` and `requirePeer`.
+    public static func connect(to location: SocketLocation) throws -> MessageConnection {
+        try connect(to: location, expectedPeer: .currentUser)
+    }
+
+    /// `connect(to:)` with the user that the peer must run as. Tests pass
+    /// another user, because they cannot start a program as one.
+    static func connect(to location: SocketLocation, expectedPeer: PeerIdentity) throws -> MessageConnection {
+        try location.checkFolder()
+        let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+        guard descriptor >= 0 else { throw SessionProtocolError.failure(of: "socket") }
+        // Before connecting, while the system still accepts the option.
+        turnOffBrokenPipeSignal(on: descriptor)
+        let result = location.withAddress { Darwin.connect(descriptor, $0, $1) }
+        guard result == 0 else {
+            let failure = SessionProtocolError.failure(of: "connect")
+            Darwin.close(descriptor)
+            throw failure
+        }
+        let connection = MessageConnection(descriptor: descriptor)
+        try connection.requirePeer(expectedPeer)
+        return connection
+    }
+
     /// Two connected ends, for tests.
     public static func makePair() throws -> (MessageConnection, MessageConnection) {
         var descriptors: [Int32] = [0, 0]
@@ -136,6 +165,15 @@ public final class MessageConnection: Sendable {
             throw SessionProtocolError.connectionClosed
         }
         return try Message(frame: MessageFrame(kind: kind, payload: payload))
+    }
+
+    /// Throws `SessionProtocolError.peerIsAnotherUser` unless the program at
+    /// the other end runs as `expected`. Call it before sending anything.
+    public func requirePeer(_ expected: PeerIdentity = .currentUser) throws {
+        let peer = try PeerIdentity(ofSocket: descriptor)
+        guard peer == expected else {
+            throw SessionProtocolError.peerIsAnotherUser(expected: expected.userIdentifier, found: peer.userIdentifier)
+        }
     }
 
     /// Ends both directions at once. A thread blocked in `receive` or `send`

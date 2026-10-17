@@ -320,4 +320,14 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         client.shutdown()
         #expect(server.peerHasClosed)
     }
+
+    @Test func connectingToAnAbsentSocketFailsWithAnErrorNumber() throws {
+        let path = NSTemporaryDirectory() + "absent-\(UInt32.random(in: 0...UInt32.max)).socket"
+        do {
+            _ = try MessageConnection.connect(to: SocketLocation(path: path))
+            Issue.record("The connection should have failed.")
+        } catch let error as SessionProtocolError {
+            #expect(error == .systemCallFailed(function: "connect", code: ENOENT))
+        }
+    }
 }

@@ -88,6 +88,23 @@ public struct SocketLocation: Equatable, Sendable {
         }
     }
 
+    /// Calls `body` with the socket address, for `bind` and `connect`.
+    public func withAddress<Result>(_ body: (UnsafePointer<sockaddr>, socklen_t) throws -> Result) rethrows -> Result {
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        let capacity = MemoryLayout.size(ofValue: address.sun_path)
+        withUnsafeMutableBytes(of: &address.sun_path) { buffer in
+            // The initializer checked the length, so the copy fits.
+            buffer.copyBytes(from: path.utf8.prefix(capacity - 1))
+        }
+        address.sun_len = UInt8(MemoryLayout<sockaddr_un>.size)
+        return try withUnsafePointer(to: &address) { pointer in
+            try pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) {
+                try body($0, socklen_t(MemoryLayout<sockaddr_un>.size))
+            }
+        }
+    }
+
     /// An absolute path without empty, "." and ".." components.
     ///
     /// Symbolic links keep their names, so a path that is already plain

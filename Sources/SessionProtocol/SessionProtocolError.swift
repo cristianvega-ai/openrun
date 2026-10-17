@@ -28,6 +28,8 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
     case socketFolderWritableThroughAccessControlList(folder: String)
     /// What should be the folder of the socket is a file of another kind.
     case socketFolderIsNotADirectory(folder: String)
+    /// The program at the other end of the socket runs as another user.
+    case peerIsAnotherUser(expected: uid_t, found: uid_t)
 
     public var description: String {
         switch self {
@@ -53,6 +55,8 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
             "The access control list of the socket folder \(folder) lets other users add or remove files in it, so one of them could put a socket of their own there. Choose a socket in a folder that only you can write to with --socket, or remove the entry (ls -led shows the list, and chmod -a removes an entry)."
         case .socketFolderIsNotADirectory(let folder):
             "The socket folder \(folder) is not a folder. Choose a socket in a folder of your own with --socket."
+        case .peerIsAnotherUser(let expected, let found):
+            "The program at the other end of the socket runs as user \(found), not as user \(expected). OpenRun talks only to programs of the same user."
         }
     }
 
