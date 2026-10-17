@@ -92,3 +92,87 @@ public struct MessageFrame: Equatable, Sendable {
         return kind
     }
 }
+
+extension JSONEncoder {
+    static var messages: JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .secondsSince1970
+        // Sorted keys keep logs and tests stable.
+        encoder.outputFormatting = [.sortedKeys]
+        return encoder
+    }
+}
+
+extension JSONDecoder {
+    static var messages: JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .secondsSince1970
+        return decoder
+    }
+
+    /// Decodes the JSON of a control message.
+    ///
+    /// A payload that holds no message of the protocol throws
+    /// `SessionProtocolError.malformedFrame`, with a reason that names the
+    /// problem in the words of the protocol. The reason never quotes the
+    /// payload. The peer wrote it, and it can hold anything, such as escape
+    /// sequences that would drive the terminal that shows the error.
+    func decodeControlMessage<Message: Decodable>(_ type: Message.Type, from payload: Data) throws -> Message {
+        do {
+            return try decode(type, from: payload)
+        } catch let error as DecodingError {
+            throw SessionProtocolError.malformedFrame(reason: Self.reason(for: error, payload: payload))
+        }
+    }
+
+    /// Takes any JSON and keeps nothing, to tell JSON that cannot be read
+    /// from JSON with a value that does not fit.
+    private struct AnyValue: Decodable {
+        init(from decoder: any Decoder) {}
+    }
+
+    private static func reason(for error: DecodingError, payload: Data) -> String {
+        switch error {
+        case .dataCorrupted(let context) where context.codingPath.isEmpty:
+            // The decoder reports a number that does not fit its type, such
+            // as 999999 for a UInt16, without a path, as it reports bad JSON.
+            (try? JSONDecoder().decode(AnyValue.self, from: payload)) != nil
+                ? "a value in the control message is out of range"
+                : "the control message is not valid JSON, or nests too deeply"
+        case .dataCorrupted(let context):
+            "the field \(fieldName(context.codingPath)) holds a value that is out of range or in the wrong form"
+        case .keyNotFound(let key, let context):
+            "the field \(fieldName(context.codingPath + [key])) is missing"
+        case .valueNotFound(_, let context):
+            "the field \(fieldName(context.codingPath)) is null"
+        case .typeMismatch(_, let context) where context.codingPath.isEmpty:
+            "the control message is not a JSON object with the name of one message of the protocol"
+        case .typeMismatch(_, let context):
+            "the field \(fieldName(context.codingPath)) has the wrong type"
+        @unknown default:
+            "the control message cannot be decoded"
+        }
+    }
+
+    /// The path of a field, such as `createSession.size.columns`. The names
+    /// of the protocol pass as they are. A name that the peer chose, such as
+    /// the name of an environment variable, passes only when it is plain
+    /// letters, digits and underscores.
+    private static func fieldName(_ path: [any CodingKey]) -> String {
+        var text = ""
+        for key in path {
+            let name = key.stringValue
+            let isPlain = !name.isEmpty && name.count <= 64 && name.unicodeScalars.allSatisfy { scalar in
+                ("a"..."z").contains(scalar) || ("A"..."Z").contains(scalar) || ("0"..."9").contains(scalar) || scalar == "_"
+            }
+            if isPlain {
+                text += (text.isEmpty ? "" : ".") + name
+            } else if let index = key.intValue {
+                text += "[\(index)]"
+            } else {
+                text += (text.isEmpty ? "" : ".") + "(a name)"
+            }
+        }
+        return text.isEmpty ? "(the message)" : text
+    }
+}
