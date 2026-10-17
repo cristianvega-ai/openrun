@@ -51,4 +51,9 @@ import Testing
         let frame = MessageFrame(kind: .output, payload: Data(count: MessageFrame.maximumPayloadLength + 1))
         #expect(throws: SessionProtocolError.self) { try frame.encoded() }
     }
+
+    @Test func exitStatusFollowsTheShellConvention() {
+        #expect(SessionExit.exited(status: 4).shellStatus == 4)
+        #expect(SessionExit.signaled(signal: 15).shellStatus == 143)
+    }
 }
