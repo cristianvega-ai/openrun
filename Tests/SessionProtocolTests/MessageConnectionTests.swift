@@ -321,6 +321,15 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         #expect(server.peerHasClosed)
     }
 
+    @Test func aRefusalIsReadEvenWhenTheHelloCannotGoOut() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try server.send(ServerMessage.failure(SessionFailure(reason: .invalidRequest, message: "The session process already serves 64 clients.")))
+        server.shutdown()
+        #expect(throws: SessionProtocolError.refused(message: "The session process already serves 64 clients.")) {
+            try client.greetSessionProcess()
+        }
+    }
+
     @Test func connectingToAnAbsentSocketFailsWithAnErrorNumber() throws {
         let path = NSTemporaryDirectory() + "absent-\(UInt32.random(in: 0...UInt32.max)).socket"
         do {

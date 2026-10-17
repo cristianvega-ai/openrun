@@ -12,10 +12,14 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
     case connectionClosed
     /// A system call failed. `code` is the `errno` value.
     case systemCallFailed(function: String, code: Int32)
+    /// The other side speaks another version of the protocol.
+    case incompatibleVersion(ours: Int, theirs: Int)
     /// A message arrived that does not fit this point of the conversation.
     case unexpectedMessage(description: String)
     /// The other side made no progress within the time limit.
     case timedOut(waitingFor: String)
+    /// The session process refused the client. The message says why.
+    case refused(message: String)
     /// The folder of the socket belongs to another user, who could put a
     /// socket of their own at the path.
     case socketFolderOfAnotherUser(folder: String, owner: uid_t)
@@ -43,10 +47,14 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
             "The connection closed."
         case .systemCallFailed(let function, let code):
             "\(function) failed: \(String(cString: strerror(code)))"
+        case .incompatibleVersion(let ours, let theirs):
+            "The session process speaks protocol version \(theirs), and this program speaks version \(ours). Update OpenRun and restart the session process."
         case .unexpectedMessage(let description):
             "An unexpected message arrived: \(description)."
         case .timedOut(let waitingFor):
             "The connection made no progress in time while it waited for \(waitingFor)."
+        case .refused(let message):
+            message
         case .socketFolderOfAnotherUser(let folder, let owner):
             "The socket folder \(folder) belongs to another user (user \(owner)), who could put a socket of their own there. Choose a socket in a folder of your own with --socket."
         case .socketFolderWritableByOthers(let folder, let mode):

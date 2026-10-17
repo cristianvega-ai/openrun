@@ -57,3 +57,24 @@ extension ServerMessage: FramedMessage {
         }
     }
 }
+
+extension ServerMessage {
+    /// The name of the message in the protocol, without its fields. An
+    /// error names a message by this, because its fields can be large and
+    /// can hold anything, such as a whole screen.
+    var name: String {
+        switch self {
+        case .hello: "hello"
+        case .sessionCreated: "sessionCreated"
+        case .sessionList: "sessionList"
+        case .attached: "attached"
+        case .snapshot: "snapshot"
+        case .output: "output"
+        case .sizeChanged: "sizeChanged"
+        case .screen: "screen"
+        case .exited: "exited"
+        case .acknowledged: "acknowledged"
+        case .failure: "failure"
+        }
+    }
+}

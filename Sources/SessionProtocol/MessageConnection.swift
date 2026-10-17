@@ -265,3 +265,61 @@ public final class MessageConnection: Sendable {
         setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size))
     }
 }
+
+extension MessageConnection {
+    /// The client side of the start of every conversation: say hello, and
+    /// check that the session process speaks the same protocol version.
+    ///
+    /// - Parameter limit: The time that the answer may take. Nil waits as
+    ///   long as it takes. Past the limit, it throws
+    ///   `SessionProtocolError.timedOut`.
+    public func greetSessionProcess(within limit: Duration? = nil) throws {
+        let deadline = limit.map { ContinuousClock.now + $0 }
+        // A session process that refuses this client answers and closes at
+        // once, maybe before the hello goes out. Its answer still waits here
+        // and explains more than the failed write.
+        var sendError: (any Error)?
+        do {
+            try send(ClientMessage.hello(protocolVersion: MessageFrame.protocolVersion), stallLimit: limit)
+        } catch {
+            sendError = error
+        }
+        let answer: ServerMessage?
+        do {
+            answer = try receive(ServerMessage.self, timeLimit: deadline.map { .wholeFrame(by: $0) } ?? .unlimited)
+        } catch {
+            throw sendError ?? error
+        }
+        switch answer {
+        case .hello(let version):
+            guard version == MessageFrame.protocolVersion else {
+                throw SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: version)
+            }
+        case .failure(let failure) where failure.reason == .incompatibleProtocol:
+            guard let version = Self.version(inRefusal: failure.message) else {
+                throw SessionProtocolError.refused(message: failure.message)
+            }
+            throw SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: version)
+        case .failure(let failure):
+            throw SessionProtocolError.refused(message: failure.message)
+        case .none:
+            throw sendError ?? SessionProtocolError.connectionClosed
+        case .some(let other):
+            // The name only: a whole message can be a screen of 64 MiB.
+            throw SessionProtocolError.unexpectedMessage(description: "\(other.name) arrived instead of hello")
+        }
+    }
+
+    /// The message of the failure that refuses a client of another version.
+    /// Every version must keep the words "protocol version" and the number of
+    /// the session process after them, because a client reads the number.
+    static func versionRefusal(ours: Int, theirs: Int) -> String {
+        "This session process speaks protocol version \(ours), not \(theirs)."
+    }
+
+    /// The version of the session process in its refusal, or nil.
+    static func version(inRefusal message: String) -> Int? {
+        guard let range = message.range(of: "protocol version ") else { return nil }
+        return Int(message[range.upperBound...].prefix { $0.isASCII && $0.isNumber })
+    }
+}
