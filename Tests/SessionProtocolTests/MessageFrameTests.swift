@@ -263,4 +263,100 @@ import Testing
             try MessageFrame(kind: .output, payload: Data(count: 67_108_865)).encoded()
         }
     }
+
+    @Test func terminalBytesTravelAsTheyAreInRawFrames() throws {
+        #expect(try ClientMessage.input(Data([0x1B, 0x5B, 0x41])).frame().encoded() == Data([0, 0, 0, 4, 3, 0x1B, 0x5B, 0x41]))
+        #expect(try ServerMessage.output(Data([0x68, 0x69])).frame().encoded() == Data([0, 0, 0, 3, 2, 0x68, 0x69]))
+        #expect(try ServerMessage.snapshot(Data([0x00, 0xFF])).frame().encoded() == Data([0, 0, 0, 3, 4, 0x00, 0xFF]))
+        #expect(try ClientMessage(frame: MessageFrame(body: Data([3, 0x1B]))) == .input(Data([0x1B])))
+        #expect(try ServerMessage(frame: MessageFrame(body: Data([2, 0x68]))) == .output(Data([0x68])))
+        #expect(try ServerMessage(frame: MessageFrame(body: Data([4, 0x01]))) == .snapshot(Data([0x01])))
+    }
+
+    @Test func aSimpleControlMessageIsTheBytesOfTheDocument() throws {
+        // {"hello":{"protocolVersion":1}} is 31 characters, so the length is 32.
+        let hello = Data([0, 0, 0, 0x20, 1]) + Data(#"{"hello":{"protocolVersion":1}}"#.utf8)
+        #expect(try ClientMessage.hello(protocolVersion: 1).frame().encoded() == hello)
+        #expect(try ServerMessage.hello(protocolVersion: 1).frame().encoded() == hello)
+        #expect(try ClientMessage.listSessions.frame().encoded() == Data([0, 0, 0, 0x14, 1]) + Data(#"{"listSessions":{}}"#.utf8))
+        #expect(try ClientMessage.detach.frame().encoded() == Data([0, 0, 0, 0x0E, 1]) + Data(#"{"detach":{}}"#.utf8))
+        #expect(try ServerMessage.acknowledged.frame().encoded() == Data([0, 0, 0, 0x14, 1]) + Data(#"{"acknowledged":{}}"#.utf8))
+    }
+
+    private static let identifierText = "3F2A9C1E-0000-4000-8000-000000000001"
+    private static let summaryText = """
+        {"identifier":"\(identifierText)","folder":"/work","command":["/bin/zsh","-l"],"size":{"columns":80,"rows":24},"createdAt":1700000000}
+        """
+
+    private static func parsedObject(_ bytes: Data) throws -> NSObject {
+        try #require(JSONSerialization.jsonObject(with: bytes) as? NSObject)
+    }
+
+    private static func parsedObject(_ text: String) throws -> NSObject {
+        try parsedObject(Data(text.utf8))
+    }
+
+    @Test func everyClientMessageHasTheTextOfTheDocument() throws {
+        let identifier = try #require(UUID(uuidString: Self.identifierText))
+        let size = SessionSize(columns: 80, rows: 24)
+        let expected: [(ClientMessage, String)] = [
+            (.hello(protocolVersion: 1), #"{"hello":{"protocolVersion":1}}"#),
+            (.createSession(folder: "/work", command: nil, size: size, environment: ["PATH": "/usr/bin"]),
+             #"{"createSession":{"environment":{"PATH":"/usr/bin"},"folder":"/work","size":{"columns":80,"rows":24}}}"#),
+            (.createSession(folder: "/work", command: ["ls", "-l"], size: size, environment: [:]),
+             #"{"createSession":{"command":["ls","-l"],"environment":{},"folder":"/work","size":{"columns":80,"rows":24}}}"#),
+            (.listSessions, #"{"listSessions":{}}"#),
+            (.readScreen(identifier: identifier, includeScrollback: true),
+             #"{"readScreen":{"identifier":"\#(Self.identifierText)","includeScrollback":true}}"#),
+            (.sendText(identifier: identifier, text: "echo \"hi\"\n"),
+             #"{"sendText":{"identifier":"\#(Self.identifierText)","text":"echo \"hi\"\n"}}"#),
+            (.killSession(identifier: identifier), #"{"killSession":{"identifier":"\#(Self.identifierText)"}}"#),
+            (.attach(identifier: identifier, size: size, relaysRawOutput: true),
+             #"{"attach":{"identifier":"\#(Self.identifierText)","relaysRawOutput":true,"size":{"columns":80,"rows":24}}}"#),
+            (.attach(identifier: identifier, size: size),
+             #"{"attach":{"identifier":"\#(Self.identifierText)","size":{"columns":80,"rows":24}}}"#),
+            (.attach(identifier: identifier, size: size, receivesSizeChanges: true),
+             #"{"attach":{"identifier":"\#(Self.identifierText)","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}"#),
+            (.resize(SessionSize(columns: 100, rows: 30)), #"{"resize":{"_0":{"columns":100,"rows":30}}}"#),
+            (.detach, #"{"detach":{}}"#),
+        ]
+        for (message, text) in expected {
+            let frame = try message.frame()
+            #expect(frame.kind == .control)
+            #expect(try Self.parsedObject(frame.payload) == Self.parsedObject(text), "\(message) became \(String(decoding: frame.payload, as: UTF8.self))")
+        }
+    }
+
+    @Test func everyServerMessageHasTheTextOfTheDocument() throws {
+        let identifier = try #require(UUID(uuidString: Self.identifierText))
+        let summary = SessionSummary(
+            identifier: identifier,
+            folder: "/work",
+            command: ["/bin/zsh", "-l"],
+            size: SessionSize(columns: 80, rows: 24),
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        let expected: [(ServerMessage, String)] = [
+            (.hello(protocolVersion: 1), #"{"hello":{"protocolVersion":1}}"#),
+            (.sessionCreated(summary), #"{"sessionCreated":{"_0":\#(Self.summaryText)}}"#),
+            (.sessionList([summary, summary]), #"{"sessionList":{"_0":[\#(Self.summaryText),\#(Self.summaryText)]}}"#),
+            (.sessionList([]), #"{"sessionList":{"_0":[]}}"#),
+            (.attached(summary), #"{"attached":{"_0":\#(Self.summaryText)}}"#),
+            (.sizeChanged(SessionSize(columns: 100, rows: 30)), #"{"sizeChanged":{"_0":{"columns":100,"rows":30}}}"#),
+            (.screen(text: "line\nline"), #"{"screen":{"text":"line\nline"}}"#),
+            (.exited(.exited(status: 3)), #"{"exited":{"_0":{"exited":{"status":3}}}}"#),
+            (.exited(.signaled(signal: 9)), #"{"exited":{"_0":{"signaled":{"signal":9}}}}"#),
+            (.acknowledged, #"{"acknowledged":{}}"#),
+            (.failure(SessionFailure(reason: .unknownSession, message: "No session.")),
+             #"{"failure":{"_0":{"message":"No session.","reason":"unknownSession"}}}"#),
+            (.failure(SessionFailure(reason: .incompatibleProtocol, message: "m")), #"{"failure":{"_0":{"message":"m","reason":"incompatibleProtocol"}}}"#),
+            (.failure(SessionFailure(reason: .launchFailed, message: "m")), #"{"failure":{"_0":{"message":"m","reason":"launchFailed"}}}"#),
+            (.failure(SessionFailure(reason: .invalidRequest, message: "m")), #"{"failure":{"_0":{"message":"m","reason":"invalidRequest"}}}"#),
+        ]
+        for (message, text) in expected {
+            let frame = try message.frame()
+            #expect(frame.kind == .control)
+            #expect(try Self.parsedObject(frame.payload) == Self.parsedObject(text), "\(message) became \(String(decoding: frame.payload, as: UTF8.self))")
+        }
+    }
 }
