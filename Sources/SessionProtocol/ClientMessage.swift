@@ -72,3 +72,23 @@ extension ClientMessage: FramedMessage {
         }
     }
 }
+
+extension ClientMessage {
+    /// The name of the message in the protocol, without its fields. An
+    /// error names a message by this, because its fields come from the peer
+    /// and can hold anything, such as text that a user typed.
+    var name: String {
+        switch self {
+        case .hello: "hello"
+        case .createSession: "createSession"
+        case .listSessions: "listSessions"
+        case .readScreen: "readScreen"
+        case .sendText: "sendText"
+        case .killSession: "killSession"
+        case .attach: "attach"
+        case .input: "input"
+        case .resize: "resize"
+        case .detach: "detach"
+        }
+    }
+}

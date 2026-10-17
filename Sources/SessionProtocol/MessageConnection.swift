@@ -310,6 +310,41 @@ extension MessageConnection {
         }
     }
 
+    /// The server side of the start of every conversation. Answers with the
+    /// version of this program, or with a failure when the versions differ, so
+    /// an older or newer client can tell what went wrong.
+    ///
+    /// A first control frame that cannot be decoded gets a failure with
+    /// reason `invalidRequest` that names the problem, before the error.
+    ///
+    /// - Parameter limit: The time that the hello may take to arrive.
+    public func greetClient(within limit: Duration? = nil) throws {
+        let timeLimit = limit.map { TimeLimit.wholeFrame(by: .now + $0) } ?? .unlimited
+        guard let frame = try receive(MessageFrame.self, timeLimit: timeLimit) else {
+            throw SessionProtocolError.connectionClosed
+        }
+        let message: ClientMessage
+        do {
+            message = try ClientMessage(frame: frame)
+        } catch where frame.kind == .control {
+            try? send(ServerMessage.failure(SessionFailure(reason: .invalidRequest, message: "\(error)")), stallLimit: limit)
+            throw error
+        }
+        switch message {
+        case .hello(let version) where version == MessageFrame.protocolVersion:
+            try send(ServerMessage.hello(protocolVersion: MessageFrame.protocolVersion), stallLimit: limit)
+        case .hello(let version):
+            try send(ServerMessage.failure(SessionFailure(
+                reason: .incompatibleProtocol,
+                message: Self.versionRefusal(ours: MessageFrame.protocolVersion, theirs: version)
+            )), stallLimit: limit)
+            throw SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: version)
+        default:
+            // The name only: the fields can hold text that a user typed.
+            throw SessionProtocolError.unexpectedMessage(description: "\(message.name) arrived instead of hello")
+        }
+    }
+
     /// The message of the failure that refuses a client of another version.
     /// Every version must keep the words "protocol version" and the number of
     /// the session process after them, because a client reads the number.

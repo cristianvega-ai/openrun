@@ -163,6 +163,34 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         }
     }
 
+    @Test func theHandshakeAcceptsMatchingVersions() throws {
+        let (client, server) = try MessageConnection.makePair()
+        let greeter = Thread { try? server.greetClient() }
+        greeter.start()
+        try client.greetSessionProcess()
+    }
+
+    @Test func aClientWithAnotherVersionGetsAnIncompatibleFailure() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try client.send(ClientMessage.hello(protocolVersion: 99))
+        #expect(throws: SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: 99)) {
+            try server.greetClient()
+        }
+        guard case .failure(let failure) = try client.receive(ServerMessage.self) else {
+            Issue.record("The client received no failure.")
+            return
+        }
+        #expect(failure.reason == .incompatibleProtocol)
+    }
+
+    @Test func aServerWithAnotherVersionIsDetectedByTheClient() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try server.send(ServerMessage.hello(protocolVersion: 7))
+        #expect(throws: SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: 7)) {
+            try client.greetSessionProcess()
+        }
+    }
+
     @Test func aFrameThatStallsEndsTheReceiveAfterTheStallLimit() throws {
         var descriptors: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
@@ -328,6 +356,11 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         #expect(throws: SessionProtocolError.refused(message: "The session process already serves 64 clients.")) {
             try client.greetSessionProcess()
         }
+    }
+
+    @Test func theVersionIsReadFromARefusal() {
+        #expect(MessageConnection.version(inRefusal: MessageConnection.versionRefusal(ours: 12, theirs: 1)) == 12)
+        #expect(MessageConnection.version(inRefusal: "Another text.") == nil)
     }
 
     @Test func connectingToAnAbsentSocketFailsWithAnErrorNumber() throws {
