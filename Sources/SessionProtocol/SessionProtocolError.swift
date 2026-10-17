@@ -18,6 +18,10 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
     /// Users other than the owner may write to the folder of the socket, so
     /// they could put a socket of their own at the path.
     case socketFolderWritableByOthers(folder: String, mode: mode_t)
+    /// An entry of the access control list of the socket's folder lets
+    /// another user or a group add or remove files in it, whatever the mode
+    /// says.
+    case socketFolderWritableThroughAccessControlList(folder: String)
     /// What should be the folder of the socket is a file of another kind.
     case socketFolderIsNotADirectory(folder: String)
 
@@ -37,6 +41,8 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
             "The socket folder \(folder) belongs to another user (user \(owner)), who could put a socket of their own there. Choose a socket in a folder of your own with --socket."
         case .socketFolderWritableByOthers(let folder, let mode):
             "Other users can write to the socket folder \(folder) (mode \(String(mode, radix: 8))), so one of them could put a socket of their own there. Choose a socket in a folder that only you can write to with --socket, or run chmod go-w on the folder."
+        case .socketFolderWritableThroughAccessControlList(let folder):
+            "The access control list of the socket folder \(folder) lets other users add or remove files in it, so one of them could put a socket of their own there. Choose a socket in a folder that only you can write to with --socket, or remove the entry (ls -led shows the list, and chmod -a removes an entry)."
         case .socketFolderIsNotADirectory(let folder):
             "The socket folder \(folder) is not a folder. Choose a socket in a folder of your own with --socket."
         }
