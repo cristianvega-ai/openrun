@@ -106,18 +106,32 @@ public final class MessageConnection: Sendable {
 
     /// Reads one whole frame and decodes it. Returns `nil` when the peer
     /// closed the connection between two frames.
+    ///
+    /// Pass `MessageFrame.self` to get the frame without decoding it, so the
+    /// caller can tell a frame that it cannot decode from a broken connection.
+    ///
+    /// - Parameters:
+    ///   - timeLimit: How long the bytes of the frame may take.
+    ///   - admittingFrame: Called with the size of the frame, its length field
+    ///     included, and its kind. It runs after the length field and the kind
+    ///     byte, before the payload is read. It may wait for room, or throw to
+    ///     stop.
     public func receive<Message: FramedMessage>(
         _ type: Message.Type = Message.self,
         timeLimit: TimeLimit = .unlimited,
+        admittingFrame: (_ byteCount: Int, _ kind: MessageFrame.Kind) throws -> Void = { _, _ in }
     ) throws -> Message? {
         guard let field = try read(MessageFrame.lengthFieldSize, startsFrame: true, timeLimit: timeLimit) else {
             return nil
         }
         let length = try MessageFrame.bodyLength(fromLengthField: field)
+        // The kind is one byte, read before the payload. The receiver can then
+        // give a small control frame, such as detach, room that input cannot take.
         guard let kindByte = try read(1, startsFrame: false, timeLimit: timeLimit)?.first else {
             throw SessionProtocolError.connectionClosed
         }
         let kind = try MessageFrame.kind(fromByte: kindByte)
+        try admittingFrame(MessageFrame.lengthFieldSize + length, kind)
         guard let payload = try read(length - 1, startsFrame: false, timeLimit: timeLimit) else {
             throw SessionProtocolError.connectionClosed
         }

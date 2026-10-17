@@ -189,6 +189,60 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         #expect(try server.receive(ClientMessage.self, timeLimit: .stall(.milliseconds(100))) == .listSessions)
     }
 
+    @Test func theAdmissionOfAFrameSeesItsSizeAndKindBeforeTheBody() throws {
+        let (client, server) = try MessageConnection.makePair()
+        try client.send(ClientMessage.input(Data(repeating: 7, count: 1000)))
+        var admitted = 0
+        var admittedKind: MessageFrame.Kind?
+        #expect(try server.receive(ClientMessage.self) { admitted = $0; admittedKind = $1 } == .input(Data(repeating: 7, count: 1000)))
+        // The length field, the kind, and the payload.
+        #expect(admitted == 4 + 1 + 1000)
+        #expect(admittedKind == .input)
+        try client.send(ClientMessage.detach)
+        #expect(try server.receive(ClientMessage.self) { admittedKind = $1 } == .detach)
+        #expect(admittedKind == .control)
+        try client.send(ClientMessage.listSessions)
+        #expect(throws: SessionProtocolError.connectionClosed) {
+            try server.receive(ClientMessage.self) { _, _ in throw SessionProtocolError.connectionClosed }
+        }
+    }
+
+    /// The session process gives a small control frame room that input
+    /// cannot take, so it must know the kind before it waits for room. Here
+    /// only the length field and the kind arrive. The admission still runs.
+    @Test func theAdmissionRunsBeforeAnyByteOfThePayloadArrives() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        // A control frame that announces 100 bytes of payload, and none of them.
+        let start: [UInt8] = [0, 0, 0, 101, 1]
+        #expect(write(descriptors[0], start, start.count) == start.count)
+        var admitted: (byteCount: Int, kind: MessageFrame.Kind)?
+        #expect(throws: SessionProtocolError.connectionClosed) {
+            try receiver.receive(ClientMessage.self, timeLimit: .stall(.seconds(5))) { byteCount, kind in
+                admitted = (byteCount, kind)
+                throw SessionProtocolError.connectionClosed
+            }
+        }
+        #expect(admitted?.byteCount == 4 + 101)
+        #expect(admitted?.kind == .control)
+    }
+
+    @Test func anUnknownKindIsRefusedBeforeTheAdmission() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        let receiver = MessageConnection(descriptor: descriptors[1])
+        let frame: [UInt8] = [0, 0, 0, 3, 99, 1, 2]
+        #expect(write(descriptors[0], frame, frame.count) == frame.count)
+        var admissions = 0
+        #expect(throws: SessionProtocolError.malformedFrame(reason: "the kind byte 99 is unknown")) {
+            try receiver.receive(ClientMessage.self) { _, _ in admissions += 1 }
+        }
+        #expect(admissions == 0)
+    }
+
     @Test func aControlFrameThatCannotBeParsedIsDescribedWithoutItsBytes() throws {
         var descriptors: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
