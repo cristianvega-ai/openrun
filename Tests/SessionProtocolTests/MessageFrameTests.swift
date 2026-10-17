@@ -172,8 +172,95 @@ import Testing
         }
     }
 
+    /// A frame of deeply nested JSON, up to 64 MiB, must not crash the
+    /// session process or exhaust the stack of the thread that reads a
+    /// client. The reading thread has the
+    /// default stack of a secondary thread, so the decoding runs on one here.
+    /// The decoder refuses JSON that nests more than 512 levels, at once.
+    @Test(arguments: ["[", #"{"hello":"#])
+    func aDeeplyNestedRequestIsRefusedWithoutExhaustingTheStack(opening: String) async throws {
+        let openingBytes = Array(opening.utf8)
+        let depth = 64 * 1024 * 1024 / openingBytes.count - 1
+        var payload = Data(capacity: depth * openingBytes.count + 1)
+        for _ in 0..<depth { payload.append(contentsOf: openingBytes) }
+        let ending = Mutex<(any Error)?>(nil)
+        let finished = Mutex(false)
+        let payloadToDecode = payload
+        let thread = Thread {
+            do {
+                _ = try ClientMessage(frame: MessageFrame(kind: .control, payload: payloadToDecode))
+            } catch {
+                ending.withLock { $0 = error }
+            }
+            finished.withLock { $0 = true }
+        }
+        #expect(thread.stackSize <= 512 * 1024)
+        let start = ContinuousClock.now
+        thread.start()
+        while !finished.withLock({ $0 }), ContinuousClock.now - start < .seconds(30) {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+        #expect(finished.withLock { $0 }, "the decoding did not end")
+        let error = ending.withLock { $0 }
+        #expect(error as? SessionProtocolError == .malformedFrame(reason: "the control message is not valid JSON, or nests too deeply"), "error: \(String(describing: error))")
+        print("nested-request: \(payload.count) bytes refused after \(ContinuousClock.now - start)")
+    }
+
     @Test func exitStatusFollowsTheShellConvention() {
         #expect(SessionExit.exited(status: 4).shellStatus == 4)
         #expect(SessionExit.signaled(signal: 15).shellStatus == 143)
+    }
+
+    // The tests below pin the format that the document describes, with bytes
+    // and numbers written out by hand. They do not use the Codable code or the
+    // constants of the frame to work out what to expect, so a symmetric change
+    // on both sides, which would break every peer of version 1, fails here.
+
+    @Test func theVersionAndTheFieldSizesAreThoseOfTheDocument() {
+        #expect(MessageFrame.protocolVersion == 1)
+        #expect(MessageFrame.lengthFieldSize == 4)
+        #expect(MessageFrame.maximumPayloadLength == 67_108_864)
+    }
+
+    @Test func eachKindHasItsNumberOnTheWire() throws {
+        let payload = Data([0xAA])
+        #expect(try MessageFrame(kind: .control, payload: payload).encoded() == Data([0, 0, 0, 2, 1, 0xAA]))
+        #expect(try MessageFrame(kind: .output, payload: payload).encoded() == Data([0, 0, 0, 2, 2, 0xAA]))
+        #expect(try MessageFrame(kind: .input, payload: payload).encoded() == Data([0, 0, 0, 2, 3, 0xAA]))
+        #expect(try MessageFrame(kind: .snapshot, payload: payload).encoded() == Data([0, 0, 0, 2, 4, 0xAA]))
+        #expect(try MessageFrame(body: Data([1, 0xAA])).kind == .control)
+        #expect(try MessageFrame(body: Data([2, 0xAA])).kind == .output)
+        #expect(try MessageFrame(body: Data([3, 0xAA])).kind == .input)
+        #expect(try MessageFrame(body: Data([4, 0xAA])).kind == .snapshot)
+        #expect(throws: SessionProtocolError.self) { try MessageFrame(body: Data([0, 0xAA])) }
+        #expect(throws: SessionProtocolError.self) { try MessageFrame(body: Data([5, 0xAA])) }
+    }
+
+    @Test func theLengthIsBigEndianAndCountsTheKindAndThePayload() throws {
+        // 300 bytes of payload and the kind make 301, which is 0x0000012D.
+        let encoded = try MessageFrame(kind: .snapshot, payload: Data(repeating: 7, count: 300)).encoded()
+        #expect(Array(encoded.prefix(5)) == [0x00, 0x00, 0x01, 0x2D, 4])
+        #expect(encoded.count == 305)
+        // 65,536 bytes of payload and the kind make 0x00010001.
+        let large = try MessageFrame(kind: .output, payload: Data(count: 65_536)).encoded()
+        #expect(Array(large.prefix(5)) == [0x00, 0x01, 0x00, 0x01, 2])
+        #expect(try MessageFrame.bodyLength(fromLengthField: Data([0x00, 0x00, 0x01, 0x2D])) == 301)
+        #expect(try MessageFrame.bodyLength(fromLengthField: Data([0x00, 0x01, 0x00, 0x01])) == 65_537)
+    }
+
+    @Test func theLimitIsFixedAtTheNumberOfTheDocument() throws {
+        // 64 MiB of payload and the kind make 0x04000001, and that is allowed.
+        #expect(try MessageFrame.bodyLength(fromLengthField: Data([0x04, 0x00, 0x00, 0x01])) == 67_108_865)
+        // One byte more is refused.
+        #expect(throws: SessionProtocolError.frameTooLarge(length: 67_108_865, limit: 67_108_864)) {
+            try MessageFrame.bodyLength(fromLengthField: Data([0x04, 0x00, 0x00, 0x02]))
+        }
+        // The highest bit counts too: the length is not signed.
+        #expect(throws: SessionProtocolError.self) {
+            try MessageFrame.bodyLength(fromLengthField: Data([0x80, 0x00, 0x00, 0x01]))
+        }
+        #expect(throws: SessionProtocolError.self) {
+            try MessageFrame(kind: .output, payload: Data(count: 67_108_865)).encoded()
+        }
     }
 }
