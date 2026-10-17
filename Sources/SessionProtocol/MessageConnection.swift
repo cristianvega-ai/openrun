@@ -131,6 +131,15 @@ public final class MessageConnection: Sendable {
         Darwin.shutdown(descriptor, SHUT_RDWR)
     }
 
+    /// Whether the other side has closed the connection. It notices the close
+    /// also while bytes that were never read wait in the socket, which a read
+    /// would return first.
+    public var peerHasClosed: Bool {
+        var entry = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+        guard poll(&entry, 1, 0) > 0 else { return false }
+        return entry.revents & Int16(POLLHUP | POLLERR | POLLNVAL) != 0
+    }
+
     /// Reads `count` bytes. The buffer grows as the bytes arrive, so a frame
     /// that announces 64 MiB and sends little costs little.
     private func read(_ count: Int, startsFrame: Bool, timeLimit: TimeLimit) throws -> Data? {

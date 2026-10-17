@@ -110,6 +110,47 @@ import Testing
         }
     }
 
+    /// The session process closes a client's descriptor
+    /// itself, to know when the socket is gone. The connection must not
+    /// close the number again when it goes away: by then the system may
+    /// have given it to another file.
+    @Test func closeEndsTheDescriptorOnceAndLaterCallsFail() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        var connection: MessageConnection? = MessageConnection(descriptor: descriptors[1])
+        connection?.close()
+        #expect(fcntl(descriptors[1], F_GETFD) == -1 && errno == EBADF, "the descriptor is still open")
+        #expect(throws: SessionProtocolError.self) { try connection?.send(ClientMessage.listSessions) }
+        #expect(try connection?.receive(ClientMessage.self) == nil)
+        connection?.close()
+
+        // The next file gets the number that was freed.
+        var pipeDescriptors: [Int32] = [0, 0]
+        #expect(pipe(&pipeDescriptors) == 0)
+        defer { close(pipeDescriptors[0]); close(pipeDescriptors[1]) }
+        let reused = pipeDescriptors.contains(descriptors[1])
+        connection = nil
+        #expect(pipeDescriptors.allSatisfy { fcntl($0, F_GETFD) != -1 }, "the connection closed a descriptor it no longer owned (reused: \(reused))")
+    }
+
+    /// macOS reports a peer that shut down only its sending side while
+    /// bytes still wait, so a
+    /// client that half-closes counts as gone, as a client that closes
+    /// between two frames does. Its other direction still works.
+    @Test func aPeerThatHalfClosedIsNoticedWhileItsBytesWait() throws {
+        var descriptors: [Int32] = [0, 0]
+        #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
+        defer { close(descriptors[0]) }
+        let server = MessageConnection(descriptor: descriptors[1])
+        let waiting = [UInt8](repeating: 7, count: 4096)
+        #expect(write(descriptors[0], waiting, waiting.count) == waiting.count)
+        #expect(!server.peerHasClosed)
+        #expect(shutdown(descriptors[0], SHUT_WR) == 0)
+        #expect(server.peerHasClosed)
+        try server.send(ServerMessage.acknowledged)
+    }
+
     @Test func aWriteThatMakesNoProgressEndsAfterTheStallLimit() throws {
         let (client, server) = try MessageConnection.makePair()
         _ = server
@@ -119,5 +160,14 @@ import Testing
             try client.send(ServerMessage.output(Data(count: 1024 * 1024)), stallLimit: .milliseconds(200))
         }
         #expect(ContinuousClock.now - start < .seconds(5))
+    }
+
+    @Test func aPeerThatClosedIsNoticedWhileItsBytesWait() throws {
+        let (client, server) = try MessageConnection.makePair()
+        #expect(!server.peerHasClosed)
+        try client.send(ClientMessage.input(Data(count: 4096)))
+        #expect(!server.peerHasClosed)
+        client.shutdown()
+        #expect(server.peerHasClosed)
     }
 }
