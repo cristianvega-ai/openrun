@@ -54,6 +54,20 @@ public struct SocketLocation: Equatable, Sendable {
         return try SocketLocation(path: defaultPath)
     }
 
+    /// Checks that no other user can change what is in the socket's folder.
+    ///
+    /// Whoever can write to the folder can put a socket of their own at the
+    /// path and pose as the session process, or take the place of a client's
+    /// session process. So the folder must belong to `user`, neither its
+    /// group nor others may write to it, and its access control list may
+    /// give no one else that right either. A folder that does not exist
+    /// passes: nothing listens in it, and connecting fails on its own. A file
+    /// that is not a folder fails here, so the message names the real fault.
+    ///
+    /// - Throws: `SessionProtocolError.socketFolderIsNotADirectory`,
+    ///   `SessionProtocolError.socketFolderOfAnotherUser`,
+    ///   `SessionProtocolError.socketFolderWritableByOthers` or
+    ///   `SessionProtocolError.socketFolderWritableThroughAccessControlList`.
     public func checkFolder(user: uid_t = geteuid()) throws {
         var status = stat()
         guard stat(folder, &status) == 0 else {
@@ -68,6 +82,9 @@ public struct SocketLocation: Equatable, Sendable {
         }
         guard status.st_mode & (S_IWGRP | S_IWOTH) == 0 else {
             throw SessionProtocolError.socketFolderWritableByOthers(folder: folder, mode: status.st_mode & 0o7777)
+        }
+        guard try !FolderAccessControlList.letsOthersChange(folder: folder, owner: user) else {
+            throw SessionProtocolError.socketFolderWritableThroughAccessControlList(folder: folder)
         }
     }
 

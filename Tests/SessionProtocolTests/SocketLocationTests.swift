@@ -226,4 +226,25 @@ private func changeMode(_ arguments: [String]) throws -> Int32 {
         let message = error?.description ?? ""
         #expect(message.contains(location.folder) && message.contains("is not a folder") && message.contains("--socket"), "\(message)")
     }
+
+    /// The check read the mode only, and an entry of the
+    /// access control list could let everyone add and remove files.
+    @Test(arguments: ["everyone allow add_file,delete_child", "everyone allow add_subdirectory", "group:staff allow delete_child"])
+    func aFolderWhoseAccessControlListLetsOthersChangeItFailsAndTheMessageNamesIt(entry: String) throws {
+        let path = try folder(mode: 0o700)
+        defer { removeFolderAndItsAccessControlList(path) }
+        try addAccessControlEntry(entry, to: path)
+        let error = #expect(throws: SessionProtocolError.self) { try SocketLocation(path: path + "/session.socket").checkFolder() }
+        let message = error?.description ?? ""
+        #expect(message.contains(path) && message.contains("access control list") && message.contains("--socket"), "\(message)")
+    }
+
+    @Test func aFolderWhoseAccessControlListOnlyDeniesOrServesTheOwnerPasses() throws {
+        let path = try folder(mode: 0o700)
+        defer { removeFolderAndItsAccessControlList(path) }
+        try addAccessControlEntry("everyone deny delete,add_file,delete_child,writesecurity", to: path)
+        try addAccessControlEntry("everyone allow list,search,readattr", to: path)
+        try addAccessControlEntry("user:\(NSUserName()) allow add_file,add_subdirectory,delete_child", to: path)
+        #expect(throws: Never.self) { try SocketLocation(path: path + "/session.socket").checkFolder() }
+    }
 }
