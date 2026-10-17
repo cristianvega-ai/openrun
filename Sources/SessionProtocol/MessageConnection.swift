@@ -1,0 +1,91 @@
+import Darwin
+import Foundation
+import Synchronization
+
+/// A Unix socket that carries frames, for either side of the conversation.
+///
+/// Sending and receiving block. One thread may send while another receives.
+/// Calls to `send` from several threads are safe: each frame goes out whole.
+/// Only one thread may call `receive` at a time.
+public final class MessageConnection: Sendable {
+    /// How long `receive` may wait for the bytes of a frame.
+    public enum TimeLimit: Sendable, Equatable {
+        /// Waits as long as it takes.
+        case unlimited
+        /// The whole frame must have arrived by this moment.
+        case wholeFrame(by: ContinuousClock.Instant)
+        /// Waits as long as it takes for a frame to start. Once it has
+        /// started, each part of it must follow within this time.
+        case stall(Duration)
+    }
+
+    /// A frame body is read in parts of this size, so the memory for a frame
+    /// grows only as its bytes arrive.
+    private static let readChunkSize = 64 * 1024
+
+    /// The socket, or -1 once `close` has run. A call after `close` then
+    /// fails with EBADF instead of using a number that the system may have
+    /// given to another file.
+    private let descriptorStorage: Atomic<Int32>
+    private var descriptor: Int32 { descriptorStorage.load(ordering: .acquiring) }
+    /// Held for each frame, so frames go out whole. It also holds the send
+    /// timeout of the socket. Nil means none: a send waits as long as it takes.
+    private let sendLock = Mutex<Duration?>(nil)
+
+    /// Takes ownership of a connected socket descriptor.
+    public init(descriptor: Int32) {
+        descriptorStorage = Atomic(descriptor)
+        // A write to a socket that the peer closed must return an error. The
+        // default is a SIGPIPE that would end the whole process. The system
+        // refuses this option once the peer has closed, so `send` also passes
+        // MSG_NOSIGNAL.
+        Self.turnOffBrokenPipeSignal(on: descriptor)
+        _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
+    }
+
+    deinit {
+        close()
+    }
+
+    /// Closes the descriptor now, instead of when the last reference goes
+    /// away. Call it only once no thread uses the connection any more. The
+    /// session process calls it to know when a client's socket is gone, so
+    /// that its limit of clients also bounds its descriptors.
+    public func close() {
+        let closing = descriptorStorage.exchange(-1, ordering: .acquiringAndReleasing)
+        if closing >= 0 { Darwin.close(closing) }
+    }
+
+    /// Two connected ends, for tests.
+    public static func makePair() throws -> (MessageConnection, MessageConnection) {
+        var descriptors: [Int32] = [0, 0]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0 else {
+            throw SessionProtocolError.failure(of: "socketpair")
+        }
+        return (MessageConnection(descriptor: descriptors[0]), MessageConnection(descriptor: descriptors[1]))
+    }
+
+    /// Ends both directions at once. A thread blocked in `receive` or `send`
+    /// returns. The descriptor itself closes when the last reference goes
+    /// away, so a thread that still uses it never meets a reused number.
+    public func shutdown() {
+        Darwin.shutdown(descriptor, SHUT_RDWR)
+    }
+
+    /// Sets how long a send may wait without progress. Nil waits forever.
+    private static func setSendTimeout(_ limit: Duration?, on descriptor: Int32) {
+        var time = timeval(tv_sec: 0, tv_usec: 0)
+        if let limit {
+            // A zero timeout means none, so the shortest limit is a millisecond.
+            let parts = max(limit, .milliseconds(1)).components
+            time = timeval(tv_sec: Int(parts.seconds), tv_usec: Int32(parts.attoseconds / 1_000_000_000_000))
+        }
+        // This fails once the peer has closed. The send then fails at once.
+        setsockopt(descriptor, SOL_SOCKET, SO_SNDTIMEO, &time, socklen_t(MemoryLayout<timeval>.size))
+    }
+
+    private static func turnOffBrokenPipeSignal(on descriptor: Int32) {
+        var enabled: Int32 = 1
+        setsockopt(descriptor, SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size))
+    }
+}
