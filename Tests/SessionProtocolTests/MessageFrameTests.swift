@@ -52,6 +52,22 @@ import Testing
         #expect(throws: SessionProtocolError.self) { try frame.encoded() }
     }
 
+    @Test func controlMessagesAreText() throws {
+        let identifier = UUID()
+        let frame = try ClientMessage.killSession(identifier: identifier).frame()
+        #expect(frame.kind == .control)
+        let text = String(decoding: frame.payload, as: UTF8.self)
+        #expect(text.contains("killSession"))
+        #expect(text.contains(identifier.uuidString))
+    }
+
+    @Test func keysInsideATextFrameAreRefused() throws {
+        let encodedMessage = try JSONEncoder().encode(ClientMessage.input(Data([1])))
+        #expect(throws: SessionProtocolError.self) {
+            try ClientMessage(frame: MessageFrame(kind: .control, payload: encodedMessage))
+        }
+    }
+
     @Test func exitStatusFollowsTheShellConvention() {
         #expect(SessionExit.exited(status: 4).shellStatus == 4)
         #expect(SessionExit.signaled(signal: 15).shellStatus == 143)

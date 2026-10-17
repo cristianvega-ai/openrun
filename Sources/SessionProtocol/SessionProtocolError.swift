@@ -6,6 +6,8 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
     case frameTooLarge(length: Int, limit: Int)
     /// A frame did not follow the format.
     case malformedFrame(reason: String)
+    /// A message arrived that does not fit this point of the conversation.
+    case unexpectedMessage(description: String)
 
     public var description: String {
         switch self {
@@ -13,6 +15,8 @@ public enum SessionProtocolError: Error, Equatable, Sendable, CustomStringConver
             "A frame of \(length) bytes is larger than the limit of \(limit) bytes."
         case .malformedFrame(let reason):
             "A frame is malformed: \(reason)."
+        case .unexpectedMessage(let description):
+            "An unexpected message arrived: \(description)."
         }
     }
 }
