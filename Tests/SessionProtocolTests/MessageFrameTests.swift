@@ -206,6 +206,12 @@ import Testing
         print("nested-request: \(payload.count) bytes refused after \(ContinuousClock.now - start)")
     }
 
+    @Test func aFrameIsAMessageOfItsOwn() throws {
+        let frame = try ServerMessage.sessionList([]).frame()
+        #expect(frame.frame() == frame)
+        #expect(MessageFrame(frame: frame) == frame)
+    }
+
     @Test func exitStatusFollowsTheShellConvention() {
         #expect(SessionExit.exited(status: 4).shellStatus == 4)
         #expect(SessionExit.signaled(signal: 15).shellStatus == 143)
@@ -358,5 +364,42 @@ import Testing
             #expect(frame.kind == .control)
             #expect(try Self.parsedObject(frame.payload) == Self.parsedObject(text), "\(message) became \(String(decoding: frame.payload, as: UTF8.self))")
         }
+    }
+
+    @Test func theExamplesOfTheDocumentDecodeToTheirMessages() throws {
+        // These are the examples of the document, as a peer of version 1 writes
+        // them: slashes are not escaped, and a missing field is absent.
+        func client(_ text: String) throws -> ClientMessage {
+            try ClientMessage(frame: MessageFrame(kind: .control, payload: Data(text.utf8)))
+        }
+        func server(_ text: String) throws -> ServerMessage {
+            try ServerMessage(frame: MessageFrame(kind: .control, payload: Data(text.utf8)))
+        }
+        let identifier = try #require(UUID(uuidString: Self.identifierText))
+        let size = SessionSize(columns: 80, rows: 24)
+        #expect(try client(#"{"hello":{"protocolVersion":1}}"#) == .hello(protocolVersion: 1))
+        #expect(try client(#"{"createSession":{"environment":{"PATH":"/usr/bin"},"folder":"/work","size":{"columns":80,"rows":24}}}"#)
+            == .createSession(folder: "/work", command: nil, size: size, environment: ["PATH": "/usr/bin"]))
+        #expect(try client(#"{"attach":{"identifier":"\#(Self.identifierText)","relaysRawOutput":true,"size":{"columns":80,"rows":24}}}"#)
+            == .attach(identifier: identifier, size: size, relaysRawOutput: true))
+        // A client that leaves the optional field out does not relay.
+        #expect(try client(#"{"attach":{"identifier":"\#(Self.identifierText)","size":{"columns":80,"rows":24}}}"#)
+            == .attach(identifier: identifier, size: size, relaysRawOutput: nil))
+        #expect(try client(#"{"attach":{"identifier":"\#(Self.identifierText)","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}"#)
+            == .attach(identifier: identifier, size: size, receivesSizeChanges: true))
+        #expect(try client(#"{"resize":{"_0":{"columns":100,"rows":30}}}"#) == .resize(SessionSize(columns: 100, rows: 30)))
+        #expect(try server(#"{"sizeChanged":{"_0":{"columns":100,"rows":30}}}"#) == .sizeChanged(SessionSize(columns: 100, rows: 30)))
+        #expect(try client(#"{"listSessions":{}}"#) == .listSessions)
+        #expect(try server(#"{"exited":{"_0":{"exited":{"status":3}}}}"#) == .exited(.exited(status: 3)))
+        #expect(try server(#"{"exited":{"_0":{"signaled":{"signal":15}}}}"#) == .exited(.signaled(signal: 15)))
+        #expect(try server(#"{"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e.","reason":"unknownSession"}}}"#)
+            == .failure(SessionFailure(reason: .unknownSession, message: "No session has the identifier 3f2a9c1e.")))
+        #expect(try server(#"{"sessionCreated":{"_0":\#(Self.summaryText)}}"#) == .sessionCreated(SessionSummary(
+            identifier: identifier,
+            folder: "/work",
+            command: ["/bin/zsh", "-l"],
+            size: size,
+            createdAt: Date(timeIntervalSince1970: 1_700_000_000)
+        )))
     }
 }

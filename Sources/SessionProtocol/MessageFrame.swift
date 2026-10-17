@@ -93,6 +93,18 @@ public struct MessageFrame: Equatable, Sendable {
     }
 }
 
+// A frame is a message of its own, so a sender can encode a message once, see
+// the size of its frame, and send that frame later.
+extension MessageFrame: FramedMessage {
+    public func frame() -> MessageFrame {
+        self
+    }
+
+    public init(frame: MessageFrame) {
+        self = frame
+    }
+}
+
 extension JSONEncoder {
     static var messages: JSONEncoder {
         let encoder = JSONEncoder()
