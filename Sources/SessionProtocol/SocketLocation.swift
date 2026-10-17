@@ -54,6 +54,23 @@ public struct SocketLocation: Equatable, Sendable {
         return try SocketLocation(path: defaultPath)
     }
 
+    public func checkFolder(user: uid_t = geteuid()) throws {
+        var status = stat()
+        guard stat(folder, &status) == 0 else {
+            if errno == ENOENT || errno == ENOTDIR { return }
+            throw SessionProtocolError.failure(of: "stat")
+        }
+        guard (status.st_mode & S_IFMT) == S_IFDIR else {
+            throw SessionProtocolError.socketFolderIsNotADirectory(folder: folder)
+        }
+        guard status.st_uid == user else {
+            throw SessionProtocolError.socketFolderOfAnotherUser(folder: folder, owner: status.st_uid)
+        }
+        guard status.st_mode & (S_IWGRP | S_IWOTH) == 0 else {
+            throw SessionProtocolError.socketFolderWritableByOthers(folder: folder, mode: status.st_mode & 0o7777)
+        }
+    }
+
     /// An absolute path without empty, "." and ".." components.
     ///
     /// Symbolic links keep their names, so a path that is already plain

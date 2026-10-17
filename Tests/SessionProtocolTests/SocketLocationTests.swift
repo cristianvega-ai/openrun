@@ -149,4 +149,59 @@ import Testing
         #expect(SocketLocation.resolvedPath(base + "/link/./missing/../missing/session.socket") == real)
         #expect(SocketLocation.resolvedPath(base + "/real/other.socket") != real)
     }
+
+    // MARK: - The folder check
+
+    private func folder(mode: mode_t) throws -> String {
+        let path = NSTemporaryDirectory() + "folder-\(UInt32.random(in: 0...UInt32.max))"
+        try FileManager.default.createDirectory(atPath: path, withIntermediateDirectories: true)
+        #expect(chmod(path, mode) == 0)
+        return path
+    }
+
+    @Test func aFolderOfTheUserThatOnlyTheUserCanWritePasses() throws {
+        for mode: mode_t in [0o700, 0o755, 0o500] {
+            let path = try folder(mode: mode)
+            defer { try? FileManager.default.removeItem(atPath: path) }
+            #expect(throws: Never.self) { try SocketLocation(path: path + "/session.socket").checkFolder() }
+        }
+    }
+
+    @Test func aFolderThatOthersCanWriteFailsAndTheMessageNamesIt() throws {
+        for mode: mode_t in [0o720, 0o702, 0o1777] {
+            let path = try folder(mode: mode)
+            defer { try? FileManager.default.removeItem(atPath: path) }
+            #expect(throws: SessionProtocolError.socketFolderWritableByOthers(folder: path, mode: mode)) {
+                try SocketLocation(path: path + "/session.socket").checkFolder()
+            }
+            let message = SessionProtocolError.socketFolderWritableByOthers(folder: path, mode: mode).description
+            #expect(message.contains(path) && message.contains("--socket"))
+        }
+    }
+
+    @Test func aFolderOfAnotherUserFails() throws {
+        let path = try folder(mode: 0o700)
+        defer { try? FileManager.default.removeItem(atPath: path) }
+        #expect(throws: SessionProtocolError.socketFolderOfAnotherUser(folder: path, owner: geteuid())) {
+            try SocketLocation(path: path + "/session.socket").checkFolder(user: geteuid() &+ 1)
+        }
+    }
+
+    @Test func aMissingFolderPassesSoThatConnectingReportsIt() throws {
+        let path = NSTemporaryDirectory() + "missing-\(UInt32.random(in: 0...UInt32.max))/session.socket"
+        #expect(throws: Never.self) { try SocketLocation(path: path).checkFolder() }
+    }
+
+    /// A file in the place of the folder passed, and the
+    /// start failed later with a bare "Not a directory".
+    @Test func aFileInThePlaceOfTheFolderFailsAndTheMessageNamesIt() throws {
+        let file = NSTemporaryDirectory() + "plain-file-\(UInt32.random(in: 0...UInt32.max))"
+        #expect(FileManager.default.createFile(atPath: file, contents: Data("text".utf8)))
+        defer { try? FileManager.default.removeItem(atPath: file) }
+        #expect(chmod(file, 0o600) == 0)
+        let location = try SocketLocation(path: file + "/session.socket")
+        let error = #expect(throws: SessionProtocolError.self) { try location.checkFolder() }
+        let message = error?.description ?? ""
+        #expect(message.contains(location.folder) && message.contains("is not a folder") && message.contains("--socket"), "\(message)")
+    }
 }
