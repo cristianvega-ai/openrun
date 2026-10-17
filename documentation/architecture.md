@@ -81,3 +81,54 @@ The controlling descriptor is closed once, when the program has ended and the la
 ### SessionProtocol
 
 This module holds the messages, the frame format, the connection, and the socket location with the check of its folder. `FolderAccessControlList`, an internal type, reads the access control list of the folder for that check. The next sections describe them.
+
+## The socket protocol
+
+### Frames
+
+Everything on the socket is a sequence of frames.
+
+```
++-----------------------+----------+-------------------------+
+| length: 4 bytes       | kind:    | payload:                |
+| big endian, counts    | 1 byte   | length - 1 bytes        |
+| the kind and payload  |          |                         |
++-----------------------+----------+-------------------------+
+```
+
+| Kind | Value | Direction | Payload |
+|---|---|---|---|
+| control | 1 | both | A JSON message |
+| output | 2 | server to client | Bytes that the program wrote |
+| input | 3 | client to server | Bytes for the program to read |
+| snapshot | 4 | server to client | A `TerminalSnapshot` |
+
+Control messages are JSON because they are small, rare and easy to read. Terminal bytes are raw because they are frequent and large.
+
+The largest payload is 64 MiB. The receiver checks the length field before it reads or allocates anything, and refuses a larger frame. It reads the kind byte next and refuses an unknown kind. Only then does it read the payload, as the bytes arrive, so the memory grows only with what came. A zero length, an unknown kind, and a connection that closes in the middle of a frame are errors.
+
+
+### Control messages
+
+A control message is a JSON object with one key, the name of the message. The value holds its fields.
+A field without a name in the Swift code is called `_0`.
+
+
+A session summary holds `identifier`, `folder`, `command` (a list), `size` and `createdAt` (seconds since 1970).
+A size holds `columns` and `rows`, each 0 to 65,535.
+JSON that nests more than 512 levels counts as JSON that cannot be read. The decoder stops at that depth at once, so a frame of 64 MiB of nested arrays costs the memory of the frame and no stack.
+An error about a message that does not fit the conversation, such as a `screen` in place of `hello`, names the message and not its fields. A field can be a whole screen, or text that a user typed.
+
+Examples of control payloads:
+
+```json
+{"hello":{"protocolVersion":1}}
+{"createSession":{"environment":{"PATH":"/usr/bin"},"folder":"/work","size":{"columns":80,"rows":24}}}
+{"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","relaysRawOutput":true,"size":{"columns":80,"rows":24}}}
+{"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}
+{"resize":{"_0":{"columns":100,"rows":30}}}
+{"sizeChanged":{"_0":{"columns":100,"rows":30}}}
+{"exited":{"_0":{"exited":{"status":3}}}}
+{"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e-…","reason":"unknownSession"}}}
+```
+The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
