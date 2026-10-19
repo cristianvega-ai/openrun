@@ -1,10 +1,65 @@
 import Testing
 @testable import CommandLineTool
 
+private func parse(_ words: String...) throws -> CommandLineArguments {
+    try CommandLineArguments(words)
+}
+
+private func usageMessage(_ words: String...) -> String? {
+    do {
+        _ = try CommandLineArguments(words)
+        return nil
+    } catch let error as CommandLineToolError {
+        if case .usage(let message) = error { return message }
+        return nil
+    } catch {
+        return nil
+    }
+}
+
 @Suite struct CommandLineArgumentsTests {
+    @Test func newTakesAFolderAndAProgramAfterTheSeparator() throws {
+        #expect(try parse("new").command == .new(folder: nil, program: []))
+        #expect(try parse("new", "--folder", "/work").command == .new(folder: "/work", program: []))
+        #expect(try parse("new", "--folder=/work", "--", "claude", "--resume", "abc").command
+            == .new(folder: "/work", program: ["claude", "--resume", "abc"]))
+        #expect(try parse("new", "--", "ls", "--folder").command == .new(folder: nil, program: ["ls", "--folder"]))
+    }
+
+    @Test func theSocketOptionWorksInEveryPlace() throws {
+        #expect(try parse("--socket", "/a", "list").socketPath == "/a")
+        #expect(try parse("list", "--socket", "/a").socketPath == "/a")
+        #expect(try parse("list", "--socket=/a").socketPath == "/a")
+        #expect(try parse("list").socketPath == nil)
+        // After the separator the word belongs to the program.
+        let arguments = try parse("new", "--", "tool", "--socket", "/inner")
+        #expect(arguments.socketPath == nil)
+        #expect(arguments.command == .new(folder: nil, program: ["tool", "--socket", "/inner"]))
+    }
+
+    @Test func sendJoinsTheWordsAndKnowsTheEnterOption() throws {
+        #expect(try parse("send", "abc", "echo", "hi").command == .send(identifier: "abc", text: "echo hi", pressEnter: false))
+        #expect(try parse("send", "abc", "--enter", "ls").command == .send(identifier: "abc", text: "ls", pressEnter: true))
+        #expect(try parse("send", "abc", "ls", "--enter").command == .send(identifier: "abc", text: "ls", pressEnter: true))
+        #expect(try parse("send", "abc", "--enter").command == .send(identifier: "abc", text: "", pressEnter: true))
+        // After the separator, a word that looks like an option is text.
+        #expect(try parse("send", "abc", "--", "--enter", "-x").command == .send(identifier: "abc", text: "--enter -x", pressEnter: false))
+    }
 
     @Test func usageErrorsExitWithTwoAndOperatingErrorsWithOne() {
         #expect(CommandLineToolError.usage("x").exitCode == 2)
         #expect(CommandLineToolError.failure("x").exitCode == 1)
+    }
+
+    @Test func helpTakesNoArguments() {
+        #expect(usageMessage("help", "extra") != nil)
+        #expect(usageMessage("help", "list") != nil)
+    }
+
+    @Test func helpOptionOnAnUnknownCommandIsAUsageError() throws {
+        #expect(usageMessage("bogus", "--help")?.contains("Unknown command bogus") == true)
+        // A real command with --help still shows the help.
+        #expect(try parse("list", "--help").command == .help)
+        #expect(try parse("read", "abc", "--help").command == .help)
     }
 }

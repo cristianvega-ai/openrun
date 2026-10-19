@@ -66,12 +66,39 @@ struct CommandLineArguments: Equatable {
         }
         let rest = Array(positional.dropFirst())
 
+        func allow(_ flag: String, used: Bool, in commands: String) throws {
+            if used { throw CommandLineToolError.usage("\(flag) does not belong to \(name). It works with \(commands).") }
+        }
+
         let command: ToolCommand
         switch name {
+        case "new":
+            try allow("--enter", used: pressEnter, in: "send")
+            try allow("--scrollback", used: includeScrollback, in: "read")
+            guard rest.isEmpty else { throw CommandLineToolError.usage("new takes no identifier or text. Put the program after --.") }
+            if let afterSeparator, afterSeparator.isEmpty {
+                throw CommandLineToolError.usage("Put a program after --.")
+            }
+            command = .new(folder: folder, program: afterSeparator ?? [])
         case "list":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
             guard rest.isEmpty else { throw CommandLineToolError.usage("list takes no arguments.") }
             command = .list
+        case "read":
+            try allow("--enter", used: pressEnter, in: "send")
+            try Self.requireNoOptions(name, folder, false, false, afterSeparator)
+            command = .read(identifier: try Self.single(rest, name: name), includeScrollback: includeScrollback)
+        case "send":
+            try allow("--scrollback", used: includeScrollback, in: "read")
+            try Self.requireNoOptions(name, folder, false, false, nil)
+            guard let identifier = rest.first else { throw CommandLineToolError.usage("send needs an identifier and text.") }
+            try Self.requireIdentifier(identifier)
+            let text = (Array(rest.dropFirst()) + (afterSeparator ?? [])).joined(separator: " ")
+            guard !text.isEmpty || pressEnter else { throw CommandLineToolError.usage("send needs text to type, or --enter.") }
+            command = .send(identifier: identifier, text: text, pressEnter: pressEnter)
+        case "kill":
+            try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
+            command = .kill(identifier: try Self.single(rest, name: name))
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -87,6 +114,20 @@ struct CommandLineArguments: Equatable {
             throw CommandLineToolError.usage("\(option) needs a value.")
         }
         return value
+    }
+
+    private static func single(_ words: [String], name: String) throws -> String {
+        guard words.count == 1, let word = words.first else {
+            throw CommandLineToolError.usage("\(name) needs exactly one identifier.")
+        }
+        try requireIdentifier(word)
+        return word
+    }
+
+    /// An empty identifier matches every session. Refuse it here, before any
+    /// connection, so it is a usage error with or without a session process.
+    private static func requireIdentifier(_ word: String) throws {
+        if word.isEmpty { throw CommandLineToolError.usage("The session identifier is empty.") }
     }
 
     private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "help"]
