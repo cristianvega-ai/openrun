@@ -60,6 +60,16 @@ actor SessionServer {
                 client.send(await create(folder: folder, command: command, size: size, environment: environment))
             case .listSessions:
                 client.send(.sessionList(await registry.summaries()))
+            case .readScreen(let identifier, let includeScrollback):
+                let answer = await readScreen(identifier, includeScrollback: includeScrollback)
+                if case .screen = answer {
+                    // A screen can be larger than the output limit, so it does
+                    // not count. The next request waits until it is written,
+                    // so a client that asks without reading cannot pile them up.
+                    await client.sendAndWait(answer)
+                } else {
+                    client.send(answer)
+                }
             case .detach:
                 break messages
             default:
@@ -78,6 +88,19 @@ actor SessionServer {
         } catch {
             return .failure(SessionFailure(reason: .launchFailed, message: "\(error)"))
         }
+    }
+
+    private func readScreen(_ identifier: UUID, includeScrollback: Bool) async -> ServerMessage {
+        guard let session = await registry.session(for: identifier) else { return Self.unknownSession(identifier) }
+        do {
+            return .screen(text: try await session.screenText(includeScrollback: includeScrollback))
+        } catch {
+            return .failure(SessionFailure(reason: .invalidRequest, message: "\(error)"))
+        }
+    }
+
+    private static func unknownSession(_ identifier: UUID) -> ServerMessage {
+        .failure(SessionFailure(reason: .unknownSession, message: "No session has the identifier \(SessionSummary.text(for: identifier))."))
     }
 
     /// The session process runs in the foreground and logs to standard error.
