@@ -5,6 +5,19 @@ import SessionProtocol
 import Synchronization
 import Testing
 
+/// Runs `body` and shuts the connection down when it takes longer than
+/// `limit`, so a regression fails the test instead of hanging `swift test`.
+private func withTimeLimit<Result>(_ limit: TimeInterval, on connection: MessageConnection, _ body: () throws -> Result) rethrows -> (result: Result, timedOut: Bool) {
+    let didTimeOut = Mutex(false)
+    let watchdog = DispatchWorkItem {
+        didTimeOut.withLock { $0 = true }
+        connection.shutdown()
+    }
+    DispatchQueue.global().asyncAfter(deadline: .now() + limit, execute: watchdog)
+    defer { watchdog.cancel() }
+    let result = try body()
+    return (result, didTimeOut.withLock { $0 })
+}
 
 private func processExists(_ identifier: pid_t) -> Bool {
     kill(identifier, 0) == 0 || errno != ESRCH
@@ -123,6 +136,57 @@ extension SessionProcessIntegration {
             process.send(signal: SIGTERM)
             #expect(await process.waitForExit(timeout: 10) == 0)
             #expect(await eventually(timeout: .seconds(5)) { !processExists(child) })
+        }
+
+        @Test func aClientThatIsAlreadyConnectedCannotStartASessionOnceShutdownHasBegun() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            // This program ignores SIGHUP, so the session process waits for it
+            // while the registry is shutting down. It writes a file for each
+            // SIGHUP it gets. The registry sets its stopping flag before it
+            // sends the first SIGHUP, so the file shows that the flag is set.
+            // The socket file goes before that, so it shows nothing.
+            let hangUpFile = process.directory.appendingPathComponent("hang-up-received")
+            let first = try await startSleepingSession(
+                process,
+                script: "trap 'echo hang-up > \"\(hangUpFile.path)\"' HUP; echo process=$$; while true; do sleep 0.05; done"
+            )
+            let markerFile = process.directory.appendingPathComponent("late-program-process")
+            defer {
+                // A program that survived must not outlive the test.
+                if let text = try? String(contentsOf: markerFile, encoding: .utf8), let survivor = pid_t(text.trimmingCharacters(in: .whitespacesAndNewlines)) {
+                    kill(survivor, SIGKILL)
+                }
+            }
+
+            let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+            defer { connection.shutdown() }
+            try connection.greetSessionProcess()
+
+            process.send(signal: SIGTERM)
+            #expect(await eventually { FileManager.default.fileExists(atPath: hangUpFile.path) }, "the program never got SIGHUP")
+            #expect(!FileManager.default.fileExists(atPath: process.socketPath))
+            // The registry waits one second for a program that ignores SIGHUP.
+            #expect(processExists(first))
+
+            try connection.send(ClientMessage.createSession(
+                folder: process.directory.path,
+                command: ["/bin/sh", "-c", "echo $$ > '\(markerFile.path)'; exec sleep 300"],
+                size: SessionSize(columns: 80, rows: 24),
+                environment: ["PATH": "/usr/bin:/bin"]
+            ))
+            let answer = try withTimeLimit(30, on: connection) { try connection.receive(ServerMessage.self) }
+            guard case .failure(let failure)? = answer.result else {
+                Issue.record("The session process started a session during shutdown, or closed the connection first: \(String(describing: answer.result)), timed out: \(answer.timedOut).")
+                return
+            }
+            #expect(failure.reason == .launchFailed)
+            #expect(failure.message == "The session process is stopping.")
+
+            #expect(await process.waitForExit(timeout: 10) == 0)
+            #expect(await eventually(timeout: .seconds(5)) { !processExists(first) })
+            // The refused program never ran.
+            #expect(!FileManager.default.fileExists(atPath: markerFile.path))
         }
 
         /// When the wait for the socket failed, the caller got no

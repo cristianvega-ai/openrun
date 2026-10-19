@@ -7,6 +7,8 @@ public enum SessionProcessError: Error, Equatable, Sendable, CustomStringConvert
     /// A file that is not a socket sits at the socket path. The session process
     /// refuses to delete a file it did not create.
     case pathIsNotASocket(path: String)
+    /// The session process is shutting down and starts no new session.
+    case stopping
     /// The file at the socket path changed while the session process
     /// checked whether a session process listens there. It was left alone.
     case socketFileReplaced(path: String)
@@ -28,6 +30,8 @@ public enum SessionProcessError: Error, Equatable, Sendable, CustomStringConvert
             "A session process already runs on \(path). Stop it first, or choose another socket with --socket."
         case .pathIsNotASocket(let path):
             "\(path) exists and is not a socket, so it was left alone. Choose another socket with --socket."
+        case .stopping:
+            "The session process is stopping."
         case .socketFileReplaced(let path):
             "The file at \(path) was replaced while the session process checked whether another one listens there, so it was left alone. Start the session process again, or choose another socket with --socket."
         case .lockFileKeepsChanging(let path):

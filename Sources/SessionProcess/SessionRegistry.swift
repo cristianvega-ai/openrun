@@ -17,6 +17,10 @@ actor SessionRegistry {
 
     /// Starts a session and adds it to the list.
     func create(folder: String, command: [String]?, size: SessionSize, environment: [String: String]) async throws -> SessionSummary {
+        // This check must come before the first suspension point. The program
+        // starts in `Session.init`, and the list `terminateAll` ends is
+        // already fixed by then.
+        guard !isStopping else { throw SessionProcessError.stopping }
         let identifier = UUID()
         var programEnvironment = environment
         programEnvironment.merge(
