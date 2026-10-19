@@ -11,6 +11,8 @@ actor Session {
     private(set) var summary: SessionSummary
     private let pseudoTerminal: PseudoTerminal
     private let terminal: Terminal
+    private var clients: [ObjectIdentifier: ClientConnection] = [:]
+    private var isFinished = false
     private var isEnding = false
     private var programExit: SessionExit?
     private var runTask: Task<Void, Never>?
@@ -35,6 +37,28 @@ actor Session {
     /// Starts reading the program's output. Call once, right after creating.
     func start() {
         runTask = Task { await self.run() }
+    }
+
+    /// What became of a request to attach.
+    enum Attachment {
+        case attached
+        /// The session ended before the request.
+        case sessionEnded
+        /// The client is not attached, for the reason in the failure.
+        case refused(SessionFailure)
+    }
+
+    func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> Attachment {
+        guard !isFinished else { return .sessionEnded }
+        let snapshot = try TerminalSnapshot(capturing: terminal)
+        client.send(.attached(summary))
+        client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
+        clients[ObjectIdentifier(client)] = client
+        return .attached
+    }
+
+    func detach(_ client: ClientConnection) {
+        clients[ObjectIdentifier(client)] = nil
     }
 
     /// Types bytes into the program.
@@ -74,6 +98,8 @@ actor Session {
             // screen is about to disappear, and parsing could delay a shutdown.
             if !isEnding {
                 terminal.write(bytes)
+                let message = ServerMessage.output(Data(bytes))
+                for client in clients.values { client.send(message) }
             }
             pseudoTerminal.markOutputConsumed(bytes.count)
             // A program that asks questions and never reads the answers waits
@@ -85,6 +111,13 @@ actor Session {
         }
         let exit = SessionExit(await pseudoTerminal.waitForExit())
         programExit = exit
+        isFinished = true
+        for client in clients.values {
+            // The exit status goes out even to a client near its limit.
+            client.send(.exited(exit), countsTowardOutputLimit: false)
+            client.closeAfterSending()
+        }
+        clients.removeAll()
         await onFinish(summary.identifier)
     }
 }

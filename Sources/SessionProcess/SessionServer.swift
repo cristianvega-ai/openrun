@@ -55,6 +55,7 @@ actor SessionServer {
     }
 
     private func serve(_ client: ClientConnection) async {
+        var attachedSession: Session?
 
         messages: for await received in client.messages {
             switch received.message {
@@ -99,6 +100,27 @@ actor SessionServer {
                 }
                 await session.terminate()
                 client.send(.acknowledged)
+            case .attach(let identifier, let size, let relaysRawOutput, let receivesSizeChanges):
+                guard attachedSession == nil else {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection is already attached.")))
+                    break
+                }
+                guard let session = await registry.session(for: identifier) else {
+                    client.send(Self.unknownSession(identifier))
+                    break
+                }
+                do {
+                    let attachment = try await session.attach(
+                        client, size: size, relaysRawOutput: relaysRawOutput ?? false, receivesSizeChanges: receivesSizeChanges ?? false
+                    )
+                    switch attachment {
+                    case .attached: attachedSession = session
+                    case .sessionEnded: client.send(Self.unknownSession(identifier))
+                    case .refused(let failure): client.send(.failure(failure))
+                    }
+                } catch {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "\(error)")))
+                }
             case .detach:
                 break messages
             default:
@@ -106,6 +128,9 @@ actor SessionServer {
             }
         }
 
+        if let attachedSession {
+            await attachedSession.detach(client)
+        }
         client.closeAfterSending()
     }
 
