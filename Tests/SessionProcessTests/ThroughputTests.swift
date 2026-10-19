@@ -90,5 +90,53 @@ extension SessionProcessIntegration {
                 #expect(elapsed < Self.timeLimit)
             }
         }
+
+        /// The first test cannot look at the screen, because the session is
+        /// gone once the program ends. Here the program stays alive after its
+        /// last line, so the screen can show that the session parsed every line
+        /// up to the last one, in order, within the time limit.
+        @Test func sixteenMegabytesOfTextAreParsedWithoutAClient() async throws {
+            try await RunningSessionProcess.run { process in
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+
+                let clock = ContinuousClock()
+                let start = clock.now
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.writeCommand + "; sleep 600"])
+                let session = try #require(UUID(uuidString: identifier))
+                let lastLine = Self.line(Self.lineCount)
+                var screen = ""
+                var elapsed = clock.now - start
+                while elapsed < .seconds(30) {
+                    try connection.send(ClientMessage.readScreen(identifier: session, includeScrollback: false))
+                    guard let reply = try connection.receive(ServerMessage.self) else {
+                        Issue.record("The session process closed the connection while the session was running.")
+                        return
+                    }
+                    guard case .screen(let text) = reply else {
+                        Issue.record("The answer to readScreen was \(reply), not a screen.")
+                        return
+                    }
+                    screen = text
+                    elapsed = clock.now - start
+                    if screen.contains(lastLine) { break }
+                    try await Task.sleep(for: .milliseconds(5))
+                }
+                print("Throughput, no client: the screen showed line \(Self.lineCount) after \(elapsed)")
+                #expect(screen.contains(lastLine), "The last line never reached the screen.")
+                #expect(elapsed < Self.timeLimit)
+
+                // Every row of the screen must hold the right line. The last
+                // line is on the screen, so the rows above it are the lines
+                // right before it. A parser that skipped or repeated text
+                // would break this run of numbers.
+                let rows = screen.split(separator: "\n", omittingEmptySubsequences: true).map(String.init)
+                let expectedRows = (0..<rows.count).map { Self.line(Self.lineCount - rows.count + 1 + $0) }
+                #expect(!rows.isEmpty)
+                #expect(rows == expectedRows)
+                #expect(process.isRunning, "The session process died.")
+            }
+        }
     }
 }
