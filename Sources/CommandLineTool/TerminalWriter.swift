@@ -138,6 +138,99 @@ final class TerminalWriter: @unchecked Sendable {
         condition.unlock()
     }
 
+    // MARK: - The main thread
+
+    /// The next request. A request to end that is not after the output comes
+    /// first, then a change of suspension. Output and the ending after it
+    /// come only when the main thread has nothing left to write and is not
+    /// suspended. Without `waiting`, returns `nil` when nothing is there.
+    func nextRequest(isSuspended: Bool, waiting: Bool) -> Request? {
+        while true {
+            condition.lock()
+            let request: Request? = if let urgentEnding {
+                .end(urgentEnding)
+            } else if waiting && !isSuspended && !queuedOutput.isEmpty {
+                .write(queuedOutput)
+            } else if waiting && !isSuspended, let endingAfterOutput {
+                .end(endingAfterOutput)
+            } else {
+                nil
+            }
+            if case .write = request {
+                queuedOutput = []
+                condition.broadcast()
+            }
+            condition.unlock()
+            if request != nil || !waiting { return request }
+            waitForWake(alsoForRoom: false)
+        }
+    }
+
+    /// Writes all bytes, unless a request to end or to suspend comes first
+    /// (with `stoppingForRequests`), the deadline passes, or the terminal
+    /// fails.
+    func write(_ bytes: [UInt8], until deadline: ContinuousClock.Instant? = nil, stoppingForRequests: Bool = true) -> WriteResult {
+        var offset = 0
+        while offset < bytes.count {
+            if stoppingForRequests && hasUrgentRequest {
+                return .interrupted(writtenCount: offset)
+            }
+            let count = bytes.withUnsafeBytes { Darwin.write(descriptor, $0.baseAddress! + offset, bytes.count - offset) }
+            if count > 0 {
+                offset += count
+                continue
+            }
+            if count < 0 && errno == EINTR { continue }
+            guard count < 0 && errno == EAGAIN else {
+                return .failed(writtenCount: offset, reason: String(cString: strerror(count < 0 ? errno : EIO)))
+            }
+            var timeout: Int32 = -1
+            if let deadline {
+                let remaining = deadline - .now
+                guard remaining > .zero else { return .timedOut(writtenCount: offset) }
+                timeout = Self.milliseconds(roundingUp: remaining)
+            }
+            waitForWake(alsoForRoom: true, timeout: timeout)
+        }
+        return .written
+    }
+
+    /// Whether the terminal takes output now. A terminal that does not has
+    /// a full output queue: the window reads nothing, as a frozen `ssh` does.
+    var takesOutputNow: Bool {
+        var descriptors = pollfd(fd: descriptor, events: Int16(POLLOUT), revents: 0)
+        return poll(&descriptors, 1, 0) > 0 && descriptors.revents & Int16(POLLOUT) != 0
+    }
+
+    /// Writes the sequences that undo what the program switched on, and puts
+    /// the original mode back. When the terminal takes no output, the mode
+    /// comes back first, because the sequences may never reach it. Neither
+    /// waits longer than `closingTimeLimit`, and no request stops them.
+    /// Returns how many bytes of the sequences reached the terminal.
+    func writeClosing(_ closingSequences: [UInt8], restoring mode: RawTerminalMode) -> Int {
+        let deadline = ContinuousClock.now + Self.closingTimeLimit
+        let result: WriteResult
+        if takesOutputNow {
+            result = write(closingSequences, until: deadline, stoppingForRequests: false)
+            mode.restore()
+        } else {
+            mode.restore(waitingForOutputAtMost: .zero)
+            result = write(closingSequences, until: deadline, stoppingForRequests: false)
+        }
+        return result.writtenCount ?? closingSequences.count
+    }
+
+    /// Writes the last message to standard error, after `stopWriting`. It
+    /// waits at most `closingTimeLimit` for room. A pipe that nobody reads
+    /// gives an error, not a SIGPIPE, because `AttachSignals` ignores it.
+    static func writeLastMessage(_ message: String) {
+        var descriptor = pollfd(fd: STDERR_FILENO, events: Int16(POLLOUT), revents: 0)
+        guard poll(&descriptor, 1, milliseconds(roundingUp: closingTimeLimit)) > 0,
+              descriptor.revents & Int16(POLLOUT) != 0 else { return }
+        let bytes = Array(message.utf8)
+        _ = bytes.withUnsafeBytes { Darwin.write(STDERR_FILENO, $0.baseAddress, $0.count) }
+    }
+
     /// Ends the writing: closes the second descriptor of the terminal, and
     /// puts back the flags of standard output when the writer changed them.
     /// Safe to call again.
