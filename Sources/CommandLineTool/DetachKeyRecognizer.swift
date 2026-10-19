@@ -1,3 +1,22 @@
+/// Finds the detach key, Control-], in the bytes that a terminal sends.
+///
+/// A terminal sends this key in a different form once a program turns on an
+/// enhanced keyboard mode, and `openrun attach` relays those requests to the
+/// real terminal. Three forms mean the key:
+///
+/// - the byte 0x1D, the form of the plain keyboard;
+/// - the kitty keyboard protocol form, `ESC [ 93 ; 5 u`. It may carry alternate
+///   key codes (`93:...`), an event after the modifiers (`5:1` press, `5:2`
+///   repeat, but not `5:3` release) and text (`; text`);
+/// - the form of xterm's modifyOtherKeys, `ESC [ 27 ; 5 ; 93 ~`.
+///
+/// Every other byte passes through unchanged.
+///
+/// A terminal can deliver one key in two reads, for example over `ssh` or in a
+/// multiplexer. So the recognizer holds an incomplete end that could still
+/// become one of the forms, a lone Escape included, for at most
+/// `holdDuration`, and the caller then sends it on with `releaseExpired`.
+/// Bytes that cannot start a form are never held.
 struct DetachKeyRecognizer {
     /// How long an incomplete start of a detach form waits for the rest. A
     /// lone Escape key press reaches the program this much later.
