@@ -33,6 +33,16 @@ private func restoreScript(
         """
 }
 
+/// The report that `restoreScript` wrote, once it is there.
+private func reportText(_ report: URL) async -> String {
+    var text = ""
+    _ = await eventually(timeout: .seconds(15)) {
+        text = (try? String(contentsOf: report, encoding: .utf8)) ?? ""
+        return text.hasSuffix("\n")
+    }
+    return text.trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 private let controlBracket: [UInt8] = [0x1D]
 private let endOfOpenSequence: [UInt8] = [0x18, 0x1B, 0x5C]
 
@@ -98,6 +108,40 @@ extension CommandLineToolIntegration {
                     #expect(contains("\u{1B}[?1049l", in: afterClosing), "round \(round)")
                     #expect(!contains("busy-output", in: afterClosing), "round \(round): \(String(decoding: afterClosing.prefix(200), as: UTF8.self))")
                 }
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
+        /// The terminal window stops taking output, as a frozen `ssh` or a
+        /// paused multiplexer does, while the program writes without end.
+        @Test(arguments: [EndingRequest.detachKey, .terminateSignal])
+        func attachEndsAndRestoresTheModeWhileTheTerminalTakesNoOutput(request: EndingRequest) async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "while :; do echo busy-output-line-$RANDOM; done"])
+                let report = process.directory.appendingPathComponent("report")
+                let script = restoreScript(identifier: identifier, socketPath: process.socketPath, report: report)
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                defer {
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                let tool = try #require(await attachProcess(of: terminal))
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await terminal.waitForScreen(containing: "busy-output-line"))
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+
+                terminal.pauseOutput()
+                // The terminal's output queue fills up, and the tool waits to write.
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+                switch request {
+                case .detachKey: terminal.type(bytes: controlBracket)
+                case .terminateSignal: kill(tool, SIGTERM)
+                }
+
+                // The tool ends and gives the mode back while the output is still stopped.
+                #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) }, "\(request)")
+                #expect(!terminal.isInRawMode, "\(request)")
+                #expect(await reportText(report) == "status=\(request.exitCode) mode-restored", "\(request)")
                 #expect(try process.listedIdentifiers() == [identifier])
             }
         }
@@ -251,6 +295,26 @@ extension CommandLineToolIntegration {
             #expect(TerminalControl.waitingInput(onTerminal: spare.path) == 50)
             clientSide.shutdown()
             sessionSide.shutdown()
+        }
+    }
+}
+
+/// How a test asks `openrun attach` to end.
+enum EndingRequest: Sendable, CustomTestStringConvertible {
+    case detachKey
+    case terminateSignal
+
+    var exitCode: Int32 {
+        switch self {
+        case .detachKey: 0
+        case .terminateSignal: 128 + SIGTERM
+        }
+    }
+
+    var testDescription: String {
+        switch self {
+        case .detachKey: "Control-]"
+        case .terminateSignal: "SIGTERM"
         }
     }
 }

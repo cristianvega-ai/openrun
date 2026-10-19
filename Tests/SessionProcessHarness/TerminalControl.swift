@@ -41,6 +41,20 @@ public enum TerminalControl {
         queueLength(onTerminal: path, request: waitingInputRequest)
     }
 
+    /// The bytes that a program wrote to a terminal and that the terminal
+    /// window has not taken yet.
+    public static func waitingOutput(onTerminal path: String) -> Int? {
+        queueLength(onTerminal: path, request: TIOCOUTQ)
+    }
+
+    /// The snapshot bytes of a terminal that shows the text. A stand-in
+    /// session process sends them in place of a real session's snapshot.
+    public static func snapshotBytes(showing text: String, columns: UInt16 = 80, rows: UInt16 = 24) throws -> [UInt8] {
+        let terminal = try Terminal(size: TerminalSize(columns: columns, rows: rows), scrollbackLimit: 100)
+        terminal.write(text)
+        return try TerminalSnapshot(capturing: terminal).bytes
+    }
+
     private static func processDetails(_ processIdentifier: pid_t) -> proc_bsdinfo? {
         var details = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
