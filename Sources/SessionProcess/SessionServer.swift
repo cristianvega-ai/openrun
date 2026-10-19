@@ -39,6 +39,16 @@ actor SessionServer {
     // MARK: - Clients
 
     private func accept(_ connection: MessageConnection) {
+        guard clients.count < ConnectionLimits.maximumClientCount else {
+            // The client reads this in place of hello. The reason is an
+            // existing one, so protocol version 1 does not change.
+            try? connection.send(ServerMessage.failure(SessionFailure(
+                reason: .invalidRequest,
+                message: "The session process already serves \(ConnectionLimits.maximumClientCount) clients, its limit. Close a client and try again."
+            )), stallLimit: .zero)
+            connection.shutdown()
+            return
+        }
         let client = ClientConnection(connection: connection)
         let key = ObjectIdentifier(client)
         clients[key] = client

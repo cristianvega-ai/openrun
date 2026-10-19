@@ -1,4 +1,9 @@
 enum ConnectionLimits {
+    /// The most clients at once. Each one costs a reading thread and a
+    /// descriptor. The session process refuses more with a failure. A client
+    /// counts until its socket is closed, also while its last messages still
+    /// go out after it detached, so the limit bounds descriptors and threads.
+    static let maximumClientCount = 64
 
     /// A client may wait as long as it likes between two frames. Once a frame
     /// has started, each part of it must follow within this time.
