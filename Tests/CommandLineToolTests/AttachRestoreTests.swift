@@ -69,6 +69,17 @@ private func firstIndex(of pattern: [UInt8], in bytes: some Collection<UInt8>) -
 private func contains(_ text: String, in bytes: some Collection<UInt8>) -> Bool {
     firstIndex(of: Array(text.utf8), in: bytes) != nil
 }
+
+/// A program that fills 23 lines of the screen, so that the first picture of
+/// `openrun attach` is larger than the output queue of a terminal.
+private let fullScreenProgram = """
+    number=0
+    while [ $number -lt 23 ]; do
+      printf 'picture-line-%02d-%s\\n' $number 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh'
+      number=$((number+1))
+    done
+    """
+
 extension CommandLineToolIntegration {
     @Suite struct AttachRestoreTests {
         /// The process identifier of `openrun attach`, the child of the script's shell.
@@ -143,6 +154,32 @@ extension CommandLineToolIntegration {
                 #expect(!terminal.isInRawMode, "\(request)")
                 #expect(await reportText(report) == "status=\(request.exitCode) mode-restored", "\(request)")
                 #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
+        @Test func aTerminateSignalWhileTheFirstPictureWaitsForTheTerminalRestoresTheMode() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", fullScreenProgram + "\nexec sleep 60"])
+                #expect(await process.waitForScreen(of: identifier, containing: "picture-line-22"))
+                let report = process.directory.appendingPathComponent("report")
+                let script = restoreScript(identifier: identifier, socketPath: process.socketPath, report: report)
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                // The terminal takes no output from the start, so the first
+                // picture cannot be written in full.
+                terminal.pauseOutput()
+                defer {
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                let tool = try #require(await attachProcess(of: terminal))
+                #expect(await eventually { terminal.isInRawMode })
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+
+                kill(tool, SIGTERM)
+                #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) })
+                #expect(!terminal.isInRawMode)
+                #expect(await reportText(report) == "status=143 mode-restored")
             }
         }
 

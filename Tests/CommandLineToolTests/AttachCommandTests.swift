@@ -117,6 +117,49 @@ extension CommandLineToolIntegration {
             #expect(await eventually(timeout: .seconds(10)) { reference == nil }, "the terminal is still alive")
         }
 
+        /// The window changes size while the first picture waits for the
+        /// terminal. The session must still get the new size.
+        @Test func aResizeWhileTheFirstPictureWaitsReachesTheSession() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = """
+                    number=0
+                    while [ $number -lt 23 ]; do
+                      printf 'picture-line-%02d-%s\\n' $number 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh'
+                      number=$((number+1))
+                    done
+                    exec /bin/sh
+                    """
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                #expect(await process.waitForScreen(of: identifier, containing: "picture-line-22"))
+                let terminal = try AttachedTerminal(
+                    shellScript: attachScript(identifier: identifier, process: process),
+                    columns: 100,
+                    rows: 30,
+                    folder: process.directory
+                )
+                terminal.pauseOutput()
+                defer {
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                #expect(await eventually { terminal.isInRawMode })
+                let tool = try #require(terminal.childProcessIdentifiers().first)
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+
+                try terminal.resize(columns: 70, rows: 20)
+                try await Task.sleep(for: .milliseconds(100))
+                terminal.resumeOutput()
+                #expect(await eventually {
+                    terminal.type("stty size\r")
+                    try? await Task.sleep(for: .milliseconds(150))
+                    return terminal.screenText.contains("20 70")
+                })
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+            }
+        }
+
         @Test func detachingWhileTheSessionWritesOutputAlwaysReportsDetachedWithStatusZero() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "while :; do echo busy-output-line-$RANDOM; done"])
