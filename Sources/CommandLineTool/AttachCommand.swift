@@ -287,6 +287,25 @@ struct AttachCommand {
                     return ending
                 case .write(let bytes):
                     output += bytes
+                case .suspend:
+                    // Until the resume sets raw mode again, a key belongs to
+                    // the shell, which gets the terminal back.
+                    keys.pause()
+                    Self.writeClosing(screen, with: writer, restoring: mode)
+                    isSuspended = true
+                    if writer.mayStopProcess {
+                        // SIGSTOP, not SIGTSTP: a SIGTSTP of our own would reach
+                        // the signal handler again after the continue.
+                        kill(getpid(), SIGSTOP)
+                    }
+                case .resume:
+                    guard (try? mode.enter()) != nil, let picture = try? screen.picture() else {
+                        return TerminalWriter.Ending(exitCode: 1, message: "the terminal cannot be set up again after the suspension")
+                    }
+                    keys.resume()
+                    pictureToDraw = picture
+                    isSuspended = false
+                    resizes.async { Self.sendWindowSize(on: connection) }
                 }
                 continue
             }

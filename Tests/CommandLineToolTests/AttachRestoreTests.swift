@@ -102,6 +102,44 @@ extension CommandLineToolIntegration {
             }
         }
 
+        @Test func aStopSignalSuspendsWithTheTerminalRestoredAndAContinueSignalDrawsTheSessionAgain() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = "printf '\\033[?1049h'; echo on-the-alternate-screen; exec /bin/sh"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let terminal = try AttachedTerminal(shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath), folder: process.directory)
+                defer { terminal.closeNow() }
+                let tool = try #require(await attachProcess(of: terminal))
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await terminal.waitForScreen(containing: "on-the-alternate-screen"))
+
+                let beforeStop = terminal.receivedBytes.count
+                kill(tool, SIGTSTP)
+                // The tool stops, and the terminal is as it was before attaching.
+                #expect(await eventually(timeout: .seconds(10)) { TerminalControl.isStopped(process: tool) })
+                #expect(await eventually(timeout: .seconds(2)) { !terminal.isInRawMode })
+                #expect(contains("\u{1B}[?1049l", in: terminal.receivedBytes.dropFirst(beforeStop)))
+                // The title goes back when the terminal is restored, and is saved again on the continue.
+                #expect(contains("\u{1B}[23;0t", in: terminal.receivedBytes.dropFirst(beforeStop)))
+
+                let beforeContinue = terminal.receivedBytes.count
+                kill(tool, SIGCONT)
+                // Raw mode again, and the screen of the session again, on the alternate screen.
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await eventually {
+                    let drawn = terminal.receivedBytes.dropFirst(beforeContinue)
+                    return contains("\u{1B}[?1049h", in: drawn) && contains("on-the-alternate-screen", in: drawn)
+                        && contains("\u{1B}[22;0t", in: drawn)
+                })
+                terminal.type("echo after-continue-$((40+2))\r")
+                #expect(await terminal.waitForScreen(containing: "after-continue-42"))
+
+                terminal.type(bytes: controlBracket)
+                #expect(await terminal.waitForScreen(containing: "mode-"))
+                #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+                #expect(terminal.screenText.contains("status=0"), "\(terminal.screenText)")
+            }
+        }
+
         /// Keys typed before attaching and while leaving stay for the program
         /// that reads the terminal next.
         @Test func rawModeKeepsTheKeysTypedAheadWhenItStartsAndWhenItEnds() throws {

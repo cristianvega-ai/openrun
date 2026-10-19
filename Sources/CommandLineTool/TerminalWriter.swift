@@ -13,6 +13,8 @@ final class TerminalWriter: @unchecked Sendable {
     enum Request: Equatable {
         case write([UInt8])
         case end(Ending)
+        case suspend
+        case resume
     }
 
     enum WriteResult: Equatable {
@@ -144,6 +146,14 @@ final class TerminalWriter: @unchecked Sendable {
         condition.withLock { urgentEnding }
     }
 
+    /// Whether the writer may stop the process now: a suspension is still
+    /// wanted, and no urgent ending has come. An ending that arrives before
+    /// the stop wins, because a stopped process would not end until someone
+    /// continued it. The writer asks right before the stop. A signal that
+    /// comes after this answer waits for the continue.
+    var mayStopProcess: Bool {
+        condition.withLock { wantsSuspension && urgentEnding == nil }
+    }
 
     /// Takes no more output. A thread that waits in `enqueue` returns.
     func close() {
@@ -165,6 +175,8 @@ final class TerminalWriter: @unchecked Sendable {
             condition.lock()
             let request: Request? = if let urgentEnding {
                 .end(urgentEnding)
+            } else if wantsSuspension != isSuspended {
+                wantsSuspension ? .suspend : .resume
             } else if waiting && !isSuspended && !queuedOutput.isEmpty {
                 .write(queuedOutput)
             } else if waiting && !isSuspended, let endingAfterOutput {
@@ -263,7 +275,7 @@ final class TerminalWriter: @unchecked Sendable {
     // MARK: - Waking
 
     private var hasUrgentRequest: Bool {
-        condition.withLock { urgentEnding != nil }
+        condition.withLock { urgentEnding != nil || wantsSuspension }
     }
 
     private func wake() {
