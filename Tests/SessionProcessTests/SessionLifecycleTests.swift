@@ -183,6 +183,18 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// Kill signalled only the program's process group, so both children lived on.
+        @Test func killEndsEveryProcessOfTheTerminalSession() async throws {
+            try await RunningSessionProcess.run { process in
+                let family = try await SessionProgramFamily.start(in: process)
+                defer { family.killSurvivors() }
+
+                #expect(try process.runCommand(["kill", family.identifier]).status == 0)
+                let survivors = await family.survivors(within: .seconds(5))
+                #expect(survivors.isEmpty, "still in the session of \(family.leader): \(survivors)")
+            }
+        }
+
         /// The session installed its reply handler after
         /// the program had started. When that failed, the session was thrown
         /// away and its program ran on without one.
