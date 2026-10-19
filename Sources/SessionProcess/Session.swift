@@ -4,6 +4,12 @@ import SessionProtocol
 import Synchronization
 import TerminalEmulation
 
+/// One program on one pseudo terminal, with the terminal state that lets a
+/// client attach at any moment.
+///
+/// The session is an actor, so its own serial context orders everything that
+/// touches the screen: output from the program, attaching, resizing and
+/// reading. That ordering is what makes attaching free of gaps and repeats.
 actor Session {
     /// The line limit of the scrollback that every session keeps.
     static let scrollbackLimit = 10_000
@@ -94,6 +100,21 @@ actor Session {
         case refused(SessionFailure)
     }
 
+    /// Takes a snapshot and registers the client in one step.
+    ///
+    /// Nothing else runs on the session between the snapshot and the
+    /// registration, because the session is an actor and this method does not
+    /// wait. Output that arrived earlier is inside the snapshot. Output that
+    /// arrives later goes to the client's queue behind the snapshot.
+    ///
+    /// The snapshot travels in one frame. A larger snapshot loses its oldest
+    /// scrollback until it fits. When the screens alone do not fit, the
+    /// client is refused before `attached`, and the session keeps its size.
+    /// The other clients that asked hear of a new size.
+    ///
+    /// A client that relays raw output has a real terminal that answers queries.
+    /// While one is attached, the session process sends no replies. Two such
+    /// clients answer the same query twice. That limit is accepted for now.
     func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
         let previousSize = summary.size

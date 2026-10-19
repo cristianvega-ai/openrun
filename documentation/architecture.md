@@ -28,6 +28,7 @@ The app will be another. A client can leave, and the programs keep running.
         +-------------------+
 ```
 
+Each session holds three things: a program on a pseudo terminal, a virtual terminal (libghostty-vt) that parses the program's output, and the list of attached clients.
 
 ## Modules
 
@@ -72,6 +73,7 @@ The tests follow the same rule. `Tests/SessionProcessHarness` is support code fo
 
 `Terminal` refuses values that no window has. A grid needs 1 to 10,000 columns and rows (`Terminal.maximumGridDimension`), at creation and in `resize`. The scrollback limit must be 0 to 1,000,000 lines (`Terminal.maximumScrollbackLines`); a negative number would reach libghostty-vt as an enormous unsigned one. A snapshot restore checks the limit too. Each refusal throws `TerminalEmulationError` before libghostty-vt is called.
 `TerminalColor` is a color of three channels, `red`, `green` and `blue`, each from 0 to 255. `Terminal` has calls for the default foreground, background and cursor color and for the default 256-color palette (file `TerminalDefaultColors.swift`). `setDefaultForegroundColor`, `setDefaultBackgroundColor` and `setDefaultCursorColor` set a default, or clear it when the color is `nil`. `setDefaultPalette` takes exactly 256 colors, or `nil` for the built-in palette; any other count throws `TerminalEmulationError`. `defaultForegroundColor`, `defaultBackgroundColor`, `defaultCursorColor` and `defaultPalette` read the defaults back. A snapshot carries the colors that are in force, so a restored terminal keeps the black and white defaults of the session process. The client calls these after it restores a snapshot, to give the terminal its own colors. libghostty-vt keeps a default apart from a color that a program sets with `OSC 4`, `OSC 10`, `OSC 11` or `OSC 12`. A new default does not replace a program color, and a reset by the program brings back the default. `TerminalColorTests.colorsThatAProgramSetsSurviveANewDefault` shows this.
+The cap for an unfinished sequence is 32 MiB. A snapshot travels in one frame of at most 64 MiB, and it also holds the screens and the scrollback (more than 15 MiB for a full, densely styled scrollback, and about 80 MB for 1000 columns of wide characters in 256 colors). A cap above the frame size could never fit. A snapshot that is too large loses its oldest scrollback (see "A snapshot that fits in one frame").
 
 `PrintableText.escaping(_:)` makes text from an untrusted source safe to print in a terminal or a log. The command-line tool and the log of the session process use it.
 
@@ -183,6 +185,65 @@ Examples of control payloads:
 {"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e-…","reason":"unknownSession"}}}
 ```
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
+
+### A conversation
+
+1. The client connects and sends `hello`. The server answers `hello`.
+2. A request that needs one answer (`createSession`, `listSessions`, `readScreen`, `sendText`, `killSession`) gets its answer. The client may send the next request or close.
+3. `attach` starts a longer conversation. See the next section.
+
+The client sends the environment of the person who asked, in `createSession`. The program starts with it, so it sees the user's own `PATH` and account settings, such as `CLAUDE_CONFIG_DIR`. The session process then sets the variables in "Environment variables" over it.
+
+## Attach sequence
+
+```
+client                                   session process
+  | attach(identifier, size)  ------------>  |
+  |                                          |  on the session's own serial context:
+  |                                          |    1. resize the terminal when the size differs
+  |                                          |    2. take a snapshot that fits in one frame, or
+  |                                          |       queue "failure", go back to the old size, and stop
+  |                                          |    3. queue "attached" and the snapshot for this client
+  |                                          |    4. add the client to the attached clients
+  |                                          |    5. queue "sizeChanged" for each other client
+  |                                          |       that asked, when the size changed
+  | <-------------------- attached(summary)  |
+  | <----------------------- snapshot frame  |
+  | <------------------------- output frame  |  every later output, in order
+  | <------------------------- output frame  |
+  | resize, detach  ---------------------->  |
+  | <--------------------------- exited(..)  |  when the program ends
+```
+
+A client's size goes to two places: the session's terminal model and the program's pseudo terminal. The session resizes the model first, because the model checks the size and may refuse it. A refused size then reaches neither, and the program and the screen that clients see keep one size. When the pseudo terminal refuses a size after the model took it, the model goes back to the old size.
+
+### Why there is no gap and no repeat
+
+A `Session` is an actor, so only one piece of its code runs at a time.
+The program's output is handled by one method of the session: it updates the terminal, and then queues the same bytes for every attached client.
+`attach` is another method of the same actor, and it does not wait for anything.
+
+So the output splits cleanly into two groups:
+
+- Output handled before `attach` ran is inside the terminal when the snapshot is taken. It is in the snapshot, and the client is not registered yet, so the client does not get it again as output.
+- Output handled after `attach` ran finds the client registered. It goes to the client's queue behind the snapshot.
+
+The client's queue keeps the order. The client restores the snapshot and then writes each output frame into the restored terminal.
+The snapshot can even fall inside an escape sequence or a UTF-8 character. A snapshot keeps the unfinished bytes, and the next output frame completes them.
+A client that draws a picture of the snapshot for another terminal must also write those bytes after the picture, because the picture holds only what is finished. `UnfinishedSequence` returns them. The protocol does not change for this: the bytes are already in the snapshot.
+
+Tests check this with 3000 numbered lines of steady output and an attach at four moments. The restored screen and scrollback must show each line once, in order.
+
+### A snapshot that fits in one frame
+
+A snapshot travels in one frame, and a frame carries at most 64 MiB. A wide session with a full scrollback in many colors can need more. A test measured about 80 MB for 1000 columns of wide characters in 256 colors with 10,000 lines of scrollback.
+So `Session.attach` captures with `TerminalSnapshot(capturing:byteLimit:)` and the payload limit, before it sends `attached`. A larger snapshot loses its oldest lines of scrollback until it fits, and it keeps as many lines as fit. The client then has the newest part of the scrollback. `openrun read --scrollback` still prints all of it.
+The visible screen, the alternate screen, the cursor, the modes and an unfinished sequence stay whole. So the seam of the attach holds as before: output parsed before the snapshot is inside it, and output after it follows it, with no gap and no repeat.
+
+The screens alone can also be too large. An example is an attach at 10,000 rows, which pulls the scrollback onto the screen. The client then gets a `failure` with reason `invalidRequest` in place of `attached`: "The screen of the session does not fit in one frame of 64 MiB, even without scrollback. Attach with fewer columns or rows." The session goes back to its earlier size, and the connection stays open and not attached. The program gets the new size and then the old one. The other clients get no `sizeChanged`, because the size did not change in the end.
+
+`ReattachTests.aSnapshotLargerThanOneFrameLosesOldScrollbackAndKeepsTheScreen` checks both cases in a session of 1000 columns. The client that attaches gets a snapshot near 64 MiB with the newest scrollback, and its screen is the screen that `openrun read` shows, also after more output.
+
 ## Environment variables
 
 Every program in a session gets these. They override the same names in the environment that the client sent. A client name that is empty or holds `=` or NUL is refused (see `createSession`), so a client cannot add a second entry for one of these names.
