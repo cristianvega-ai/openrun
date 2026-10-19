@@ -447,6 +447,76 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test func inputBeforeAttachReachesNoProgramAndTheConnectionAttachesAfterwards() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let goFile = process.directory.appendingPathComponent("go")
+                // The program reads the keys that it gets after the go file, and
+                // counts them. Raw mode makes each byte count as it comes.
+                let script = "stty raw -echo; echo reader-ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; "
+                    + "stty min 0 time 20; printf 'got=%s\\n' \"$(dd bs=64 count=1 2>/dev/null | wc -c | tr -d ' ')\"; sleep 60"
+                let reader = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: reader, containing: "reader-ready"))
+
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                try hostile.greet()
+                // Keys, before any attach. They have nowhere to go.
+                hostile.send(HostileClient.frame(kind: 3, payload: Array("ignored!".utf8)))
+                hostile.send(HostileClient.control(
+                    #"{"attach":{"identifier":"\#(reader.uppercased())","size":{"columns":80,"rows":24}}}"#
+                ))
+                // The connection still works: it is attached now, and one key
+                // sent after the attach reaches the program.
+                var sawAttached = false
+                var sawSnapshot = false
+                while !(sawAttached && sawSnapshot) {
+                    let frame = try #require(hostile.receiveFrame(), "the attach was not answered")
+                    if frame.messageName == "attached" { sawAttached = true }
+                    if frame.kind == 4 { sawSnapshot = true }
+                    #expect(frame.messageName != "failure", "the attach failed: \(String(describing: frame.object))")
+                }
+                hostile.send(HostileClient.frame(kind: 3, payload: Array("x".utf8)))
+                // The program waits up to two seconds for a key, so it does not
+                // matter whether the key is in its input yet when it starts to read.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await process.waitForScreen(of: reader, containing: "got="))
+                let screen = try process.screenText(of: reader)
+                #expect(screen.contains("got=1"), "the program read: \(screen)")
+                try await expectTheServerKeepsServing(process, identifier: identifier, alsoListed: [reader], neighbor: neighbor, "input before attach")
+            }
+        }
+
+        @Test func aSecondAttachIsRefusedAndTheFirstKeepsWorking() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                // A program that answers a line with a line, so the test sees
+                // that the first attach still relays keys and output.
+                let echoing = try process.createSession(program: ["/bin/sh", "-c", "stty -echo; echo echo-ready; read line; echo answer-$line; sleep 60"])
+                #expect(await process.waitForScreen(of: echoing, containing: "echo-ready"))
+
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                try hostile.greet()
+                let attach = HostileClient.control(#"{"attach":{"identifier":"\#(echoing.uppercased())","size":{"columns":80,"rows":24}}}"#)
+                hostile.send(attach)
+                hostile.send(attach)
+
+                var refusal: ReceivedFrame?
+                while refusal == nil {
+                    let frame = try #require(hostile.receiveFrame(), "the second attach was not answered")
+                    if frame.messageName == "failure" { refusal = frame }
+                }
+                let failure = refusal?.fields?["_0"] as? [String: Any]
+                #expect(failure?["reason"] as? String == "invalidRequest")
+
+                // The first attach still works: keys go in, output comes out.
+                hostile.send(HostileClient.frame(kind: 3, payload: Array("hello\n".utf8)))
+                var output = ""
+                while !output.contains("answer-hello") {
+                    let frame = try #require(hostile.receiveFrame(), "the first attach stopped working; output so far: \(output)")
+                    if frame.kind == 2 { output += String(decoding: frame.payload, as: UTF8.self) }
+                }
+                try await expectTheServerKeepsServing(process, identifier: identifier, alsoListed: [echoing], neighbor: neighbor, "second attach")
+            }
+        }
+
         @Test func aClientThatSaysNothingIsEndedAtTheHelloDeadlineAndBlocksNoOne() async throws {
             try await withNeighbor { process, identifier, neighbor in
                 let silent = try HostileClient(socketPath: process.socketPath)
