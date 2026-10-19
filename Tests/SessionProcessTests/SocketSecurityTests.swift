@@ -8,6 +8,53 @@ import Testing
 extension SessionProcessIntegration {
     @Suite struct SocketSecurityTests {
 
+        // MARK: - The user at the other end
+        //
+        // This Mac has one user account, and a test cannot start a program as
+        // another user. So these tests make each side expect another user
+        // than the one it meets, through a parameter that only tests set.
+
+        @Test func thePeerOfASocketIsTheUserOfThisProcess() throws {
+            let (one, other) = try MessageConnection.makePair()
+            #expect(throws: Never.self) { try one.requirePeer() }
+            #expect(throws: Never.self) { try other.requirePeer(PeerIdentity(userIdentifier: geteuid())) }
+        }
+
+        /// The session process closes a connection of another user before it
+        /// sends a byte, and never serves it.
+        @Test func theSessionProcessRefusesAClientOfAnotherUser() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let anotherUser = PeerIdentity(userIdentifier: geteuid() &+ 1)
+
+            for (allowed, served) in [(anotherUser, false), (PeerIdentity.currentUser, true)] {
+                let location = try SocketLocation(path: folder.appendingPathComponent(served ? "served" : "refused").path)
+                let listener = try SocketListener(location: location, allowedPeer: allowed)
+                let connections = listener.connections
+                let counting = Task {
+                    var count = 0
+                    for await connection in connections {
+                        count += 1
+                        connection.shutdown()
+                    }
+                    return count
+                }
+                let client = try MessageConnection.connect(to: location)
+                // A refused client sees the connection end with no byte. A
+                // served one waits for an answer that this test never gives.
+                let answer = Result { try client.receive(ServerMessage.self, timeLimit: .wholeFrame(by: .now + .milliseconds(served ? 300 : 5000))) }
+                client.shutdown()
+                listener.close()
+                let count = await counting.value
+                if served {
+                    #expect(count == 1)
+                } else {
+                    #expect(count == 0)
+                    #expect(try answer.get() == nil)
+                }
+            }
+        }
+
         // MARK: - Connections that wait for the server
 
         /// The listener kept every connection it accepted

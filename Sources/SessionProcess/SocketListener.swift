@@ -24,7 +24,9 @@ final class SocketListener: @unchecked Sendable {
     /// The connections that the system queues before `accept`.
     private static let listenQueueLength: Int32 = 64
 
-    init(location: SocketLocation) throws {
+    /// - Parameter allowedPeer: The user that clients must run as. Tests pass
+    ///   another user, because they cannot start a program as one.
+    init(location: SocketLocation, allowedPeer: PeerIdentity = .currentUser) throws {
         self.location = location
         let descriptor = try Self.bindAndListen(at: location)
 
@@ -47,6 +49,15 @@ final class SocketListener: @unchecked Sendable {
                     // sockets. The connection code expects blocking calls.
                     _ = fcntl(accepted, F_SETFL, 0)
                     let connection = MessageConnection(descriptor: accepted)
+                    // Another user gets nothing, not even a refusal. Closing
+                    // the connection is all it learns.
+                    do {
+                        try connection.requirePeer(allowedPeer)
+                    } catch {
+                        SessionServer.log("Refused a connection: \(error)")
+                        connection.shutdown()
+                        continue
+                    }
                     switch continuation.yield(connection) {
                     case .enqueued:
                         break
