@@ -147,6 +147,11 @@ This module holds the messages, the frame format, the connection, and the socket
 
 The log of the session process (`SessionServer.log`) escapes every line with `PrintableText.escaping`. A log line can include text that a client chose, such as a folder, a command or an error message, and a terminal that shows the log must not obey it.
 
+### CommandLineTool
+
+`CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects (`SessionClient`), finds the session from a typed identifier (`SessionIdentifierMatch`), and runs one command.
+`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand` and `KillCommand` hold the commands. `RawTerminalMode` switches the terminal to raw mode and back.
+`openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them to the session. `AttachSignals` turns signals into requests for the writer.
 
 ## Process model
 
@@ -291,6 +296,7 @@ Examples of control payloads:
 ```
 
 `relaysRawOutput` is a new optional field of `attach`. It stays inside protocol version 1: a client that leaves it out, or sends `false`, does not relay raw output, and an older session process ignores the field.
+`receivesSizeChanges` is another optional field of `attach`, and it stays inside protocol version 1 too. A client that leaves it out, or sends `false`, never receives `sizeChanged`, so an older client never meets a message that it does not know. An older session process ignores the field and never sends the message. The client whose own `resize` or `attach` changed the size does not get the message, because it knows its size. `openrun attach` does not ask: it sends the size of its own window, and its real terminal lays out the output. A client that draws the screen itself, as the app will, asks for the message and resizes its own `Terminal` when it comes.
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
 
 ### A conversation
@@ -353,6 +359,55 @@ The screens alone can also be too large. An example is an attach at 10,000 rows,
 
 `ReattachTests.aSnapshotLargerThanOneFrameLosesOldScrollbackAndKeepsTheScreen` checks both cases in a session of 1000 columns. The client that attaches gets a snapshot near 64 MiB with the newest scrollback, and its screen is the screen that `openrun read` shows, also after more output.
 
+### What `openrun attach` does
+
+1. It resolves the identifier, and sends `attach` with the size of its terminal and `relaysRawOutput` set to `true`, because it writes the raw output to a real terminal. It does not set `receivesSizeChanges`, because its real terminal lays out the output at the size of its own window.
+2. It restores the snapshot into a local `Terminal` and makes the first picture from it. This happens before the terminal changes, so a snapshot that cannot be restored ends the tool with an error (exit code 1) and leaves the terminal as it was. A `failure` in place of `attached`, such as for a screen that does not fit in one frame, ends the tool the same way, with the message of the failure.
+3. It starts to handle signals, and only then puts the terminal in raw mode. So no signal can leave the terminal raw.
+4. It draws the picture: it clears the screen and draws the visible screen of the local terminal in its VT format. When the session is on the alternate screen, it enters the alternate screen first. When the snapshot fell inside an escape sequence or a UTF-8 character, it writes the start of it after the picture (`UnfinishedSequence`). The first output frame then finishes it in the real terminal. Without this, the terminal would show the end of the sequence, such as `1mRED`, as text. The picture starts with `CSI 22 ; 0 t`, which saves the title of the window on its stack. The tool puts the title back when it restores the terminal (step 7). The picture after a suspension saves the title again.
+5. It relays: keys go out as input frames, output frames go to the terminal, and SIGWINCH sends `resize`. It sends the size once more when the relay starts, because the window can change between the attach request and the signal handler. The local terminal follows exactly the bytes that reached the terminal, so the tool knows at the end whether the terminal is on the alternate screen. Keys go out in order on a queue of their own. After `KeySender.stop` returns, the keyboard thread reads no more keys: it checks the stop flag and reads under one lock. Keys that it read before `stop` still go to the session. Keys that the recognizer holds for a possible detach at that moment, such as a lone Escape within its short hold, are dropped. `KeySender.pause` works like `stop` for reads: the thread checks the pause flag and reads under one lock, so it reads no key after `pause` returns. `resume` lets it read again. A send waits when the program reads no input and the session process holds as much as it may, and the keyboard thread must still see the detach key then.
+6. Control-] detaches. `DetachKeyRecognizer` finds the key in the bytes that the terminal sends (see "The detach key"). The tool sends `detach` behind the keys, waits for it at most 200 milliseconds, and then closes the connection. The program's exit, a lost connection, a failed write to the terminal, SIGINT, SIGTERM, SIGHUP and SIGQUIT also end it.
+7. In every case it restores the terminal. It first writes CAN (`0x18`) and ST (`ESC \`), which end any escape sequence or string, such as an operating system command, that the program left open. Without them, a terminal could take what follows, and the message after it, as part of the open sequence. Then it turns off synchronized output (mode 2026), because that mode holds back every later change of the screen. Then it leaves the alternate screen, when the terminal is on it. Then it undoes what the program and the first picture switched on: the scroll region and origin mode (with the cursor saved and restored around them, because both reset moves the cursor), the color palette, the foreground, background and cursor colors (OSC 10 to 12), styles, a hyperlink that is still open (OSC 8 with no address), the character sets, insert mode, reverse video (mode 5), line wrap, the cursor and its shape, the modes that lock the keyboard or change a key (ANSI modes 2 and 20, mode 67), the left and right margins (mode 69), mouse reports (modes 9, 1000, 1002, 1003) and their encodings (1005, 1006, 1015, 1016), focus reports, color scheme reports, visibility reports and size reports (modes 1004, 2031, 2033, 2048), bracketed paste, application keys, and the extended keyboard modes. Then it puts the title back (`CSI 23 ; 0 t`), when the picture saved it. Then it puts the original terminal mode back.
+
+   A saved cursor also keeps origin mode, so when the program set origin mode, the tool resets it after the cursor is restored, and moves the cursor back to its place. The tool finds out whether origin mode is set from the local terminal. The reset before leaving the alternate screen has the same reason: the alternate screen forgets its cursor.
+
+   The tool resets only modes that are off in a plain terminal. It does not touch modes that many terminals turn on by default, such as alternate scroll (1007), grapheme clusters (2027) and the meta key modes (1035, 1036). Those modes would then differ from the user's own setting.
+
+Threads. Only the main thread writes to the terminal, through `TerminalWriter`. One thread receives frames from the session process and hands the output to the writer, at most 1 MiB ahead. The keyboard thread (`KeySender`) and the signal handlers (`AttachSignals`) never write to the terminal. They ask the writer to end, to suspend, or to go on. When two requests to end arrive, an urgent ending wins over an ending that waits for output, also when the urgent one came second. A detach (Control-]) and a signal are urgent: they end the attach at once, and output that still waits is dropped. The exit of the program and a lost connection wait for the output that came before them. Among urgent endings, the first one decides the exit code, so a second signal does not change it. Among endings that wait for output, the first one decides as well. No output follows the closing sequences.
+
+The last message of `openrun attach` (such as `[detached]` or the reason of a lost connection) can include text from the session process, so it is escaped with `PrintableText.escaping`.
+
+A terminal that takes no output. The writer opens the terminal a second time, without blocking, so a terminal that reads nothing, such as a frozen `ssh` or a paused multiplexer, cannot hold the tool in a write. It waits for room with `poll`, and a request wakes it. Control-] and the stop signals therefore end the tool also while the terminal takes no output. In that case the tool puts the original mode back first, because the closing sequences may never reach the terminal, and then gives the closing sequences and the last message one second each.
+
+Suspending. SIGTSTP restores the terminal as at the end (including the title), and then stops the tool. The tool stops itself with SIGSTOP, because a SIGTSTP of its own would reach its own handler again after the continue. A shell reports the tool as stopped by a signal. A signal to end that arrives before the stop wins over the suspension: SIGINT, SIGTERM, SIGHUP or SIGQUIT, also 150 milliseconds after SIGTSTP while the terminal takes no output, ends the tool with 128 plus the signal and the terminal restored, and the tool never stops itself. The tool asks once more, right before SIGSTOP, so the closing sequences of the suspension (which may wait up to one second for a terminal that takes no output) do not hide the signal. The keyboard thread reads no keys from the start of the suspension until the continue has set raw mode again (`KeySender.pause` and `KeySender.resume`). Keys that the user types in that time stay in the terminal for the shell, also while the closing sequences wait for a terminal that takes no output. `KeySender.stop` and the end of attach still work while the reading is paused. A signal that comes after the stop waits for the continue, as for any stopped process. SIGCONT puts the terminal in raw mode again, with the mode that the terminal has then as the one to put back, saves the title again, sends the size, and draws the picture again.
+
+Closing state. The local screen counts the window as on the alternate screen, and as holding the saved title, until the bytes that end that state went out. `TerminalWriter.writeClosing` returns how many bytes of the closing sequences reached the terminal. The alternate screen is done with when the bytes up to the end of `CSI ? 1049 l` went out. The title is done with when all bytes went out, because the title pop (`CSI 23 ; 0 t`) is the last part. When a suspension gives up on a frozen terminal and a signal then ends attach, the last closing still leaves the alternate screen and pops the title. A state that was ended is never ended again, so the title pop is not sent twice. The other sequences give the same result when repeated.
+
+Raw mode starts with TCSANOW and ends with TCSADRAIN, so neither discards the keys that the user typed ahead: the session gets the keys typed before attaching, and the shell gets the keys typed while the tool ends. TCSADRAIN waits for the output to drain, so the tool waits at most 200 milliseconds for that, and switches with TCSANOW when the terminal takes no output. Back in line editing, the kernel marks the keys typed ahead for another pass (PENDIN), and the mode shows the mark until something looks at the input. The tool polls the input once, so the mode reads exactly as it was before attaching.
+
+### The detach key
+
+`openrun attach` passes a program's keyboard mode requests to the real terminal. After a program such as Codex turns on an enhanced mode, the terminal sends Control-] in another form. `DetachKeyRecognizer` (in `Sources/CommandLineTool/`) detaches on all of these:
+
+| Form | Bytes |
+|---|---|
+| Plain keyboard | `0x1D` |
+| Kitty keyboard protocol | `ESC [ 93 ; 5 u` |
+| xterm modifyOtherKeys | `ESC [ 27 ; 5 ; 93 ~` |
+
+The kitty form is `CSI 93[:alternates] ; modifiers[:event] [; text] u`. The modifiers value minus one must have the Control bit and no Shift, Alt, Super, Hyper or Meta bit. The Caps Lock and Num Lock bits are ignored. The event may be missing, 1 (press) or 2 (repeat). Event 3 (release) does not detach. Other keys, such as `ESC [ 91 ; 5 u`, pass through.
+
+The recognizer returns the bytes before the key, and the tool sends them to the session. All other bytes pass through unchanged.
+
+A terminal can deliver one key in two reads, for example over `ssh` or in a multiplexer. So the recognizer holds an incomplete end of the input when it could still become one of the three forms above. A lone Escape counts, because it starts the two escape forms. The recognizer joins the held bytes to the next read.
+
+- A hold lasts at most 20 milliseconds. Then `AttachCommand` sends the held bytes to the session, and a later second half no longer detaches. The hold starts when the first held byte arrives. More bytes of the same form do not start it again.
+- Bytes that no detach form can start with are never held. An example is `ESC [ 1`, or `ESC [ 9 3 0`. They are sent at once.
+- The Escape key reaches the program up to 20 milliseconds late. This is the price of recognizing a split key.
+- The keyboard thread of `openrun attach` polls with the time that the hold has left. When the poll times out, it sends the held bytes. Keys that are ready when the poll ends were in the terminal in time, so the thread reads them and joins them to the held bytes first, also when it gets to them late on a busy Mac. The hold therefore counts from when the bytes were read. A poll that a signal interrupts reads nothing, and the next poll waits for the time that the hold has left, so a held Escape never waits for the next key.
+
+The exit code of `openrun attach` is 0 after a detach, and the program's own status (or 128 plus the signal) when the program ends while attached. The session process is another program, so the tool clamps these numbers to 0 to 255. Without the clamp, a status of 300 would reach the shell as 44, because the kernel keeps only the low byte. The exit code is 128 plus the signal when SIGINT, SIGTERM, SIGHUP or SIGQUIT ends the tool, and 1 when the connection is lost or the terminal cannot be written to.
+
 ## Query replies
 
 Programs ask the terminal questions, such as "where is the cursor" (`ESC [ 6 n`) or "what are you" (`ESC [ c`). The terminal must send an answer back as input.
@@ -366,10 +421,13 @@ libghostty-vt answers through callbacks. `Terminal.setReplyHandler` installs fou
 - the default foreground and background colors of the terminal. libghostty-vt has no callback for `OSC 10` and `OSC 11` queries. It answers them from the default colors that the embedder sets with `ghostty_terminal_set`. `Terminal.write` sets them from the appearance before it parses output, and only when the appearance changed: black on white in light mode, white on black in dark mode. The reply has the form `ESC ] 10 ; rgb:0000/0000/0000 BEL` and ends with the terminator of the query. `setReplyHandler(nil)` clears the colors. While a reply handler is installed, `write` sets the foreground and the background again each time the appearance changes, so a color set with `setDefaultForegroundColor` or `setDefaultBackgroundColor` lasts only until then. A client that restores a snapshot installs no handler, so its colors stay. The cursor color and the palette are never set by the handler.
 - `CSI 15 t` (the size of the screen in pixels). libghostty-vt does not parse this query, so it has no callback. `Terminal.write` looks for the exact bytes `ESC [ 1 5 t` (also when a write ends inside them), parses the bytes up to the end of the query, and then sends `ESC [ 5 ; height ; width t` from the grid and the nominal cell, so the replies keep the order of the queries. For an 80 by 24 grid the reply is `ESC [ 5 ; 384 ; 640 t`.
 
+The default colors are a setting of the terminal, not output. The snapshot carries them, but the picture of `openrun attach` (the visible screen as sequences from a restored snapshot) and the text of `openrun read` do not change. `TerminalReplyTests.theQueriesChangeNoPictureOrText` compares plain text, sequences and hypertext markup, with and without the colors, for eleven kinds of output, also after the restore and more output.
 
 The handler's box is stored in `Terminal.replyBox` before libghostty-vt gets a pointer to it, and the old box lives until the new pointer is in place. If the installation fails half way, the terminal takes the callbacks back, or keeps the box alive when it cannot.
 
 The session process installs a handler on the session's `Terminal` before it starts the program. The handler writes the bytes to the pseudo terminal with `PseudoTerminal.write`, which never waits, unless a real terminal answers instead. An answer goes in behind typed input that waits for room, as a real terminal would send them.
+
+`openrun attach` writes the raw output to the user's terminal window, and that window answers the same queries, as it would over `ssh`. Two answers would confuse the program. So the rule is:
 
 - While at least one attached client relays raw output (`relaysRawOutput` is `true` in its `attach` message), the session process sends no replies. The real terminal of that client answers.
 - With no client, or with only clients that do not relay, the session process answers. This holds for the colors (`OSC 10`, `OSC 11`) and for `CSI 15 t` too. With a relaying client attached, the handler of the session process stays silent for all queries.
@@ -396,6 +454,7 @@ The session parses output, attaches and detaches on one serial context, so each 
 - A query that the session parsed while a relaying client was attached is sent to that client as output, and only its terminal answers.
 - If that client detaches, or loses its connection, before its terminal has answered, nobody answers. The program gets no reply, as it would when an `ssh` connection drops. The next query is answered by the session process again.
 
+Tests cover no client, an attached client in a pseudo terminal that plays a real terminal and answers `ESC [ c`, an older client that sends no field, a client that attaches after the answer, and a client that detaches before the next query. In each case the program reads exactly one reply.
 
 Limit: two relaying clients attached at once both answer, so the program gets two replies. Attaching two terminal windows to one session is rare, and the app will not relay raw output.
 
@@ -424,3 +483,18 @@ Every program in a session gets these. They override the same names in the envir
 
 `OPENRUN_SOCKET` also tells `openrun` inside a session where the session process is. The tool reads it when no `--socket` flag is given.
 
+## Command-line tool
+
+```
+openrun new [--folder PATH] [-- PROGRAM ARGUMENTS...]
+openrun list
+openrun attach IDENTIFIER
+openrun read IDENTIFIER [--scrollback]
+openrun send IDENTIFIER [--enter] TEXT
+openrun kill IDENTIFIER
+openrun help
+```
+
+Every command takes `--socket PATH`. Errors go to standard error with exit code 1. Wrong arguments exit with code 2: this includes `openrun help` with arguments, `openrun COMMAND-THAT-DOES-NOT-EXIST --help`, and an empty session identifier. The tool checks the arguments before it connects, so these exit with 2 whether or not a session process runs. `--help` after a real command (`openrun read abc --help`) shows the help.
+`list` prints one line per session: the identifier, the folder and the command, separated by tabs. A client chose the folder and the arguments, so each field is escaped with `PrintableText.escaping`: a backslash becomes two backslashes, a tab `\t`, a new line `\n`, a carriage return `\r`, and any other control character `\u{XX}` in upper-case hexadecimal. Each session is exactly one line, and the tabs split exactly three columns. The arguments of the command are joined by one space.
+Every error message that `openrun` prints is escaped the same way, including failures that the session process reports, so text from a client never drives the terminal of the caller. The tool's own line breaks stay. A message with a list, such as the sessions that start with the typed identifier, is a heading and one line for each entry (`CommandLineToolError.failureWithList`). The tool escapes each line on its own, so every entry is on its own line, and a line break inside client text shows as `\n`.
