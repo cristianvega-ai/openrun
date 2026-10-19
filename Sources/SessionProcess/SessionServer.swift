@@ -153,6 +153,14 @@ actor SessionServer {
     }
 
     private func create(folder: String, command: [String]?, size: SessionSize, environment: [String: String]) async -> ServerMessage {
+        guard size.columns > 0, size.rows > 0 else {
+            return .failure(SessionFailure(reason: .invalidRequest, message: "A session needs at least one column and one row."))
+        }
+        // No command means the login shell. An empty one names no program, so
+        // it is a mistake of the client, not a request for the shell.
+        if let command, command.isEmpty {
+            return .failure(SessionFailure(reason: .invalidRequest, message: "The command is empty. Name a program, or send no command to start the login shell."))
+        }
         do {
             let summary = try await registry.create(folder: folder, command: command, size: size, environment: environment)
             Self.log("Started session \(summary.identifierText) in \(folder)")
