@@ -30,6 +30,7 @@ final class SocketListener: @unchecked Sendable {
     ///   another user, because they cannot start a program as one.
     init(location: SocketLocation, allowedPeer: PeerIdentity = .currentUser) throws {
         self.location = location
+        try Self.prepareFolder(for: location)
         lock = try SocketLock(socketPath: location.path)
         let descriptor = try Self.bindAndListen(at: location)
 
@@ -92,6 +93,31 @@ final class SocketListener: @unchecked Sendable {
     }
 
     // MARK: - Starting
+
+    // The socket file is the only door into the session process, and every
+    // program of the user can talk to it. A folder that another user can
+    // change would let that user put a socket of their own in its place.
+    private static func prepareFolder(for location: SocketLocation) throws {
+        let folder = location.folder
+        var status = stat()
+        if stat(folder, &status) != 0 {
+            do {
+                try FileManager.default.createDirectory(
+                    atPath: folder,
+                    withIntermediateDirectories: true,
+                    attributes: [.posixPermissions: 0o700]
+                )
+            } catch {
+                throw SessionProcessError.failure(of: "mkdir")
+            }
+        } else if location.isDefault, status.st_uid == geteuid(), (status.st_mode & S_IFMT) == S_IFDIR {
+            // This folder belongs to OpenRun, so its mode is ours to fix. A
+            // folder chosen with --socket keeps its mode and must pass the
+            // check below as it is.
+            guard chmod(folder, 0o700) == 0 else { throw SessionProcessError.failure(of: "chmod") }
+        }
+        try location.checkFolder()
+    }
 
 
     private static func bindAndListen(at location: SocketLocation) throws -> Int32 {

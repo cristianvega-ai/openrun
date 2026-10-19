@@ -42,6 +42,15 @@ public final class RunningSessionProcess: @unchecked Sendable {
         return URL(fileURLWithPath: path, isDirectory: true)
     }
 
+    /// Starts the process and waits until it accepts connections.
+    ///
+    /// - Parameter socketRelativePath: The socket inside the private folder.
+    ///   A path with a missing subfolder lets a test see the process create it.
+    /// - Parameters:
+    ///   - directory: A folder to share with another process. The process that
+    ///     gets a folder does not remove it.
+    ///   - logName: The file for standard error. Two processes in one folder
+    ///     need two names.
     public init(
         directory: URL? = nil,
         socketRelativePath: String = "socket",
@@ -73,6 +82,9 @@ public final class RunningSessionProcess: @unchecked Sendable {
             }
         }
     }
+
+    public var processIdentifier: pid_t { process.processIdentifier }
+    public var isRunning: Bool { process.isRunning }
 
     /// What the process wrote to standard error.
     public var log: String {
