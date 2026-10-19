@@ -186,6 +186,102 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// The halves of a kitty Control-] arrive 20 ms apart at most, but the
+        /// tool gets to the second half only later, as on a busy Mac. The hold
+        /// counts from when the bytes were read, so the key still detaches.
+        /// Stopping the tool between the halves makes it late on purpose.
+        @Test func aKeyWhoseSecondHalfArrivesInTimeDetachesEvenWhenTheToolReadsItLate() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                var conclusiveRounds = 0
+                for round in 0..<6 where conclusiveRounds == 0 {
+                    let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                    defer { terminal.closeNow() }
+                    guard try await typeAKeyInHalvesWhileTheToolStops(terminal) else {
+                        print("hold-round-\(round): not conclusive")
+                        continue
+                    }
+                    conclusiveRounds += 1
+                    #expect(await terminal.waitForScreen(containing: "mode-restored", timeout: .seconds(10)), "round \(round)")
+                    #expect(terminal.screenText.contains("[detached]"), "round \(round): \(terminal.screenText)")
+                    #expect(terminal.screenText.contains("status=0"), "round \(round)")
+                }
+                #expect(conclusiveRounds == 1)
+            }
+        }
+
+        /// Types the kitty Control-] in two halves, and stops the tool between
+        /// them for 100 ms. Returns whether the round shows what the test is
+        /// about: the tool read the first half before it stopped, and stopped
+        /// before its 20 ms hold ended.
+        private func typeAKeyInHalvesWhileTheToolStops(_ terminal: AttachedTerminal) async throws -> Bool {
+            #expect(await eventually { terminal.isInRawMode })
+            let tool = try #require(terminal.childProcessIdentifiers().first)
+            let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+
+            let typed = ContinuousClock.now
+            terminal.type(bytes: Array("\u{1B}[93".utf8))
+            usleep(3_000)
+            kill(tool, SIGSTOP)
+            let stoppedAfter = ContinuousClock.now - typed
+            terminal.type(bytes: Array(";5u".utf8))
+            var waiting = 0
+            for _ in 0..<200 where waiting < 3 {
+                waiting = TerminalControl.waitingInput(onTerminal: path) ?? 0
+                usleep(5_000)
+            }
+            // The stopped tool reads nothing, so only the second half waits
+            // when the tool read the first half before it stopped.
+            let firstHalfRead = TerminalControl.waitingInput(onTerminal: path) == 3
+            usleep(100_000)
+            kill(tool, SIGCONT)
+            print("hold-round: stopped \(stoppedAfter) after the first half, first half read: \(firstHalfRead)")
+            return firstHalfRead && stoppedAfter < .milliseconds(15)
+        }
+
+        /// A program that never reads input, and keys that keep coming. The
+        /// keys that wait in the tool have a limit, so the tool stops reading
+        /// the terminal instead of growing.
+        @Test func keysThatWaitForAProgramThatNeverReadsUseBoundedMemory() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                let tool = try #require(terminal.childProcessIdentifiers().first)
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                let before = try #require(TerminalControl.memoryFootprint(of: tool))
+
+                // 96 MiB, far more than the session process and the tool hold.
+                let paste = [UInt8](repeating: UInt8(ascii: "x"), count: 64 * 1024)
+                for _ in 0..<(96 * 16) { terminal.type(bytes: paste) }
+                let limit = before + 40 * 1024 * 1024
+                var largest = before
+                var waitingSince: ContinuousClock.Instant?
+                let deadline = ContinuousClock.now + .seconds(60)
+                // The tool has stopped reading when keys wait in the terminal for a whole second.
+                while ContinuousClock.now < deadline, largest <= limit {
+                    largest = max(largest, TerminalControl.memoryFootprint(of: tool) ?? 0)
+                    if (TerminalControl.waitingInput(onTerminal: path) ?? 0) > 0 {
+                        let since = waitingSince ?? ContinuousClock.now
+                        waitingSince = since
+                        if ContinuousClock.now - since > .seconds(1) { break }
+                    } else {
+                        waitingSince = nil
+                    }
+                    try await Task.sleep(for: .milliseconds(20))
+                }
+                print("bounded-keys: footprint before \(before), largest \(largest)")
+                #expect(largest <= limit, "the tool grew from \(before) to \(largest) bytes")
+                #expect(waitingSince != nil, "the tool kept reading keys")
+
+                // Attaching still ends at once, with the terminal restored.
+                kill(tool, SIGTERM)
+                #expect(await terminal.waitForScreen(containing: "mode-restored", timeout: .seconds(10)))
+                #expect(terminal.screenText.contains("status=143"))
+            }
+        }
+
         /// The window changes size while the first picture waits for the
         /// terminal. The session must still get the new size.
         @Test func aResizeWhileTheFirstPictureWaitsReachesTheSession() async throws {
