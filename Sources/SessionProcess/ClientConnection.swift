@@ -111,6 +111,9 @@ final class ClientConnection: Sendable {
         readAhead.release(received.byteCount, from: received.room)
     }
 
+    /// Closes the connection once every queued message has gone out, or after
+    /// `ConnectionLimits.closingTimeLimit`, whichever comes first. A client
+    /// that reads nothing then cannot keep its descriptor and thread.
     func closeAfterSending() {
         let starts = state.withLock { state -> Bool in
             guard state.phase == .open else { return false }
@@ -122,6 +125,11 @@ final class ClientConnection: Sendable {
         // room stops.
         readAhead.close()
         writeQueue.async { [self] in end() }
+        let parts = ConnectionLimits.closingTimeLimit.components
+        let delay = DispatchTimeInterval.nanoseconds(Int(parts.seconds) * 1_000_000_000 + Int(parts.attoseconds / 1_000_000_000))
+        DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+            self?.end()
+        }
     }
 
     // MARK: - Private
@@ -164,7 +172,7 @@ final class ClientConnection: Sendable {
     private func write(_ frame: MessageFrame, countedAs size: Int, whenWritten: (@Sendable () -> Void)?) {
         if !hasEnded {
             do {
-                try connection.send(frame)
+                try connection.send(frame, stallLimit: ConnectionLimits.writeStallLimit)
             } catch {
                 end()
             }

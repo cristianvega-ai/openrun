@@ -8,6 +8,15 @@ enum ConnectionLimits {
     /// A client may wait as long as it likes between two frames. Once a frame
     /// has started, each part of it must follow within this time.
     static let frameStallLimit: Duration = .seconds(30)
+
+    /// A write to a client that takes no byte for this long ends the client.
+    static let writeStallLimit: Duration = .seconds(10)
+
+    /// A client that is closing gets this long to take the messages that wait
+    /// for it, such as the exit status of its program at shutdown. Then its
+    /// socket closes, also when a write to it is stuck.
+    static let closingTimeLimit: Duration = .seconds(2)
+
     /// Output may wait for a client up to this many bytes. Past that, it loses
     /// its connection: it can attach again and get a fresh snapshot, but the
     /// session process must not keep an unbounded backlog for it. Snapshots

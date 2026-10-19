@@ -31,11 +31,84 @@ private func connectedSocket(to path: String) throws -> Int32 {
     }
     return descriptor
 }
+
+/// Whether the session process has closed its side of this socket. The
+/// socket may still hold bytes that the test never read.
+private func isClosedBySessionProcess(_ descriptor: Int32) -> Bool {
+    var entry = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+    return poll(&entry, 1, 0) > 0 && entry.revents & Int16(POLLHUP) != 0
+}
+
+private func writeAll(_ bytes: [UInt8], to descriptor: Int32) -> Bool {
+    bytes.withUnsafeBytes { Darwin.write(descriptor, $0.baseAddress, $0.count) == $0.count }
+}
+
+/// Receives one message, or `nil` when the connection closes or the time
+/// limit passes. A test that waits too long fails instead of hanging.
+private func receiveMessage(_ connection: MessageConnection, within limit: TimeInterval) throws -> ServerMessage? {
+    let watchdog = DispatchWorkItem { connection.shutdown() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + limit, execute: watchdog)
+    defer { watchdog.cancel() }
+    return try connection.receive(ServerMessage.self)
+}
+
+/// A greeted connection on a socket whose descriptor the test keeps.
+private func greetedConnection(to path: String) throws -> (connection: MessageConnection, descriptor: Int32) {
+    let descriptor = try connectedSocket(to: path)
+    let connection = MessageConnection(descriptor: descriptor)
+    try connection.greetSessionProcess()
+    return (connection, descriptor)
+}
 extension SessionProcessIntegration {
     /// Each client costs a bounded amount: a thread, a descriptor, and memory
     /// for what it sends and receives. Deadlines end the clients that stop
     /// halfway, and a limit refuses clients past 64.
     @Suite struct ConnectionLimitTests {
+        /// Closing a client that stopped reading waited for a write
+        /// that never finished, so its descriptor and thread stayed for good.
+        @Test func stalledClientsAreClosedSoonAfterTheirProgramEnds() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let descriptorsBefore = try #require(process.descriptorCount)
+                let threadsBefore = try #require(process.threadCount)
+                // One MiB of output is far below the 8 MiB limit, and far
+                // more than the socket holds.
+                let script = "while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; dd if=/dev/zero bs=65536 count=16 2>/dev/null; exit 7"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+
+                var clients: [(connection: MessageConnection, descriptor: Int32)] = []
+                for _ in 0..<6 {
+                    let client = try greetedConnection(to: process.socketPath)
+                    try client.connection.send(ClientMessage.attach(identifier: UUID(uuidString: identifier)!, size: SessionSize(columns: 80, rows: 24)))
+                    guard case .attached = try receiveMessage(client.connection, within: 30),
+                          case .snapshot = try receiveMessage(client.connection, within: 30) else {
+                        Issue.record("The attach was not answered.")
+                        return
+                    }
+                    clients.append(client)
+                }
+                defer { clients.forEach { $0.connection.shutdown() } }
+
+                // The clients now read nothing more.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await eventually { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty })
+                let programEnded = ContinuousClock.now
+                let closed = await eventually(timeout: .seconds(8)) { clients.allSatisfy { isClosedBySessionProcess($0.descriptor) } }
+                print("stalled-clients: closed \(closed) \(ContinuousClock.now - programEnded) after the program ended")
+                #expect(closed, "the session process kept stalled clients open after their program ended")
+
+                // The system ends an idle worker thread of a dispatch queue about
+                // five seconds after its last work, such as a stuck write.
+                var descriptorsAfter = Int.max
+                var threadsAfter = Int.max
+                let released = await eventually(timeout: .seconds(15)) {
+                    descriptorsAfter = process.descriptorCount ?? Int.max
+                    threadsAfter = process.threadCount ?? Int.max
+                    return descriptorsAfter <= descriptorsBefore && threadsAfter <= threadsBefore + 2
+                }
+                #expect(released, "descriptors \(descriptorsBefore) then \(descriptorsAfter); threads \(threadsBefore) then \(threadsAfter)")
+            }
+        }
 
         /// Every connection got a thread, without a limit.
         @Test func clientsPastTheLimitAreRefusedAndTheThreadsStayBounded() async throws {
