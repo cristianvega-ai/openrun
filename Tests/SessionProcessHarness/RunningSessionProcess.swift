@@ -42,6 +42,27 @@ public final class RunningSessionProcess: @unchecked Sendable {
         return URL(fileURLWithPath: path, isDirectory: true)
     }
 
+    /// The login shell of the current user as the directory service reports
+    /// it, asked of the `dscl` program. Tests compare the shell of the session
+    /// process with this, so that they do not use the code under test as their
+    /// own oracle.
+    public static func loginShellFromDirectoryService() throws -> String {
+        let reader = Process()
+        reader.executableURL = URL(fileURLWithPath: "/usr/bin/dscl")
+        reader.arguments = [".", "-read", "/Users/" + NSUserName(), "UserShell"]
+        let pipe = Pipe()
+        reader.standardOutput = pipe
+        reader.standardError = FileHandle.nullDevice
+        try reader.run()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        reader.waitUntilExit()
+        let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+        guard reader.terminationStatus == 0, text.hasPrefix("UserShell:") else {
+            throw HarnessError.commandFailed(description: "dscl reported no shell for \(NSUserName()): \(text)")
+        }
+        return text.dropFirst("UserShell:".count).trimmingCharacters(in: .whitespaces)
+    }
+
     /// Starts the process and waits until it accepts connections.
     ///
     /// - Parameter socketRelativePath: The socket inside the private folder.

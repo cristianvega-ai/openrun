@@ -6,6 +6,14 @@ import SessionProtocol
 import Testing
 @testable import SessionProcess
 
+/// A folder with an empty zsh startup file, so that the login shell of the
+/// person who runs the tests does not read their own startup files and does
+/// not show the first-run questions of zsh.
+private func makeCleanHome() throws -> URL {
+    let home = try RunningSessionProcess.makeDirectory()
+    FileManager.default.createFile(atPath: home.appendingPathComponent(".zshrc").path, contents: Data())
+    return home
+}
 
 private func realPath(_ file: URL) -> String {
     String(cString: realpath(file.path, nil))
@@ -85,6 +93,25 @@ extension SessionProcessIntegration {
                 let result = try process.runCommand(["new", "--", "/bin/sh", "-c", "pwd; sleep 60"], folder: folder)
                 let identifier = try #require(result.outputLines.first)
                 #expect(await process.waitForScreen(of: identifier, containing: realPath(folder)))
+            }
+        }
+
+        @Test func aSessionWithoutAProgramRunsTheLoginShell() async throws {
+            try await RunningSessionProcess.run { process in
+                let home = try makeCleanHome()
+                defer { try? FileManager.default.removeItem(at: home) }
+                let identifier = try process.createSession(environment: ["HOME": home.path, "ZDOTDIR": home.path])
+                // The directory service names the shell, not the code under test.
+                let shell = try RunningSessionProcess.loginShellFromDirectoryService()
+                let listing = try process.runCommand(["list"]).outputLines
+                #expect(listing == ["\(identifier)\t\(process.directory.path)\t\(shell)"])
+
+                // The terminal echoes what is typed, so the marker is something
+                // that only a running shell can produce: the shell works out 42
+                // and its own name. A login shell is called with a dash first.
+                let name = "-" + (shell.split(separator: "/").last.map(String.init) ?? shell)
+                _ = try process.runCommand(["send", identifier, "--enter", "echo alive-$((6*7))-\"$0\""])
+                #expect(await process.waitForScreen(of: identifier, containing: "alive-42-\(name)"), "screen: \((try? process.screenText(of: identifier)) ?? "")")
             }
         }
 
