@@ -396,6 +396,22 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// A frame of deeply nested JSON, as large as a frame may be, must not
+        /// crash the session process or exhaust the stack of the thread that
+        /// reads the client.
+        @Test func aDeeplyNestedRequestOfTheLargestFrameSizeIsAnsweredAndNobodyElseNotices() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                try hostile.greet()
+                let largest = 64 * 1024 * 1024
+                #expect(hostile.send(HostileClient.frame(kind: 1, payload: [UInt8](repeating: UInt8(ascii: "["), count: largest))))
+
+                expectUnreadableRequestFailure(hostile.receiveFrame(within: .seconds(30)), naming: "nests too deeply", "64 MiB of nested arrays")
+                #expect(hostile.waitForClose(), "the server did not end the connection")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "64 MiB of nested arrays")
+            }
+        }
+
         @Test func aClientWithAnotherProtocolVersionIsToldAndEnded() async throws {
             try await withNeighbor { process, identifier, neighbor in
                 let hostile = try HostileClient(socketPath: process.socketPath)
@@ -408,6 +424,42 @@ extension SessionProcessIntegration {
                 #expect((failure?["message"] as? String)?.contains("protocol version 1") == true, "message: \(String(describing: failure?["message"]))")
                 #expect(hostile.waitForClose(), "the server did not end the connection")
                 try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "wrong version")
+            }
+        }
+
+        @Test func aSecondHelloIsAnsweredWithAFailureAndTheConnectionStaysUsable() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                try hostile.greet()
+                hostile.send(HostileClient.hello)
+
+                let answer = try #require(hostile.receiveFrame())
+                #expect(answer.messageName == "failure")
+                let failure = answer.fields?["_0"] as? [String: Any]
+                #expect(failure?["reason"] as? String == "invalidRequest")
+
+                // The mistake costs the client nothing more than the answer.
+                hostile.send(HostileClient.control(#"{"listSessions":{}}"#))
+                let list = try #require(hostile.receiveFrame())
+                #expect(list.messageName == "sessionList")
+                #expect((list.fields?["_0"] as? [Any])?.count == 1)
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "second hello")
+            }
+        }
+
+        @Test func aClientThatSaysNothingIsEndedAtTheHelloDeadlineAndBlocksNoOne() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let silent = try HostileClient(socketPath: process.socketPath)
+                let start = ContinuousClock.now
+                // While it keeps the connection open, everyone else is served.
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "silent client, while it waits")
+
+                #expect(silent.waitForClose(within: .seconds(20)), "the server never ended the silent connection")
+                let waited = ContinuousClock.now - start
+                // The server allows five seconds for the hello. It does not
+                // end a connection at once, and it does not wait for ever.
+                #expect(waited > .seconds(3), "the connection ended after \(waited)")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "silent client, after it was ended")
             }
         }
     }
