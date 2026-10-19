@@ -103,6 +103,47 @@ public final class AttachedTerminal: @unchecked Sendable {
         typing.yield(bytes)
     }
 
+    /// Stops the program's output from reaching this terminal, as a slow
+    /// terminal window does. The program blocks once the terminal's output
+    /// queue is full. Nothing is lost: `resumeOutput` lets it flow again, and
+    /// the screen then shows all of it.
+    ///
+    /// The pseudo terminal reader of this class cannot do this, because it
+    /// reads at once and keeps the bytes in memory. The terminal itself
+    /// holds the output back instead.
+    public func pauseOutput() {
+        clearAnyKeyRestart()
+        controlOutput(TCOOFF)
+    }
+
+    /// `cfmakeraw` leaves IXANY set. With it, any key that the terminal reads,
+    /// such as the typed detach key, restarts the output that `pauseOutput`
+    /// stopped, and the test would no longer hold the output back at the
+    /// moment it types the key.
+    private func clearAnyKeyRestart() {
+        let descriptor = open(pseudoTerminal.terminalPath, O_RDWR | O_NOCTTY)
+        guard descriptor >= 0 else { return }
+        defer { close(descriptor) }
+        var attributes = termios()
+        guard tcgetattr(descriptor, &attributes) == 0 else { return }
+        attributes.c_iflag &= ~tcflag_t(IXANY)
+        tcsetattr(descriptor, TCSANOW, &attributes)
+    }
+
+    /// Lets the output that `pauseOutput` held back flow again.
+    public func resumeOutput() {
+        controlOutput(TCOON)
+    }
+
+    private func controlOutput(_ action: Int32) {
+        // Opening the terminal by its path reaches the same terminal that the
+        // program uses. O_NOCTTY keeps the test from adopting it.
+        let descriptor = open(pseudoTerminal.terminalPath, O_RDWR | O_NOCTTY)
+        guard descriptor >= 0 else { return }
+        defer { close(descriptor) }
+        tcflow(descriptor, action)
+    }
+
     /// Waits until the screen shows the text.
     public func waitForScreen(containing text: String, timeout: Duration = .seconds(15)) async -> Bool {
         await eventually(timeout: timeout) { screenText.contains(text) }
