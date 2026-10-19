@@ -8,6 +8,8 @@ final class SocketListener: @unchecked Sendable {
     let connections: AsyncStream<MessageConnection>
     private let location: SocketLocation
     private let source: DispatchSourceRead
+    /// Held until the listener goes away, which is the end of the process.
+    private let lock: SocketLock
 
     /// The most accepted connections that may wait for the server to take
     /// them. A connection that waits is outside the client limit and has no
@@ -28,6 +30,7 @@ final class SocketListener: @unchecked Sendable {
     ///   another user, because they cannot start a program as one.
     init(location: SocketLocation, allowedPeer: PeerIdentity = .currentUser) throws {
         self.location = location
+        lock = try SocketLock(socketPath: location.path)
         let descriptor = try Self.bindAndListen(at: location)
 
         // .bufferingOldest keeps the oldest waiting connections. When the
@@ -117,5 +120,66 @@ final class SocketListener: @unchecked Sendable {
             throw failure
         }
         return descriptor
+    }
+}
+
+extension SocketListener {
+    /// A lock file next to the socket, which a session process holds for its
+    /// whole life.
+    ///
+    /// Checking for a live session process and then creating the socket are
+    /// two steps. Two processes that start together could both pass the
+    /// check, and the one that lost could remove the other's socket. The lock
+    /// makes the two steps one: a process that cannot take it at once refuses
+    /// to start.
+    ///
+    /// The file stays after the process ends. A lock on a file that someone
+    /// removes protects nothing, so the file is never removed, and a process
+    /// checks that the file it locked is still the one at the path.
+    final class SocketLock: Sendable {
+        let path: String
+        private let descriptor: Int32
+
+        init(socketPath: String, owner: uid_t = geteuid()) throws {
+            path = Self.path(forSocket: socketPath)
+            descriptor = try Self.take(path, socketPath: socketPath, owner: owner)
+        }
+
+        deinit {
+            // Closing the descriptor releases the lock. The system releases
+            // it also when the process ends in any other way.
+            Darwin.close(descriptor)
+        }
+
+        static func path(forSocket socketPath: String) -> String {
+            socketPath + ".lock"
+        }
+
+        private static func take(_ path: String, socketPath: String, owner: uid_t) throws -> Int32 {
+            // Each pass that fails found a file that was removed or replaced
+            // while it took the lock. That needs another program at work in
+            // the folder.
+            for _ in 0..<8 {
+                let descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0o600)
+                guard descriptor >= 0 else {
+                    let code = errno
+                    throw SessionProcessError.systemCallFailed(function: "open \(path)", code: code)
+                }
+                guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+                    let code = errno
+                    Darwin.close(descriptor)
+                    if code == EWOULDBLOCK { throw SessionProcessError.alreadyRunning(path: socketPath) }
+                    throw SessionProcessError.systemCallFailed(function: "flock", code: code)
+                }
+                var locked = stat()
+                var current = stat()
+                if fstat(descriptor, &locked) == 0, lstat(path, &current) == 0,
+                   locked.st_dev == current.st_dev, locked.st_ino == current.st_ino {
+                    return descriptor
+                }
+                Darwin.close(descriptor)
+            }
+            throw SessionProcessError.lockFileKeepsChanging(path: path)
+        }
     }
 }
