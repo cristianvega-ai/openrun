@@ -54,4 +54,35 @@ import Testing
         #expect(throws: CommandLineToolError.self) { try SessionIdentifierMatch.find("", in: summaries) }
         #expect(throws: CommandLineToolError.self) { try SessionIdentifierMatch.find("1a", in: []) }
     }
+
+    /// openrun's own line breaks stay, so each candidate is on its own line.
+    /// The folder is text that a client chose, so no control character in it
+    /// reaches the terminal, not even a line break.
+    @Test func theListPrintsOneCandidatePerLineAndEscapesClientText() throws {
+        let hostile = [
+            SessionSummary(
+                identifier: UUID(uuidString: "1A2B3C4D-0000-4000-8000-000000000001")!,
+                folder: "/work/\u{1B}[31mred\nopenrun: forged",
+                command: ["sh"],
+                size: SessionSize(columns: 80, rows: 24),
+                createdAt: .now
+            ),
+            summary("1A2B9999-0000-4000-8000-000000000002"),
+        ]
+        do {
+            _ = try SessionIdentifierMatch.find("1a2b", in: hostile)
+            Issue.record("The prefix should be ambiguous.")
+        } catch let error as CommandLineToolError {
+            let lines = error.printableDescription.split(separator: "\n", omittingEmptySubsequences: false)
+            // Without this, a defect would crash the test process at the index below.
+            try #require(lines.count == 3, "lines: \(lines)")
+            #expect(lines[0] == "More than one session starts with 1a2b. Type more characters.")
+            #expect(lines[1] == "  1a2b3c4d-0000-4000-8000-000000000001  /work/\\u{1B}[31mred\\nopenrun: forged")
+            #expect(lines[2] == "  1a2b9999-0000-4000-8000-000000000002  /work/1A2B")
+            let controls = error.printableDescription.unicodeScalars.filter { $0.value < 0x20 && $0 != "\n" }
+            #expect(controls.isEmpty)
+        } catch {
+            Issue.record("Unexpected error \(error)")
+        }
+    }
 }
