@@ -33,6 +33,18 @@ private final class WatchedConnection {
         while let _ = try? connection.receive(ServerMessage.self) {}
     }
 
+    /// Reads until the program has printed the text, and returns the sizes
+    /// that arrived in `sizeChanged` messages before it.
+    func sizeChanges(until text: String) throws -> [SessionSize] {
+        var sizes: [SessionSize] = []
+        var output = ""
+        while !output.contains(text), let message = try connection.receive(ServerMessage.self) {
+            if case .sizeChanged(let size) = message { sizes.append(size) }
+            if case .output(let bytes) = message { output += String(decoding: bytes, as: UTF8.self) }
+        }
+        #expect(output.contains(text), "the connection ended before \(text)")
+        return sizes
+    }
 }
 
 /// A program that prints the size of its terminal each time a line arrives.
@@ -97,6 +109,43 @@ extension SessionProcessIntegration {
             resized.readUntilClosed()
             #expect(try process.runCommand(["send", identifier, "--enter"]).status == 0)
             #expect(await process.waitForScreen(of: identifier, containing: "size=30 100"))
+        }
+
+        /// A client was not told when another client changed
+        /// the size of its session.
+        @Test func onlyTheOtherClientsThatAskedHearOfANewSize() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: sizeReporter)
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                let session = try #require(UUID(uuidString: identifier))
+                var clients: [WatchedConnection] = []
+                for asks in [true, true, nil] {
+                    let client = try WatchedConnection(socketPath: process.socketPath)
+                    guard case .attached = try client.request(.attach(identifier: session, size: SessionSize(columns: 80, rows: 24), receivesSizeChanges: asks)) else {
+                        Issue.record("A client did not attach.")
+                        return
+                    }
+                    clients.append(client)
+                }
+                let (requester, asker, other) = (clients[0], clients[1], clients[2])
+
+                // A resize, then a line for the program. The requester knows its size, and the other client did not ask.
+                try requester.connection.send(ClientMessage.resize(SessionSize(columns: 100, rows: 30)))
+                try requester.connection.send(ClientMessage.input(Data("\n".utf8)))
+                #expect(try asker.sizeChanges(until: "size=30 100") == [SessionSize(columns: 100, rows: 30)])
+                #expect(try requester.sizeChanges(until: "size=30 100") == [])
+                #expect(try other.sizeChanges(until: "size=30 100") == [])
+
+                // An attach with another size: both clients that asked hear of it.
+                let newcomer = try WatchedConnection(socketPath: process.socketPath)
+                try newcomer.connection.send(ClientMessage.attach(identifier: session, size: SessionSize(columns: 120, rows: 40)))
+                try newcomer.connection.send(ClientMessage.input(Data("\n".utf8)))
+                for client in [asker, requester] {
+                    #expect(try client.sizeChanges(until: "size=40 120") == [SessionSize(columns: 120, rows: 40)])
+                }
+                #expect(try other.sizeChanges(until: "size=40 120") == [])
+                #expect(try newcomer.sizeChanges(until: "size=40 120") == [])
+            }
         }
     }
 }
