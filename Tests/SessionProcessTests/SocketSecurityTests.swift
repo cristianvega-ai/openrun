@@ -5,8 +5,32 @@ import SessionProcessHarness
 @testable import SessionProtocol
 import Testing
 
+private typealias Harness = SocketSecurityHarness
 extension SessionProcessIntegration {
     @Suite struct SocketSecurityTests {
+
+        /// A lock file of another user would let that user
+        /// hold the lock. This Mac has one user, so the test makes the lock
+        /// expect another owner than the file has.
+        @Test func aLockFileOfAnotherUserIsRefusedAndLeftAlone() throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let lockPath = Harness.lockPath(forSocket: socketPath)
+            #expect(FileManager.default.createFile(atPath: lockPath, contents: nil))
+            #expect(chmod(lockPath, 0o644) == 0)
+
+            let error = #expect(throws: SessionProcessError.self) {
+                _ = try SocketListener.SocketLock(socketPath: socketPath, owner: geteuid() &+ 1)
+            }
+            let message = error?.description ?? ""
+            #expect(message.contains(lockPath) && message.contains("another user"), "\(message)")
+            #expect(Harness.mode(of: lockPath) == 0o644)
+            // The owner takes the same file, and only the owner may open it.
+            let lock = try SocketListener.SocketLock(socketPath: socketPath)
+            #expect(lock.path == lockPath)
+            #expect(Harness.mode(of: lockPath) == 0o600)
+        }
 
         // MARK: - The user at the other end
         //

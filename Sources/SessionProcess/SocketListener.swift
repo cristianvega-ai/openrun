@@ -140,6 +140,13 @@ extension SocketListener {
         let path: String
         private let descriptor: Int32
 
+        /// Takes the lock for the socket at `socketPath`.
+        ///
+        /// - Parameter owner: The user that the lock file must belong to.
+        ///   Tests pass another user, because they cannot make a file of one.
+        /// - Throws: `SessionProcessError.alreadyRunning` when another session
+        ///   process holds it, `SessionProcessError.lockFileIsNotARegularFile`
+        ///   or `SessionProcessError.lockFileOfAnotherUser`.
         init(socketPath: String, owner: uid_t = geteuid()) throws {
             path = Self.path(forSocket: socketPath)
             descriptor = try Self.take(path, socketPath: socketPath, owner: owner)
@@ -160,10 +167,22 @@ extension SocketListener {
             // while it took the lock. That needs another program at work in
             // the folder.
             for _ in 0..<8 {
+                // The open neither follows a symbolic link nor waits for the
+                // writer of a named pipe. Both are refused below.
                 let descriptor = open(path, O_RDWR | O_CREAT | O_CLOEXEC | O_NOFOLLOW | O_NONBLOCK, 0o600)
                 guard descriptor >= 0 else {
                     let code = errno
+                    var status = stat()
+                    if lstat(path, &status) == 0, (status.st_mode & S_IFMT) != S_IFREG {
+                        throw SessionProcessError.lockFileIsNotARegularFile(path: path)
+                    }
                     throw SessionProcessError.systemCallFailed(function: "open \(path)", code: code)
+                }
+                do {
+                    try makePrivate(descriptor, path: path, owner: owner)
+                } catch {
+                    Darwin.close(descriptor)
+                    throw error
                 }
                 guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
                     let code = errno
@@ -180,6 +199,24 @@ extension SocketListener {
                 Darwin.close(descriptor)
             }
             throw SessionProcessError.lockFileKeepsChanging(path: path)
+        }
+
+        // A lock file that was there before may have been made by anyone, in
+        // any mode. Another user who can open it can hold the lock, and then
+        // no session process starts. Only a regular file of the owner is
+        // used, and only the owner may open it.
+        private static func makePrivate(_ descriptor: Int32, path: String, owner: uid_t) throws {
+            var status = stat()
+            guard fstat(descriptor, &status) == 0 else { throw SessionProcessError.failure(of: "fstat \(path)") }
+            guard (status.st_mode & S_IFMT) == S_IFREG else {
+                throw SessionProcessError.lockFileIsNotARegularFile(path: path)
+            }
+            guard status.st_uid == owner else {
+                throw SessionProcessError.lockFileOfAnotherUser(path: path, owner: status.st_uid)
+            }
+            if status.st_mode & 0o7777 != 0o600, fchmod(descriptor, 0o600) != 0 {
+                throw SessionProcessError.failure(of: "chmod \(path)")
+            }
         }
     }
 }
