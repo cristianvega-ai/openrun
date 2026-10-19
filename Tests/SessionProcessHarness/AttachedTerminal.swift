@@ -3,6 +3,13 @@ import Foundation
 import PseudoTerminal
 import TerminalEmulation
 
+/// A program that runs in a pseudo terminal that the test controls, with a
+/// terminal screen that shows what the program drew. It plays the part of the
+/// user's terminal window for `openrun attach`.
+///
+/// Like a real terminal window, it answers the queries that the output
+/// contains, such as the device attributes query. It counts its answers, so a
+/// test can tell who answered.
 public final class AttachedTerminal: @unchecked Sendable {
     private let pseudoTerminal: PseudoTerminal
     private let screen: Terminal
@@ -72,6 +79,29 @@ public final class AttachedTerminal: @unchecked Sendable {
     /// Waits until the screen shows the text.
     public func waitForScreen(containing text: String, timeout: Duration = .seconds(15)) async -> Bool {
         await eventually(timeout: timeout) { screenText.contains(text) }
+    }
+
+    /// Whether the terminal is in raw mode: no line editing and no echo.
+    public var isInRawMode: Bool {
+        // Opening the terminal by its path shows the settings that the
+        // program under test made. O_NOCTTY keeps the test from adopting it.
+        let descriptor = open(pseudoTerminal.terminalPath, O_RDONLY | O_NOCTTY)
+        guard descriptor >= 0 else { return false }
+        defer { close(descriptor) }
+        var attributes = termios()
+        guard tcgetattr(descriptor, &attributes) == 0 else { return false }
+        // Every flag that `cfmakeraw` clears must be clear, and the program
+        // must read eight bits without parity. Checking only line editing and
+        // echo would accept a terminal that still turns Control-C into a
+        // signal or Return into a line feed.
+        let cleared: [(flags: tcflag_t, mask: Int32)] = [
+            (attributes.c_iflag, BRKINT | PARMRK | ISTRIP | INLCR | IGNCR | ICRNL | IXON),
+            (attributes.c_oflag, OPOST),
+            (attributes.c_lflag, ECHO | ECHONL | ICANON | ISIG | IEXTEN),
+            (attributes.c_cflag, PARENB),
+        ]
+        return cleared.allSatisfy { $0.flags & tcflag_t($0.mask) == 0 }
+            && attributes.c_cflag & tcflag_t(CSIZE) == tcflag_t(CS8)
     }
 
     /// Ends the script and everything it started, at once. A test calls it
