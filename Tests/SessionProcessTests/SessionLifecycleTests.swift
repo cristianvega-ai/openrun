@@ -208,6 +208,65 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// The owner decided that a client that attaches while `openrun
+        /// kill` waits for a program that ignores SIGHUP gets the last screen
+        /// and then the exit status, not a failure.
+        @Test func anAttachDuringTheGracePeriodOfKillGetsTheScreenAndThenTheExitStatus() async throws {
+            try await RunningSessionProcess.run { process in
+                // The program writes a file when it gets SIGHUP. The session
+                // marks itself as ending before it sends SIGHUP, so the file
+                // shows that the grace period of one second has begun.
+                let hangUpFile = process.directory.appendingPathComponent("hang-up-received")
+                let script = "trap 'echo hang-up > \"\(hangUpFile.path)\"' HUP; echo ready; while true; do sleep 0.05; done"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                let session = try #require(UUID(uuidString: identifier))
+
+                let killer = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { killer.shutdown() }
+                try killer.greetSessionProcess()
+                try killer.send(ClientMessage.killSession(identifier: session))
+                #expect(await eventually { FileManager.default.fileExists(atPath: hangUpFile.path) }, "the program never got SIGHUP")
+
+                let late = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { late.shutdown() }
+                try late.greetSessionProcess()
+                try late.send(ClientMessage.attach(identifier: session, size: SessionSize(columns: 80, rows: 24)))
+                var answers: [ServerMessage] = []
+                while let message = try? receiveMessage(late, within: 15) {
+                    if case .output = message { continue }
+                    answers.append(message)
+                }
+                guard answers.count == 3, case .attached = answers[0], case .snapshot = answers[1] else {
+                    Issue.record("The attach during the grace period got \(answers).")
+                    return
+                }
+                #expect(answers[2] == .exited(.signaled(signal: SIGKILL)), "answers: \(answers)")
+                #expect(try process.listedIdentifiers().isEmpty)
+            }
+        }
+
+        /// Attach accepted a size of zero, which createSession
+        /// refuses, and kept the old size without a word.
+        @Test func anAttachWithoutColumnsOrRowsIsRefused() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let session = try #require(UUID(uuidString: identifier))
+                for size in [SessionSize(columns: 0, rows: 0), SessionSize(columns: 80, rows: 0), SessionSize(columns: 0, rows: 24)] {
+                    let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                    defer { connection.shutdown() }
+                    try connection.greetSessionProcess()
+                    try connection.send(ClientMessage.attach(identifier: session, size: size))
+                    let answer = try receiveMessage(connection, within: 15)
+                    guard case .failure(let failure) = answer else {
+                        Issue.record("An attach at \(size.columns) by \(size.rows) got \(String(describing: answer))")
+                        continue
+                    }
+                    #expect(failure.reason == .invalidRequest)
+                }
+            }
+        }
+
         /// The harness read a crashed session process as an empty
         /// list and an empty screen, so a crash at exit passed as success.
         @Test func aDeadSessionProcessIsReportedNotReadAsEmpty() async throws {

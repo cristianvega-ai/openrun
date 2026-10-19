@@ -117,6 +117,10 @@ actor SessionServer {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection is already attached.")))
                     break
                 }
+                guard size.columns > 0, size.rows > 0 else {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "A session needs at least one column and one row.")))
+                    break
+                }
                 guard let session = await registry.session(for: identifier) else {
                     client.send(Self.unknownSession(identifier))
                     break
