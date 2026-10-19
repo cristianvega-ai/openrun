@@ -193,4 +193,30 @@ import Testing
         #expect(recognizer.remainingHold(at: start + .milliseconds(15)) == .milliseconds(5))
         #expect(recognizer.releaseExpired(at: start + .milliseconds(20)) == Array("\u{1B}[93;".utf8))
     }
+    // MARK: - The keyboard thread's turn after its wait (KeySender.step)
+
+    /// Runs one turn of the keyboard thread, and records whether it read.
+    private func turn(
+        afterWaiting ready: Int32,
+        _ recognizer: inout DetachKeyRecognizer,
+        at instant: ContinuousClock.Instant,
+        reading keys: KeySender.KeyRead = .nothing
+    ) -> (step: KeySender.Step, didRead: Bool) {
+        var didRead = false
+        let step = KeySender.step(afterWaiting: ready, recognizer: &recognizer, now: { instant }) {
+            didRead = true
+            return keys
+        }
+        return (step, didRead)
+    }
+
+    /// The tool gets to the second half after the hold ended, as on a busy
+    /// Mac, but the half was in the terminal when the wait ended. It is read
+    /// and joined before the held start is sent, so the key detaches.
+    @Test func keysReadyAfterTheWaitAreJoinedToTheHeldStartEvenWhenTheToolIsLate() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan(Array("\u{1B}[93".utf8), at: start)
+        let late = turn(afterWaiting: 1, &recognizer, at: start + .milliseconds(50), reading: .keys(Array(";5u".utf8)))
+        #expect(late.step == .detach(keysBefore: []))
+    }
 }
