@@ -1,3 +1,6 @@
+/// The limits and deadlines that keep each client of the session process
+/// cheap. A client that stops halfway, sends without end, or reads nothing
+/// loses its connection instead of holding memory, threads or descriptors.
 enum ConnectionLimits {
     /// The most clients at once. Each one costs a reading thread and a
     /// descriptor. The session process refuses more with a failure. A client

@@ -59,6 +59,17 @@ private func greetedConnection(to path: String) throws -> (connection: MessageCo
     try connection.greetSessionProcess()
     return (connection, descriptor)
 }
+
+/// The summaries of the sessions, as the protocol lists them, or `nil`.
+private func listedSummaries(_ process: RunningSessionProcess) throws -> [SessionSummary]? {
+    let client = try greetedConnection(to: process.socketPath)
+    defer { client.connection.shutdown() }
+    try client.connection.send(ClientMessage.listSessions)
+    guard case .sessionList(let summaries) = try receiveMessage(client.connection, within: 30) else { return nil }
+    return summaries
+}
+
+
 extension SessionProcessIntegration {
     /// Each client costs a bounded amount: a thread, a descriptor, and memory
     /// for what it sends and receives. Deadlines end the clients that stop
@@ -209,6 +220,71 @@ extension SessionProcessIntegration {
                 // A client that leaves makes room for another.
                 connections.removeFirst().shutdown()
                 #expect(await eventually(timeout: .seconds(5)) { (try? process.runCommand(["list"]).status) == 0 })
+            }
+        }
+
+        /// A client's place among the 64 was free as soon as
+        /// it detached, while its socket and threads stayed for up to 2
+        /// seconds more to send what still waited for it. Clients that attach,
+        /// read nothing and detach, over and over, then held more sockets and
+        /// threads than the limit allows.
+        @Test func clientsThatAttachAndDetachFastHoldNoMoreSocketsThanTheLimit() async throws {
+            try await RunningSessionProcess.run { process in
+                // The scrollback makes each snapshot far larger than a socket
+                // holds, so it waits for a client that reads nothing.
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "seq 1 3000; exec sleep 600"])
+                #expect(await process.waitForScreen(of: identifier, containing: "3000"))
+                let descriptorsBefore = try #require(process.descriptorCount)
+                let threadsBefore = try #require(process.threadCount)
+
+                var clients: [MessageConnection] = []
+                defer { clients.forEach { $0.shutdown() } }
+                var refusals: Set<String> = []
+                var mostDescriptors = descriptorsBefore
+                var mostThreads = threadsBefore
+                let start = ContinuousClock.now
+                for _ in 0..<150 {
+                    let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                    do {
+                        try connection.greetSessionProcess()
+                    } catch {
+                        refusals.insert("\(error)")
+                        continue
+                    }
+                    try connection.send(ClientMessage.attach(identifier: UUID(uuidString: identifier)!, size: SessionSize(columns: 80, rows: 24)))
+                    try connection.send(ClientMessage.detach)
+                    // The client keeps its socket and reads nothing.
+                    clients.append(connection)
+                    mostDescriptors = max(mostDescriptors, process.descriptorCount ?? Int.max)
+                    mostThreads = max(mostThreads, process.threadCount ?? Int.max)
+                }
+                let churn = ContinuousClock.now - start
+                print("attach-detach-churn: \(clients.count) served and \(150 - clients.count) refused in \(churn); descriptors \(descriptorsBefore) then at most \(mostDescriptors); threads \(threadsBefore) then at most \(mostThreads)")
+
+                // Each client costs one descriptor, one reading thread, and at
+                // most one thread that writes.
+                #expect(mostDescriptors <= descriptorsBefore + 64 + 4, "descriptors went from \(descriptorsBefore) to \(mostDescriptors)")
+                #expect(mostThreads <= threadsBefore + 2 * 64 + 16, "threads went from \(threadsBefore) to \(mostThreads)")
+                // The 65th client is still refused, with the reason.
+                #expect(refusals.allSatisfy { $0.contains("64 clients") }, "refusals: \(refusals)")
+
+                // A place frees within the closing limit of 2 seconds, so a new
+                // client is served soon.
+                let waitStart = ContinuousClock.now
+                let served = await eventually(timeout: .seconds(4)) {
+                    guard let connection = try? MessageConnection.connect(to: SocketLocation(path: process.socketPath)) else { return false }
+                    defer { connection.shutdown() }
+                    return (try? connection.greetSessionProcess()) != nil
+                }
+                print("attach-detach-churn: a new client was served \(ContinuousClock.now - waitStart) after the churn")
+                #expect(served, "no new client was served within 4 seconds")
+                // Every socket of the churn is closed within the closing limit.
+                var descriptorsAfter = Int.max
+                let released = await eventually(timeout: .seconds(5)) {
+                    descriptorsAfter = process.descriptorCount ?? Int.max
+                    return descriptorsAfter <= descriptorsBefore + 1
+                }
+                #expect(released, "descriptors \(descriptorsBefore) then \(descriptorsAfter)")
             }
         }
 
