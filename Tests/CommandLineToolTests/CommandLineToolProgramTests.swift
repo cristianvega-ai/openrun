@@ -109,6 +109,25 @@ extension CommandLineToolIntegration {
             }
         }
 
+        @Test func aSessionCanReachItsOwnSessionProcessWithTheEnvironment() async throws {
+            try await RunningSessionProcess.run { process in
+                // An agent inside a session runs openrun with no options. The
+                // variables that the session sets must be enough.
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let executable = RunningSessionProcess.commandExecutable.path
+                _ = try process.runCommand(["send", identifier, "--enter", "'\(executable)' list | wc -l | tr -d ' ' | sed 's/^/listed=/'"])
+                #expect(await process.waitForScreen(of: identifier, containing: "listed=1"))
+            }
+        }
+
+        @Test func sendWithEnterTypesACarriageReturn() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty -echo; read line; echo got=$line; sleep 60"])
+                _ = try process.runCommand(["send", identifier, "--enter", "hello world"])
+                #expect(await process.waitForScreen(of: identifier, containing: "got=hello world"))
+            }
+        }
+
         @Test func readPrintsScrollbackOnlyOnRequest() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "seq 1 100; sleep 60"])

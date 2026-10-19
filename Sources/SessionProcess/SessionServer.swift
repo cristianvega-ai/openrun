@@ -70,6 +70,24 @@ actor SessionServer {
                 } else {
                     client.send(answer)
                 }
+            case .sendText(let identifier, let text):
+                guard let session = await registry.session(for: identifier) else {
+                    client.send(Self.unknownSession(identifier))
+                    break
+                }
+                // The answer waits until the text is in the program's backlog,
+                // so a client never hears that text arrived when it was lost.
+                do {
+                    try await session.type(Array(text.utf8))
+                    client.send(.acknowledged)
+                } catch is CancellationError {
+                    break messages
+                } catch {
+                    client.send(.failure(SessionFailure(
+                        reason: .unknownSession,
+                        message: "The program of session \(SessionSummary.text(for: identifier)) ended before it took the text."
+                    )))
+                }
             case .detach:
                 break messages
             default:

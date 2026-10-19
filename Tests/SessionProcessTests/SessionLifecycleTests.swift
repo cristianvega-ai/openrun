@@ -31,6 +31,17 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test func aUniquePrefixOfTheIdentifierIsEnough() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let prefix = String(identifier.prefix(8))
+                #expect(try process.runCommand(["send", prefix, "--enter", "echo by-prefix"]).status == 0)
+                #expect(await process.waitForScreen(of: identifier, containing: "by-prefix"))
+                // Upper case works too, because identifiers are lower case text.
+                #expect(try process.runCommand(["read", prefix.uppercased()]).status == 0)
+            }
+        }
+
         @Test func aSessionRunsTheGivenFolderAndCommand() async throws {
             try await RunningSessionProcess.run { process in
                 let folder = try RunningSessionProcess.makeDirectory()
@@ -49,6 +60,33 @@ extension SessionProcessIntegration {
                 let result = try process.runCommand(["new", "--", "/bin/sh", "-c", "pwd; sleep 60"], folder: folder)
                 let identifier = try #require(result.outputLines.first)
                 #expect(await process.waitForScreen(of: identifier, containing: realPath(folder)))
+            }
+        }
+
+        @Test func everyProgramGetsTheSessionEnvironment() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                // The session writes the values to a file, one per line, so that the
+                // screen width and the length of the socket path cannot change what
+                // the test reads.
+                let file = process.directory.appendingPathComponent("session-environment")
+                let script = "printf '%s\\n%s\\n%s\\n%s\\n%s\\n' \"$OPENRUN_SESSION\" \"$OPENRUN_SOCKET\" \"$TERM\" \"$COLORTERM\" \"$TERM_PROGRAM\" > '\(file.path)'"
+                _ = try process.runCommand(["send", identifier, "--enter", script])
+                let written = await eventually {
+                    ((try? String(contentsOf: file, encoding: .utf8)) ?? "").hasSuffix("\n")
+                }
+                #expect(written)
+                let text = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+                let values = text.components(separatedBy: "\n").dropLast()
+                #expect(Array(values) == [identifier, process.socketPath, "xterm-256color", "truecolor", "OpenRun"])
+            }
+        }
+
+        @Test func theSessionKeepsTheEnvironmentOfTheCaller() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"], environment: ["ACCOUNT_SETTING": "second-account"])
+                _ = try process.runCommand(["send", identifier, "--enter", "echo setting=$ACCOUNT_SETTING"])
+                #expect(await process.waitForScreen(of: identifier, containing: "setting=second-account"))
             }
         }
 

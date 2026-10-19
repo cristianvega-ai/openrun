@@ -35,6 +35,18 @@ actor Session {
         runTask = Task { await self.run() }
     }
 
+    /// Types bytes into the program.
+    ///
+    /// Waits while the program's input backlog is full. The wait happens
+    /// outside the actor, so the session goes on with its output, attaching,
+    /// and ending meanwhile.
+    ///
+    /// - Throws: `PseudoTerminalError.programEnded` when the program ends
+    ///   before the bytes are in the backlog.
+    nonisolated func type(_ bytes: [UInt8]) async throws {
+        try await pseudoTerminal.type(bytes)
+    }
+
     /// The text on the screen, or on the screen and above it.
     func screenText(includeScrollback: Bool) throws -> String {
         let bytes = try terminal.formatted(.plainText, extent: includeScrollback ? .withScrollback : .visible)
