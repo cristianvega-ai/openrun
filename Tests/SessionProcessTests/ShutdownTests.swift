@@ -10,8 +10,43 @@ private func processExists(_ identifier: pid_t) -> Bool {
     kill(identifier, 0) == 0 || errno != ESRCH
 }
 
+/// Starts a session whose program prints its own process identifier, then waits.
+private func startSleepingSession(_ process: RunningSessionProcess, script: String = "echo process=$$; exec sleep 300") async throws -> pid_t {
+    let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+    #expect(await process.waitForScreen(of: identifier, containing: "process="))
+    let text = try process.screenText(of: identifier)
+    let digits = text.split(separator: "\n").first { $0.hasPrefix("process=") }.map { $0.dropFirst(8) }
+    return try #require(digits.flatMap { pid_t($0) })
+}
+
 extension SessionProcessIntegration {
     @Suite struct ShutdownTests {
+
+        @Test(arguments: [SIGTERM, SIGINT, SIGHUP])
+        func aStopSignalEndsEveryProgramAndRemovesTheSocket(signal: Int32) async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let first = try await startSleepingSession(process)
+            let second = try await startSleepingSession(process)
+            #expect(processExists(first) && processExists(second))
+            #expect(FileManager.default.fileExists(atPath: process.socketPath))
+
+            process.send(signal: signal)
+            #expect(await process.waitForExit() == 0)
+
+            #expect(!FileManager.default.fileExists(atPath: process.socketPath))
+            #expect(await eventually(timeout: .seconds(5)) { !processExists(first) && !processExists(second) })
+            #expect(process.log.contains("Stopped."))
+        }
+
+        @Test func aProgramThatIgnoresHangUpIsKilledAfterAShortWait() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let child = try await startSleepingSession(process, script: "trap '' HUP; echo process=$$; while true; do sleep 1; done")
+            process.send(signal: SIGTERM)
+            #expect(await process.waitForExit(timeout: 10) == 0)
+            #expect(await eventually(timeout: .seconds(5)) { !processExists(child) })
+        }
 
         /// When the wait for the socket failed, the caller got no
         /// object to stop, and the session process ran on for the rest of the

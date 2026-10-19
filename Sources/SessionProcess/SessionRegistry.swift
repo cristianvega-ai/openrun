@@ -6,6 +6,10 @@ import SessionProtocol
 actor SessionRegistry {
     private var sessions: [UUID: Session] = [:]
     private let socketPath: String
+    /// Set before `terminateAll` first suspends. A client that is already
+    /// connected can still send `createSession` while the programs end, and
+    /// that program would outlive the session process.
+    private var isStopping = false
 
     init(socketPath: String) {
         self.socketPath = socketPath
@@ -56,6 +60,15 @@ actor SessionRegistry {
         var all: [SessionSummary] = []
         for session in sessions.values { all.append(await session.summary) }
         return all.sorted { $0.createdAt < $1.createdAt }
+    }
+
+    /// Ends every program and waits until all sessions are gone.
+    func terminateAll() async {
+        isStopping = true
+        let all = Array(sessions.values)
+        await withTaskGroup(of: Void.self) { group in
+            for session in all { group.addTask { await session.terminate() } }
+        }
     }
 
     private func remove(_ identifier: UUID) {

@@ -25,9 +25,13 @@ actor SessionServer {
         }
     }
 
+    /// Stops accepting, ends every program, and closes every client. The
+    /// socket file goes first, so no client can connect to a process that is
+    /// about to leave.
     func shutDown() async {
         listener.close()
         await acceptTask?.value
+        await registry.terminateAll()
         for client in clients.values { client.closeAfterSending() }
         for handler in handlers.values { await handler.value }
     }
