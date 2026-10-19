@@ -98,8 +98,20 @@ actor SessionServer {
                     client.send(Self.unknownSession(identifier))
                     break
                 }
-                await session.terminate()
+                guard session === attachedSession else {
+                    await session.terminate()
+                    client.send(.acknowledged)
+                    break
+                }
+                // The end of the session would close this connection before
+                // the answer. So the client leaves the session first, and gets
+                // the answer and then the exit status from here.
+                await session.detach(client)
+                attachedSession = nil
+                let exit = await session.terminate()
                 client.send(.acknowledged)
+                client.send(.exited(exit), countsTowardOutputLimit: false)
+                break messages
             case .attach(let identifier, let size, let relaysRawOutput, let receivesSizeChanges):
                 guard attachedSession == nil else {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection is already attached.")))

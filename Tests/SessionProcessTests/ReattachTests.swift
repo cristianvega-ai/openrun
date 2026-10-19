@@ -112,6 +112,15 @@ private func attachWhileTheSnapshotHolds(_ unfinished: [UInt8], process: Running
     throw ProtocolClientError.unexpected("No snapshot held the unfinished bytes \(unfinished); the last held \(lastSeen).")
 }
 
+/// Receives one message, or `nil` when the connection closes or the time
+/// limit passes. A test that waits too long fails instead of hanging.
+private func receiveMessage(_ connection: MessageConnection, within limit: TimeInterval) throws -> ServerMessage? {
+    let watchdog = DispatchWorkItem { connection.shutdown() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + limit, execute: watchdog)
+    defer { watchdog.cancel() }
+    return try connection.receive(ServerMessage.self)
+}
+
 
 extension SessionProcessIntegration {
     @Suite struct ReattachTests {
@@ -197,6 +206,23 @@ extension SessionProcessIntegration {
 
                 #expect(try client.text(withScrollback: false) == "\u{20AC} euro")
                 #expect(try process.screenText(of: identifier).trimmingCharacters(in: .whitespacesAndNewlines) == "\u{20AC} euro")
+            }
+        }
+
+        @Test(arguments: [50, 400, 1000, 1700])
+        func attachingWhileOutputRunsLosesNothingAndRepeatsNothing(millisecondsBeforeAttach: Int) async throws {
+            try await RunningSessionProcess.run { process in
+                // About three seconds of steady output, so the attach lands in the middle.
+                let script = "number=1; while [ $number -le 3000 ]; do echo line-$number; number=$((number+1)); if [ $((number % 20)) -eq 0 ]; then sleep 0.02; fi; done"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                try await Task.sleep(for: .milliseconds(millisecondsBeforeAttach))
+
+                let client = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
+                let exit = try client.followUntilExit()
+                #expect(exit == .exited(status: 0))
+
+                let lines = try client.text(withScrollback: true).split(separator: "\n").map(String.init)
+                #expect(lines == (1...3000).map { "line-\($0)" })
             }
         }
     }

@@ -19,6 +19,15 @@ private func realPath(_ file: URL) -> String {
     String(cString: realpath(file.path, nil))
 }
 
+/// Receives one message, or `nil` when the connection closes or the time
+/// limit passes. A test that waits too long fails instead of hanging.
+private func receiveMessage(_ connection: MessageConnection, within limit: TimeInterval) throws -> ServerMessage? {
+    let watchdog = DispatchWorkItem { connection.shutdown() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + limit, execute: watchdog)
+    defer { watchdog.cancel() }
+    return try connection.receive(ServerMessage.self)
+}
+
 extension SessionProcessIntegration {
     @Suite struct SessionLifecycleTests {
         @Test func newListSendReadAndKill() async throws {
@@ -171,6 +180,31 @@ extension SessionProcessIntegration {
                 for (number, identifier) in identifiers.enumerated() {
                     #expect(await process.waitForScreen(of: identifier, containing: "session-\(number)"))
                 }
+            }
+        }
+
+        /// A kill sent on the attached connection itself got no
+        /// answer, because the end of the session closed the connection first.
+        @Test func killSessionOnTheAttachedConnectionIsAnswered() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "echo started; exec sleep 300"])
+                #expect(await process.waitForScreen(of: identifier, containing: "started"))
+                let session = try #require(UUID(uuidString: identifier))
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+                try connection.send(ClientMessage.attach(identifier: session, size: SessionSize(columns: 80, rows: 24)))
+                try connection.send(ClientMessage.killSession(identifier: session))
+
+                var answers: [ServerMessage] = []
+                while let message = try? receiveMessage(connection, within: 15) {
+                    if case .output = message { continue }
+                    if case .snapshot = message { continue }
+                    answers.append(message)
+                }
+                #expect(answers.contains(.acknowledged), "answers: \(answers)")
+                #expect(answers.contains(.exited(.signaled(signal: SIGHUP))), "answers: \(answers)")
+                #expect(try process.listedIdentifiers().isEmpty)
             }
         }
 
