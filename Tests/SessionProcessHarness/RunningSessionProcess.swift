@@ -105,6 +105,21 @@ public final class RunningSessionProcess: @unchecked Sendable {
         (try? String(contentsOf: logFile, encoding: .utf8)) ?? ""
     }
 
+    /// Sends a signal to the process.
+    public func send(signal: Int32) {
+        if process.isRunning { kill(process.processIdentifier, signal) }
+    }
+
+    /// Waits for the process to end and returns its exit status, or `nil`
+    /// when it is still running after the timeout.
+    public func waitForExit(timeout: TimeInterval = 15) async -> Int32? {
+        let deadline = Date().addingTimeInterval(timeout)
+        while process.isRunning, Date() < deadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+        return process.isRunning ? nil : process.terminationStatus
+    }
+
     /// Ends the process with SIGTERM, then SIGKILL, and removes the folder.
     public func stop() {
         if process.isRunning {
