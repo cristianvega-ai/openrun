@@ -16,6 +16,28 @@ extension SessionProcessIntegration {
             #expect(result.status == 0)
         }
 
+        /// The state letters that `ps` shows for a process, or `nil` when the
+        /// process does not exist. A plus sign means that the process is in the
+        /// foreground group of its controlling terminal.
+        private static func processState(of identifier: pid_t) throws -> String? {
+            let statusCommand = Process()
+            statusCommand.executableURL = URL(fileURLWithPath: "/bin/ps")
+            statusCommand.arguments = ["-o", "stat=", "-p", String(identifier)]
+            let pipe = Pipe()
+            statusCommand.standardOutput = pipe
+            try statusCommand.run()
+            let data = pipe.fileHandleForReading.readDataToEndOfFile()
+            statusCommand.waitUntilExit()
+            let text = String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+            return text.isEmpty ? nil : text
+        }
+
+        /// The identifier that zsh prints when it starts a background job: `[1] 4242`.
+        private static func backgroundJobIdentifier(in screen: String) -> pid_t? {
+            guard let range = screen.range(of: #"\[1\] (\d+)"#, options: .regularExpression) else { return nil }
+            return screen[range].split(separator: " ").last.flatMap { pid_t($0) }
+        }
+
         @Test func theProgramNamesTheSessionDeviceAsItsControllingTerminal() async throws {
             try await RunningSessionProcess.run { process in
                 let script = "echo \"controlling=$(ps -o tty= -p $$ | tr -d ' ') standard=$(tty)\"; sleep 60"
@@ -66,6 +88,41 @@ extension SessionProcessIntegration {
                 let ended = await eventually(timeout: .seconds(2)) { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty }
                 print("Control-C ended a bare sleep after \(clock.now - start)")
                 #expect(ended)
+            }
+        }
+
+        @Test func anInteractiveShellHasJobControl() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(
+                    program: ["/bin/zsh", "-f", "-i"],
+                    environment: ["TERM": "dumb"]
+                )
+                try Self.type("echo up-$((6*7))", into: identifier, of: process, pressEnter: true)
+                #expect(await process.waitForScreen(of: identifier, containing: "up-42"))
+
+                try Self.type("sleep 30 &", into: identifier, of: process, pressEnter: true)
+                #expect(await eventually { Self.backgroundJobIdentifier(in: (try? process.screenText(of: identifier)) ?? "") != nil })
+                let job = try #require(Self.backgroundJobIdentifier(in: try process.screenText(of: identifier)))
+                defer { kill(job, SIGKILL) }
+
+                // The job appears in the list of jobs.
+                try Self.type("jobs", into: identifier, of: process, pressEnter: true)
+                #expect(await process.waitForScreen(of: identifier, containing: "running"))
+                // With job control, the job has a process group of its own, so
+                // it is not in the foreground group of the terminal. Without
+                // job control, it would share the group of the shell.
+                let backgroundState = try Self.processState(of: job)
+                #expect(backgroundState != nil)
+                #expect(backgroundState?.contains("+") == false)
+
+                try Self.type("fg", into: identifier, of: process, pressEnter: true)
+                #expect(await eventually { (try? Self.processState(of: job))??.contains("+") == true })
+
+                // Control-C reaches the job that fg brought back.
+                try Self.type(Self.interrupt, into: identifier, of: process)
+                #expect(await eventually { (try? Self.processState(of: job)) == .some(nil) })
+                try Self.type("echo status=$?", into: identifier, of: process, pressEnter: true)
+                #expect(await process.waitForScreen(of: identifier, containing: "status=130"))
             }
         }
 
