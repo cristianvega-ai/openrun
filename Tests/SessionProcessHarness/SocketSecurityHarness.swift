@@ -3,6 +3,13 @@ import Foundation
 import Synchronization
 
 public enum SocketSecurityHarness {
+    /// A new folder under `TMPDIR` with exactly this mode. The mode is set
+    /// after the folder exists, so the umask does not change it.
+    public static func makeFolder(mode: mode_t) throws -> URL {
+        let folder = try RunningSessionProcess.makeDirectory()
+        guard chmod(folder.path, mode) == 0 else { throw HarnessError.commandFailed(description: "chmod \(folder.path) failed: \(errno)") }
+        return folder
+    }
 
     /// The mode bits of a file or folder, or nil when it does not exist.
     public static func mode(of path: String) -> mode_t? {
@@ -14,6 +21,19 @@ public enum SocketSecurityHarness {
     /// The lock file that a session process holds next to its socket.
     public static func lockPath(forSocket socketPath: String) -> String {
         socketPath + ".lock"
+    }
+
+    /// Takes the lock of a socket, as a session process holds it from the
+    /// start. Returns the descriptor, or nil when another process
+    /// holds the lock. Close the descriptor to release it.
+    public static func takeSocketLock(forSocket socketPath: String) -> Int32? {
+        let descriptor = open(lockPath(forSocket: socketPath), O_RDWR | O_CREAT | O_CLOEXEC, 0o600)
+        guard descriptor >= 0 else { return nil }
+        guard flock(descriptor, LOCK_EX | LOCK_NB) == 0 else {
+            close(descriptor)
+            return nil
+        }
+        return descriptor
     }
 }
 

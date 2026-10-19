@@ -8,6 +8,34 @@ import Testing
 private typealias Harness = SocketSecurityHarness
 extension SessionProcessIntegration {
     @Suite struct SocketSecurityTests {
+        // MARK: - The folder of the socket
+
+        @Test(arguments: [0o770, 0o707, 0o1777] as [mode_t])
+        func aSessionProcessRefusesAFolderThatOtherUsersCanWrite(mode: mode_t) async throws {
+            let folder = try Harness.makeFolder(mode: mode)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let logs = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: logs) }
+            let socketPath = folder.appendingPathComponent("socket").path
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: logs, logFile: logs.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 5) == 1)
+            #expect(process.log.contains(folder.path) && process.log.contains("write"), "log: \(process.log)")
+            #expect(!FileManager.default.fileExists(atPath: socketPath))
+            // A folder that the user chose keeps its mode. Only the default
+            // folder belongs to OpenRun.
+            #expect(Harness.mode(of: folder.path) == mode)
+        }
+        // MARK: - One session process per socket
+
+        @Test func aRunningSessionProcessHoldsTheLockOfItsSocket() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let descriptor = Harness.takeSocketLock(forSocket: process.socketPath)
+            if let descriptor { close(descriptor) }
+            #expect(descriptor == nil)
+        }
 
         /// A lock file of another user would let that user
         /// hold the lock. This Mac has one user, so the test makes the lock
