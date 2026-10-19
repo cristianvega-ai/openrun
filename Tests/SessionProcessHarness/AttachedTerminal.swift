@@ -76,9 +76,42 @@ public final class AttachedTerminal: @unchecked Sendable {
         lock.withLock { String(decoding: (try? screen.formatted(.plainText)) ?? [], as: UTF8.self) }
     }
 
+    /// The visible screen as the sequences that draw it, with colors and
+    /// styles. A test reads the style of text from it.
+    public var screenWithStyles: String {
+        lock.withLock { String(decoding: (try? screen.formatted(.virtualTerminalSequences)) ?? [], as: UTF8.self) }
+    }
+
+    /// Whether the terminal shows its alternate screen now.
+    public var isAlternateScreenActive: Bool {
+        lock.withLock { screen.isAlternateScreenActive }
+    }
+
+    /// Every byte that the program wrote to this terminal so far, in order.
+    /// A test reads what `openrun attach` sent around an event from it.
+    public var receivedBytes: [UInt8] {
+        lock.withLock { received }
+    }
+
+    /// Types text, as keys.
+    public func type(_ text: String) {
+        typing.yield(Array(text.utf8))
+    }
+
+    /// Types raw bytes, such as the detach key.
+    public func type(bytes: [UInt8]) {
+        typing.yield(bytes)
+    }
+
     /// Waits until the screen shows the text.
     public func waitForScreen(containing text: String, timeout: Duration = .seconds(15)) async -> Bool {
         await eventually(timeout: timeout) { screenText.contains(text) }
+    }
+
+    /// Changes the size of the window, as dragging a window corner does.
+    public func resize(columns: UInt16, rows: UInt16) throws {
+        try lock.withLock { try screen.resize(to: TerminalSize(columns: columns, rows: rows)) }
+        try pseudoTerminal.resize(to: PseudoTerminalSize(columns: columns, rows: rows))
     }
 
     /// Whether the terminal is in raw mode: no line editing and no echo.
@@ -104,6 +137,28 @@ public final class AttachedTerminal: @unchecked Sendable {
             && attributes.c_cflag & tcflag_t(CSIZE) == tcflag_t(CS8)
     }
 
+    /// The process identifiers of the children of the script's shell.
+    public func childProcessIdentifiers() -> [pid_t] {
+        let childLister = Process()
+        childLister.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
+        childLister.arguments = ["-P", String(processIdentifier)]
+        let pipe = Pipe()
+        childLister.standardOutput = pipe
+        guard (try? childLister.run()) != nil else { return [] }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        childLister.waitUntilExit()
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { pid_t($0) }
+    }
+
+    /// Waits for the script to end.
+    public func waitForExit(timeout: Duration = .seconds(15)) async -> ProgramExit? {
+        let exitHolder = ExitHolder()
+        let waiter = Task { exitHolder.set(await pseudoTerminal.waitForExit()) }
+        defer { waiter.cancel() }
+        _ = await eventually(timeout: timeout) { exitHolder.value != nil }
+        return exitHolder.value
+    }
+
     /// Ends the script and everything it started, at once. A test calls it
     /// when it ends, so that no process outlives the test run.
     public func closeNow() {
@@ -115,5 +170,12 @@ public final class AttachedTerminal: @unchecked Sendable {
         private var stored = 0
         var count: Int { lock.withLock { stored } }
         func increment() { lock.withLock { stored += 1 } }
+    }
+
+    private final class ExitHolder: @unchecked Sendable {
+        private let lock = NSLock()
+        private var stored: ProgramExit?
+        var value: ProgramExit? { lock.withLock { stored } }
+        func set(_ exit: ProgramExit) { lock.withLock { stored = exit } }
     }
 }

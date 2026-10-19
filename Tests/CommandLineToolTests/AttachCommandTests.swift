@@ -3,8 +3,45 @@ import Foundation
 import SessionProcessHarness
 import Testing
 
+/// A shell script that attaches to a session and reports what the terminal
+/// looked like before and after. The script prints `status=` and
+/// `mode-restored` or `mode-changed` when attaching ends.
+private func attachScript(identifier: String, process: RunningSessionProcess) -> String {
+    let executable = RunningSessionProcess.commandExecutable.path
+    return """
+        saved=$(stty -g)
+        '\(executable)' attach \(identifier) --socket '\(process.socketPath)'
+        code=$?
+        echo "status=$code"
+        if [ "$(stty -g)" = "$saved" ]; then echo mode-restored; else echo mode-changed; fi
+        """
+}
+
 extension CommandLineToolIntegration {
     @Suite struct AttachCommandTests {
+        @Test func attachDrawsTheScreenInRawModeRelaysKeysAndDetachesWithControlBracket() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "echo already-on-screen; exec /bin/sh"])
+                #expect(await process.waitForScreen(of: identifier, containing: "already-on-screen"))
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+
+                // The picture of the session appears, and the terminal is in raw mode.
+                #expect(await terminal.waitForScreen(containing: "already-on-screen"))
+                #expect(await eventually { terminal.isInRawMode })
+
+                // Keys reach the session, and its output comes back.
+                terminal.type("echo keys-$((20+22))\r")
+                #expect(await terminal.waitForScreen(containing: "keys-42"))
+
+                // Control-] leaves, and the session goes on.
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                #expect(terminal.screenText.contains("status=0"))
+                #expect(try process.listedIdentifiers() == [identifier])
+                #expect(await terminal.waitForExit() == .exited(status: 0))
+            }
+        }
 
         /// The harness checked only two of the flags that raw
         /// mode clears, so a terminal that still turned Control-C into a signal
