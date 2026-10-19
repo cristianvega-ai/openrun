@@ -221,8 +221,97 @@ private func expectTheServerKeepsServing(
     let before = neighbor.latestTick
     #expect(neighbor.waitForTick(above: before + 2), "the neighbor stopped getting output after the \(context)")
 }
+
+/// Control frames that the server cannot decode. Each one gets a failure that
+/// names the problem, and then the connection closes.
+enum UnreadableRequest: String, CaseIterable, Sendable, CustomTestStringConvertible {
+    case textThatIsNotStructured
+    case keysInsideATextFrame
+    case columnsAboveTheLargestSize
+    case rowsBelowZero
+    case unknownMessage
+    case badIdentifier
+    case deeplyNestedText
+
+    var testDescription: String { rawValue }
+
+    var bytes: [UInt8] {
+        switch self {
+        case .textThatIsNotStructured: HostileClient.control("\u{1B}]52;c;this is not json\u{07}")
+        case .keysInsideATextFrame: HostileClient.control(#"{"input":{"_0":"\#(Data([1]).base64EncodedString())"}}"#)
+        case .columnsAboveTheLargestSize:
+            HostileClient.control(#"{"createSession":{"folder":"/","size":{"columns":999999,"rows":24},"environment":{}}}"#)
+        case .rowsBelowZero: HostileClient.control(#"{"resize":{"_0":{"columns":80,"rows":-1}}}"#)
+        case .unknownMessage: HostileClient.control(#"{"noSuchMessage\u001b[31m":{}}"#)
+        case .badIdentifier:
+            HostileClient.control(#"{"readScreen":{"identifier":"not-an-identifier\u001b[2J","includeScrollback":false}}"#)
+        // A mebibyte of nested arrays.
+        case .deeplyNestedText: HostileClient.frame(kind: 1, payload: [UInt8](repeating: UInt8(ascii: "["), count: 1024 * 1024))
+        }
+    }
+
+    /// Words that the failure must hold, so that it names the problem.
+    var expectedWords: String {
+        switch self {
+        case .textThatIsNotStructured: "not valid JSON"
+        case .keysInsideATextFrame: "input must be a raw frame"
+        case .columnsAboveTheLargestSize: "createSession.size.columns"
+        case .rowsBelowZero: "resize._0.rows"
+        case .unknownMessage: "the name of one message"
+        case .badIdentifier: "readScreen.identifier"
+        case .deeplyNestedText: "nests too deeply"
+        }
+    }
+}
+
+/// Reads frames until a control frame arrives, and returns it. Output that a
+/// session sends to an attached client may come first.
+private func nextControlFrame(from client: HostileClient) -> ReceivedFrame? {
+    while let frame = client.receiveFrame() {
+        if frame.kind == 1 { return frame }
+    }
+    return nil
+}
+
+/// Checks that a frame is a failure with reason `invalidRequest` whose
+/// message holds the words and no control character of the request.
+private func expectUnreadableRequestFailure(_ frame: ReceivedFrame?, naming words: String, _ context: Comment) {
+    #expect(frame?.messageName == "failure", "the answer was \(String(describing: frame?.messageName)) after \(context)")
+    let failure = frame?.fields?["_0"] as? [String: Any]
+    #expect(failure?["reason"] as? String == "invalidRequest", "reason: \(String(describing: failure?["reason"])) after \(context)")
+    let message = failure?["message"] as? String ?? ""
+    #expect(message.contains(words), "message: \(message)")
+    #expect(!message.unicodeScalars.contains { $0.value < 0x20 || $0.value == 0x7F }, "the message holds a control character: \(message.debugDescription)")
+}
+
 extension SessionProcessIntegration {
     @Suite struct HostileClientTests {
+
+        /// A request that could not be decoded ended the
+        /// connection without a word.
+        @Test(arguments: UnreadableRequest.allCases)
+        func aRequestThatCannotBeReadGetsAFailureThatNamesTheProblemBeforeTheClose(request: UnreadableRequest) async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                try hostile.greet()
+                hostile.send(request.bytes)
+
+                expectUnreadableRequestFailure(hostile.receiveFrame(), naming: request.expectedWords, "\(request.rawValue)")
+                #expect(hostile.waitForClose(), "the server did not end the connection after \(request.rawValue)")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "\(request.rawValue)")
+            }
+        }
+
+        @Test func aFirstFrameThatCannotBeReadGetsAFailureInPlaceOfHello() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                hostile.send(HostileClient.control(#"{"hello":{"protocolVersion":"one"}}"#))
+
+                expectUnreadableRequestFailure(hostile.receiveFrame(), naming: "hello.protocolVersion", "a hello that cannot be read")
+                #expect(hostile.waitForClose(), "the server did not end the connection")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "a hello that cannot be read")
+            }
+        }
 
         @Test func aClientWithAnotherProtocolVersionIsToldAndEnded() async throws {
             try await withNeighbor { process, identifier, neighbor in
