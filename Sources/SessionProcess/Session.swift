@@ -12,6 +12,7 @@ actor Session {
     private let pseudoTerminal: PseudoTerminal
     private let terminal: Terminal
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
+    private let replyGate: ReplyGate
     private var isFinished = false
     private var isEnding = false
     private var programExit: SessionExit?
@@ -22,16 +23,57 @@ actor Session {
     ///
     /// The program starts last, so nothing can fail after it runs. A failure
     /// before it leaves no program running without a session.
+    ///
+    /// - Parameter installReplyHandler: Installs the handler on the terminal.
+    ///   Tests replace it to make the installation fail.
     init(
         summary: SessionSummary,
         launch: ProgramLaunch,
         onFinish: @escaping @Sendable (UUID) async -> Void,
+        installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try $0.setReplyHandler($1) }
     ) throws {
         self.summary = summary
         self.onFinish = onFinish
+        let gate = ReplyGate()
+        replyGate = gate
         terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: Self.scrollbackLimit)
+        // The terminal answers queries such as "where is the cursor", unless a
+        // client's real terminal answers them. A client's copy of the screen
+        // has no handler, so the real terminal is the only other source.
+        try installReplyHandler(terminal) { bytes in gate.deliver(bytes) }
         let pseudoTerminal = try PseudoTerminal(launching: launch)
         self.pseudoTerminal = pseudoTerminal
+        gate.connect(pseudoTerminal)
+    }
+
+    /// Decides whether the session process answers terminal queries.
+    ///
+    /// The handler asks the gate while the session parses the bytes of a query.
+    /// The session parses on its own serial context, which also runs attach
+    /// and detach. So each query meets exactly one state of the client list:
+    /// the one at the moment its bytes are parsed. A client that attaches later
+    /// does not see that query, because its snapshot holds the screen and not
+    /// the bytes. A client that is attached receives the bytes and its real
+    /// terminal answers.
+    ///
+    /// The gate also holds the program's pseudo terminal, because the handler
+    /// is installed before the program starts. The terminal parses output
+    /// only after that, so no answer comes before the program is connected.
+    private final class ReplyGate: Sendable {
+        private struct State {
+            var isClosed = false
+            var program: PseudoTerminal?
+        }
+
+        private let state = Mutex(State())
+
+        func deliver(_ bytes: [UInt8]) {
+            let program = state.withLock { $0.isClosed ? nil : $0.program }
+            program?.write(bytes)
+        }
+
+        func connect(_ program: PseudoTerminal) { state.withLock { $0.program = program } }
+        func close(_ shouldClose: Bool) { state.withLock { $0.isClosed = shouldClose } }
     }
 
     /// Starts reading the program's output. Call once, right after creating.
