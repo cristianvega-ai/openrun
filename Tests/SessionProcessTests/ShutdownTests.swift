@@ -288,6 +288,22 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test func aSecondSessionProcessRefusesALiveSocket() async throws {
+            let first = try RunningSessionProcess()
+            defer { first.stop() }
+            let identifier = try first.createSession(program: ["/bin/sh"])
+
+            let second = try RunningSessionProcess(directory: first.directory, logName: "second-log", waitUntilReady: false)
+            defer { second.stop() }
+            #expect(await second.waitForExit() == 1)
+            #expect(second.log.contains("already runs"))
+
+            // The first process is untouched, and its session still works.
+            #expect(first.isRunning)
+            #expect(try first.listedIdentifiers() == [identifier])
+            #expect(FileManager.default.fileExists(atPath: first.socketPath))
+        }
+
         @Test func aStaleSocketFileIsReplaced() async throws {
             let first = try RunningSessionProcess()
             defer { first.stop() }
