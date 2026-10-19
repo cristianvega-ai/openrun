@@ -11,3 +11,9 @@ public enum HarnessError: Error, CustomStringConvertible {
         }
     }
 }
+
+extension HarnessError {
+    static func commandFailed(arguments: [String], result: CommandResult) -> HarnessError {
+        .commandFailed(description: "openrun \(arguments.joined(separator: " ")) exited with \(result.status): \(result.standardError)")
+    }
+}

@@ -105,6 +105,64 @@ public final class RunningSessionProcess: @unchecked Sendable {
         if ownsDirectory { try? FileManager.default.removeItem(at: directory) }
     }
 
+    /// Runs `openrun` with the arguments and this process's socket.
+    public func runCommand(
+        _ arguments: [String],
+        folder: URL? = nil,
+        environment: [String: String] = [:],
+        passSocket: Bool = true
+    ) throws -> CommandResult {
+        try Self.runOpenrun(arguments + (passSocket ? ["--socket", socketPath] : []), folder: folder, environment: environment, in: directory)
+    }
+
+    /// Runs `openrun` with the exact arguments.
+    public static func runOpenrun(_ arguments: [String], folder: URL? = nil, environment: [String: String] = [:], in directory: URL) throws -> CommandResult {
+        let command = Process()
+        command.executableURL = commandExecutable
+        // Put the options before a "--" separator, where the tool reads them.
+        command.arguments = Self.placingOptionsBeforeSeparator(arguments)
+        command.currentDirectoryURL = folder ?? directory
+        command.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new }
+        let standardOutput = directory.appendingPathComponent("command-output-\(UUID().uuidString)")
+        let standardError = directory.appendingPathComponent("command-error-\(UUID().uuidString)")
+        FileManager.default.createFile(atPath: standardOutput.path, contents: nil)
+        FileManager.default.createFile(atPath: standardError.path, contents: nil)
+        let outputHandle = try FileHandle(forWritingTo: standardOutput)
+        let errorHandle = try FileHandle(forWritingTo: standardError)
+        command.standardOutput = outputHandle
+        command.standardError = errorHandle
+        command.standardInput = FileHandle.nullDevice
+        try command.run()
+
+        // A command that hangs must not hang the whole test run.
+        let watchdog = DispatchWorkItem { if command.isRunning { kill(command.processIdentifier, SIGKILL) } }
+        DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: watchdog)
+        command.waitUntilExit()
+        watchdog.cancel()
+        try? outputHandle.close()
+        try? errorHandle.close()
+        let result = CommandResult(
+            status: command.terminationStatus,
+            standardOutput: (try? String(contentsOf: standardOutput, encoding: .utf8)) ?? "",
+            standardError: (try? String(contentsOf: standardError, encoding: .utf8)) ?? ""
+        )
+        try? FileManager.default.removeItem(at: standardOutput)
+        try? FileManager.default.removeItem(at: standardError)
+        return result
+    }
+
+    private static func placingOptionsBeforeSeparator(_ arguments: [String]) -> [String] {
+        // The harness appends "--socket PATH" at the end. After a "--" the
+        // tool would read it as part of the program, so move it in front.
+        guard let separator = arguments.firstIndex(of: "--"),
+              let tail = arguments.lastIndex(of: "--socket"), tail > separator else { return arguments }
+        var moved = arguments
+        let option = Array(moved[tail...])
+        moved.removeSubrange(tail...)
+        moved.insert(contentsOf: option, at: separator)
+        return moved
+    }
+
     private func waitForSocket(timeout: TimeInterval) throws {
         let deadline = Date().addingTimeInterval(timeout)
         while Date() < deadline {

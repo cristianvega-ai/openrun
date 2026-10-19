@@ -80,4 +80,14 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(try parse("list", "--help").command == .help)
         #expect(try parse("read", "abc", "--help").command == .help)
     }
+
+    @Test func wrongHelpAndEmptyIdentifierExitWithTwoBeforeAnySocketIsOpened() {
+        // No session process listens here, so a command that reached the
+        // connection would exit with 1.
+        let environment = ["OPENRUN_SOCKET": "/nonexistent-openrun-folder/session.socket"]
+        #expect(CommandLineTool.run(arguments: ["help", "extra"], environment: environment) == 2)
+        #expect(CommandLineTool.run(arguments: ["bogus", "--help"], environment: environment) == 2)
+        #expect(CommandLineTool.run(arguments: ["kill", ""], environment: environment) == 2)
+        #expect(CommandLineTool.run(arguments: ["attach", ""], environment: environment) == 2)
+    }
 }

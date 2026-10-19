@@ -9,6 +9,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "TerminalEmulation", targets: ["TerminalEmulation"]),
+        .executable(name: "openrun", targets: ["openrun"]),
         .executable(name: "openrun-session", targets: ["openrun-session"]),
     ],
     targets: [
@@ -44,6 +45,10 @@ let package = Package(
             name: "CommandLineTool",
             dependencies: ["TerminalEmulation", "SessionProtocol"]
         ),
+        .executableTarget(
+            name: "openrun",
+            dependencies: ["CommandLineTool"]
+        ),
         .testTarget(
             name: "PseudoTerminalTests",
             dependencies: ["PseudoTerminal"]
@@ -52,7 +57,7 @@ let package = Package(
         // executables.
         .target(
             name: "SessionProcessHarness",
-            dependencies: ["PseudoTerminal", "TerminalEmulation", "openrun-session"],
+            dependencies: ["PseudoTerminal", "TerminalEmulation", "openrun", "openrun-session"],
             path: "Tests/SessionProcessHarness"
         ),
         .testTarget(
