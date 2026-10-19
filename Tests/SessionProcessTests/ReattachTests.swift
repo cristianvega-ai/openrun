@@ -225,5 +225,75 @@ extension SessionProcessIntegration {
                 #expect(lines == (1...3000).map { "line-\($0)" })
             }
         }
+
+        @Test func aClientThatAttachesWhileTheProgramIsOnTheAlternateScreenGetsTheAlternateScreen() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let script = "echo primary-line; printf '\\033[?1049h\\033[2J\\033[Halternate-line'; "
+                    + "while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; printf '\\033[?1049l'; echo back-on-primary; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "alternate-line"))
+
+                let client = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
+                defer { client.detach() }
+                #expect(client.terminal.isAlternateScreenActive)
+                #expect(try client.text(withScrollback: false) == "alternate-line")
+
+                // The program leaves the alternate screen, and the client that
+                // followed the output leaves it with the program.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                try client.follow { $0.contains("back-on-primary") }
+                #expect(!client.terminal.isAlternateScreenActive)
+                #expect(try client.text(withScrollback: false).contains("primary-line"))
+                #expect(!(try client.text(withScrollback: false).contains("alternate-line")))
+            }
+        }
+
+        /// The session keeps 10,000 lines of scrollback. A program prints more
+        /// than that, and the whole scrollback travels through the server to a
+        /// client that attaches, and again to a client that attaches later.
+        @Test func aFullScrollbackOfTenThousandLinesSurvivesAttachingAndReattaching() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let printed = 15_000
+                let script = "awk 'BEGIN { for (number = 1; number <= \(printed); number++) printf \"row-%05d\\n\", number }'; echo FINISHED-PRINTING; "
+                    + "while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; echo row-after-reattach; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "FINISHED-PRINTING", timeout: .seconds(60)))
+
+                let everything = try process.screenText(of: identifier, includeScrollback: true)
+                let rowNumbers = everything.split(separator: "\n").compactMap { line -> Int? in
+                    line.hasPrefix("row-") ? Int(line.dropFirst(4)) : nil
+                }
+                print("full-scrollback: the server kept \(rowNumbers.count) rows, from \(rowNumbers.first ?? -1) to \(rowNumbers.last ?? -1)")
+                // The scrollback is full: the oldest rows are gone, the rows that
+                // stay are the newest, in order, each once and without a gap.
+                // libghostty-vt prunes whole pages, so the count of lines is
+                // near the limit of 10,000 and not exactly at it.
+                #expect(rowNumbers.last == printed)
+                #expect(rowNumbers.count >= 9_000, "the server kept only \(rowNumbers.count) rows")
+                #expect(rowNumbers.count <= 11_000, "the server kept \(rowNumbers.count) rows")
+                #expect(rowNumbers == Array((printed - rowNumbers.count + 1)...printed))
+
+                let first = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
+                #expect((9_000...11_000).contains(first.terminal.scrollbackLineCount), "the client got \(first.terminal.scrollbackLineCount) lines of scrollback")
+                let firstText = try first.text(withScrollback: true)
+                #expect(firstText.trimmingCharacters(in: .whitespacesAndNewlines) == everything.trimmingCharacters(in: .whitespacesAndNewlines))
+                first.detach()
+
+                // Output continues after the reattach, and the scrollback stays
+                // full and consistent: the new row is the newest.
+                let second = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
+                defer { second.detach() }
+                #expect(try second.text(withScrollback: true) == firstText)
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                try second.follow { $0.contains("row-after-reattach") }
+                let afterwards = try second.text(withScrollback: true).split(separator: "\n").map(String.init)
+                #expect(afterwards.last == "row-after-reattach")
+                #expect(afterwards.contains("row-\(String(format: "%05d", printed))"))
+                #expect(!afterwards.contains("row-00001"))
+                #expect((9_000...11_000).contains(second.terminal.scrollbackLineCount))
+            }
+        }
     }
 }
