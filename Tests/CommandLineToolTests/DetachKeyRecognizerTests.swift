@@ -193,6 +193,40 @@ import Testing
         #expect(recognizer.remainingHold(at: start + .milliseconds(15)) == .milliseconds(5))
         #expect(recognizer.releaseExpired(at: start + .milliseconds(20)) == Array("\u{1B}[93;".utf8))
     }
+
+    @Test func aFormThatArrivesAfterTheHoldDoesNotDetach() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan(Array("\u{1B}[93".utf8), at: start)
+        // When its wait for keys timed out, the caller sends the expired bytes
+        // before it looks at newer ones.
+        #expect(recognizer.releaseExpired(at: start + .milliseconds(25)) == Array("\u{1B}[93".utf8))
+        let late = recognizer.scan(Array(";5u".utf8), at: start + .milliseconds(25))
+        #expect(late == .init(bytesToSend: Array(";5u".utf8), foundDetachKey: false))
+    }
+
+    @Test func aHeldStartThatTurnsOutToBeAnotherKeyIsSentWithTheNextRead() {
+        var recognizer = DetachKeyRecognizer()
+        let first = recognizer.scan(Array("\u{1B}[".utf8), at: start)
+        #expect(first.bytesToSend.isEmpty)
+        let second = recognizer.scan(Array("Ax".utf8), at: start + .milliseconds(2))
+        #expect(second == .init(bytesToSend: Array("\u{1B}[Ax".utf8), foundDetachKey: false))
+        #expect(recognizer.remainingHold(at: start + .milliseconds(2)) == nil)
+    }
+
+    @Test func aHeldStartThatTurnsOutNotToBeADetachFormIsSentAtOnce() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan(Array("\u{1B}[93".utf8), at: start)
+        let second = recognizer.scan(Array("0".utf8), at: start + .milliseconds(2))
+        #expect(second == .init(bytesToSend: Array("\u{1B}[930".utf8), foundDetachKey: false))
+        #expect(recognizer.remainingHold(at: start + .milliseconds(2)) == nil)
+    }
+
+    @Test func aPlainKeyAfterAHeldEscapeSendsBoth() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan([0x1B], at: start)
+        #expect(recognizer.scan(Array("a".utf8), at: start + .milliseconds(1)) == .init(bytesToSend: [0x1B, 0x61], foundDetachKey: false))
+    }
+
     // MARK: - The keyboard thread's turn after its wait (KeySender.step)
 
     /// Runs one turn of the keyboard thread, and records whether it read.
@@ -218,5 +252,35 @@ import Testing
         _ = recognizer.scan(Array("\u{1B}[93".utf8), at: start)
         let late = turn(afterWaiting: 1, &recognizer, at: start + .milliseconds(50), reading: .keys(Array(";5u".utf8)))
         #expect(late.step == .detach(keysBefore: []))
+    }
+
+    /// A wait that a signal interrupted reads nothing, so it cannot block in a
+    /// read with an Escape held. The next wait that times out sends it.
+    @Test func anInterruptedWaitReadsNothingAndTheHeldEscapeIsSentWhenTheHoldEnds() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan([0x1B], at: start)
+        let interrupted = turn(afterWaiting: -1, &recognizer, at: start + .milliseconds(5))
+        #expect(interrupted.step == .waitAgain)
+        #expect(!interrupted.didRead)
+        #expect(recognizer.remainingHold(at: start + .milliseconds(5)) == .milliseconds(15))
+        let timedOut = turn(afterWaiting: 0, &recognizer, at: start + .milliseconds(20))
+        #expect(timedOut.step == .send([0x1B]))
+        #expect(!timedOut.didRead)
+    }
+
+    /// When the wait times out, no second half was there in time: the held
+    /// start goes out, and a later half is sent as keys.
+    @Test func aWaitThatTimesOutSendsTheHeldStartAndALateHalfDoesNotDetach() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan(Array("\u{1B}[93".utf8), at: start)
+        #expect(turn(afterWaiting: 0, &recognizer, at: start + .milliseconds(20)).step == .send(Array("\u{1B}[93".utf8)))
+        let late = turn(afterWaiting: 1, &recognizer, at: start + .milliseconds(30), reading: .keys(Array(";5u".utf8)))
+        #expect(late.step == .send(Array(";5u".utf8)))
+    }
+
+    @Test func theEndOfInputEndsTheKeyboardThread() {
+        var recognizer = DetachKeyRecognizer()
+        #expect(turn(afterWaiting: 1, &recognizer, at: start, reading: .endOfInput).step == .endOfInput)
+        #expect(turn(afterWaiting: 1, &recognizer, at: start, reading: .nothing).step == .waitAgain)
     }
 }
