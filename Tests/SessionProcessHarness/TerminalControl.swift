@@ -2,6 +2,10 @@ import Darwin
 import Foundation
 import TerminalEmulation
 
+/// What a test needs to look at and control around `openrun attach` that
+/// `AttachedTerminal` does not offer: the state of a process, the queues of a
+/// terminal, a second terminal, and snapshot bytes for a stand-in session
+/// process.
 public enum TerminalControl {
     /// `FIONREAD`, `_IOR('f', 127, int)`. Swift cannot import the macro.
     private static let waitingInputRequest = UInt(0x4004_667F)

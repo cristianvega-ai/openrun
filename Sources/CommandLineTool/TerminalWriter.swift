@@ -1,6 +1,19 @@
 import Darwin
 import Foundation
 
+/// The one writer of the terminal while `openrun attach` runs.
+///
+/// Only the main thread writes. The other threads ask it: the thread that
+/// receives from the session process hands it output, and the keyboard
+/// thread and the signal handlers ask it to end or to suspend. A signal
+/// therefore never writes its closing sequences into the middle of an
+/// output frame. When two requests to end arrive, `requestEnd` says which
+/// one decides the exit code.
+///
+/// A write never blocks without limit. The writer opens the terminal a
+/// second time, without blocking, so a terminal that takes no output, such
+/// as a frozen `ssh`, cannot hold it in `write`. It waits for room with
+/// `poll`, and a request to end or to suspend wakes it.
 final class TerminalWriter: @unchecked Sendable {
     /// How attaching ends: the exit code of the tool and its last message.
     struct Ending: Equatable, Sendable {

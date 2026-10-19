@@ -330,6 +330,57 @@ extension CommandLineToolIntegration {
             #expect(TerminalControl.waitingInput(onTerminal: spare.path) == 12)
         }
 
+        /// A terminal that takes no output keeps the closing sequences of a
+        /// suspension waiting for a second, with the terminal mode restored
+        /// already. Keys typed then are for the shell. The keyboard thread
+        /// used to read them and send them to the program in the session.
+        @Test func keysTypedWhileAttachSuspendsStayInTheTerminalAndNotReachTheProgram() async throws {
+            try await RunningSessionProcess.run { process in
+                let received = process.directory.appendingPathComponent("received")
+                let program = "(while :; do echo busy-output-line-$RANDOM; done) & cat > '\(received.path)'"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let afterwards = "read -r -t 8 line; echo \"shell-got=$line\""
+                let terminal = try AttachedTerminal(
+                    shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath, afterwards: afterwards),
+                    folder: process.directory
+                )
+                let tool = try #require(await attachProcess(of: terminal))
+                defer {
+                    if TerminalControl.exists(process: tool) { kill(tool, SIGCONT) }
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await terminal.waitForScreen(containing: "busy-output-line"))
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                terminal.pauseOutput()
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+                // The queue must be full and stay full, or the closing sequences
+                // fit at once and the tool stops before the keys are typed.
+                try await Task.sleep(for: .milliseconds(300))
+                let fullQueueLength = TerminalControl.waitingOutput(onTerminal: path) ?? 0
+                try await Task.sleep(for: .milliseconds(300))
+                try #require(TerminalControl.waitingOutput(onTerminal: path) == fullQueueLength, "the waiting output still grew")
+
+                kill(tool, SIGTSTP)
+                try await Task.sleep(for: .milliseconds(150))
+                try #require(!TerminalControl.isStopped(process: tool), "the tool stopped, so this run proves nothing")
+                // The restored mode lets any key restart the output. Holding the
+                // output again keeps the terminal frozen while the keys are typed.
+                terminal.pauseOutput()
+                terminal.type("typed-while-suspended\r")
+                try await Task.sleep(for: .milliseconds(300))
+                kill(tool, SIGTERM)
+                #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) })
+                terminal.resumeOutput()
+
+                #expect(await terminal.waitForScreen(containing: "shell-got=", timeout: .seconds(15)))
+                #expect(terminal.screenText.contains("shell-got=typed-while-suspended"), "\(terminal.screenText)")
+                let reachedTheProgram = (try? String(contentsOf: received, encoding: .utf8)) ?? ""
+                #expect(!reachedTheProgram.contains("typed-while-suspended"), "the program got the keys")
+            }
+        }
+
         /// The keyboard thread reads no key while it is paused, and the keys
         /// stay in the terminal. `resume` lets it read them, and `stop` ends
         /// it while it is paused.

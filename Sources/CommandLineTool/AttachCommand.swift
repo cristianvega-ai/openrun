@@ -4,6 +4,12 @@ import Foundation
 import SessionProtocol
 import TerminalEmulation
 
+/// `openrun attach`: shows a session in this terminal and types into it.
+///
+/// Three threads work for the main thread: one receives output from the
+/// session process, one reads keys (`KeySender`), and the signal handlers
+/// (`AttachSignals`). Only the main thread writes to the terminal, through
+/// `TerminalWriter`, and it alone decides how attaching ends.
 struct AttachCommand {
     var identifier: String
 
