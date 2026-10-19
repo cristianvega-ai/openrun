@@ -40,6 +40,10 @@ let package = Package(
             name: "openrun-session",
             dependencies: ["SessionProcess"]
         ),
+        .target(
+            name: "CommandLineTool",
+            dependencies: ["TerminalEmulation", "SessionProtocol"]
+        ),
         .testTarget(
             name: "PseudoTerminalTests",
             dependencies: ["PseudoTerminal"]
@@ -54,6 +58,10 @@ let package = Package(
         .testTarget(
             name: "SessionProcessTests",
             dependencies: ["SessionProcessHarness", "SessionProcess", "SessionProtocol", "TerminalEmulation"]
+        ),
+        .testTarget(
+            name: "CommandLineToolTests",
+            dependencies: ["SessionProcessHarness", "CommandLineTool", "PseudoTerminal"]
         ),
     ],
     swiftLanguageModes: [.v6]
