@@ -289,6 +289,50 @@ extension SessionProcessIntegration {
             #expect(descriptor == nil)
         }
 
+        /// A lock file made beforehand kept its mode, so
+        /// another user who could open it could hold the lock.
+        @Test func aLockFileThatOthersCouldOpenIsMadePrivate() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let lockPath = Harness.lockPath(forSocket: socketPath)
+            #expect(FileManager.default.createFile(atPath: lockPath, contents: nil))
+            #expect(chmod(lockPath, 0o666) == 0)
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { process.stop() }
+            try #require(await process.waitForLog(containing: "Listening on"), "log: \(process.log)")
+            #expect(Harness.mode(of: lockPath) == 0o600)
+        }
+
+        /// What sat at the lock path was used as it was. A
+        /// named pipe gave a bare flock error. Each kind is now refused by
+        /// name and left as it is.
+        @Test(arguments: ["named pipe", "symbolic link", "folder"])
+        func aLockPathThatIsNotARegularFileIsRefusedAndLeftAlone(kind: String) async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let lockPath = Harness.lockPath(forSocket: socketPath)
+            let target = folder.appendingPathComponent("target").path
+            #expect(FileManager.default.createFile(atPath: target, contents: Data("target".utf8)))
+            #expect(chmod(target, 0o644) == 0)
+            switch kind {
+            case "named pipe": #expect(mkfifo(lockPath, 0o600) == 0)
+            case "symbolic link": #expect(symlink(target, lockPath) == 0)
+            default: #expect(mkdir(lockPath, 0o700) == 0)
+            }
+            let before = try #require(Harness.fileIdentity(at: lockPath))
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 5) == 1)
+            #expect(process.log.contains(lockPath) && process.log.contains("not a regular file"), "log: \(process.log)")
+            #expect(Harness.fileIdentity(at: lockPath) == before)
+            #expect(Harness.mode(of: target) == 0o644)
+            #expect(!FileManager.default.fileExists(atPath: socketPath))
+        }
+
         /// A lock file of another user would let that user
         /// hold the lock. This Mac has one user, so the test makes the lock
         /// expect another owner than the file has.
@@ -414,6 +458,29 @@ extension SessionProcessIntegration {
             let (one, other) = try MessageConnection.makePair()
             #expect(throws: Never.self) { try one.requirePeer() }
             #expect(throws: Never.self) { try other.requirePeer(PeerIdentity(userIdentifier: geteuid())) }
+        }
+
+        /// A client refuses a session process of another user before it sends
+        /// a byte.
+        @Test func aClientRefusesASessionProcessOfAnotherUser() throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let location = try SocketLocation(path: folder.appendingPathComponent("socket").path)
+            let server = try Harness.StandInListener(path: location.path, behavior: .answers(helloFrame()))
+            defer { server.close() }
+            let anotherUser = PeerIdentity(userIdentifier: geteuid() &+ 1)
+
+            #expect(throws: SessionProtocolError.peerIsAnotherUser(expected: anotherUser.userIdentifier, found: geteuid())) {
+                _ = try MessageConnection.connect(to: location, expectedPeer: anotherUser)
+            }
+            // The same stand-in, as the same user, is accepted and answers.
+            let connection = try MessageConnection.connect(to: location)
+            defer { connection.shutdown() }
+            try connection.greetSessionProcess(within: .seconds(5))
+            #expect(server.acceptedCount == 2)
+            // Only the second connection said hello.
+            let helloSize = try ClientMessage.hello(protocolVersion: MessageFrame.protocolVersion).frame().encoded().count
+            #expect(server.receivedByteCount == helloSize)
         }
 
         /// The session process closes a connection of another user before it
