@@ -3,6 +3,9 @@ import Dispatch
 import Foundation
 import SessionProtocol
 
+/// Owns the listening socket: it checks that no other session process runs,
+/// creates the socket file with private permissions, and accepts connections
+/// from programs of the same user.
 final class SocketListener: @unchecked Sendable {
     /// Connections in the order they arrived. The stream finishes after `close`.
     let connections: AsyncStream<MessageConnection>
@@ -10,6 +13,8 @@ final class SocketListener: @unchecked Sendable {
     private let source: DispatchSourceRead
     /// Held until the listener goes away, which is the end of the process.
     private let lock: SocketLock
+    /// The socket file this listener created. `close` removes only this one.
+    private let socketFile: (device: dev_t, serialNumber: ino_t)
 
     /// How long a program that listens on the path may take to answer hello
     /// before it counts as no session process. A live one answers at once.
@@ -38,6 +43,13 @@ final class SocketListener: @unchecked Sendable {
         lock = try SocketLock(socketPath: location.path)
         try Self.removeStaleSocket(at: location)
         let descriptor = try Self.bindAndListen(at: location)
+        var status = stat()
+        guard lstat(location.path, &status) == 0 else {
+            let failure = SessionProcessError.failure(of: "lstat")
+            Darwin.close(descriptor)
+            throw failure
+        }
+        socketFile = (status.st_dev, status.st_ino)
 
         // .bufferingOldest keeps the oldest waiting connections. When the
         // buffer is full, the newest connection is dropped and closes.
@@ -100,9 +112,15 @@ final class SocketListener: @unchecked Sendable {
         source.resume()
     }
 
+    /// Stops accepting and removes the socket file, so that no new client can
+    /// find the session process. A file that another program put at the path
+    /// stays. The lock stays held until the process ends.
     func close() {
         source.cancel()
-        unlink(location.path)
+        var status = stat()
+        if lstat(location.path, &status) == 0, status.st_dev == socketFile.device, status.st_ino == socketFile.serialNumber {
+            unlink(location.path)
+        }
     }
 
     // MARK: - Starting

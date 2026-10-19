@@ -46,6 +46,23 @@ extension SessionProcessIntegration {
             #expect(Harness.mode(of: folder.path) == mode)
         }
 
+        @Test(.enabled(if: geteuid() != 0))
+        func bothSidesRefuseAFolderOfAnotherUser() async throws {
+            // The system owns /usr. Nobody but root can put a socket there.
+            let socketPath = "/usr/openrun-test-\(UInt32.random(in: 0...UInt32.max)).socket"
+            let logs = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: logs) }
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: logs, logFile: logs.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 5) == 1)
+            #expect(process.log.contains("/usr") && process.log.contains("another user"), "log: \(process.log)")
+
+            let tool = try RunningSessionProcess.runOpenrun(["list", "--socket", socketPath], in: logs)
+            #expect(tool.status == 1)
+            #expect(tool.standardError.contains("/usr") && tool.standardError.contains("another user"), "stderr: \(tool.standardError)")
+        }
+
         /// A program of the same user listens in a folder that others can
         /// write, and answers hello as a session process would. The client
         /// refuses the folder before it connects, so the squatter learns
@@ -80,6 +97,31 @@ extension SessionProcessIntegration {
             #expect(squatter.acceptedCount == 0, "the squatter accepted \(squatter.acceptedCount) connections")
             #expect(squatter.receivedByteCount == 0, "the squatter received \(squatter.receivedByteCount) bytes")
             #expect(Harness.fileIdentity(at: socketPath) == squatterFile)
+        }
+
+        /// A folder of mode 0700 whose access control list
+        /// lets everyone add and delete files passed the check, so another
+        /// user could replace the socket.
+        @Test func bothSidesRefuseAFolderWhoseAccessControlListLetsOthersChangeIt() async throws {
+            let folder = try Harness.makeFolder(mode: 0o700)
+            defer {
+                Harness.removeAccessControlLists(under: folder.path)
+                try? FileManager.default.removeItem(at: folder)
+            }
+            try Harness.addAccessControlEntry("everyone allow add_file,delete_child", to: folder.path)
+            let logs = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: logs) }
+            let socketPath = folder.appendingPathComponent("socket").path
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: logs, logFile: logs.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 5) == 1)
+            #expect(process.log.contains(folder.path) && process.log.contains("access control list"), "log: \(process.log)")
+            #expect(!FileManager.default.fileExists(atPath: socketPath))
+
+            let tool = try RunningSessionProcess.runOpenrun(["list", "--socket", socketPath], in: logs)
+            #expect(tool.status == 1)
+            #expect(tool.standardError.contains(folder.path) && tool.standardError.contains("access control list"), "stderr: \(tool.standardError)")
         }
 
         // MARK: - What counts as a live session process
@@ -191,6 +233,22 @@ extension SessionProcessIntegration {
             #expect(await second.waitForExit(timeout: 5) == 1)
             #expect(second.log.contains("already runs"), "log: \(second.log)")
             #expect(Harness.fileIdentity(at: socketPath) == startingFile)
+        }
+
+        /// At shutdown a session process removes the socket file only when the
+        /// file at the path is still the one it created.
+        @Test func shutdownLeavesASocketFileThatIsNoLongerItsOwn() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let moved = process.directory.appendingPathComponent("moved").path
+            #expect(rename(process.socketPath, moved) == 0)
+            let other = try Harness.StandInListener(path: process.socketPath, behavior: .boundOnly)
+            defer { other.close() }
+            let otherFile = Harness.fileIdentity(at: process.socketPath)
+
+            process.send(signal: SIGTERM)
+            #expect(await process.waitForExit() == 0)
+            #expect(otherFile != nil && Harness.fileIdentity(at: process.socketPath) == otherFile)
         }
 
         /// Two session processes start on one fresh socket at the same moment,

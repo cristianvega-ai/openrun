@@ -15,6 +15,28 @@ public enum SocketSecurityHarness {
         return folder
     }
 
+    /// Adds an entry to the access control list of a file or folder, such as
+    /// "everyone allow add_file", with `chmod +a`.
+    public static func addAccessControlEntry(_ entry: String, to path: String) throws {
+        let status = try changeMode(["+a", entry, path])
+        guard status == 0 else { throw HarnessError.commandFailed(description: "chmod +a '\(entry)' \(path) exited \(status)") }
+    }
+
+    /// Removes every entry of the access control list of a folder and of all
+    /// that it holds, so that a deny entry cannot keep it from being removed.
+    public static func removeAccessControlLists(under path: String) {
+        _ = try? changeMode(["-R", "-N", path])
+    }
+
+    private static func changeMode(_ arguments: [String]) throws -> Int32 {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/bin/chmod")
+        process.arguments = arguments
+        try process.run()
+        process.waitUntilExit()
+        return process.terminationStatus
+    }
+
     /// The mode bits of a file or folder, or nil when it does not exist.
     public static func mode(of path: String) -> mode_t? {
         var status = stat()
