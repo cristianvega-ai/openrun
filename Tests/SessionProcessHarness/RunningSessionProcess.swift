@@ -1,7 +1,27 @@
 import Darwin
 import Foundation
 
+/// A real `openrun-session` process on a socket in a private folder, for
+/// integration tests. The folder lives under `TMPDIR`, because a Unix socket
+/// path must stay short.
 public final class RunningSessionProcess: @unchecked Sendable {
+    /// Where the products of the build are: the folder that holds the test
+    /// bundle also holds the executables that the tests depend on.
+    public static let productsDirectory: URL = {
+        for bundle in Bundle.allBundles where bundle.bundleURL.pathExtension == "xctest" {
+            return bundle.bundleURL.deletingLastPathComponent()
+        }
+        // swift test runs the bundle from a helper process in some versions.
+        for argument in CommandLine.arguments where argument.contains(".xctest") {
+            if let range = argument.range(of: ".xctest") {
+                return URL(fileURLWithPath: String(argument[..<range.upperBound])).deletingLastPathComponent()
+            }
+        }
+        return Bundle.main.bundleURL.deletingLastPathComponent()
+    }()
+
+    public static var sessionExecutable: URL { productsDirectory.appendingPathComponent("openrun-session") }
+    public static var commandExecutable: URL { productsDirectory.appendingPathComponent("openrun") }
 
     /// A new private folder with a short name under `TMPDIR`. The system
     /// makes the name and refuses one that exists, so two calls never share a
