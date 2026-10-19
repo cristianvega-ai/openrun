@@ -52,6 +52,7 @@ final class TerminalWriter: @unchecked Sendable {
     private let condition = NSCondition()
     private var urgentEnding: Ending?
     private var endingAfterOutput: Ending?
+    private var wantsSuspension = false
     private var queuedOutput: [UInt8] = []
     private var isClosed = false
     private var hasStoppedWriting = false
@@ -126,6 +127,21 @@ final class TerminalWriter: @unchecked Sendable {
         }
         condition.unlock()
         wake()
+    }
+
+    /// Asks the writer to suspend attaching, or to go on after a suspension.
+    /// A continue that comes before the writer handled the suspension cancels it.
+    func requestSuspension(_ suspended: Bool) {
+        condition.lock()
+        wantsSuspension = suspended
+        condition.unlock()
+        wake()
+    }
+
+    /// A request to end that came before the terminal changed. Attaching
+    /// then ends without touching the terminal.
+    var endingBeforeStart: Ending? {
+        condition.withLock { urgentEnding }
     }
 
 

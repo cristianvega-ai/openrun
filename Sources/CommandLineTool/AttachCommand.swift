@@ -51,6 +51,24 @@ struct AttachCommand {
         let writer = try TerminalWriter()
         defer { writer.stopWriting() }
         let resizes = DispatchQueue(label: "attach.resize")
+        // Signals are handled before raw mode starts, so none can leave the
+        // terminal raw.
+        let signals = AttachSignals { event in
+            switch event {
+            case .stop(let signal):
+                writer.requestEnd(TerminalWriter.Ending(exitCode: 128 + signal), afterOutput: false)
+            case .suspend:
+                writer.requestSuspension(true)
+            case .resume:
+                writer.requestSuspension(false)
+            case .resize:
+                resizes.async { Self.sendWindowSize(on: connection) }
+            }
+        }
+        defer { signals.cancel() }
+        if let ending = writer.endingBeforeStart {
+            return ending.exitCode
+        }
 
         let mode = try RawTerminalMode(descriptor: STDIN_FILENO)
         let keys = KeySender(connection: connection)
