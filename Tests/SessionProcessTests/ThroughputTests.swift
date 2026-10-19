@@ -138,5 +138,69 @@ extension SessionProcessIntegration {
                 #expect(process.isRunning, "The session process died.")
             }
         }
+
+        @Test func sixteenMegabytesOfTextReachTheExitWithOneClientThatReadsAllOutput() async throws {
+            let expected = Self.expectedOutput()
+            try await RunningSessionProcess.run { process in
+                // The program waits for a file, so the client is attached
+                // before the first byte of output and sees all of it.
+                let releaseFile = process.directory.appendingPathComponent("release").path
+                let script = "while [ ! -e '\(releaseFile)' ]; do sleep 0.05; done; " + Self.writeCommand
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+                try connection.send(ClientMessage.attach(
+                    identifier: try #require(UUID(uuidString: identifier)),
+                    size: SessionSize(columns: 80, rows: 24),
+                    relaysRawOutput: true
+                ))
+                guard case .attached = try connection.receive(ServerMessage.self) else {
+                    Issue.record("The first answer to attach was not attached.")
+                    return
+                }
+
+                let clock = ContinuousClock()
+                let start = clock.now
+                FileManager.default.createFile(atPath: releaseFile, contents: Data())
+                let rawReceived = try await Task.detached { try Self.readUntilExit(connection) }.value
+                let elapsed = clock.now - start
+                print("Throughput, one client: \(rawReceived.count) bytes reached the exit in \(elapsed)")
+                let received = Self.removingRepeatedCarriageReturns(from: rawReceived)
+                #expect(received.count == expected.count, "The client received \(received.count) bytes, not \(expected.count).")
+                // The two streams must match byte for byte. This catches bytes
+                // that arrive twice, in another order or with other values,
+                // which a count alone does not.
+                if received != expected {
+                    let offset = zip(received, expected).enumerated().first { $0.element.0 != $0.element.1 }?.offset ?? min(received.count, expected.count)
+                    Issue.record("The output differs from the lines that the program wrote, first at byte \(offset).")
+                }
+                #expect(elapsed < Self.timeLimit)
+            }
+        }
+
+        /// Reads every message, as fast as it arrives, until the program exits.
+        /// Returns the output bytes in the order received.
+        private static func readUntilExit(_ connection: MessageConnection) throws -> Data {
+            var received = Data()
+            received.reserveCapacity(byteCount + lineCount)
+            while let message = try connection.receive(ServerMessage.self) {
+                switch message {
+                case .snapshot:
+                    continue
+                case .output(let bytes):
+                    received.append(bytes)
+                case .exited:
+                    return received
+                default:
+                    continue
+                }
+            }
+            throw ThroughputError.connectionClosedBeforeExit
+        }
+
+        private enum ThroughputError: Error {
+            case connectionClosedBeforeExit
+        }
     }
 }
