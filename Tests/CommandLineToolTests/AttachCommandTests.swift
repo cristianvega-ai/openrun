@@ -153,6 +153,39 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// The documented price of the split-key hold: a lone Escape reaches the
+        /// program at most 20 milliseconds later than another key. The test
+        /// waits for the program to say it reads, and for each answer before the
+        /// next key, and compares the Escape with a plain key typed the same way.
+        @Test func aLoneEscapeReachesTheProgramAtMostTwentyMillisecondsLaterThanAPlainKey() async throws {
+            try await RunningSessionProcess.run { process in
+                // The program reports each key it reads as key-<hex>.
+                let script = "stty raw -echo; printf 'key-reader-ready\\r\\n'; "
+                    + "while :; do key=$(dd bs=1 count=1 2>/dev/null | od -An -tx1 | tr -d ' \\n'); printf 'key-%s\\r\\n' \"$key\"; done"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await terminal.waitForScreen(containing: "key-reader-ready"))
+
+                var plainDelays: [Duration] = []
+                var escapeDelays: [Duration] = []
+                for _ in 0..<9 {
+                    plainDelays.append(try #require(delayUntilReported(key: 0x71, in: terminal)))
+                    escapeDelays.append(try #require(delayUntilReported(key: 0x1B, in: terminal)))
+                }
+                let plain = median(plainDelays)
+                let escape = median(escapeDelays)
+                print("lone-escape-delay: plain \(plain), escape \(escape), extra \(escape - plain)")
+                // The hold is 20 ms. The rest of the allowance covers the noise of
+                // the program's own commands, so a longer hold fails.
+                #expect(escape - plain <= .milliseconds(40), "plain \(plainDelays), escape \(escapeDelays)")
+
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+            }
+        }
+
         /// The window changes size while the first picture waits for the
         /// terminal. The session must still get the new size.
         @Test func aResizeWhileTheFirstPictureWaitsReachesTheSession() async throws {
@@ -443,6 +476,42 @@ struct OpenSequence: Sendable, CustomTestStringConvertible {
     }
 
     var testDescription: String { kind }
+}
+
+/// Types one key and returns how long its report, `key-<hex>`, took to come
+/// back from the program, or `nil` after 3 seconds.
+private func delayUntilReported(key: UInt8, in terminal: AttachedTerminal) -> Duration? {
+    let report = Array(("key-" + String(format: "%02x", key) + "\r\n").utf8)
+    let reportsBefore = occurrences(of: report, in: terminal.receivedBytes)
+    let start = ContinuousClock.now
+    terminal.type(bytes: [key])
+    while ContinuousClock.now - start < .seconds(3) {
+        if occurrences(of: report, in: terminal.receivedBytes) > reportsBefore {
+            return ContinuousClock.now - start
+        }
+        usleep(250)
+    }
+    return nil
+}
+
+private func occurrences(of pattern: [UInt8], in bytes: [UInt8]) -> Int {
+    guard bytes.count >= pattern.count else { return 0 }
+    var count = 0
+    var start = 0
+    while start <= bytes.count - pattern.count {
+        if bytes[start..<start + pattern.count].elementsEqual(pattern) {
+            count += 1
+            start += pattern.count
+        } else {
+            start += 1
+        }
+    }
+    return count
+}
+
+private func median(_ values: [Duration]) -> Duration {
+    let sorted = values.sorted()
+    return sorted[sorted.count / 2]
 }
 
 /// Where `pattern` last occurs in `bytes`.
