@@ -5,6 +5,7 @@ import TerminalEmulation
 /// Accepts clients and answers their requests.
 actor SessionServer {
     private let listener: SocketListener
+    private let registry: SessionRegistry
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -12,6 +13,7 @@ actor SessionServer {
     /// Starts listening. Throws when another session process already does.
     init(location: SocketLocation) throws {
         listener = try SocketListener(location: location)
+        registry = SessionRegistry(socketPath: location.path)
     }
 
     func start() {
@@ -54,6 +56,10 @@ actor SessionServer {
             switch received.message {
             case .hello:
                 client.send(.failure(SessionFailure(reason: .invalidRequest, message: "Hello was already sent.")))
+            case .createSession(let folder, let command, let size, let environment):
+                client.send(await create(folder: folder, command: command, size: size, environment: environment))
+            case .listSessions:
+                client.send(.sessionList(await registry.summaries()))
             case .detach:
                 break messages
             default:
@@ -62,6 +68,16 @@ actor SessionServer {
         }
 
         client.closeAfterSending()
+    }
+
+    private func create(folder: String, command: [String]?, size: SessionSize, environment: [String: String]) async -> ServerMessage {
+        do {
+            let summary = try await registry.create(folder: folder, command: command, size: size, environment: environment)
+            Self.log("Started session \(summary.identifierText) in \(folder)")
+            return .sessionCreated(summary)
+        } catch {
+            return .failure(SessionFailure(reason: .launchFailed, message: "\(error)"))
+        }
     }
 
     /// The session process runs in the foreground and logs to standard error.
