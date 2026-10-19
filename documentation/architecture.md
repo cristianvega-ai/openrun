@@ -239,9 +239,41 @@ The `hello` message itself must stay readable by every version.
 A control message is a JSON object with one key, the name of the message. The value holds its fields.
 A field without a name in the Swift code is called `_0`.
 
+Client to server:
+
+| Message | Fields | Answer |
+|---|---|---|
+| `hello` | `protocolVersion` | `hello` |
+| `createSession` | `folder`, `command` (absent for the login shell), `size`, `environment` | `sessionCreated`. An empty `command` list names no program and gets a `failure` with reason `invalidRequest`. A value that would reach the program changed gets a `failure` with reason `launchFailed` whose message names the problem: an environment name that is empty or holds `=` or NUL, or a NUL in an environment value, an argument, the program or the folder |
+| `listSessions` | none | `sessionList` |
+| `readScreen` | `identifier`, `includeScrollback` | `screen` |
+| `sendText` | `identifier`, `text` | `acknowledged` once the text is in the program's input backlog, behind the input frames that this connection sent before. `failure` with reason `unknownSession` when the program ends before that |
+| `killSession` | `identifier` | `acknowledged`, after the session is gone and every process of its terminal session has ended (see `terminate`). On a connection that is attached to that session: `acknowledged`, then `exited`, and the connection closes |
+| `attach` | `identifier`, `size`, `relaysRawOutput` (optional), `receivesSizeChanges` (optional) | `attached`, then a snapshot frame, then output frames, and `sizeChanged` when the client asked for it. A size with 0 columns or 0 rows, or one that the terminal refuses, gets a `failure` with reason `invalidRequest`, and the session keeps its size. So does a size at which the screens alone do not fit in one frame (see "A snapshot that fits in one frame"). The `failure` comes in place of `attached`, and the connection stays open and not attached |
+| `input` | the bytes, as an input frame | none |
+| `resize` | `_0` is the size | none. A size that the terminal refuses (more than 10,000 columns or rows) changes nothing. A new size goes to the other attached clients that asked for it, as `sizeChanged` |
+| `detach` | none | the connection closes |
+
+Server to client:
+
+| Message | Fields |
+|---|---|
+| `hello` | `protocolVersion` |
+| `sessionCreated` | `_0` is a session summary |
+| `sessionList` | `_0` is a list of session summaries |
+| `attached` | `_0` is a session summary |
+| `snapshot` | the bytes, as a snapshot frame |
+| `output` | the bytes, as an output frame |
+| `sizeChanged` | `_0` is the new size. Only a client that set `receivesSizeChanges` in its `attach` receives it, when another client changes the size with `resize` or with `attach`. It comes before the output that is laid out for the new size |
+| `screen` | `text` |
+| `exited` | `_0` is `{"exited":{"status":N}}` or `{"signaled":{"signal":N}}` |
+| `acknowledged` | none |
+| `failure` | `_0` holds `reason` (`incompatibleProtocol`, `unknownSession`, `launchFailed` or `invalidRequest`) and `message` |
 
 A session summary holds `identifier`, `folder`, `command` (a list), `size` and `createdAt` (seconds since 1970).
 A size holds `columns` and `rows`, each 0 to 65,535.
+
+A control frame from a client that the session process cannot decode gets a `failure` with reason `invalidRequest`, and then the connection closes. Examples are text that is not JSON, a name that is no message of the protocol, a missing field, a field of the wrong type, keys in a control frame, and a value out of range, such as a size of 999999 or -1. The message names the problem in the words of the protocol, such as `A frame is malformed: the field resize._0.rows holds a value that is out of range or in the wrong form.` It never quotes the request, which can hold escape sequences. The first frame gets the same answer in place of `hello`. A frame that breaks the framing (a zero length, a length above the limit, or an unknown kind) closes the connection without an answer, because the bytes after it cannot be read as frames. A frame of a kind that only the server sends also closes the connection without an answer, as before. Other clients notice nothing.
 JSON that nests more than 512 levels counts as JSON that cannot be read. The decoder stops at that depth at once, so a frame of 64 MiB of nested arrays costs the memory of the frame and no stack.
 An error about a message that does not fit the conversation, such as a `screen` in place of `hello`, names the message and not its fields. A field can be a whole screen, or text that a user typed.
 
