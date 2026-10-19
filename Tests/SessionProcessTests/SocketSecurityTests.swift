@@ -6,6 +6,18 @@ import SessionProcessHarness
 import Testing
 
 private typealias Harness = SocketSecurityHarness
+
+/// Whether a session process answers hello on the socket within two seconds.
+private func answersHello(_ socketPath: String) -> Bool {
+    guard let connection = try? MessageConnection.connect(to: SocketLocation(path: socketPath)) else { return false }
+    let watchdog = DispatchWorkItem { connection.shutdown() }
+    DispatchQueue.global().asyncAfter(deadline: .now() + 2, execute: watchdog)
+    defer {
+        watchdog.cancel()
+        connection.shutdown()
+    }
+    return (try? connection.greetSessionProcess()) != nil
+}
 extension SessionProcessIntegration {
     @Suite struct SocketSecurityTests {
         // MARK: - The folder of the socket
@@ -58,6 +70,38 @@ extension SessionProcessIntegration {
             let lock = try SocketListener.SocketLock(socketPath: socketPath)
             #expect(lock.path == lockPath)
             #expect(Harness.mode(of: lockPath) == 0o600)
+        }
+
+        /// Two session processes start on one fresh socket at the same moment,
+        /// many times. Each time exactly one survives, and its socket stays
+        /// and answers until it stops.
+        @Test func ofTwoSessionProcessesStartedTogetherExactlyOneSurvives() async throws {
+            for round in 1...30 {
+                let folder = try RunningSessionProcess.makeDirectory()
+                defer { try? FileManager.default.removeItem(at: folder) }
+                let socketPath = folder.appendingPathComponent("socket").path
+                let pair = try Harness.startTogether(count: 2, socketPath: socketPath, folder: folder)
+                defer { for process in pair { process.stop() } }
+
+                let settled = await eventually(timeout: .seconds(10)) {
+                    pair.filter(\.isRunning).count == 1 && answersHello(socketPath)
+                }
+                // A second process that also survived could need a moment to
+                // show it, so look again after a short wait.
+                try? await Task.sleep(for: .milliseconds(200))
+                let survivors = pair.filter(\.isRunning)
+                try #require(settled && survivors.count == 1,
+                             "round \(round): \(survivors.count) running; logs: \(pair.map(\.log))")
+                let survivor = survivors[0]
+                let loser = pair.first { $0 !== survivor }!
+                #expect(await loser.waitForExit(timeout: 5) == 1, "round \(round)")
+                #expect(loser.log.contains("already runs"), "round \(round): \(loser.log)")
+                #expect(answersHello(socketPath), "round \(round): the socket stopped answering")
+
+                survivor.send(signal: SIGTERM)
+                #expect(await survivor.waitForExit() == 0, "round \(round)")
+                #expect(!FileManager.default.fileExists(atPath: socketPath), "round \(round)")
+            }
         }
 
         // MARK: - The command line of openrun-session

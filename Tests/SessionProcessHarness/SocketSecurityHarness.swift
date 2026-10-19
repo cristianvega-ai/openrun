@@ -35,6 +35,44 @@ public enum SocketSecurityHarness {
         }
         return descriptor
     }
+
+    /// Starts `count` session processes on one socket at the same moment. Each
+    /// starts as a shell that waits on one pipe and then replaces itself with
+    /// `openrun-session`, so the process identifiers stay. One write to the
+    /// pipe releases all of them.
+    public static func startTogether(count: Int, socketPath: String, folder: URL) throws -> [StartedSessionProcess] {
+        let gate = folder.appendingPathComponent("gate-\(UInt32.random(in: 0...UInt32.max))")
+        guard mkfifo(gate.path, 0o600) == 0 else { throw HarnessError.commandFailed(description: "mkfifo failed: \(errno)") }
+        defer { unlink(gate.path) }
+        // Read and write, so the open does not wait for a reader, and the
+        // bytes stay in the pipe for a shell that opens it late.
+        let gateDescriptor = open(gate.path, O_RDWR | O_CLOEXEC)
+        guard gateDescriptor >= 0 else { throw HarnessError.commandFailed(description: "open of the gate failed: \(errno)") }
+        defer { close(gateDescriptor) }
+        var started: [StartedSessionProcess] = []
+        for index in 0..<count {
+            started.append(try StartedSessionProcess(
+                executable: URL(fileURLWithPath: "/bin/sh"),
+                arguments: ["-c", "read line < \"$1\"; exec \"$2\" --socket \"$3\"", "sh", gate.path, RunningSessionProcess.sessionExecutable.path, socketPath],
+                folder: folder,
+                logFile: folder.appendingPathComponent("log-\(index)")
+            ))
+        }
+        let release = Array(String(repeating: "go\n", count: count).utf8)
+        guard write(gateDescriptor, release, release.count) == release.count else {
+            for process in started { process.stop() }
+            throw HarnessError.commandFailed(description: "write to the gate failed: \(errno)")
+        }
+        // Each shell reads its own line. Keep the pipe open until every shell
+        // has read, so none of them waits for a writer that has gone.
+        let deadline = Date().addingTimeInterval(10)
+        repeat {
+            var entry = pollfd(fd: gateDescriptor, events: Int16(POLLIN), revents: 0)
+            if poll(&entry, 1, 0) == 0 { break }
+            usleep(2_000)
+        } while Date() < deadline
+        return started
+    }
 }
 
 extension SocketSecurityHarness {
