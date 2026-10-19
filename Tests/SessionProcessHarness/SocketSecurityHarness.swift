@@ -18,6 +18,20 @@ public enum SocketSecurityHarness {
         return status.st_mode & 0o7777
     }
 
+    /// The device and inode of the file at the path itself, without following
+    /// a symbolic link, or nil when there is none. Two values differ when the
+    /// file was replaced.
+    public static func fileIdentity(at path: String) -> FileIdentity? {
+        var status = stat()
+        guard lstat(path, &status) == 0 else { return nil }
+        return FileIdentity(device: status.st_dev, serialNumber: status.st_ino)
+    }
+
+    public struct FileIdentity: Equatable, Sendable {
+        public let device: dev_t
+        public let serialNumber: ino_t
+    }
+
     /// The lock file that a session process holds next to its socket.
     public static func lockPath(forSocket socketPath: String) -> String {
         socketPath + ".lock"
@@ -146,6 +160,71 @@ extension SocketSecurityHarness {
                 kill(process.processIdentifier, SIGKILL)
                 process.waitUntilExit()
             }
+        }
+    }
+}
+
+extension SocketSecurityHarness {
+    /// A program of the same user that is not a session process and sits on
+    /// the socket path, as a squatter or a hung program would. It counts what
+    /// reaches it.
+    public final class StandInListener: @unchecked Sendable {
+        public enum Behavior: Sendable {
+            /// Binds the path and never listens, as a session process does for
+            /// a moment while it starts.
+            case boundOnly
+            /// Accepts connections and never writes a byte.
+            case neverAnswers
+            /// Accepts connections and writes these bytes once the first bytes
+            /// arrive, then reads all that follows. It closes a connection that
+            /// stays quiet for half a second after the answer, so a client that
+            /// waits for more fails soon instead of hanging. A test passes the
+            /// frame of a hello, so the stand-in passes for a session process.
+            case answers(Data)
+        }
+
+        public let path: String
+        private let descriptor: Int32
+        private let counts = Mutex((accepted: 0, received: 0))
+        private let accepted = Mutex<[Int32]>([])
+        private let stopped = Atomic<Bool>(false)
+
+        public init(path: String, behavior: Behavior) throws {
+            self.path = path
+            descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+            guard descriptor >= 0 else { throw HarnessError.commandFailed(description: "socket failed: \(errno)") }
+            _ = fcntl(descriptor, F_SETFD, FD_CLOEXEC)
+            var address = sockaddr_un()
+            address.sun_family = sa_family_t(AF_UNIX)
+            withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: path.utf8.prefix($0.count - 1)) }
+            let length = socklen_t(MemoryLayout<sockaddr_un>.size)
+            let bound = withUnsafePointer(to: &address) { pointer in
+                pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(descriptor, $0, length) }
+            }
+            guard bound == 0 else {
+                let code = errno
+                Darwin.close(descriptor)
+                throw HarnessError.commandFailed(description: "bind \(path) failed: \(code)")
+            }
+            if case .boundOnly = behavior { return }
+            guard listen(descriptor, 16) == 0 else {
+                let code = errno
+                Darwin.close(descriptor)
+                throw HarnessError.commandFailed(description: "listen failed: \(code)")
+            }
+        }
+
+        /// The connections that the stand-in accepted.
+        public var acceptedCount: Int { counts.withLock { $0.accepted } }
+        /// The bytes that clients sent to it.
+        public var receivedByteCount: Int { counts.withLock { $0.received } }
+
+        /// Stops accepting and closes every connection. The socket file stays.
+        public func close() {
+            guard !stopped.exchange(true, ordering: .sequentiallyConsistent) else { return }
+            Darwin.shutdown(descriptor, SHUT_RDWR)
+            Darwin.close(descriptor)
+            for connection in accepted.withLock({ $0 }) { Darwin.shutdown(connection, SHUT_RDWR) }
         }
     }
 }

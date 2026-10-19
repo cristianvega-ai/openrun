@@ -72,6 +72,27 @@ extension SessionProcessIntegration {
             #expect(Harness.mode(of: lockPath) == 0o600)
         }
 
+        /// While a session process starts, it has bound its socket and not
+        /// yet listened, so a connection is refused as on a stale file. It
+        /// already holds the lock, so a second process refuses to start, and
+        /// the socket file of the first one stays.
+        @Test func aSessionProcessThatIsStartingMakesASecondOneRefuse() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let lock = try #require(Harness.takeSocketLock(forSocket: socketPath))
+            defer { close(lock) }
+            let starting = try Harness.StandInListener(path: socketPath, behavior: .boundOnly)
+            defer { starting.close() }
+            let startingFile = Harness.fileIdentity(at: socketPath)
+
+            let second = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { second.stop() }
+            #expect(await second.waitForExit(timeout: 5) == 1)
+            #expect(second.log.contains("already runs"), "log: \(second.log)")
+            #expect(Harness.fileIdentity(at: socketPath) == startingFile)
+        }
+
         /// Two session processes start on one fresh socket at the same moment,
         /// many times. Each time exactly one survives, and its socket stays
         /// and answers until it stops.
