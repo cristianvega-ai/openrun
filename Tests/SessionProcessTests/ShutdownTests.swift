@@ -189,6 +189,86 @@ extension SessionProcessIntegration {
             #expect(!FileManager.default.fileExists(atPath: markerFile.path))
         }
 
+        /// The server dies while a client is attached. The tool must
+        /// end with the exact status of the program, and leave the terminal in
+        /// the mode it found.
+        @Test func aClientAttachedAtShutdownEndsWithTheStatusOfTheProgramAndRestoresTheTerminal() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let identifier = try process.createSession(program: ["/bin/sh", "-c", "echo session-is-up; exec sleep 300"])
+            #expect(await process.waitForScreen(of: identifier, containing: "session-is-up"))
+            let executable = RunningSessionProcess.commandExecutable.path
+            let script = """
+                saved=$(stty -g)
+                echo before-attach
+                '\(executable)' attach \(identifier) --socket '\(process.socketPath)'
+                code=$?
+                echo "status=$code"
+                if [ "$(stty -g)" = "$saved" ]; then echo mode-restored; else echo mode-changed; fi
+                """
+            let attached = try AttachedTerminal(shellScript: script, folder: process.directory)
+            defer { attached.closeNow() }
+            #expect(await attached.waitForScreen(containing: "session-is-up"))
+            #expect(await eventually { attached.isInRawMode })
+
+            process.send(signal: SIGTERM)
+            // sleep ends by SIGHUP, signal 1, so the status is 128 + 1.
+            #expect(await attached.waitForScreen(containing: "mode-"), "screen: \(attached.screenText)")
+            let screen = attached.screenText
+            #expect(screen.contains("status=129"), "screen: \(screen)")
+            #expect(screen.contains("mode-restored") && !screen.contains("mode-changed"), "screen: \(screen)")
+            #expect(!attached.isInRawMode)
+            #expect(await attached.waitForExit() == .exited(status: 0))
+            #expect(await process.waitForExit() == 0)
+        }
+
+        /// Shutdown closed every client at once, so the output and the
+        /// exit status that still waited for a slow client were lost.
+        ///
+        /// The client reads nothing and the program writes 1.5 MiB. That is more
+        /// than the session process holds in its buffers and the socket, so
+        /// output still waits for the client when shutdown starts. (`openrun
+        /// attach` reads up to 1 MiB ahead, so a smaller amount never waits.)
+        @Test func aPausedAttachedClientStillGetsTheExitStatusAtShutdown() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let goFile = process.directory.appendingPathComponent("go")
+            let script = "while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; "
+                + "dd if=/dev/zero bs=65536 count=24 2>/dev/null | tr '\\0' 'z'; echo; echo printed-everything; exec sleep 300"
+            let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+            let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+            defer { connection.close() }
+            try connection.greetSessionProcess()
+            try connection.send(ClientMessage.attach(identifier: try #require(UUID(uuidString: identifier)), size: SessionSize(columns: 80, rows: 24)))
+            let answer = try withTimeLimit(30, on: connection) { try connection.receive(ServerMessage.self) }
+            guard case .attached = answer.result else {
+                Issue.record("the attach was answered with \(String(describing: answer.result))")
+                return
+            }
+
+            // From here on the client reads nothing, so the output waits in the
+            // session process.
+            FileManager.default.createFile(atPath: goFile.path, contents: Data())
+            #expect(await process.waitForScreen(of: identifier, containing: "printed-everything"))
+
+            process.send(signal: SIGTERM)
+            try await Task.sleep(for: .milliseconds(800))
+
+            var exit: SessionExit?
+            let reading = try withTimeLimit(30, on: connection) {
+                while let message = try connection.receive(ServerMessage.self) {
+                    if case .exited(let how) = message {
+                        exit = how
+                        break
+                    }
+                }
+            }
+            #expect(!reading.timedOut, "the connection stayed open without an exit status")
+            // sleep ends by SIGHUP, signal 1.
+            #expect(exit == .signaled(signal: SIGHUP), "exit status: \(String(describing: exit))")
+            #expect(await process.waitForExit() == 0)
+        }
+
         /// When the wait for the socket failed, the caller got no
         /// object to stop, and the session process ran on for the rest of the
         /// test run.

@@ -32,6 +32,8 @@ actor SessionServer {
         listener.close()
         await acceptTask?.value
         await registry.terminateAll()
+        // Each client gets a short time to take what still waits for it, such
+        // as the exit status of its program. See `closeAfterSending`.
         for client in clients.values { client.closeAfterSending() }
         for handler in handlers.values { await handler.value }
     }
