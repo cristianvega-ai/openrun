@@ -72,11 +72,15 @@ public final class RunningSessionProcess: @unchecked Sendable {
     ///     gets a folder does not remove it.
     ///   - logName: The file for standard error. Two processes in one folder
     ///     need two names.
+    ///   - descriptorLimit: The most descriptors the process may open, for a
+    ///     test that makes it run out. A shell sets the limit and then
+    ///     replaces itself with the process, so the process identifier stays.
     public init(
         directory: URL? = nil,
         socketRelativePath: String = "socket",
         logName: String = "log",
         waitUntilReady: Bool = true,
+        descriptorLimit: Int? = nil,
         readyTimeout: TimeInterval = 15,
         didStart: (pid_t) -> Void = { _ in }
     ) throws {
@@ -85,8 +89,13 @@ public final class RunningSessionProcess: @unchecked Sendable {
         socketPath = self.directory.appendingPathComponent(socketRelativePath).path
         logFile = self.directory.appendingPathComponent(logName)
         FileManager.default.createFile(atPath: logFile.path, contents: nil)
-        process.executableURL = Self.sessionExecutable
-        process.arguments = ["--socket", socketPath]
+        if let descriptorLimit {
+            process.executableURL = URL(fileURLWithPath: "/bin/sh")
+            process.arguments = ["-c", "ulimit -n \(descriptorLimit) && exec \"$0\" \"$@\"", Self.sessionExecutable.path, "--socket", socketPath]
+        } else {
+            process.executableURL = Self.sessionExecutable
+            process.arguments = ["--socket", socketPath]
+        }
         process.standardError = try FileHandle(forWritingTo: logFile)
         process.standardOutput = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice

@@ -45,7 +45,9 @@ final class SocketListener: @unchecked Sendable {
         let queue = DispatchQueue(label: "SocketListener")
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         self.source = source
-        source.setEventHandler {
+        let parts = ConnectionLimits.acceptRetryPause.components
+        let pause = DispatchTimeInterval.nanoseconds(Int(parts.seconds) * 1_000_000_000 + Int(parts.attoseconds / 1_000_000_000))
+        source.setEventHandler { [weak source] in
             while true {
                 let accepted = accept(descriptor, nil, nil)
                 if accepted >= 0 {
@@ -77,6 +79,12 @@ final class SocketListener: @unchecked Sendable {
                 let code = errno
                 if code == EINTR || code == ECONNABORTED { continue }
                 if code == EAGAIN { return }
+                // Out of descriptors (EMFILE, ENFILE) or memory. A waiting
+                // connection keeps the socket ready, so the handler would run
+                // again at once. Pause, and let clients leave first.
+                guard let source else { return }
+                source.suspend()
+                queue.asyncAfter(deadline: .now() + pause) { source.resume() }
                 return
             }
         }

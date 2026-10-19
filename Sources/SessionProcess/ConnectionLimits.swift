@@ -36,4 +36,11 @@ enum ConnectionLimits {
     /// How often a reading thread that waits for room in the read-ahead
     /// checks whether its client has left.
     static let peerCheckInterval: Duration = .milliseconds(100)
+
+    /// How long the listener waits after an accept fails for a lack of
+    /// descriptors or memory. The waiting connection keeps the socket ready,
+    /// so trying again at once could become a busy loop. On macOS each failed
+    /// accept also drops one waiting connection, so the wait keeps the loss
+    /// small while descriptors are short.
+    static let acceptRetryPause: Duration = .milliseconds(250)
 }
