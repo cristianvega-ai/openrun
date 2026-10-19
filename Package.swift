@@ -9,6 +9,7 @@ let package = Package(
     platforms: [.macOS(.v26)],
     products: [
         .library(name: "TerminalEmulation", targets: ["TerminalEmulation"]),
+        .executable(name: "openrun-session", targets: ["openrun-session"]),
     ],
     targets: [
         // Built by scripts/build-ghostty-library.sh. Only TerminalEmulation
@@ -35,6 +36,10 @@ let package = Package(
             name: "SessionProcess",
             dependencies: ["TerminalEmulation", "PseudoTerminal", "SessionProtocol"]
         ),
+        .executableTarget(
+            name: "openrun-session",
+            dependencies: ["SessionProcess"]
+        ),
         .testTarget(
             name: "PseudoTerminalTests",
             dependencies: ["PseudoTerminal"]
@@ -43,7 +48,7 @@ let package = Package(
         // executables.
         .target(
             name: "SessionProcessHarness",
-            dependencies: ["PseudoTerminal", "TerminalEmulation"],
+            dependencies: ["PseudoTerminal", "TerminalEmulation", "openrun-session"],
             path: "Tests/SessionProcessHarness"
         ),
         .testTarget(
