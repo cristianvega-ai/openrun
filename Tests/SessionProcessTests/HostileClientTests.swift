@@ -141,3 +141,102 @@ private final class HostileClient: Sendable {
         }
     }
 }
+
+/// A client that stays attached to a session that prints a numbered line every
+/// 100 milliseconds. It is the neighbor that a hostile client must not harm:
+/// the numbers keep growing only while its connection and its session work.
+private final class Neighbor: Sendable {
+    private let connection: MessageConnection
+    private let text = Mutex("")
+
+    init(socketPath: String, identifier: String) throws {
+        connection = try MessageConnection.connect(to: SocketLocation(path: socketPath))
+        try connection.greetSessionProcess()
+        try connection.send(ClientMessage.attach(identifier: UUID(uuidString: identifier)!, size: SessionSize(columns: 80, rows: 24)))
+        guard case .attached = try connection.receive(ServerMessage.self),
+              case .snapshot = try connection.receive(ServerMessage.self)
+        else {
+            throw HarnessError.commandFailed(description: "The neighbor could not attach.")
+        }
+    }
+
+    /// The highest number printed so far among the lines it has seen.
+    var latestTick: Int {
+        text.withLock { text in
+            text.components(separatedBy: CharacterSet.newlines)
+                .compactMap { $0.hasPrefix("tick-") ? Int($0.dropFirst(5)) : nil }
+                .max() ?? 0
+        }
+    }
+
+    /// Reads until a line with a number above `tick` has arrived. Returns
+    /// `false` when the connection ends or the time passes first.
+    func waitForTick(above tick: Int, within limit: TimeInterval = 20) -> Bool {
+        let watchdog = DispatchWorkItem { [connection] in connection.shutdown() }
+        DispatchQueue.global().asyncAfter(deadline: .now() + limit, execute: watchdog)
+        defer { watchdog.cancel() }
+        while latestTick <= tick {
+            guard let message = try? connection.receive(ServerMessage.self) else { return false }
+            switch message {
+            case .output(let bytes): text.withLock { $0 += String(decoding: bytes, as: UTF8.self) }
+            case .exited: return false
+            default: continue
+            }
+        }
+        return true
+    }
+
+    func close() {
+        connection.shutdown()
+    }
+}
+
+/// A server with one session and one neighbor attached to it.
+private func withNeighbor(_ body: (RunningSessionProcess, String, Neighbor) async throws -> Void) async throws {
+    try await RunningSessionProcess.run { process in
+        let identifier = try process.createSession(program: ["/bin/sh", "-c", "number=0; while :; do number=$((number+1)); echo tick-$number; sleep 0.1; done"])
+        #expect(await process.waitForScreen(of: identifier, containing: "tick-2"))
+        let neighbor = try Neighbor(socketPath: process.socketPath, identifier: identifier)
+        defer { neighbor.close() }
+        #expect(neighbor.waitForTick(above: 1), "the neighbor got no output before the test began")
+        try await body(process, identifier, neighbor)
+    }
+}
+
+/// Checks that the server serves everyone else: the process runs, the session
+/// is listed, a new client can start a session and read it, and the neighbor
+/// that was attached all along still gets new output.
+private func expectTheServerKeepsServing(
+    _ process: RunningSessionProcess,
+    identifier: String,
+    alsoListed others: [String] = [],
+    neighbor: Neighbor,
+    _ context: Comment
+) async throws {
+    #expect(process.isRunning, context)
+    #expect(Set(try process.listedIdentifiers()) == Set([identifier] + others), context)
+    let extra = try process.createSession(program: ["/bin/sh", "-c", "echo extra-session-works; sleep 60"])
+    #expect(await process.waitForScreen(of: extra, containing: "extra-session-works"), context)
+    #expect(try process.runCommand(["kill", extra]).status == 0, context)
+    let before = neighbor.latestTick
+    #expect(neighbor.waitForTick(above: before + 2), "the neighbor stopped getting output after the \(context)")
+}
+extension SessionProcessIntegration {
+    @Suite struct HostileClientTests {
+
+        @Test func aClientWithAnotherProtocolVersionIsToldAndEnded() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                hostile.send(HostileClient.control(#"{"hello":{"protocolVersion":99}}"#))
+
+                let answer = try #require(hostile.receiveFrame())
+                #expect(answer.messageName == "failure")
+                let failure = answer.fields?["_0"] as? [String: Any]
+                #expect(failure?["reason"] as? String == "incompatibleProtocol")
+                #expect((failure?["message"] as? String)?.contains("protocol version 1") == true, "message: \(String(describing: failure?["message"]))")
+                #expect(hostile.waitForClose(), "the server did not end the connection")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "wrong version")
+            }
+        }
+    }
+}
