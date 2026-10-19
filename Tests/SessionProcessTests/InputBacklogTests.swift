@@ -106,11 +106,78 @@ private func patternBytes(count: Int) -> [UInt8] {
     return bytes
 }
 
+/// Fills the 8 MiB input backlog of a program that reads nothing yet, with
+/// text that the session process acknowledged.
+private let fillerByteCount = 8 * 1024 * 1024
+
+private func fillBacklog(of identifier: String, in process: RunningSessionProcess) throws {
+    let filler = try RawClient(socketPath: process.socketPath)
+    let piece = patternBytes(count: 1024 * 1024)
+    for _ in 0..<(fillerByteCount / piece.count) {
+        #expect(try filler.sendText(piece[...], to: identifier) == .acknowledged)
+    }
+}
+
+/// The lines of a screen, so a test can match a whole line.
+private func lines(of screen: String) -> [String] {
+    screen.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+}
+
 extension SessionProcessIntegration {
     /// Input that a program has not read yet waits in the session process, up
     /// to 8 MiB. Past that, a writer waits for room. Nothing is dropped while
     /// its client is there. Input of a client that has left holds nothing.
     @Suite struct InputBacklogTests {
+        @Test func moreTextThanTheBacklogHoldsReachesASlowReaderCompleteAndInOrder() async throws {
+            try await RunningSessionProcess.run { process in
+                let total = 10 * 1024 * 1024
+                let file = process.directory.appendingPathComponent("received-checksum")
+                // The program reads nothing for two seconds, so the text piles up
+                // past the 8 MiB backlog before it reads.
+                let script = "stty raw -echo; sleep 2; head -c \(total) | shasum -a 256 > '\(file.path)'; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                let text = patternBytes(count: total)
+                let client = try RawClient(socketPath: process.socketPath)
+
+                var answers: [ServerMessage?] = []
+                for offset in stride(from: 0, to: total, by: 512 * 1024) {
+                    answers.append(try client.sendText(text[offset..<offset + 512 * 1024], to: identifier))
+                }
+                #expect(answers.allSatisfy { $0 == .acknowledged })
+
+                let expected = SHA256.hash(data: text).map { String(format: "%02x", $0) }.joined()
+                let arrived = await eventually(timeout: .seconds(30)) {
+                    ((try? String(contentsOf: file, encoding: .utf8)) ?? "").hasPrefix(expected)
+                }
+                #expect(arrived, "the program read: \((try? String(contentsOf: file, encoding: .utf8)) ?? "nothing")")
+            }
+        }
+
+        @Test func textThatWaitsWhenTheProgramEndsIsReportedAsAFailure() async throws {
+            try await RunningSessionProcess.run { process in
+                // The program never reads, and ends after four seconds.
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; sleep 4"])
+                let client = try RawClient(socketPath: process.socketPath)
+                let piece = patternBytes(count: 1024 * 1024)
+                // This fills the backlog.
+                for _ in 0..<8 {
+                    #expect(try client.sendText(piece[...], to: identifier) == .acknowledged)
+                }
+
+                // This text waits for room. Other requests and other sessions go on meanwhile.
+                let waitingText = String(decoding: patternBytes(count: 512 * 1024), as: UTF8.self)
+                let waiting = Task.detached { try process.runCommand(["send", identifier, waitingText]) }
+                try await Task.sleep(for: .milliseconds(300))
+                #expect(try process.listedIdentifiers().contains(identifier))
+                let other = try process.createSession(program: ["/bin/sh"])
+                #expect(try process.runCommand(["send", other, "--enter", "echo other-$((6*7))"]).status == 0)
+                #expect(await process.waitForScreen(of: other, containing: "other-42"))
+
+                let result = try await waiting.value
+                #expect(result.status == 1)
+                #expect(result.standardError.contains("ended"), "standard error: \(result.standardError)")
+            }
+        }
 
         /// A reading thread that waits for room must notice
         /// a client that left within a second, whenever in its wait the client
