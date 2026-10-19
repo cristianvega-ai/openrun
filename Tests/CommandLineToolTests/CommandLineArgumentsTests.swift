@@ -37,6 +37,16 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(arguments.command == .new(folder: nil, program: ["tool", "--socket", "/inner"]))
     }
 
+    @Test func eachCommandParses() throws {
+        #expect(try parse("list").command == .list)
+        #expect(try parse("attach", "abc").command == .attach(identifier: "abc"))
+        #expect(try parse("read", "abc").command == .read(identifier: "abc", includeScrollback: false))
+        #expect(try parse("read", "abc", "--scrollback").command == .read(identifier: "abc", includeScrollback: true))
+        #expect(try parse("kill", "abc").command == .kill(identifier: "abc"))
+        #expect(try parse("help").command == .help)
+        #expect(try parse("--help").command == .help)
+    }
+
     @Test func sendJoinsTheWordsAndKnowsTheEnterOption() throws {
         #expect(try parse("send", "abc", "echo", "hi").command == .send(identifier: "abc", text: "echo hi", pressEnter: false))
         #expect(try parse("send", "abc", "--enter", "ls").command == .send(identifier: "abc", text: "ls", pressEnter: true))
@@ -79,6 +89,22 @@ private func usageMessage(_ words: String...) -> String? {
         // A real command with --help still shows the help.
         #expect(try parse("list", "--help").command == .help)
         #expect(try parse("read", "abc", "--help").command == .help)
+    }
+
+    @Test(arguments: [["attach", ""], ["read", ""], ["kill", ""], ["send", "", "text"]])
+    func anEmptyIdentifierIsAUsageError(words: [String]) {
+        do {
+            _ = try CommandLineArguments(words)
+            Issue.record("An empty identifier was accepted.")
+        } catch let error as CommandLineToolError {
+            guard case .usage(let message) = error else {
+                Issue.record("The error was not a usage error.")
+                return
+            }
+            #expect(message.contains("empty"))
+        } catch {
+            Issue.record("Unexpected error \(error).")
+        }
     }
 
     @Test func wrongHelpAndEmptyIdentifierExitWithTwoBeforeAnySocketIsOpened() {

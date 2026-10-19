@@ -43,6 +43,41 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// A program that is on the alternate screen when a client attaches.
+        /// The picture of the session is drawn on the alternate screen, and
+        /// detaching leaves it, so the user is back on the screen that they
+        /// started from.
+        @Test func attachingWhileTheProgramIsOnTheAlternateScreenDrawsItThereAndDetachLeavesIt() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = "printf '\\033[?1049h\\033[2J\\033[Halternate-text'; exec /bin/sh"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                #expect(await process.waitForScreen(of: identifier, containing: "alternate-text"))
+                let script = "echo primary-before-attach; " + attachScript(identifier: identifier, process: process)
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                defer { terminal.closeNow() }
+
+                #expect(await terminal.waitForScreen(containing: "alternate-text"))
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(terminal.isAlternateScreenActive, "the picture is not on the alternate screen: \(terminal.screenText)")
+                #expect(!terminal.screenText.contains("primary-before-attach"))
+                let beforeDetach = terminal.receivedBytes.count
+
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                // The terminal left the alternate screen after the detach, and
+                // shows the screen that it had before.
+                #expect(!terminal.isAlternateScreenActive, "the terminal is still on the alternate screen: \(terminal.screenText)")
+                let afterDetach = Array(terminal.receivedBytes.dropFirst(beforeDetach))
+                #expect(String(decoding: afterDetach, as: UTF8.self).contains("\u{1B}[?1049l"))
+                #expect(terminal.screenText.contains("primary-before-attach"))
+                #expect(terminal.screenText.contains("status=0"))
+                #expect(!terminal.screenText.contains("alternate-text"))
+                // The program is still on the alternate screen, in its session.
+                #expect(try process.listedIdentifiers() == [identifier])
+                #expect(try process.screenText(of: identifier).contains("alternate-text"))
+            }
+        }
+
         /// The harness checked only two of the flags that raw
         /// mode clears, so a terminal that still turned Control-C into a signal
         /// counted as raw.
@@ -80,6 +115,38 @@ extension CommandLineToolIntegration {
                 terminal.closeNow()
             }
             #expect(await eventually(timeout: .seconds(10)) { reference == nil }, "the terminal is still alive")
+        }
+
+        @Test func aDetachedAndReattachedTerminalShowsTheSameScreen() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "seq 1 40; echo end-of-numbers; sleep 60"])
+                #expect(await process.waitForScreen(of: identifier, containing: "end-of-numbers"))
+                let expected = try process.screenText(of: identifier).trimmingCharacters(in: .whitespacesAndNewlines)
+
+                for _ in 0..<2 {
+                    let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                    defer { terminal.closeNow() }
+                    #expect(await terminal.waitForScreen(containing: "end-of-numbers"))
+                    #expect(terminal.screenText.trimmingCharacters(in: .whitespacesAndNewlines) == expected)
+                    terminal.type(bytes: [0x1D])
+                    #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                }
+            }
+        }
+
+        @Test func attachEndsAndRestoresTheModeWhenTheProgramExits() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "read line; exit 7"])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                terminal.type("go\r")
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                // The exit status of the program is the status of the tool.
+                #expect(terminal.screenText.contains("status=7"))
+                #expect(await eventually { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty })
+            }
         }
     }
 }
