@@ -31,9 +31,24 @@ let package = Package(
             dependencies: ["SessionProtocol"]
         ),
         .target(name: "PseudoTerminal"),
+        .target(
+            name: "SessionProcess",
+            dependencies: ["TerminalEmulation", "PseudoTerminal", "SessionProtocol"]
+        ),
         .testTarget(
             name: "PseudoTerminalTests",
             dependencies: ["PseudoTerminal"]
+        ),
+        // Support code for the integration tests. It starts the real
+        // executables.
+        .target(
+            name: "SessionProcessHarness",
+            dependencies: ["PseudoTerminal", "TerminalEmulation"],
+            path: "Tests/SessionProcessHarness"
+        ),
+        .testTarget(
+            name: "SessionProcessTests",
+            dependencies: ["SessionProcessHarness", "SessionProcess", "SessionProtocol", "TerminalEmulation"]
         ),
     ],
     swiftLanguageModes: [.v6]
