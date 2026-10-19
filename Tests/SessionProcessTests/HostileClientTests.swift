@@ -222,6 +222,59 @@ private func expectTheServerKeepsServing(
     #expect(neighbor.waitForTick(above: before + 2), "the neighbor stopped getting output after the \(context)")
 }
 
+/// The ways a client can break the rules so that the server must end its
+/// connection.
+enum Offense: String, CaseIterable, Sendable, CustomTestStringConvertible {
+    case lengthZero
+    case unknownKind
+    case kindZero
+    case textThatIsNotStructured
+    case unknownMessage
+    case badIdentifier
+    case outputFrameFromAClient
+    case snapshotFrameFromAClient
+    case serverMessageFromAClient
+    case keysInsideATextFrame
+    case lengthAboveTheLimit
+    case lengthOfFourBillionBytes
+    case requestBeforeHello
+    case webRequestInsteadOfHello
+    case oversizedLengthAfterAGoodRequest
+
+    var testDescription: String { rawValue }
+
+    /// Whether the client says hello before the offense.
+    var greetsFirst: Bool {
+        switch self {
+        case .requestBeforeHello, .webRequestInsteadOfHello: false
+        default: true
+        }
+    }
+
+    var bytes: [UInt8] {
+        switch self {
+        case .lengthZero: [0, 0, 0, 0]
+        case .unknownKind: HostileClient.frame(kind: 99, payload: Array("{}".utf8))
+        case .kindZero: HostileClient.frame(kind: 0, payload: Array("{}".utf8))
+        case .textThatIsNotStructured: HostileClient.control("this is not json")
+        case .unknownMessage: HostileClient.control(#"{"noSuchMessage":{}}"#)
+        case .badIdentifier:
+            HostileClient.control(#"{"readScreen":{"identifier":"not-an-identifier","includeScrollback":false}}"#)
+        case .outputFrameFromAClient: HostileClient.frame(kind: 2, payload: Array("output".utf8))
+        case .snapshotFrameFromAClient: HostileClient.frame(kind: 4, payload: Array("snapshot".utf8))
+        case .serverMessageFromAClient: HostileClient.control(#"{"acknowledged":{}}"#)
+        case .keysInsideATextFrame: HostileClient.control(#"{"input":{"_0":"\#(Data([1]).base64EncodedString())"}}"#)
+        // 64 MiB and two more bytes: one above the largest payload.
+        case .lengthAboveTheLimit: [0x04, 0x00, 0x00, 0x02]
+        case .lengthOfFourBillionBytes: [0xFF, 0xFF, 0xFF, 0xFF]
+        case .requestBeforeHello: HostileClient.control(#"{"listSessions":{}}"#)
+        // The first four bytes, "GET ", read as a length of about 1.2 GB.
+        case .webRequestInsteadOfHello: Array("GET / HTTP/1.0\r\n\r\n".utf8)
+        case .oversizedLengthAfterAGoodRequest: HostileClient.control(#"{"listSessions":{}}"#) + [0x04, 0x00, 0x00, 0x02]
+        }
+    }
+}
+
 /// Control frames that the server cannot decode. Each one gets a failure that
 /// names the problem, and then the connection closes.
 enum UnreadableRequest: String, CaseIterable, Sendable, CustomTestStringConvertible {
@@ -285,7 +338,22 @@ private func expectUnreadableRequestFailure(_ frame: ReceivedFrame?, naming word
 }
 
 extension SessionProcessIntegration {
+    /// Clients that break the rules, against a running server. Each one ends
+    /// its own connection, or gets an answer on it, and nothing else changes:
+    /// the server runs, and a neighbor that is attached to a session keeps
+    /// getting its output.
     @Suite struct HostileClientTests {
+        @Test(arguments: Offense.allCases)
+        func aClientThatBreaksTheRulesLosesItsConnectionAndNobodyElseNotices(offense: Offense) async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                if offense.greetsFirst { try hostile.greet() }
+                hostile.send(offense.bytes)
+
+                #expect(hostile.waitForClose(), "the server did not end the connection after \(offense.rawValue)")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "\(offense.rawValue)")
+            }
+        }
 
         /// A request that could not be decoded ended the
         /// connection without a word.
@@ -310,6 +378,21 @@ extension SessionProcessIntegration {
                 expectUnreadableRequestFailure(hostile.receiveFrame(), naming: "hello.protocolVersion", "a hello that cannot be read")
                 #expect(hostile.waitForClose(), "the server did not end the connection")
                 try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "a hello that cannot be read")
+            }
+        }
+
+        @Test func anAttachedClientThatSendsARequestThatCannotBeReadIsAnsweredAndDetached() async throws {
+            try await withNeighbor { process, identifier, neighbor in
+                let hostile = try HostileClient(socketPath: process.socketPath)
+                try hostile.greet()
+                hostile.send(HostileClient.control(#"{"attach":{"identifier":"\#(identifier.uppercased())","size":{"columns":80,"rows":24}}}"#))
+                let attached = nextControlFrame(from: hostile)
+                #expect(attached?.messageName == "attached", "the attach was answered with \(String(describing: attached?.messageName))")
+                hostile.send(UnreadableRequest.rowsBelowZero.bytes)
+
+                expectUnreadableRequestFailure(nextControlFrame(from: hostile), naming: UnreadableRequest.rowsBelowZero.expectedWords, "a resize that cannot be read")
+                #expect(hostile.waitForClose(), "the server did not end the connection")
+                try await expectTheServerKeepsServing(process, identifier: identifier, neighbor: neighbor, "an attached client with a resize that cannot be read")
             }
         }
 
