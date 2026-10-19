@@ -34,6 +34,28 @@ struct AttachCommand {
     private static let detached = TerminalWriter.Ending(exitCode: 0, message: "detached")
 
 
+    // MARK: - Attaching
+
+    private func receiveSnapshot(from client: SessionClient) throws -> TerminalSnapshot {
+        for _ in 0..<2 {
+            do {
+                switch try client.connection.receive(ServerMessage.self) {
+                case .attached:
+                    continue
+                case .snapshot(let bytes):
+                    return TerminalSnapshot(bytes: Array(bytes))
+                case .failure(let failure):
+                    throw CommandLineToolError.failure(failure.message)
+                default:
+                    throw CommandLineToolError.failure("The session process answered the attach request in an unexpected way.")
+                }
+            } catch let error as SessionProtocolError {
+                throw CommandLineToolError.failure("\(error)")
+            }
+        }
+        throw CommandLineToolError.failure("The session process sent no snapshot.")
+    }
+
     /// The screen of the session, kept in this process. It draws the
     /// picture, at the start and after a suspension. Then it follows the
     /// bytes that reached the terminal, and no others, so the end of the
@@ -173,4 +195,66 @@ struct AttachCommand {
         var titleEnd: Int?
     }
 
+    // MARK: - Relaying
+
+    private static func writeClosing(_ screen: LocalScreen, with writer: TerminalWriter, restoring mode: RawTerminalMode) {
+        let closing = screen.closingSequences()
+        screen.closingReached(writer.writeClosing(closing.bytes, restoring: mode), of: closing)
+    }
+
+    /// Writes the picture and the output until a request ends attaching, and
+    /// returns how it ended.
+    private func relay(
+        writer: TerminalWriter,
+        screen: LocalScreen,
+        mode: RawTerminalMode,
+        keys: KeySender,
+        resizes: DispatchQueue,
+        connection: MessageConnection
+    ) -> TerminalWriter.Ending {
+        // The picture goes through the writer too, so a signal can end the
+        // attach while the picture waits for the terminal.
+        var pictureToDraw: [UInt8]? = screen.firstPicture
+        var output: [UInt8] = []
+        var isSuspended = false
+        while true {
+            let hasWork = !isSuspended && (pictureToDraw != nil || !output.isEmpty)
+            if let request = writer.nextRequest(isSuspended: isSuspended, waiting: !hasWork) {
+                switch request {
+                case .end(let ending):
+                    return ending
+                case .write(let bytes):
+                    output += bytes
+                }
+                continue
+            }
+            let result: TerminalWriter.WriteResult
+            if let picture = pictureToDraw {
+                result = writer.write(picture)
+                screen.pictureReached(result.writtenCount ?? picture.count, of: picture)
+                // An interrupted picture is drawn again whole after a suspension.
+                if result == .written { pictureToDraw = nil }
+            } else {
+                result = writer.write(output)
+                let written = result.writtenCount ?? output.count
+                screen.follow(output[..<written])
+                output.removeFirst(written)
+            }
+            if case .failed(_, let reason) = result {
+                return TerminalWriter.Ending(exitCode: 1, message: "writing to the terminal failed: \(reason)")
+            }
+        }
+    }
+
+    /// The exit code for how the program ended: its status, or 128 plus the
+    /// signal, as a shell reports it. A process exit code holds 0 to 255, and
+    /// the kernel would keep only the low byte, so 300 would become 44. The
+    /// session process is another program, so its numbers are clamped.
+    static func exitCode(for exit: SessionExit) -> Int32 {
+        let code: Int64 = switch exit {
+        case .exited(let status): Int64(status)
+        case .signaled(let signal): 128 + Int64(signal)
+        }
+        return Int32(Swift.min(Swift.max(code, 0), 255))
+    }
 }
