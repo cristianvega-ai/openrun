@@ -179,6 +179,66 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// The program turns on the in-band size reports of mode 2048 and
+        /// reads the report that comes at once. After the go file, it prints
+        /// the reports that came later, with ESC as E.
+        private static func sizeReportScript(goFolder: URL) -> String {
+            #"""
+            stty raw -echo opost min 0 time 10
+            printf '\033[?2048h'
+            dd bs=1 count=20 >/dev/null 2>&1
+            printf 'READY\n'
+            while [ ! -e '\#(goFolder.path)'/go ]; do sleep 0.1; done
+            stty time 20
+            printf 'reports=%s\n' "$(dd bs=1 count=200 2>/dev/null | tr '\033' E)"
+            printf 'DONE\n'
+            sleep 60
+            """#
+        }
+
+        /// Attaches over the protocol and waits for `attached`.
+        private static func attach(to session: UUID, of process: RunningSessionProcess, size: SessionSize, relaysRawOutput: Bool?) throws -> MessageConnection {
+            let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+            try connection.greetSessionProcess()
+            try connection.send(ClientMessage.attach(identifier: session, size: size, relaysRawOutput: relaysRawOutput))
+            guard case .attached = try connection.receive(ServerMessage.self) else {
+                throw HarnessError.commandFailed(description: "The attach was not answered with attached.")
+            }
+            return connection
+        }
+
+        /// Sends a resize and returns once the session has handled it. The
+        /// answer to the list request behind it comes only after that.
+        private static func resize(_ connection: MessageConnection, to size: SessionSize) throws {
+            try connection.send(ClientMessage.resize(size))
+            try connection.send(ClientMessage.listSessions)
+            while let message = try connection.receive(ServerMessage.self) {
+                if case .sessionList = message { return }
+            }
+        }
+
+        /// A relaying client kept the replies
+        /// closed, so a size change by another client sent no report of mode
+        /// 2048. The relaying client's own resize is for its terminal to report.
+        @Test func eachSizeChangeIsReportedOnceWhileARelayingClientIsAttached() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.sizeReportScript(goFolder: process.directory)])
+                #expect(await process.waitForScreen(of: identifier, containing: "READY"))
+                let session = try #require(UUID(uuidString: identifier))
+                let relaying = try Self.attach(to: session, of: process, size: SessionSize(columns: 80, rows: 24), relaysRawOutput: true)
+                defer { relaying.shutdown() }
+                let other = try Self.attach(to: session, of: process, size: SessionSize(columns: 100, rows: 30), relaysRawOutput: nil)
+                defer { other.shutdown() }
+                try Self.resize(other, to: SessionSize(columns: 120, rows: 40))
+                try Self.resize(relaying, to: SessionSize(columns: 90, rows: 25))
+
+                FileManager.default.createFile(atPath: process.directory.appendingPathComponent("go").path, contents: Data())
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE"))
+                let screen = try process.screenText(of: identifier)
+                #expect(screen.contains("reports=E[48;30;100;480;800tE[48;40;120;640;960t\n"), "screen: \(screen)")
+            }
+        }
+
         @Test func aCursorPositionQueryReportsTheCursor() async throws {
             try await RunningSessionProcess.run { process in
                 let script = "stty raw -echo opost; printf 'abc\\n\\033[6n'; dd bs=1 count=6 2>/dev/null | od -An -c; echo DONE; sleep 60"
