@@ -288,6 +288,48 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// Every control reply counted 256 bytes toward the
+        /// 8 MiB of output that may wait for a client, whatever its size. A
+        /// client that asked for large lists and read nothing was ended only
+        /// by the 10-second write stall, with far more than 8 MiB queued.
+        @Test func aClientThatAsksForLargeListsAndReadsNothingIsEndedAtTheOutputLimit() async throws {
+            try await RunningSessionProcess.run { process in
+                // Four sessions whose commands hold 256 KiB each make a list of
+                // more than 1 MiB.
+                let creator = try greetedConnection(to: process.socketPath)
+                let argument = String(repeating: "a", count: 256 * 1024)
+                for _ in 0..<4 {
+                    try creator.connection.send(ClientMessage.createSession(
+                        folder: process.directory.path,
+                        command: ["/bin/sh", "-c", "exec sleep 600", argument],
+                        size: SessionSize(columns: 80, rows: 24),
+                        environment: [:]
+                    ))
+                    guard case .sessionCreated = try receiveMessage(creator.connection, within: 30) else {
+                        Issue.record("A session with a long command was not created.")
+                        return
+                    }
+                }
+                creator.connection.shutdown()
+                let summaries = try #require(try listedSummaries(process))
+                let listSize = try ServerMessage.sessionList(summaries).frame().encoded().count
+                #expect(listSize > 1024 * 1024)
+
+                let client = try greetedConnection(to: process.socketPath)
+                defer { client.connection.shutdown() }
+                // 64 requests of 25 bytes ask for more than 64 MiB.
+                for _ in 0..<64 {
+                    try client.connection.send(ClientMessage.listSessions)
+                }
+                let start = ContinuousClock.now
+                let ended = await eventually(timeout: .seconds(5)) { isClosedBySessionProcess(client.descriptor) }
+                print("large-lists: a list of \(listSize) bytes; the client was ended: \(ended) after \(ContinuousClock.now - start)")
+                #expect(ended, "a client with \(64 * listSize) bytes of lists waiting was still open after 5 seconds")
+                #expect(process.isRunning)
+                #expect(try process.runCommand(["list"]).status == 0)
+            }
+        }
+
         /// The listener could spin when the process runs out of
         /// descriptors. On macOS a failed accept drops the waiting connection
         /// instead, so the old listener did not spin: it dropped every waiting

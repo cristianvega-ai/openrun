@@ -537,5 +537,58 @@ extension SessionProcessIntegration {
                 #expect(try showsWhatReadShows())
             }
         }
+
+        /// An answer to readScreen counted toward the limit for output
+        /// that waits, so a large answer ended the connection.
+        @Test func aScreenAnswerIsNotCountedAgainstTheLimitForOutputThatWaits() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                // About 1.9 MB of text in the scrollback, then 7 MiB of output
+                // that the client does not read.
+                let script = "awk 'BEGIN { for (number = 1; number <= 12000; number++) printf \"row-%05d-%0180d\\n\", number, 0 }'; echo ready; "
+                    + "while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; dd if=/dev/zero bs=1048576 count=7 2>/dev/null; echo zeros-done; sleep 600"
+                let size = SessionSize(columns: 200, rows: 50)
+                let identifier = try createSession(in: process, command: ["/bin/sh", "-c", script], size: size)
+                let identifierText = SessionSummary.text(for: identifier)
+                #expect(await process.waitForScreen(of: identifierText, containing: "ready", timeout: .seconds(60)))
+
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+                try connection.send(ClientMessage.attach(identifier: identifier, size: size))
+                guard case .attached = try receiveMessage(connection, within: 30),
+                      case .snapshot = try receiveMessage(connection, within: 30) else {
+                    Issue.record("The attach was not answered.")
+                    return
+                }
+
+                // The client stops reading. 7 MiB of output wait for it, below the limit.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await process.waitForScreen(of: identifierText, containing: "zeros-done", timeout: .seconds(30)))
+                try connection.send(ClientMessage.readScreen(identifier: identifier, includeScrollback: true))
+                try await Task.sleep(for: .milliseconds(300))
+
+                let (outputByteCount, screen, problem) = await Task.detached { () -> (Int, String?, String?) in
+                    var outputByteCount = 0
+                    do {
+                        while let message = try receiveMessage(connection, within: 30) {
+                            switch message {
+                            case .output(let bytes): outputByteCount += bytes.count
+                            case .screen(let text): return (outputByteCount, text, nil)
+                            default: continue
+                            }
+                        }
+                        return (outputByteCount, nil, "The connection closed before the screen arrived.")
+                    } catch {
+                        return (outputByteCount, nil, "\(error)")
+                    }
+                }.value
+                print("screen-answer: \(outputByteCount) output bytes, then a screen of \(screen?.utf8.count ?? 0) bytes")
+                #expect(problem == nil, "\(problem ?? "")")
+                #expect(outputByteCount >= 7 * 1024 * 1024)
+                #expect((screen?.utf8.count ?? 0) > 1024 * 1024)
+                #expect(screen?.contains("row-12000-") == true)
+            }
+        }
     }
 }
