@@ -88,6 +88,13 @@ actor SessionServer {
                         message: "The program of session \(SessionSummary.text(for: identifier)) ended before it took the text."
                     )))
                 }
+            case .killSession(let identifier):
+                guard let session = await registry.session(for: identifier) else {
+                    client.send(Self.unknownSession(identifier))
+                    break
+                }
+                await session.terminate()
+                client.send(.acknowledged)
             case .detach:
                 break messages
             default:

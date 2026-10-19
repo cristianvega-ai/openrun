@@ -13,6 +13,31 @@ private func realPath(_ file: URL) -> String {
 
 extension SessionProcessIntegration {
     @Suite struct SessionLifecycleTests {
+        @Test func newListSendReadAndKill() async throws {
+            try await RunningSessionProcess.run { process in
+                let folder = try RunningSessionProcess.makeDirectory()
+                defer { try? FileManager.default.removeItem(at: folder) }
+
+                #expect(try process.listedIdentifiers().isEmpty)
+                let identifier = try process.createSession(program: ["/bin/sh"], folder: folder)
+                #expect(UUID(uuidString: identifier) != nil)
+
+                let listing = try process.runCommand(["list"]).outputLines
+                #expect(listing == ["\(identifier)\t\(folder.path)\t/bin/sh"])
+
+                let send = try process.runCommand(["send", identifier, "--enter", "echo typed-$((6*7))"])
+                #expect(send.status == 0)
+                #expect(await process.waitForScreen(of: identifier, containing: "typed-42"))
+
+                let kill = try process.runCommand(["kill", identifier])
+                #expect(kill.status == 0)
+                #expect(try process.listedIdentifiers().isEmpty)
+                let afterKill = try process.runCommand(["read", identifier])
+                #expect(afterKill.status == 1)
+                #expect(afterKill.standardError.contains("No session"))
+            }
+        }
+
         /// The folder of a session is text that a client chose. A terminal
         /// that shows the log of the session process must not obey it.
         @Test func theLogEscapesTheFolderThatAClientChose() async throws {
@@ -98,6 +123,14 @@ extension SessionProcessIntegration {
                 let missingFolder = try process.runCommand(["new", "--folder", "/no/such/folder", "--", "/bin/sh"])
                 #expect(missingFolder.status == 1)
                 #expect(try process.listedIdentifiers().isEmpty)
+            }
+        }
+
+        @Test func aProgramThatEndsLeavesTheList() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "echo bye; exit 5"])
+                let gone = await eventually { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty }
+                #expect(gone)
             }
         }
 

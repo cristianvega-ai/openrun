@@ -11,6 +11,8 @@ actor Session {
     private(set) var summary: SessionSummary
     private let pseudoTerminal: PseudoTerminal
     private let terminal: Terminal
+    private var isEnding = false
+    private var programExit: SessionExit?
     private var runTask: Task<Void, Never>?
     private let onFinish: @Sendable (UUID) async -> Void
 
@@ -53,11 +55,26 @@ actor Session {
         return String(decoding: bytes, as: UTF8.self)
     }
 
+    /// Ends the program and waits until the session has told its clients and
+    /// left the list. Returns how the program ended.
+    @discardableResult
+    func terminate() async -> SessionExit {
+        isEnding = true
+        await pseudoTerminal.terminate()
+        await runTask?.value
+        if let programExit { return programExit }
+        return SessionExit(await pseudoTerminal.waitForExit())
+    }
+
     // MARK: - Private
 
     private func run() async {
         for await bytes in pseudoTerminal.output {
-            terminal.write(bytes)
+            // Output that arrives while the session ends needs no parsing. The
+            // screen is about to disappear, and parsing could delay a shutdown.
+            if !isEnding {
+                terminal.write(bytes)
+            }
             pseudoTerminal.markOutputConsumed(bytes.count)
             // A program that asks questions and never reads the answers waits
             // here, in its own output, instead of growing the input backlog.
@@ -66,6 +83,8 @@ actor Session {
             // serve nobody else. Yielding lets attach, read and kill run.
             await Task.yield()
         }
+        let exit = SessionExit(await pseudoTerminal.waitForExit())
+        programExit = exit
         await onFinish(summary.identifier)
     }
 }
@@ -73,5 +92,14 @@ actor Session {
 extension TerminalSize {
     fileprivate init(_ size: SessionSize) {
         self.init(columns: size.columns, rows: size.rows)
+    }
+}
+
+extension SessionExit {
+    fileprivate init(_ exit: ProgramExit) {
+        switch exit {
+        case .exited(let status): self = .exited(status: status)
+        case .signaled(let signal): self = .signaled(signal: signal)
+        }
     }
 }
