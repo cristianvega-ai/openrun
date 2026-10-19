@@ -2,6 +2,12 @@ import Dispatch
 import Foundation
 import SessionProtocol
 import Synchronization
+
+/// One client of the session process.
+///
+/// Reading and writing each have a thread of their own, so a client that
+/// stops reading blocks only its own writes and never a session. The limits
+/// and deadlines in `ConnectionLimits` bound what each client costs.
 final class ClientConnection: Sendable {
     /// A message from the client, and the room it takes in the read-ahead.
     struct Received: Sendable {
@@ -76,10 +82,22 @@ final class ClientConnection: Sendable {
                     }
                     // The client closed the connection between two frames.
                     guard let frame else { return }
-                    let message = try ClientMessage(frame: frame)
+                    let message: ClientMessage
+                    do {
+                        message = try ClientMessage(frame: frame)
+                    } catch where frame.kind == .control {
+                        // A request that cannot be read gets an answer that
+                        // names the problem, then the connection closes.
+                        self?.refuse(because: error)
+                        return
+                    }
                     continuation.yield(Received(message: message, byteCount: byteCount, room: room))
                 }
             } catch {
+                // A client that breaks the protocol, misses a deadline, or
+                // leaves while it waits for room ends its own connection. A
+                // connection that is closing stops reading here too, and its
+                // queued messages, such as the exit status, still go out.
                 self?.endIfOpen()
             }
         }
@@ -156,6 +174,12 @@ final class ClientConnection: Sendable {
 
     // MARK: - Private
 
+    /// Answers a request that cannot be read with a failure that names the
+    /// problem, and closes the connection once the answer has gone out.
+    private func refuse(because error: any Error) {
+        enqueue(.failure(SessionFailure(reason: .invalidRequest, message: "\(error)")), countsTowardOutputLimit: false, whenWritten: nil)
+        closeAfterSending()
+    }
 
     private func enqueue(_ message: ServerMessage, countsTowardOutputLimit: Bool, whenWritten: (@Sendable () -> Void)?) {
         // The frame is made here, once, so a control message counts the bytes
