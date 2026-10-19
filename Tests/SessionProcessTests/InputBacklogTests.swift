@@ -224,6 +224,29 @@ private final class ClosedConnectionWatch: Sendable {
     var result: Ending? { ending.withLock { $0 } }
 }
 
+/// How a test fills a client's read-ahead with input that the program does
+/// not read: up to the limit of 1024 messages, or up to the limit of 1 MiB.
+enum ReadAheadFilling: String, CaseIterable, Sendable, CustomTestStringConvertible {
+    case messages
+    case bytes
+
+    var testDescription: String { rawValue }
+
+    /// Input frames that fill the read-ahead exactly while the program's
+    /// backlog is full. Waiting input goes in in order, so the first frame,
+    /// which is larger than the little room that the backlog has left, keeps
+    /// every later frame waiting too.
+    var frames: [ClientMessage] {
+        switch self {
+        case .messages:
+            [.input(Data(patternBytes(count: 64 * 1024)))] + Array(repeating: .input(Data([UInt8(ascii: "m")])), count: 1023)
+        case .bytes:
+            // With its length field and kind, the frame is exactly 1 MiB.
+            [.input(Data(patternBytes(count: 1024 * 1024 - 5)))]
+        }
+    }
+}
+
 /// The value of something that the system measures. A process always has
 /// memory, threads and descriptors, so a zero or a missing value means that
 /// the measurement failed, and a bound checked against it would prove nothing.
@@ -565,6 +588,73 @@ extension SessionProcessIntegration {
                 #expect(await process.waitForScreen(of: identifier, containing: "order=", timeout: .seconds(60)))
                 let screen = try process.screenText(of: identifier)
                 #expect(lines(of: screen).contains("order=acb"), "screen: \(screen)")
+            }
+        }
+
+        /// The limit of 1024 messages in the
+        /// read-ahead had no test, and the suite stayed green without it. One-byte frames
+        /// that wait for the program reach that limit long before 1 MiB.
+        @Test func aFloodOfTinyInputFramesMeetsTheMessageLimitOfTheReadAhead() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 600"])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier)
+                // This frame does not fit the room that the backlog has left, so
+                // every frame after it waits too.
+                try client.connection.send(ClientMessage.input(Data(patternBytes(count: 64 * 1024))))
+
+                let offered = 20_000
+                let flood = MessageFlood(client: client, message: .input(Data([UInt8(ascii: "t")])), byteCount: 1, count: offered)
+                defer { client.connection.shutdown() }
+                await flood.waitUntilStalled(timeout: .seconds(30))
+                let sent = flood.sentMessages.load(ordering: .sequentiallyConsistent)
+                print("tiny-input-flood: \(sent) of \(offered) one-byte frames went out before the sends stopped")
+
+                // 1023 frames fit behind the first one, and the socket holds a few
+                // hundred more. A test machine measured about 1280 in all. Without
+                // the message limit, all 20,000 go out, because they hold only
+                // 120,000 bytes.
+                #expect(sent >= 1023, "only \(sent) frames went out")
+                #expect(sent < 4096, "\(sent) of \(offered) one-byte frames went out")
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
+        /// A client whose read-ahead was full of input that its
+        /// program did not read could not detach. The detach behind the input
+        /// waited until the program read.
+        @Test(arguments: ReadAheadFilling.allCases)
+        func aClientWhoseReadAheadIsFullOfInputCanStillDetach(filling: ReadAheadFilling) async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let receivedFile = process.directory.appendingPathComponent("received")
+                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile)
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier)
+                for frame in filling.frames {
+                    try client.connection.send(frame)
+                }
+                try client.connection.send(ClientMessage.detach)
+                let closed = ClosedConnectionWatch(client: client)
+                let start = ContinuousClock.now
+                let ended = await eventually(timeout: .seconds(5)) { closed.result != nil }
+                print("full-read-ahead-detach (\(filling.rawValue)): ended \(ended) after \(ContinuousClock.now - start) with \(String(describing: closed.result))")
+                #expect(ended, "the session process did not handle the detach behind a read-ahead full of \(filling.rawValue)")
+                #expect(closed.result == .cleanClose, "the connection ended with \(String(describing: closed.result))")
+                client.connection.shutdown()
+                #expect(try process.listedIdentifiers() == [identifier])
+
+                // The input that waited when the client detached never reaches
+                // the program.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await process.waitForScreen(of: identifier, containing: "finished", timeout: .seconds(60)))
+                expectReceived(in: receivedFile, fillerThen: [], "after the detach behind a read-ahead full of \(filling.rawValue)")
             }
         }
 
