@@ -238,6 +238,83 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// A client may fall 8 MiB of output behind. These two cases bracket
+        /// the limit from both sides: a client that is 7 MiB behind keeps every
+        /// byte, and one that is 9 MiB behind is dropped. A limit of 1 MiB or
+        /// of 16 MiB fails one of them.
+        struct FloodCase: Sendable, CustomTestStringConvertible {
+            var byteCount: Int
+            var isDropped: Bool
+            var testDescription: String { "\(byteCount) bytes behind, dropped: \(isDropped)" }
+        }
+
+        @Test(arguments: [FloodCase(byteCount: 7 * 1024 * 1024, isDropped: false), FloodCase(byteCount: 9 * 1024 * 1024, isDropped: true)])
+        func aClientThatNeverReadsIsDroppedOnlyPastTheLimitAndDoesNotBlockTheSession(flood: FloodCase) async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let againFile = process.directory.appendingPathComponent("again")
+                // Zero bytes keep the terminal's own work small.
+                let script = "stty -echo; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.05; done; "
+                    + "dd if=/dev/zero bs=1048576 count=\(flood.byteCount / 1_048_576) 2>/dev/null; echo FLOOD-DONE; "
+                    + "while [ ! -e '\(againFile.path)' ]; do sleep 0.05; done; echo after-reattach; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                let stuck = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
+                defer { stuck.detach() }
+                // The stuck client now never calls receive.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+
+                // The session keeps working for others while the stuck client falls behind.
+                #expect(await process.waitForScreen(of: identifier, containing: "FLOOD-DONE", timeout: .seconds(120)))
+                #expect(try process.listedIdentifiers() == [identifier])
+
+                // Now the client reads what it got, and the bytes are counted.
+                var outputBytes = 0
+                var text = Data()
+                var sawExit = false
+                var closed = false
+                while !text.suffix(64).contains(Data("FLOOD-DONE".utf8)) {
+                    guard let message = try ProtocolClient.receive(on: stuck.connection, within: 60) else {
+                        closed = true
+                        break
+                    }
+                    switch message {
+                    case .output(let bytes):
+                        outputBytes += bytes.count
+                        text = Data((text + bytes).suffix(64))
+                    case .exited:
+                        sawExit = true
+                    default:
+                        break
+                    }
+                }
+                print("slow-client: \(flood.byteCount) bytes of output, \(outputBytes) bytes received, connection closed: \(closed)")
+                #expect(!sawExit)
+                if flood.isDropped {
+                    // The session dropped the client instead of keeping its
+                    // backlog, so the end of the flood never arrived and the
+                    // connection ended. Only what the socket held was delivered.
+                    #expect(closed, "the client was not dropped after \(outputBytes) bytes")
+                    #expect(outputBytes < flood.byteCount)
+                } else {
+                    // Every byte arrived: the zeros, a line end, and the words.
+                    #expect(!closed, "the client was dropped after \(outputBytes) bytes")
+                    #expect(outputBytes >= flood.byteCount)
+                    #expect(outputBytes < flood.byteCount + 4096)
+                }
+
+                // A client that was dropped, or kept, can attach again and gets
+                // a fresh snapshot and the output that follows it.
+                stuck.detach()
+                let again = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
+                defer { again.detach() }
+                #expect(try again.text(withScrollback: false).contains("FLOOD-DONE"))
+                FileManager.default.createFile(atPath: againFile.path, contents: Data())
+                try again.follow { $0.contains("after-reattach") }
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
         @Test func aClientThatAttachesWhileTheProgramIsOnTheAlternateScreenGetsTheAlternateScreen() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")

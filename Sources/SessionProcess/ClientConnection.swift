@@ -19,12 +19,14 @@ final class ClientConnection: Sendable {
     }
 
     private struct State {
+        var queuedOutputBytes = 0
         var phase = Phase.open
     }
 
     private enum Admission {
         case queued
         case refused
+        case overLimit
     }
 
     private let connection: MessageConnection
@@ -57,10 +59,15 @@ final class ClientConnection: Sendable {
     }
 
     /// Queues a message for the client. Never blocks.
+    ///
+    /// - Parameter countsTowardOutputLimit: Snapshots, screens and the exit
+    ///   status pass `false`. See `ConnectionLimits.queuedOutputByteLimit`.
     func send(_ message: ServerMessage, countsTowardOutputLimit: Bool = true) {
         enqueue(message, countsTowardOutputLimit: countsTowardOutputLimit, whenWritten: nil)
     }
 
+    /// Queues a reply that does not count toward the output limit, and
+    /// returns once it is written or the connection has ended.
     func sendAndWait(_ message: ServerMessage) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
             enqueue(message, countsTowardOutputLimit: false) { continuation.resume() }
@@ -92,6 +99,10 @@ final class ClientConnection: Sendable {
         let size = countsTowardOutputLimit ? Self.countedByteCount(of: frame) : 0
         let admission = state.withLock { state -> Admission in
             guard state.phase == .open else { return .refused }
+            if size > 0, state.queuedOutputBytes > 0, state.queuedOutputBytes + size > ConnectionLimits.queuedOutputByteLimit {
+                return .overLimit
+            }
+            state.queuedOutputBytes += size
             // Queued while the lock is held, so the write runs before the last
             // work that `end` queues once it has changed the phase.
             writeQueue.async { [self] in write(frame, countedAs: size, whenWritten: whenWritten) }
@@ -99,6 +110,9 @@ final class ClientConnection: Sendable {
         }
         switch admission {
         case .refused:
+            whenWritten?()
+        case .overLimit:
+            end()
             whenWritten?()
         case .queued:
             break
@@ -113,6 +127,7 @@ final class ClientConnection: Sendable {
                 end()
             }
         }
+        state.withLock { $0.queuedOutputBytes -= size }
         whenWritten?()
     }
 
