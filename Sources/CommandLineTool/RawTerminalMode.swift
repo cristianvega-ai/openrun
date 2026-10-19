@@ -2,6 +2,13 @@ import Darwin
 import SessionProtocol
 import Synchronization
 
+/// Puts a terminal in raw mode: no echo, no line editing, no signals from
+/// keys. Every key reaches the program in the session unchanged, and the
+/// session's own terminal does the echo and the line editing.
+///
+/// Neither switch discards the keys that the user typed ahead. The next
+/// reader of the terminal gets them: the session when raw mode starts, the
+/// shell when it ends.
 final class RawTerminalMode: Sendable {
     private let descriptor: Int32
     /// The mode to put back, while raw mode is on.
