@@ -333,6 +333,89 @@ extension SessionProcessIntegration {
             #expect(await process.waitForExit(timeout: 10) == 0)
         }
 
+        /// Each client that floods input and leaves used to leave its
+        /// waiting input, and the thread that read it, behind for good.
+        @Test func clientsThatFloodInputAndLeaveHoldNothingAndTheirInputNeverArrives() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                // After the go file, the program reads the filler, then counts
+                // what else arrives until no byte comes for a second.
+                let script = "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; "
+                    + "head -c \(fillerByteCount) > /dev/null; stty min 0 time 10; "
+                    + "printf 'extra=%s\\n' \"$(dd bs=65536 2>/dev/null | wc -c | tr -d ' ')\"; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+
+                var footprintAtStart = 0
+                var threadsAtStart = 0
+                var descriptorsAtStart = 0
+                var sentPerCycle: [Int] = []
+                for cycle in 1...30 {
+                    let client = try RawClient(socketPath: process.socketPath)
+                    try client.attach(to: identifier)
+                    let flood = MessageFlood(client: client, frameSize: 64 * 1024, total: 8 * 1024 * 1024)
+                    await flood.waitUntilStalled(timeout: .seconds(10), steadyFor: .milliseconds(150))
+                    sentPerCycle.append(flood.sentBytes.load(ordering: .sequentiallyConsistent))
+                    client.vanish()
+                    #expect(await eventually(timeout: .seconds(5)) { flood.isFinished.load(ordering: .sequentiallyConsistent) })
+                    if cycle == 3 {
+                        try await Task.sleep(for: .milliseconds(500))
+                        footprintAtStart = try measured(process.memoryFootprint, "the memory footprint")
+                        threadsAtStart = try measured(process.threadCount, "the thread count")
+                        descriptorsAtStart = try measured(process.descriptorCount, "the descriptor count")
+                    }
+                }
+                try await Task.sleep(for: .milliseconds(500))
+                let footprintAtEnd = try measured(process.memoryFootprint, "the memory footprint")
+                let threadsAtEnd = try measured(process.threadCount, "the thread count")
+                let descriptorsAtEnd = try measured(process.descriptorCount, "the descriptor count")
+                print("flood-and-leave: sent per cycle \(sentPerCycle); footprint \(footprintAtStart) then \(footprintAtEnd); threads \(threadsAtStart) then \(threadsAtEnd); descriptors \(descriptorsAtStart) then \(descriptorsAtEnd)")
+
+                // Each client met backpressure: the read-ahead filled and the
+                // sends stopped long before the 8 MiB that the flood offered.
+                #expect(sentPerCycle.allSatisfy { $0 >= 512 * 1024 && $0 < 4 * 1024 * 1024 }, "sent per cycle: \(sentPerCycle)")
+                // 27 more clients came and left. They hold no memory, threads or descriptors.
+                #expect(footprintAtEnd - footprintAtStart < 12 * 1024 * 1024, "footprint grew from \(footprintAtStart) to \(footprintAtEnd) bytes")
+                #expect(threadsAtEnd <= threadsAtStart + 4, "threads went from \(threadsAtStart) to \(threadsAtEnd)")
+                #expect(descriptorsAtEnd <= descriptorsAtStart + 2, "descriptors went from \(descriptorsAtStart) to \(descriptorsAtEnd)")
+
+                // The program gets the filler, which was acknowledged, and none of
+                // the input of the clients that left.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await process.waitForScreen(of: identifier, containing: "extra=", timeout: .seconds(60)))
+                let screen = try process.screenText(of: identifier)
+                #expect(lines(of: screen).contains("extra=0"), "screen: \(screen)")
+            }
+        }
+
+        /// A client whose read-ahead is full when its program ends still gets
+        /// the exit status: the reading thread stops, and the queued messages
+        /// go out before the connection closes.
+        @Test func aClientWithAFullReadAheadStillGetsTheExitStatus() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let script = "stty raw -echo; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; exit 3"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier)
+                let flood = MessageFlood(client: client, frameSize: 64 * 1024, total: 16 * 1024 * 1024)
+                await flood.waitUntilStalled(timeout: .seconds(10), steadyFor: .milliseconds(300))
+                let sent = flood.sentBytes.load(ordering: .sequentiallyConsistent)
+                #expect(sent >= 512 * 1024 && sent < 4 * 1024 * 1024, "sent \(sent) bytes")
+
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                var exit: SessionExit?
+                while let message = try? client.receive(within: 30) {
+                    if case .exited(let ended) = message { exit = ended }
+                }
+                #expect(exit == .exited(status: 3))
+            }
+        }
+
         /// A reading thread that waits for room must notice
         /// a client that left within a second, whenever in its wait the client
         /// leaves. Here the client leaves 300 milliseconds into the wait, so a
