@@ -438,6 +438,36 @@ extension CommandLineToolIntegration {
             }
         }
 
+        @Test func aSnapshotThatCannotBeRestoredEndsAttachWithAnErrorAndLeavesTheTerminalAlone() async throws {
+            let standIn = try StandInSessionProcess(snapshot: Array("not a snapshot".utf8), afterSnapshot: [])
+            defer { standIn.stop() }
+            let script = restoreScript(identifier: StandInSessionProcess.identifierText, socketPath: standIn.socketPath)
+            let terminal = try AttachedTerminal(shellScript: script, folder: standIn.directory)
+            defer { terminal.closeNow() }
+            #expect(await terminal.waitForScreen(containing: "mode-"))
+            #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+            #expect(terminal.screenText.contains("status=1"), "\(terminal.screenText)")
+            #expect(terminal.screenText.contains("snapshot"), "\(terminal.screenText)")
+        }
+
+        /// A session process that is not ours can claim any exit. The tool must
+        /// not trap on `128 + signal`, and a status above 255 must not wrap
+        /// around to a small one, such as 300 to 44.
+        @Test(arguments: [SessionExit.signaled(signal: Int32.max), .exited(status: 300), .exited(status: Int32.max)])
+        func exitStatusesFromTheSessionProcessAreClampedTo255(exit: SessionExit) async throws {
+            let standIn = try StandInSessionProcess(
+                snapshot: try TerminalControl.snapshotBytes(showing: "stand-in-screen"),
+                afterSnapshot: [.exited(exit)]
+            )
+            defer { standIn.stop() }
+            let script = restoreScript(identifier: StandInSessionProcess.identifierText, socketPath: standIn.socketPath)
+            let terminal = try AttachedTerminal(shellScript: script, folder: standIn.directory)
+            defer { terminal.closeNow() }
+            #expect(await terminal.waitForScreen(containing: "mode-"))
+            #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+            #expect(terminal.screenText.contains("status=255"), "\(terminal.screenText)")
+        }
+
         /// Keys typed before attaching and while leaving stay for the program
         /// that reads the terminal next.
         @Test func rawModeKeepsTheKeysTypedAheadWhenItStartsAndWhenItEnds() throws {
@@ -621,6 +651,70 @@ enum EndingRequest: Sendable, CustomTestStringConvertible {
         case .detachKey: "Control-]"
         case .terminateSignal: "SIGTERM"
         }
+    }
+}
+
+/// A stand-in for `openrun-session` on its own socket. It answers the hello,
+/// the list and the attach of one `openrun attach`, and then sends what the
+/// test chose, such as a snapshot that cannot be restored or an exit that no
+/// real session process sends.
+private final class StandInSessionProcess: @unchecked Sendable {
+    static let identifier = UUID(uuidString: "3F2A9C1E-0000-4000-8000-000000000001")!
+    static var identifierText: String { SessionSummary.text(for: identifier) }
+
+    let directory: URL
+    let socketPath: String
+    private let listener: Int32
+
+    init(snapshot: [UInt8], afterSnapshot: [ServerMessage], closesAfterSnapshot: Bool = false) throws {
+        directory = try RunningSessionProcess.makeDirectory()
+        socketPath = directory.appendingPathComponent("socket").path
+        listener = socket(AF_UNIX, SOCK_STREAM, 0)
+        var address = sockaddr_un()
+        address.sun_family = sa_family_t(AF_UNIX)
+        withUnsafeMutableBytes(of: &address.sun_path) { $0.copyBytes(from: socketPath.utf8.prefix($0.count - 1)) }
+        let bound = withUnsafePointer(to: &address) { pointer in
+            pointer.withMemoryRebound(to: sockaddr.self, capacity: 1) { bind(listener, $0, socklen_t(MemoryLayout<sockaddr_un>.size)) }
+        }
+        guard bound == 0, listen(listener, 4) == 0 else {
+            close(listener)
+            throw HarnessError.commandFailed(description: "The stand-in session process cannot listen on \(socketPath).")
+        }
+        let summary = SessionSummary(
+            identifier: Self.identifier,
+            folder: "/",
+            command: ["/bin/sh"],
+            size: SessionSize(columns: 80, rows: 24),
+            createdAt: Date(timeIntervalSince1970: 0)
+        )
+        let listener = listener
+        let thread = Thread {
+            let descriptor = accept(listener, nil, nil)
+            guard descriptor >= 0 else { return }
+            let connection = MessageConnection(descriptor: descriptor)
+            while let message = try? connection.receive(ClientMessage.self) {
+                switch message {
+                case .hello:
+                    try? connection.send(ServerMessage.hello(protocolVersion: MessageFrame.protocolVersion))
+                case .listSessions:
+                    try? connection.send(ServerMessage.sessionList([summary]))
+                case .attach:
+                    try? connection.send(ServerMessage.attached(summary))
+                    try? connection.send(ServerMessage.snapshot(Data(snapshot)))
+                    for later in afterSnapshot { try? connection.send(later) }
+                    if closesAfterSnapshot { return }
+                default:
+                    continue
+                }
+            }
+        }
+        thread.start()
+    }
+
+    func stop() {
+        Darwin.shutdown(listener, SHUT_RDWR)
+        close(listener)
+        try? FileManager.default.removeItem(at: directory)
     }
 }
 
