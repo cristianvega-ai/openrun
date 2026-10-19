@@ -178,6 +178,16 @@ extension SessionProcessIntegration {
                 #expect(try process.screenText(of: identifier).contains("extra1=2"))
             }
         }
+
+        @Test func aCursorPositionQueryReportsTheCursor() async throws {
+            try await RunningSessionProcess.run { process in
+                let script = "stty raw -echo opost; printf 'abc\\n\\033[6n'; dd bs=1 count=6 2>/dev/null | od -An -c; echo DONE; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE"))
+                // Row 2, column 1 after "abc" and a newline: ESC [ 2 ; 1 R.
+                #expect(try process.screenText(of: identifier).contains("033   [   2   ;   1   R"))
+            }
+        }
     }
 }
 

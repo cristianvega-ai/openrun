@@ -183,6 +183,36 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// The session installed its reply handler after
+        /// the program had started. When that failed, the session was thrown
+        /// away and its program ran on without one.
+        @Test func aSessionThatCannotBeSetUpLeavesNoProgramRunning() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let marker = folder.appendingPathComponent("program-started")
+            let launch = ProgramLaunch(
+                executablePath: "/bin/sh",
+                arguments: ["-c", "echo $$ > '\(marker.path)'; exec sleep 300"],
+                folder: folder.path,
+                environment: ["PATH": "/usr/bin:/bin"],
+                size: PseudoTerminalSize(columns: 80, rows: 24)
+            )
+            let size = SessionSize(columns: 80, rows: 24)
+            let summary = SessionSummary(identifier: UUID(), folder: folder.path, command: ["/bin/sh"], size: size, createdAt: Date())
+            struct InstallationFailure: Error {}
+            #expect(throws: InstallationFailure.self) {
+                _ = try Session(summary: summary, launch: launch, onFinish: { _ in }) { _, _ in throw InstallationFailure() }
+            }
+
+            // A program that started has this long to write its marker.
+            try await Task.sleep(for: .seconds(1))
+            let text = try? String(contentsOf: marker, encoding: .utf8)
+            if let started = text.flatMap({ pid_t($0.trimmingCharacters(in: .whitespacesAndNewlines)) }), getsid(started) == started {
+                kill(started, SIGKILL)
+                Issue.record("The program \(started) runs without a session.")
+            }
+        }
+
         /// A kill sent on the attached connection itself got no
         /// answer, because the end of the session closed the connection first.
         @Test func killSessionOnTheAttachedConnectionIsAnswered() async throws {
