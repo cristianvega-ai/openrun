@@ -99,7 +99,14 @@ actor Session {
         let previousSize = summary.size
         defer { if summary.size != previousSize { announceSize(changedBy: client) } }
         try apply(size)
-        let snapshot = try TerminalSnapshot(capturing: terminal)
+        guard let snapshot = try TerminalSnapshot(capturing: terminal, byteLimit: MessageFrame.maximumPayloadLength) else {
+            // The client does not attach, so its size does not stay either.
+            _ = try? apply(previousSize)
+            return .refused(SessionFailure(
+                reason: .invalidRequest,
+                message: "The screen of the session does not fit in one frame of \(MessageFrame.maximumPayloadLength / 1_048_576) MiB, even without scrollback. Attach with fewer columns or rows."
+            ))
+        }
         client.send(.attached(summary))
         client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
         clients[ObjectIdentifier(client)] = client

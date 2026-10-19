@@ -121,6 +121,18 @@ private func receiveMessage(_ connection: MessageConnection, within limit: TimeI
     return try connection.receive(ServerMessage.self)
 }
 
+/// Starts a session with a size of its own, which `openrun new` cannot give.
+private func createSession(in process: RunningSessionProcess, command: [String], size: SessionSize) throws -> UUID {
+    let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+    defer { connection.shutdown() }
+    try connection.greetSessionProcess()
+    try connection.send(ClientMessage.createSession(folder: process.directory.path, command: command, size: size, environment: ["PATH": "/usr/bin:/bin"]))
+    guard case .sessionCreated(let summary) = try receiveMessage(connection, within: 30) else {
+        throw ProtocolClientError.unexpected("The session was not created.")
+    }
+    return summary.identifier
+}
+
 
 extension SessionProcessIntegration {
     @Suite struct ReattachTests {
@@ -293,6 +305,82 @@ extension SessionProcessIntegration {
                 #expect(afterwards.contains("row-\(String(format: "%05d", printed))"))
                 #expect(!afterwards.contains("row-00001"))
                 #expect((9_000...11_000).contains(second.terminal.scrollbackLineCount))
+            }
+        }
+
+        /// Rows of 500 wide characters in many colors fill 1000 columns. A
+        /// snapshot of the whole scrollback is larger than one frame.
+        private static let wideColorfulProgram = #"""
+            binmode(STDOUT, ':utf8');
+            for my $line (1 .. 10200) {
+                print map({ sprintf("\e[38;5;%dm", ($_ * 5 + $line) % 256) . (chr(0x4E00 + ($line + $_) % 9000) x 10) } 0 .. 49), "\e[0m\n";
+            }
+            $| = 1;
+            print "wide-done\n";
+            select(undef, undef, undef, 0.05) until -e $ARGV[0];
+            print "after-attach\n";
+            sleep 600;
+            """#
+
+        /// A snapshot larger than one frame ended the attach
+        /// after `attached`, with no snapshot and no failure.
+        @Test func aSnapshotLargerThanOneFrameLosesOldScrollbackAndKeepsTheScreen() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let program = process.directory.appendingPathComponent("wide-colorful")
+                try Self.wideColorfulProgram.write(to: program, atomically: true, encoding: .utf8)
+                let size = SessionSize(columns: 1000, rows: 50)
+                let identifier = try createSession(in: process, command: ["/usr/bin/perl", program.path, goFile.path], size: size)
+                let identifierText = SessionSummary.text(for: identifier)
+                #expect(await process.waitForScreen(of: identifierText, containing: "wide-done", timeout: .seconds(120)))
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+
+                // 10,000 rows pull the scrollback onto the screen, and the screen alone does not fit.
+                try connection.send(ClientMessage.attach(identifier: identifier, size: SessionSize(columns: 1000, rows: 10_000)))
+                let refusal = try receiveMessage(connection, within: 60)
+                guard case .failure(let failure) = refusal, failure.message.contains("does not fit in one frame") else {
+                    Issue.record("The attach at 10,000 rows was answered with \(String(describing: refusal)).")
+                    return
+                }
+                // The client is not attached, and the session keeps its size.
+                try connection.send(ClientMessage.listSessions)
+                guard case .sessionList(let summaries) = try receiveMessage(connection, within: 30) else {
+                    Issue.record("The list did not follow the refusal.")
+                    return
+                }
+                #expect(summaries.first?.size == size)
+
+                try connection.send(ClientMessage.attach(identifier: identifier, size: size))
+                guard case .attached = try receiveMessage(connection, within: 60),
+                      case .snapshot(let bytes) = try receiveMessage(connection, within: 60) else {
+                    Issue.record("The attach was not answered with attached and a snapshot.")
+                    return
+                }
+                #expect(bytes.count <= MessageFrame.maximumPayloadLength)
+                #expect(bytes.count > MessageFrame.maximumPayloadLength - 4 * 1_048_576, "the snapshot has \(bytes.count) bytes")
+                let terminal = try TerminalSnapshot(bytes: Array(bytes)).restoreTerminal(scrollbackLimit: 10_000)
+                func text(_ extent: ScreenExtent) throws -> [UInt8] { try terminal.formatted(.plainText, extent: extent) }
+                func showsWhatReadShows() throws -> Bool {
+                    try String(decoding: text(.visible), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+                        == process.screenText(of: identifierText).trimmingCharacters(in: .whitespacesAndNewlines)
+                }
+                #expect(try showsWhatReadShows())
+                // The snapshot holds the newest lines of the scrollback. `openrun read` adds a line end.
+                let everything = Array(try process.screenText(of: identifierText, includeScrollback: true).utf8.dropLast())
+                let kept = try text(.withScrollback)
+                print("wide-snapshot: \(bytes.count) bytes, \(kept.count) of \(everything.count) bytes of text")
+                #expect(kept.count < everything.count && everything.dropLast(kept.count).last == 0x0A)
+                #expect(everything.suffix(kept.count).elementsEqual(kept))
+
+                // The output after the snapshot continues the screen that `openrun read` shows.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                while !String(decoding: try text(.visible), as: UTF8.self).contains("after-attach") {
+                    guard case .output(let output) = try receiveMessage(connection, within: 60) else { break }
+                    terminal.write(output)
+                }
+                #expect(try showsWhatReadShows())
             }
         }
     }
