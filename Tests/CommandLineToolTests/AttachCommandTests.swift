@@ -296,6 +296,46 @@ extension CommandLineToolIntegration {
                 #expect(await terminal.waitForScreen(containing: "mode-restored"))
             }
         }
+
+        /// The program leaves a sequence or a string open in the terminal window.
+        /// Detaching must end it, or the terminal would take the reset
+        /// sequences, and maybe the message, as part of it.
+        @Test(arguments: [
+            OpenSequence(kind: "control sequence", start: "\\033[3"),
+            OpenSequence(kind: "operating system command", start: "\\033]0;open-title"),
+            OpenSequence(kind: "device control string", start: "\\033Pzopen-device-string"),
+        ])
+        func detachingInsideAnOpenSequenceEndsItAndRestoresTheTerminal(sequence: OpenSequence) async throws {
+            try await RunningSessionProcess.run { process in
+                // Bracketed paste on and the cursor hidden, then the open sequence.
+                let script = "stty -echo; printf '\\033[?2004h\\033[?25l'; read line; printf 'sequence-opened\\n\(sequence.start)'; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(try process.runCommand(["send", identifier, "--enter", "go"]).status == 0)
+                #expect(await terminal.waitForScreen(containing: "sequence-opened"))
+                #expect(terminal.screenWithStyles.contains("\u{1B}[?2004h"))
+
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                #expect(terminal.screenText.contains("[detached]"), "\(sequence.kind): \(terminal.screenText)")
+                #expect(terminal.screenText.contains("status=0"))
+                #expect(!terminal.screenWithStyles.contains("\u{1B}[?2004h"))
+                #expect(!terminal.screenWithStyles.contains("\u{1B}[?25l"))
+
+                // The first bytes after the open sequence end it: CAN aborts a
+                // sequence, and ST ends a string.
+                let received = terminal.receivedBytes
+                let opened = Array("sequence-opened".utf8)
+                let start = try #require(lastRange(of: opened, in: received)).upperBound
+                let afterSequence = Array(received[start...])
+                let expectedStart = Array("\r\n".utf8) + sequence.startBytes
+                #expect(Array(afterSequence.prefix(expectedStart.count)) == expectedStart)
+                let closing = afterSequence.dropFirst(expectedStart.count)
+                #expect(Array(closing.prefix(3)) == [0x18, 0x1B, 0x5C], "\(sequence.kind): \(Array(closing.prefix(12)))")
+            }
+        }
     }
 }
 
@@ -311,4 +351,28 @@ struct UnfinishedOutput: Sendable, CustomTestStringConvertible {
     var styled: String?
 
     var testDescription: String { firstPart }
+}
+
+/// A sequence or string that a program leaves open.
+struct OpenSequence: Sendable, CustomTestStringConvertible {
+    var kind: String
+    /// The start, as `printf` format text.
+    var start: String
+
+    /// The bytes that `printf` writes for `start`.
+    var startBytes: [UInt8] {
+        Array(start.replacingOccurrences(of: "\\033", with: "\u{1B}").utf8)
+    }
+
+    var testDescription: String { kind }
+}
+
+/// Where `pattern` last occurs in `bytes`.
+private func lastRange(of pattern: [UInt8], in bytes: [UInt8]) -> Range<Int>? {
+    guard bytes.count >= pattern.count else { return nil }
+    for start in stride(from: bytes.count - pattern.count, through: 0, by: -1)
+    where bytes[start..<start + pattern.count].elementsEqual(pattern) {
+        return start..<start + pattern.count
+    }
+    return nil
 }
