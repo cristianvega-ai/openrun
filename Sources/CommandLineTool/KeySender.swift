@@ -37,6 +37,16 @@ final class KeySender: @unchecked Sendable {
         self.inputDescriptor = inputDescriptor
     }
 
+    /// Starts the keyboard thread. `onDetach` runs when the user typed the
+    /// detach key or the terminal went away, after the detach request went
+    /// out or its time ran out.
+    func start(onDetach: @escaping @Sendable () -> Void) {
+        let keyboard = Thread { [self] in
+            readKeys(onDetach: onDetach)
+        }
+        keyboard.name = "attach.keyboard"
+        keyboard.start()
+    }
 
     /// Ends the keyboard thread, also when it waits for room in the queue.
     ///
@@ -56,6 +66,58 @@ final class KeySender: @unchecked Sendable {
     /// because of the detach.
     var isDetaching: Bool {
         condition.withLock { detaching }
+    }
+
+    /// Reads keys and sends them on until the detach key or the end of input.
+    /// The detach key is Control-], the same key that telnet uses. A program
+    /// in the session never needs it, and a shell does not use it for
+    /// editing. `DetachKeyRecognizer` knows its forms.
+    /// It polls with a timeout so it can notice that attaching has ended. When
+    /// the recognizer holds the start of a detach form, the timeout is the
+    /// time the hold has left, and the held keys go to the session when it ends.
+    private func readKeys(onDetach: @Sendable () -> Void) {
+        var recognizer = DetachKeyRecognizer()
+        var buffer = [UInt8](repeating: 0, count: 4096)
+        let idleTimeoutMilliseconds: Int64 = 100
+        while true {
+            let stopped = condition.withLock {
+                return isStopped
+            }
+            if stopped { return }
+            var timeoutMilliseconds = idleTimeoutMilliseconds
+            if let remaining = recognizer.remainingHold(at: .now) {
+                // Round up, so the poll never returns before the hold ends.
+                let components = remaining.components
+                let milliseconds = components.seconds * 1000 + (components.attoseconds + 999_999_999_999_999) / 1_000_000_000_000_000
+                timeoutMilliseconds = min(idleTimeoutMilliseconds, milliseconds)
+            }
+            var descriptor = pollfd(fd: inputDescriptor, events: Int16(POLLIN), revents: 0)
+            let ready = poll(&descriptor, 1, Int32(timeoutMilliseconds))
+            let step = Self.step(afterWaiting: ready, recognizer: &recognizer, now: { .now }) {
+                condition.withLock {
+                    if isStopped { return .nothing }
+                    let count = read(inputDescriptor, &buffer, buffer.count)
+                    if count < 0 && (errno == EINTR || errno == EAGAIN) { return .nothing }
+                    return count > 0 ? .keys(Array(buffer[0..<count])) : .endOfInput
+                }
+            }
+            switch step {
+            case .waitAgain:
+                continue
+            case .send(let keys):
+                guard send(keys) else { return }
+            case .detach(let keysBefore):
+                // The keys before the detach key go out without waiting for
+                // room, so a full queue cannot hold the detach back.
+                guard send(keysBefore, waitingForRoom: false) else { return }
+                detach(onDetach: onDetach)
+                return
+            case .endOfInput:
+                // The terminal went away. Leave the session running.
+                detach(onDetach: onDetach)
+                return
+            }
+        }
     }
 
     /// One turn of the keyboard thread after `poll` returned `ready`.

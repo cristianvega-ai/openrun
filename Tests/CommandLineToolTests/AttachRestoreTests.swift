@@ -31,3 +31,15 @@ extension CommandLineToolIntegration {
         }
     }
 }
+
+/// The number of keys that a stand-in session has received.
+private final class ReceivedKeyCounter: @unchecked Sendable {
+    private let lock = NSLock()
+    private var count = 0
+
+    var total: Int { lock.withLock { count } }
+
+    func add(_ keys: Int) {
+        lock.withLock { count += keys }
+    }
+}
