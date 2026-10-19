@@ -14,6 +14,8 @@ actor Session {
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     /// The attached clients that write raw output to a real terminal.
     private var relayingClients: Set<ObjectIdentifier> = []
+    /// The attached clients that asked to hear of each new size.
+    private var clientsThatReceiveSizeChanges: Set<ObjectIdentifier> = []
     private let replyGate: ReplyGate
     private var isFinished = false
     private var isEnding = false
@@ -94,12 +96,15 @@ actor Session {
 
     func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
+        let previousSize = summary.size
+        defer { if summary.size != previousSize { announceSize(changedBy: client) } }
         try apply(size)
         let snapshot = try TerminalSnapshot(capturing: terminal)
         client.send(.attached(summary))
         client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
         clients[ObjectIdentifier(client)] = client
         if relaysRawOutput { relayingClients.insert(ObjectIdentifier(client)) }
+        if receivesSizeChanges { clientsThatReceiveSizeChanges.insert(ObjectIdentifier(client)) }
         updateReplyGate()
         return .attached
     }
@@ -107,6 +112,7 @@ actor Session {
     func detach(_ client: ClientConnection) {
         clients[ObjectIdentifier(client)] = nil
         relayingClients.remove(ObjectIdentifier(client))
+        clientsThatReceiveSizeChanges.remove(ObjectIdentifier(client))
         updateReplyGate()
     }
 
@@ -122,8 +128,11 @@ actor Session {
         try await pseudoTerminal.type(bytes)
     }
 
+    /// Resizes the program's terminal and the session's copy of it. The last
+    /// client to resize wins, and the other clients that asked hear of it.
     func resize(to size: SessionSize, from requester: ClientConnection) throws {
-        try apply(size)
+        let reportsItself = relayingClients.contains(ObjectIdentifier(requester))
+        if try apply(size, requesterReportsSize: reportsItself) { announceSize(changedBy: requester) }
     }
 
     /// The text on the screen, or on the screen and above it.
@@ -172,12 +181,22 @@ actor Session {
         }
         clients.removeAll()
         relayingClients.removeAll()
+        clientsThatReceiveSizeChanges.removeAll()
         updateReplyGate()
         await onFinish(summary.identifier)
     }
 
     private func updateReplyGate() {
         replyGate.close(!relayingClients.isEmpty)
+    }
+
+    /// A client that draws the screen itself must lay out the output that
+    /// follows for the new size. The message goes out before that output.
+    /// The requester knows its own size and does not get it.
+    private func announceSize(changedBy requester: ClientConnection) {
+        for (key, client) in clients where key != ObjectIdentifier(requester) && clientsThatReceiveSizeChanges.contains(key) {
+            client.send(.sizeChanged(summary.size))
+        }
     }
 
     /// Resizes both copies of the terminal, or neither, and returns whether
