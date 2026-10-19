@@ -106,4 +106,91 @@ import Testing
         #expect(recognizer.releaseExpired(at: start + .milliseconds(20)) == Array("\u{1B}[".utf8))
     }
 
+    @Test(arguments: [
+        "\u{1B}x",
+        "\u{1B}[1",
+        "\u{1B}[930",
+        "\u{1B}[91;",
+        "\u{1B}[27;3",
+        "\u{1B}[27;5;91",
+        "\u{1B}[28",
+        "\u{1B}[93;5 ",
+        "\u{1B}[?",
+        "\u{1B}[<",
+        "\u{1B}[93;5;93;1",
+        "\u{1B}[27;5;93;",
+        "\u{1B}]0;",
+    ])
+    func bytesThatCannotStartADetachFormAreNeverHeld(text: String) {
+        var recognizer = DetachKeyRecognizer()
+        let scan = recognizer.scan(Array(text.utf8), at: start)
+        #expect(scan == .init(bytesToSend: Array(text.utf8), foundDetachKey: false))
+        #expect(recognizer.remainingHold(at: start) == nil)
+    }
+
+    @Test(arguments: [
+        "\u{1B}[9",
+        "\u{1B}[93",
+        "\u{1B}[93:",
+        "\u{1B}[93:93;",
+        "\u{1B}[93;",
+        "\u{1B}[93;5",
+        "\u{1B}[93;5:1;",
+        "\u{1B}[2",
+        "\u{1B}[27;",
+        "\u{1B}[27;5;",
+        "\u{1B}[27;5;9",
+    ])
+    func everyStartOfADetachFormIsHeld(text: String) {
+        var recognizer = DetachKeyRecognizer()
+        #expect(recognizer.scan(Array(text.utf8), at: start).bytesToSend.isEmpty)
+        #expect(recognizer.remainingHold(at: start) == .milliseconds(20))
+    }
+
+    @Test(arguments: ["\u{1D}", "\u{1B}[93;5u", "\u{1B}[27;5;93~"])
+    func onlyTheBytesBeforeTheKeyAreSent(key: String) {
+        #expect(scan("ls\r" + key + "ignored") == .init(bytesToSend: Array("ls\r".utf8), foundDetachKey: true))
+    }
+
+    @Test func otherSequencesBeforeTheKeyAreSentUnchanged() {
+        #expect(scan("\u{1B}[A\u{1B}[93;5u") == .init(bytesToSend: Array("\u{1B}[A".utf8), foundDetachKey: true))
+    }
+
+    @Test(arguments: [
+        "\u{1B}[93;5u",
+        "\u{1B}[93;5:1u",
+        "\u{1B}[93:93;5:2;93u",
+        "\u{1B}[27;5;93~",
+    ])
+    func aFormSplitAtEveryPositionDetaches(sequence: String) {
+        let bytes = Array(sequence.utf8)
+        for splitIndex in 1..<bytes.count {
+            var recognizer = DetachKeyRecognizer()
+            let first = recognizer.scan(Array("x".utf8) + bytes[..<splitIndex], at: start)
+            #expect(first == .init(bytesToSend: Array("x".utf8), foundDetachKey: false), "split at \(splitIndex)")
+            let second = recognizer.scan(Array(bytes[splitIndex...]), at: start + .milliseconds(5))
+            #expect(second == .init(bytesToSend: [], foundDetachKey: true), "split at \(splitIndex)")
+            #expect(recognizer.remainingHold(at: start + .milliseconds(5)) == nil, "split at \(splitIndex)")
+        }
+    }
+
+    @Test func aFormSplitIntoSingleBytesDetaches() {
+        var recognizer = DetachKeyRecognizer()
+        var instant = start
+        var results: [DetachKeyRecognizer.Scan] = []
+        for byte in Array("\u{1B}[93;5u".utf8) {
+            results.append(recognizer.scan([byte], at: instant))
+            instant = instant + .milliseconds(3)
+        }
+        #expect(results.dropLast().allSatisfy { $0 == .init(bytesToSend: [], foundDetachKey: false) })
+        #expect(results.last == .init(bytesToSend: [], foundDetachKey: true))
+    }
+
+    @Test func theHoldDoesNotStartAgainWhenMoreOfTheSameFormArrives() {
+        var recognizer = DetachKeyRecognizer()
+        _ = recognizer.scan(Array("\u{1B}[9".utf8), at: start)
+        _ = recognizer.scan(Array("3;".utf8), at: start + .milliseconds(15))
+        #expect(recognizer.remainingHold(at: start + .milliseconds(15)) == .milliseconds(5))
+        #expect(recognizer.releaseExpired(at: start + .milliseconds(20)) == Array("\u{1B}[93;".utf8))
+    }
 }
