@@ -2,6 +2,10 @@ import Darwin
 import Foundation
 import Synchronization
 
+/// Tools for the tests of the socket's security and of how a session process
+/// starts: a session process started as a person starts it, programs that
+/// stand on the socket path in place of a session process, and the lock of
+/// the socket.
 public enum SocketSecurityHarness {
     /// A new folder under `TMPDIR` with exactly this mode. The mode is set
     /// after the folder exists, so the umask does not change it.
@@ -212,6 +216,9 @@ extension SocketSecurityHarness {
                 Darwin.close(descriptor)
                 throw HarnessError.commandFailed(description: "listen failed: \(code)")
             }
+            let thread = Thread { [self] in serve(behavior) }
+            thread.name = "StandInListener"
+            thread.start()
         }
 
         /// The connections that the stand-in accepted.
@@ -225,6 +232,41 @@ extension SocketSecurityHarness {
             Darwin.shutdown(descriptor, SHUT_RDWR)
             Darwin.close(descriptor)
             for connection in accepted.withLock({ $0 }) { Darwin.shutdown(connection, SHUT_RDWR) }
+        }
+
+        private func serve(_ behavior: Behavior) {
+            while !stopped.load(ordering: .sequentiallyConsistent) {
+                var entry = pollfd(fd: descriptor, events: Int16(POLLIN), revents: 0)
+                guard poll(&entry, 1, 50) > 0 else { continue }
+                let connection = accept(descriptor, nil, nil)
+                guard connection >= 0 else { continue }
+                counts.withLock { $0.accepted += 1 }
+                accepted.withLock { $0.append(connection) }
+                let reader = Thread { [self] in read(from: connection, behavior) }
+                reader.start()
+            }
+        }
+
+        private func read(from connection: Int32, _ behavior: Behavior) {
+            defer { Darwin.close(connection) }
+            var answeredAt: Date?
+            var buffer = [UInt8](repeating: 0, count: 64 * 1024)
+            while !stopped.load(ordering: .sequentiallyConsistent) {
+                var entry = pollfd(fd: connection, events: Int16(POLLIN), revents: 0)
+                guard poll(&entry, 1, 50) > 0 else {
+                    if let answeredAt, Date().timeIntervalSince(answeredAt) > 0.5 { return }
+                    continue
+                }
+                let count = Darwin.read(connection, &buffer, buffer.count)
+                guard count > 0 else { return }
+                counts.withLock { $0.received += count }
+                if case .answers(let answer) = behavior {
+                    if answeredAt == nil {
+                        _ = answer.withUnsafeBytes { Darwin.send(connection, $0.baseAddress, $0.count, MSG_NOSIGNAL) }
+                    }
+                    answeredAt = Date()
+                }
+            }
         }
     }
 }

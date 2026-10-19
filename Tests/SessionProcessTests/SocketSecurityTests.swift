@@ -7,6 +7,12 @@ import Testing
 
 private typealias Harness = SocketSecurityHarness
 
+/// The frame that a session process of this version sends for hello. A
+/// stand-in that sends it passes for a session process.
+private func helloFrame() throws -> Data {
+    try ServerMessage.hello(protocolVersion: MessageFrame.protocolVersion).frame().encoded()
+}
+
 /// Whether a session process answers hello on the socket within two seconds.
 private func answersHello(_ socketPath: String) -> Bool {
     guard let connection = try? MessageConnection.connect(to: SocketLocation(path: socketPath)) else { return false }
@@ -38,6 +44,30 @@ extension SessionProcessIntegration {
             // A folder that the user chose keeps its mode. Only the default
             // folder belongs to OpenRun.
             #expect(Harness.mode(of: folder.path) == mode)
+        }
+
+        // MARK: - What counts as a live session process
+
+        /// Only a program that answers hello is a session process. A listener
+        /// that never answers is replaced, and the log says so.
+        @Test func aListenerThatNeverAnswersHelloIsNotTakenForASessionProcess() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let listener = try Harness.StandInListener(path: socketPath, behavior: .neverAnswers)
+            defer { listener.close() }
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { process.stop() }
+            // Until the session process has replaced the socket, a client would
+            // wait for the stand-in's answer. So the test waits for the log.
+            try #require(await process.waitForLog(containing: "Listening on"), "log: \(process.log)")
+            #expect(process.isRunning)
+            #expect(process.log.contains("did not answer"), "log: \(process.log)")
+            #expect(listener.acceptedCount >= 1)
+
+            let list = try RunningSessionProcess.runOpenrun(["list", "--socket", socketPath], in: folder)
+            #expect(list.status == 0, "stderr: \(list.standardError)")
         }
         // MARK: - One session process per socket
 
