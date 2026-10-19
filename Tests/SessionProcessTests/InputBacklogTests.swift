@@ -123,6 +123,15 @@ private func lines(of screen: String) -> [String] {
     screen.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
 }
 
+/// The value of something that the system measures. A process always has
+/// memory, threads and descriptors, so a zero or a missing value means that
+/// the measurement failed, and a bound checked against it would prove nothing.
+private func measured(_ value: Int?, _ what: String) throws -> Int {
+    let value = try #require(value, "The system did not report \(what).")
+    try #require(value > 0, "The system reported \(value) for \(what).")
+    return value
+}
+
 extension SessionProcessIntegration {
     /// Input that a program has not read yet waits in the session process, up
     /// to 8 MiB. Past that, a writer waits for room. Nothing is dropped while

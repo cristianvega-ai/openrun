@@ -239,6 +239,61 @@ public final class RunningSessionProcess: @unchecked Sendable {
     }
 }
 
+// What the process holds, as the system reports it. Each value is nil when
+// the system call fails, so a test that checks a bound fails instead of
+// passing on a value that was never measured.
+extension RunningSessionProcess {
+    /// The memory that the process uses, in bytes, as Activity Monitor
+    /// counts it.
+    public var memoryFootprint: Int? {
+        guard let usage = resourceUsage else { return nil }
+        return Int(usage.ri_phys_footprint)
+    }
+
+    /// The processor time that the process has used so far, in user and
+    /// system mode together.
+    public var processorTime: Duration? {
+        guard let usage = resourceUsage else { return nil }
+        // The system counts this time in ticks of the machine clock, not in
+        // nanoseconds. The time base converts them.
+        var timeBase = mach_timebase_info_data_t()
+        guard mach_timebase_info(&timeBase) == KERN_SUCCESS, timeBase.denom != 0 else { return nil }
+        let ticks = usage.ri_user_time + usage.ri_system_time
+        return .nanoseconds(Int64(ticks * UInt64(timeBase.numer) / UInt64(timeBase.denom)))
+    }
+
+    /// The number of threads of the process.
+    public var threadCount: Int? {
+        var information = proc_taskinfo()
+        let size = Int32(MemoryLayout<proc_taskinfo>.size)
+        guard proc_pidinfo(processIdentifier, PROC_PIDTASKINFO, 0, &information, size) == size else { return nil }
+        return Int(information.pti_threadnum)
+    }
+
+    /// The number of descriptors that the process has open.
+    public var descriptorCount: Int? {
+        let estimate = proc_pidinfo(processIdentifier, PROC_PIDLISTFDS, 0, nil, 0)
+        guard estimate > 0 else { return nil }
+        let entrySize = MemoryLayout<proc_fdinfo>.stride
+        var entries = [proc_fdinfo](repeating: proc_fdinfo(), count: Int(estimate) / entrySize + 32)
+        let filled = entries.withUnsafeMutableBytes { buffer in
+            proc_pidinfo(processIdentifier, PROC_PIDLISTFDS, 0, buffer.baseAddress, Int32(buffer.count))
+        }
+        guard filled > 0 else { return nil }
+        return Int(filled) / entrySize
+    }
+
+    private var resourceUsage: rusage_info_v4? {
+        var usage = rusage_info_v4()
+        let result = withUnsafeMutablePointer(to: &usage) { pointer in
+            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(processIdentifier, RUSAGE_INFO_V4, $0)
+            }
+        }
+        return result == 0 ? usage : nil
+    }
+}
+
 /// Polls until the condition holds or the timeout passes.
 public func eventually(timeout: Duration = .seconds(15), _ condition: () async throws -> Bool) async rethrows -> Bool {
     let deadline = ContinuousClock.now + timeout
