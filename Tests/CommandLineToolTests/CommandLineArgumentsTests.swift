@@ -46,6 +46,24 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(try parse("send", "abc", "--", "--enter", "-x").command == .send(identifier: "abc", text: "--enter -x", pressEnter: false))
     }
 
+    @Test func wrongArgumentsAreUsageErrors() {
+        #expect(usageMessage() != nil)
+        #expect(usageMessage("bogus")?.contains("Unknown command bogus") == true)
+        #expect(usageMessage("attach") != nil)
+        #expect(usageMessage("attach", "a", "b") != nil)
+        #expect(usageMessage("list", "extra") != nil)
+        #expect(usageMessage("send", "abc") != nil)
+        #expect(usageMessage("send") != nil)
+        #expect(usageMessage("new", "--") != nil)
+        #expect(usageMessage("new", "stray") != nil)
+        #expect(usageMessage("--socket") != nil)
+        #expect(usageMessage("list", "--unknown") != nil)
+        #expect(usageMessage("list", "--enter") != nil)
+        #expect(usageMessage("read", "abc", "--enter") != nil)
+        #expect(usageMessage("send", "abc", "x", "--scrollback") != nil)
+        #expect(usageMessage("kill", "abc", "--folder", "/x") != nil)
+    }
+
     @Test func usageErrorsExitWithTwoAndOperatingErrorsWithOne() {
         #expect(CommandLineToolError.usage("x").exitCode == 2)
         #expect(CommandLineToolError.failure("x").exitCode == 1)
