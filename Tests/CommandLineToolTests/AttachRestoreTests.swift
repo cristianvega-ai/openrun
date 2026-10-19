@@ -5,8 +5,102 @@ import SessionProtocol
 import Testing
 
 @testable import CommandLineTool
+
+/// A shell script that attaches to a session and reports how attaching
+/// ended: `status=` and `mode-restored` or `mode-changed`, on the terminal
+/// and, first, in the file `report` when there is one. A terminal that took
+/// no output may still be inside a sequence that the tool could not end, so
+/// the file is the report that a test can always read. `redirections` go
+/// after the command, and `afterwards` runs after the report.
+private func restoreScript(
+    identifier: String,
+    socketPath: String,
+    report: URL? = nil,
+    redirections: String = "",
+    afterwards: String = ""
+) -> String {
+    let executable = RunningSessionProcess.commandExecutable.path
+    let reportLine = report.map { "echo \"status=$code $mode\" > '\($0.path)'" } ?? ""
+    return """
+        saved=$(stty -g)
+        '\(executable)' attach \(identifier) --socket '\(socketPath)' \(redirections)
+        code=$?
+        if [ "$(stty -g)" = "$saved" ]; then mode=mode-restored; else mode=mode-changed; fi
+        \(reportLine)
+        echo "status=$code"
+        echo "$mode"
+        \(afterwards)
+        """
+}
+
+private let controlBracket: [UInt8] = [0x1D]
+private let endOfOpenSequence: [UInt8] = [0x18, 0x1B, 0x5C]
+
+/// Where `pattern` last occurs in `bytes`.
+private func lastIndex(of pattern: [UInt8], in bytes: [UInt8]) -> Int? {
+    guard bytes.count >= pattern.count else { return nil }
+    for start in stride(from: bytes.count - pattern.count, through: 0, by: -1)
+    where bytes[start..<start + pattern.count].elementsEqual(pattern) {
+        return start
+    }
+    return nil
+}
+
+/// Where `pattern` first occurs in `bytes`.
+private func firstIndex(of pattern: [UInt8], in bytes: some Collection<UInt8>) -> Int? {
+    let bytes = Array(bytes)
+    guard bytes.count >= pattern.count else { return nil }
+    for start in 0...(bytes.count - pattern.count) where bytes[start..<start + pattern.count].elementsEqual(pattern) {
+        return start
+    }
+    return nil
+}
+
+private func contains(_ text: String, in bytes: some Collection<UInt8>) -> Bool {
+    firstIndex(of: Array(text.utf8), in: bytes) != nil
+}
 extension CommandLineToolIntegration {
     @Suite struct AttachRestoreTests {
+        /// The process identifier of `openrun attach`, the child of the script's shell.
+        private func attachProcess(of terminal: AttachedTerminal) async -> pid_t? {
+            var found: pid_t?
+            _ = await eventually(timeout: .seconds(10)) {
+                found = terminal.childProcessIdentifiers().first
+                return found != nil
+            }
+            return found
+        }
+
+        @Test func aTerminateSignalWhileOutputFlowsLeavesTheAlternateScreenAndRestoresTheMode() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = "printf '\\033[?1049h'; while :; do echo busy-output-line-$RANDOM; done"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                for round in 0..<4 {
+                    let terminal = try AttachedTerminal(shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath), folder: process.directory)
+                    defer { terminal.closeNow() }
+                    let tool = try #require(await attachProcess(of: terminal))
+                    #expect(await eventually { terminal.isInRawMode }, "round \(round)")
+                    #expect(await terminal.waitForScreen(containing: "busy-output-line"), "round \(round)")
+
+                    kill(tool, SIGTERM)
+                    // A second signal while the first one ends attaching must not
+                    // change the exit code or write a second ending.
+                    if round > 1 { kill(tool, SIGINT) }
+                    #expect(await terminal.waitForScreen(containing: "mode-"), "round \(round)")
+                    #expect(terminal.screenText.contains("mode-restored"), "round \(round): \(terminal.screenText)")
+                    #expect(terminal.screenText.contains("status=143"), "round \(round): \(terminal.screenText)")
+
+                    // After the closing sequences, no output of the program reaches
+                    // the terminal, and the alternate screen is left.
+                    let received = terminal.receivedBytes
+                    let closing = try #require(lastIndex(of: endOfOpenSequence, in: received), "round \(round)")
+                    let afterClosing = received[closing...]
+                    #expect(contains("\u{1B}[?1049l", in: afterClosing), "round \(round)")
+                    #expect(!contains("busy-output", in: afterClosing), "round \(round): \(String(decoding: afterClosing.prefix(200), as: UTF8.self))")
+                }
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
 
         /// Keys typed before attaching and while leaving stay for the program
         /// that reads the terminal next.
