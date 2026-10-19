@@ -50,6 +50,7 @@ actor Session {
 
     func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
+        try apply(size)
         let snapshot = try TerminalSnapshot(capturing: terminal)
         client.send(.attached(summary))
         client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
@@ -71,6 +72,10 @@ actor Session {
     ///   before the bytes are in the backlog.
     nonisolated func type(_ bytes: [UInt8]) async throws {
         try await pseudoTerminal.type(bytes)
+    }
+
+    func resize(to size: SessionSize, from requester: ClientConnection) throws {
+        try apply(size)
     }
 
     /// The text on the screen, or on the screen and above it.
@@ -120,9 +125,34 @@ actor Session {
         clients.removeAll()
         await onFinish(summary.identifier)
     }
+
+    /// Resizes both copies of the terminal, or neither, and returns whether
+    /// the size changed. The terminal model checks the size and may refuse
+    /// it, so it goes first: a refused size then never reaches the program.
+    /// When the program's terminal refuses the size after that, the model
+    /// goes back to the old size.
+    @discardableResult
+    private func apply(_ size: SessionSize, requesterReportsSize: Bool = false) throws -> Bool {
+        guard size.columns > 0, size.rows > 0, size != summary.size else { return false }
+        try terminal.resize(to: TerminalSize(size))
+        do {
+            try pseudoTerminal.resize(to: PseudoTerminalSize(size))
+        } catch {
+            try? terminal.resize(to: TerminalSize(summary.size))
+            throw error
+        }
+        summary.size = size
+        return true
+    }
 }
 
 extension TerminalSize {
+    fileprivate init(_ size: SessionSize) {
+        self.init(columns: size.columns, rows: size.rows)
+    }
+}
+
+extension PseudoTerminalSize {
     fileprivate init(_ size: SessionSize) {
         self.init(columns: size.columns, rows: size.rows)
     }

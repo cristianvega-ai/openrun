@@ -137,6 +137,8 @@ actor SessionServer {
                 } catch {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "\(error)")))
                 }
+            case .resize(let size):
+                try? await attachedSession?.resize(to: size, from: client)
             case .detach:
                 break messages
             default:
