@@ -50,5 +50,61 @@ extension SessionProcessIntegration {
                 #expect(screen.contains("extra1=0"))
             }
         }
+
+        @Test func aClientThatDoesNotSayItRelaysIsAnsweredForLikeNoClient() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
+                // A client of the first release of protocol version 1 sends an
+                // attach message without the relay field.
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+                let message = #"{"attach":{"identifier":"\#(identifier.uppercased())","size":{"columns":80,"rows":24}}}"#
+                try connection.send(ControlMessage(text: message))
+                guard case .attached = try connection.receive(ServerMessage.self) else {
+                    Issue.record("The first answer to attach was not attached.")
+                    return
+                }
+                #expect(await process.waitForScreen(of: identifier, containing: "READY"))
+                Self.releaseProgram(in: process.directory, round: 1)
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE1"))
+                let screen = try process.screenText(of: identifier)
+                #expect(screen.contains(Self.expectedReply))
+                #expect(screen.contains("extra1=0"))
+            }
+        }
+
+        @Test func aReplyThatArrivesOneSecondLateIsSeenByTheDuplicateDetector() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
+                #expect(await process.waitForScreen(of: identifier, containing: "READY"))
+                Self.releaseProgram(in: process.directory, round: 1)
+                #expect(await process.waitForScreen(of: identifier, containing: Self.expectedReply))
+                // The program has read its reply and now listens for a second
+                // one. These two bytes play a late duplicate.
+                try await Task.sleep(for: .seconds(1))
+                _ = try process.runCommand(["send", identifier, "ZZ"])
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE1"))
+                #expect(try process.screenText(of: identifier).contains("extra1=2"))
+            }
+        }
+    }
+}
+
+/// A control message with text that a test wrote by hand, as an older client
+/// would send it.
+private struct ControlMessage: FramedMessage {
+    let text: String
+
+    init(text: String) {
+        self.text = text
+    }
+
+    func frame() throws -> MessageFrame {
+        MessageFrame(kind: .control, payload: Data(text.utf8))
+    }
+
+    init(frame: MessageFrame) throws {
+        text = String(decoding: frame.payload, as: UTF8.self)
     }
 }

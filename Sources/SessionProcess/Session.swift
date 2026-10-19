@@ -12,6 +12,8 @@ actor Session {
     private let pseudoTerminal: PseudoTerminal
     private let terminal: Terminal
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
+    /// The attached clients that write raw output to a real terminal.
+    private var relayingClients: Set<ObjectIdentifier> = []
     private let replyGate: ReplyGate
     private var isFinished = false
     private var isEnding = false
@@ -97,11 +99,15 @@ actor Session {
         client.send(.attached(summary))
         client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
         clients[ObjectIdentifier(client)] = client
+        if relaysRawOutput { relayingClients.insert(ObjectIdentifier(client)) }
+        updateReplyGate()
         return .attached
     }
 
     func detach(_ client: ClientConnection) {
         clients[ObjectIdentifier(client)] = nil
+        relayingClients.remove(ObjectIdentifier(client))
+        updateReplyGate()
     }
 
     /// Types bytes into the program.
@@ -165,7 +171,13 @@ actor Session {
             client.closeAfterSending()
         }
         clients.removeAll()
+        relayingClients.removeAll()
+        updateReplyGate()
         await onFinish(summary.identifier)
+    }
+
+    private func updateReplyGate() {
+        replyGate.close(!relayingClients.isEmpty)
     }
 
     /// Resizes both copies of the terminal, or neither, and returns whether
@@ -173,9 +185,18 @@ actor Session {
     /// it, so it goes first: a refused size then never reaches the program.
     /// When the program's terminal refuses the size after that, the model
     /// goes back to the old size.
+    ///
+    /// A program that turned on mode 2048 hears of each new size in an
+    /// in-band report. A relaying client whose window changed size sends it
+    /// from its own terminal. No terminal reports any other change, so the
+    /// session process does, also while a relaying client is attached. The
+    /// gate opens only for the resize, which parses no output, so no query
+    /// gets a second reply.
     @discardableResult
     private func apply(_ size: SessionSize, requesterReportsSize: Bool = false) throws -> Bool {
         guard size.columns > 0, size.rows > 0, size != summary.size else { return false }
+        if !requesterReportsSize { replyGate.close(false) }
+        defer { updateReplyGate() }
         try terminal.resize(to: TerminalSize(size))
         do {
             try pseudoTerminal.resize(to: PseudoTerminalSize(size))
