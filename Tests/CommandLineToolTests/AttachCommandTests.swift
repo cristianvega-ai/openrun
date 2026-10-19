@@ -117,6 +117,42 @@ extension CommandLineToolIntegration {
             #expect(await eventually(timeout: .seconds(10)) { reference == nil }, "the terminal is still alive")
         }
 
+        @Test func theKittyFormOfControlBracketDetaches() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                // A terminal sends this once a program turns on the kitty keyboard protocol.
+                terminal.type(bytes: Array("\u{1B}[93;5u".utf8))
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                #expect(terminal.screenText.contains("[detached]"))
+                #expect(terminal.screenText.contains("status=0"))
+                #expect(try process.listedIdentifiers() == [identifier])
+                #expect(await terminal.waitForExit() == .exited(status: 0))
+            }
+        }
+
+        @Test func aKittyKeyTypedInTwoWritesFiveMillisecondsApartStillDetaches() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                // Over ssh or in a multiplexer, one key can arrive in two reads.
+                terminal.type(bytes: Array("\u{1B}[93".utf8))
+                try await Task.sleep(for: .milliseconds(5))
+                terminal.type(bytes: Array(";5u".utf8))
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                #expect(terminal.screenText.contains("[detached]"))
+                #expect(terminal.screenText.contains("status=0"))
+                #expect(try process.listedIdentifiers() == [identifier])
+                #expect(await terminal.waitForExit() == .exited(status: 0))
+            }
+        }
+
         /// The window changes size while the first picture waits for the
         /// terminal. The session must still get the new size.
         @Test func aResizeWhileTheFirstPictureWaitsReachesTheSession() async throws {
@@ -186,6 +222,26 @@ extension CommandLineToolIntegration {
                     #expect(terminal.screenText.contains("[detached]"), "attempt \(attempt)")
                     #expect(!terminal.screenText.contains("connection lost"), "attempt \(attempt)")
                 }
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
+        @Test func controlBracketDetachesWhileTypedKeysWaitForTheProgram() async throws {
+            try await RunningSessionProcess.run { process in
+                // The program never reads, so typed keys pile up until the
+                // session process holds as much as it may and the sends wait.
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                // 16 MiB is more than the session process holds for one program.
+                let paste = [UInt8](repeating: UInt8(ascii: "x"), count: 64 * 1024)
+                for _ in 0..<256 { terminal.type(bytes: paste) }
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored", timeout: .seconds(30)))
+                #expect(terminal.screenText.contains("[detached]"))
+                #expect(terminal.screenText.contains("status=0"))
                 #expect(try process.listedIdentifiers() == [identifier])
             }
         }
@@ -334,6 +390,28 @@ extension CommandLineToolIntegration {
                 #expect(Array(afterSequence.prefix(expectedStart.count)) == expectedStart)
                 let closing = afterSequence.dropFirst(expectedStart.count)
                 #expect(Array(closing.prefix(3)) == [0x18, 0x1B, 0x5C], "\(sequence.kind): \(Array(closing.prefix(12)))")
+            }
+        }
+
+        @Test func attachWithoutATerminalFailsWithAMessage() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let result = try process.runCommand(["attach", identifier])
+                #expect(result.status == 1)
+                #expect(result.standardError.contains("needs a terminal"))
+            }
+        }
+
+        @Test func attachToAnUnknownSessionFailsBeforeChangingTheTerminal() async throws {
+            try await RunningSessionProcess.run { process in
+                let terminal = try AttachedTerminal(
+                    shellScript: attachScript(identifier: "ffffffff", process: process),
+                    folder: process.directory
+                )
+                defer { terminal.closeNow() }
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                #expect(terminal.screenText.contains("No session"))
+                #expect(terminal.screenText.contains("status=1"))
             }
         }
     }
