@@ -134,6 +134,33 @@ extension CommandLineToolIntegration {
             }
         }
 
+        @Test func theSessionTerminalHasTheSizeOfTheAttachedTerminalAlsoAfterAResize() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let terminal = try AttachedTerminal(
+                    shellScript: attachScript(identifier: identifier, process: process),
+                    columns: 100,
+                    rows: 30,
+                    folder: process.directory
+                )
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                terminal.type("stty size\r")
+                #expect(await terminal.waitForScreen(containing: "30 100"))
+
+                try terminal.resize(columns: 60, rows: 20)
+                // The window change reaches the session through the tool.
+                #expect(await eventually {
+                    terminal.type("stty size\r")
+                    try? await Task.sleep(for: .milliseconds(150))
+                    return terminal.screenText.contains("20 60")
+                })
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+            }
+        }
+
         @Test func attachEndsAndRestoresTheModeWhenTheProgramExits() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "read line; exit 7"])
@@ -146,6 +173,24 @@ extension CommandLineToolIntegration {
                 // The exit status of the program is the status of the tool.
                 #expect(terminal.screenText.contains("status=7"))
                 #expect(await eventually { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty })
+            }
+        }
+
+        @Test(arguments: [SIGTERM, SIGHUP, SIGINT, SIGQUIT])
+        func attachRestoresTheModeWhenItReceivesAStopSignal(signal: Int32) async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                let children = terminal.childProcessIdentifiers()
+                let tool = try #require(children.first)
+                kill(tool, signal)
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+                #expect(terminal.screenText.contains("status=\(128 + signal)"))
+                // Stopping the tool leaves the session running.
+                #expect(try process.listedIdentifiers() == [identifier])
             }
         }
     }

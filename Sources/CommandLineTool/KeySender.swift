@@ -3,6 +3,19 @@ import Dispatch
 import Foundation
 import SessionProtocol
 
+/// Reads keys from the terminal and sends them to the session in order.
+///
+/// A thread of its own reads the keys, and a queue of its own sends them. A
+/// send waits while the program reads no input and the session process
+/// already holds as much of it as it may, and the keyboard thread must go on
+/// reading meanwhile, or it would not see the detach key.
+///
+/// The keys that wait in this process have a limit, `queuedByteLimit`, for
+/// keys that come without end, such as the reports that a terminal sends.
+/// At the limit the keyboard thread stops reading until the session takes
+/// more, and the terminal holds the keys, as it does for any program that
+/// reads slowly. The detach key then waits too, and a signal still ends
+/// attaching.
 final class KeySender: @unchecked Sendable {
     static let queuedByteLimit = 16 << 20
 

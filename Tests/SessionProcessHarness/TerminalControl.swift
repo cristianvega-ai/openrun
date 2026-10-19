@@ -6,10 +6,46 @@ public enum TerminalControl {
     /// `FIONREAD`, `_IOR('f', 127, int)`. Swift cannot import the macro.
     private static let waitingInputRequest = UInt(0x4004_667F)
 
+    /// The path of the controlling terminal of a process, such as
+    /// `/dev/ttys004`, or `nil` when it has none.
+    public static func terminalPath(ofProcess processIdentifier: pid_t) -> String? {
+        guard let details = processDetails(processIdentifier) else { return nil }
+        // A process without a terminal has the device number -1.
+        guard details.e_tdev != UInt32.max, let name = devname(dev_t(bitPattern: details.e_tdev), S_IFCHR) else { return nil }
+        return "/dev/" + String(cString: name)
+    }
+
+    /// Whether a process is stopped, as by SIGSTOP or SIGTSTP.
+    public static func isStopped(process processIdentifier: pid_t) -> Bool {
+        processDetails(processIdentifier)?.pbi_status == UInt32(SSTOP)
+    }
+
+    /// Whether a process still exists. Its parent reaps it soon after it ends.
+    public static func exists(process processIdentifier: pid_t) -> Bool {
+        kill(processIdentifier, 0) == 0 || errno == EPERM
+    }
+
+    /// The memory that a process uses, as Activity Monitor counts it.
+    public static func memoryFootprint(of processIdentifier: pid_t) -> UInt64? {
+        var usage = rusage_info_v4()
+        let result = withUnsafeMutablePointer(to: &usage) { pointer in
+            pointer.withMemoryRebound(to: rusage_info_t?.self, capacity: 1) {
+                proc_pid_rusage(processIdentifier, RUSAGE_INFO_V4, $0)
+            }
+        }
+        return result == 0 ? usage.ri_phys_footprint : nil
+    }
 
     /// The bytes that wait in a terminal for a program to read them.
     public static func waitingInput(onTerminal path: String) -> Int? {
         queueLength(onTerminal: path, request: waitingInputRequest)
+    }
+
+    private static func processDetails(_ processIdentifier: pid_t) -> proc_bsdinfo? {
+        var details = proc_bsdinfo()
+        let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+        guard proc_pidinfo(processIdentifier, PROC_PIDTBSDINFO, 0, &details, size) == size else { return nil }
+        return details
     }
 
     private static func queueLength(onTerminal path: String, request: UInt) -> Int? {
