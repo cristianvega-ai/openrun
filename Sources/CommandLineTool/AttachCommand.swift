@@ -33,6 +33,50 @@ struct AttachCommand {
 
     private static let detached = TerminalWriter.Ending(exitCode: 0, message: "detached")
 
+    func run(location: SocketLocation) throws -> Int32 {
+        guard isatty(STDIN_FILENO) != 0, isatty(STDOUT_FILENO) != 0 else {
+            throw CommandLineToolError.failure("attach needs a terminal. Use send and read in scripts.")
+        }
+        let client = try SessionClient(location: location)
+        let session = try client.session(matching: identifier)
+        let size = RawTerminalMode.windowSize(of: STDOUT_FILENO) ?? session.size
+
+        try client.connection.send(ClientMessage.attach(identifier: session.identifier, size: size, relaysRawOutput: true))
+        let snapshot = try receiveSnapshot(from: client)
+        // Made before the terminal changes, so a snapshot that cannot be
+        // restored ends attaching with an error, not with a blank picture.
+        let screen = try LocalScreen(snapshot: snapshot)
+
+        let connection = client.connection
+        let writer = try TerminalWriter()
+        defer { writer.stopWriting() }
+        let resizes = DispatchQueue(label: "attach.resize")
+
+        let mode = try RawTerminalMode(descriptor: STDIN_FILENO)
+        let keys = KeySender(connection: connection)
+        keys.start { writer.requestEnd(Self.detached, afterOutput: false) }
+        let receiver = Thread {
+            Self.receiveOutput(from: connection, into: writer, keys: keys)
+        }
+        receiver.name = "attach.receiver"
+        receiver.start()
+        // The window may have changed between the attach request and the
+        // signal handler, and that change would be lost.
+        resizes.async { Self.sendWindowSize(on: connection) }
+
+        let ending = relay(writer: writer, screen: screen, mode: mode, keys: keys, resizes: resizes, connection: connection)
+
+        writer.close()
+        keys.stop()
+        Self.writeClosing(screen, with: writer, restoring: mode)
+        writer.stopWriting()
+        if let message = ending.message {
+            // The message can include text from the session process, such as
+            // the reason of a lost connection.
+            TerminalWriter.writeLastMessage("\n[\(PrintableText.escaping(message))]\n")
+        }
+        return ending.exitCode
+    }
 
     // MARK: - Attaching
 
@@ -246,6 +290,37 @@ struct AttachCommand {
         }
     }
 
+    /// Receives output and the end of the session, and hands both to the
+    /// writer in order.
+    private static func receiveOutput(from connection: MessageConnection, into writer: TerminalWriter, keys: KeySender) {
+        while true {
+            let message: ServerMessage?
+            do {
+                message = try connection.receive(ServerMessage.self)
+            } catch {
+                // Detaching shuts the socket down while this loop may be in the
+                // middle of reading a frame. That read then fails, and the failure
+                // is the detach itself, not a lost connection.
+                let ending = keys.isDetaching ? detached : TerminalWriter.Ending(exitCode: 1, message: "connection lost: \(error)")
+                writer.requestEnd(ending, afterOutput: true)
+                return
+            }
+            switch message {
+            case .output(let bytes):
+                guard writer.enqueue(output: Array(bytes)) else { return }
+            case .exited(let exit):
+                writer.requestEnd(TerminalWriter.Ending(exitCode: exitCode(for: exit), message: "program \(exit)"), afterOutput: true)
+                return
+            case nil:
+                let ending = keys.isDetaching ? detached : TerminalWriter.Ending(exitCode: 1, message: "the session process closed the connection")
+                writer.requestEnd(ending, afterOutput: true)
+                return
+            default:
+                continue
+            }
+        }
+    }
+
     /// The exit code for how the program ended: its status, or 128 plus the
     /// signal, as a shell reports it. A process exit code holds 0 to 255, and
     /// the kernel would keep only the low byte, so 300 would become 44. The
@@ -256,5 +331,11 @@ struct AttachCommand {
         case .signaled(let signal): 128 + Int64(signal)
         }
         return Int32(Swift.min(Swift.max(code, 0), 255))
+    }
+
+    private static func sendWindowSize(on connection: MessageConnection) {
+        if let size = RawTerminalMode.windowSize(of: STDOUT_FILENO) {
+            try? connection.send(ClientMessage.resize(size))
+        }
     }
 }

@@ -34,6 +34,8 @@ public enum CommandLineTool {
             write(try NewCommand(folder: folder, program: program).run(location: location, environment: environment), to: .standardOutput)
         case .list:
             write(try ListCommand().run(location: location), to: .standardOutput)
+        case .attach(let identifier):
+            return try AttachCommand(identifier: identifier).run(location: location)
         case .read(let identifier, let includeScrollback):
             write(try ReadCommand(identifier: identifier, includeScrollback: includeScrollback).run(location: location), to: .standardOutput)
         case .send(let identifier, let text, let pressEnter):

@@ -8,6 +8,8 @@ enum UsageText {
                           Start a session and print its identifier. Without a program
                           it runs your login shell. The folder defaults to the current one.
           list            Show every session: identifier, folder and command.
+          attach IDENTIFIER
+                          Show a session and type into it. Control-] detaches.
           read IDENTIFIER [--scrollback]
                           Print the screen of a session as plain text. With --scrollback,
                           print the lines above the screen too.

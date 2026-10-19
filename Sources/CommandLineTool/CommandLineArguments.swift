@@ -84,6 +84,9 @@ struct CommandLineArguments: Equatable {
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
             guard rest.isEmpty else { throw CommandLineToolError.usage("list takes no arguments.") }
             command = .list
+        case "attach":
+            try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
+            command = .attach(identifier: try Self.single(rest, name: name))
         case "read":
             try allow("--enter", used: pressEnter, in: "send")
             try Self.requireNoOptions(name, folder, false, false, afterSeparator)
