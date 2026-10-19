@@ -123,6 +123,48 @@ private func lines(of screen: String) -> [String] {
     screen.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
 }
 
+/// Sends messages on its own thread until the count is sent or a send fails,
+/// and counts what went out.
+private final class MessageFlood: Sendable {
+    let sentBytes = Atomic<Int>(0)
+    let sentMessages = Atomic<Int>(0)
+    let isFinished = Atomic<Bool>(false)
+
+    init(client: RawClient, message: ClientMessage, byteCount: Int, count: Int) {
+        let thread = Thread { [self] in
+            defer { isFinished.store(true, ordering: .sequentiallyConsistent) }
+            while sentMessages.load(ordering: .sequentiallyConsistent) < count {
+                guard (try? client.connection.send(message)) != nil else { return }
+                sentBytes.add(byteCount, ordering: .sequentiallyConsistent)
+                sentMessages.add(1, ordering: .sequentiallyConsistent)
+            }
+        }
+        thread.start()
+    }
+
+    /// Input frames of `frameSize` bytes until `total` bytes are sent.
+    convenience init(client: RawClient, frameSize: Int, total: Int) {
+        self.init(client: client, message: .input(Data(patternBytes(count: frameSize))), byteCount: frameSize, count: total / frameSize)
+    }
+
+    /// Waits until no message went out for `steadyFor`, or the flood finished.
+    func waitUntilStalled(timeout: Duration, steadyFor: Duration = .seconds(1)) async {
+        let deadline = ContinuousClock.now + timeout
+        var last = -1
+        var steadySince = ContinuousClock.now
+        while ContinuousClock.now < deadline, !isFinished.load(ordering: .sequentiallyConsistent) {
+            let now = sentBytes.load(ordering: .sequentiallyConsistent)
+            if now != last {
+                last = now
+                steadySince = ContinuousClock.now
+            } else if ContinuousClock.now - steadySince > steadyFor {
+                return
+            }
+            try? await Task.sleep(for: .milliseconds(25))
+        }
+    }
+}
+
 /// The value of something that the system measures. A process always has
 /// memory, threads and descriptors, so a zero or a missing value means that
 /// the measurement failed, and a bound checked against it would prove nothing.
@@ -185,6 +227,43 @@ extension SessionProcessIntegration {
                 let result = try await waiting.value
                 #expect(result.status == 1)
                 #expect(result.standardError.contains("ended"), "standard error: \(result.standardError)")
+            }
+        }
+
+        @Test func aClientThatFloodsInputMeetsBackpressureAndTheProcessStaysSmall() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier)
+                let before = try measured(process.memoryFootprint, "the memory footprint")
+                let threadsBefore = try measured(process.threadCount, "the thread count")
+
+                let total = 256 * 1024 * 1024
+                let flood = MessageFlood(client: client, frameSize: 64 * 1024, total: total)
+                defer { client.connection.shutdown() }
+                await flood.waitUntilStalled(timeout: .seconds(30))
+                let sent = flood.sentBytes.load(ordering: .sequentiallyConsistent)
+                let after = try measured(process.memoryFootprint, "the memory footprint")
+                let threadsAfter = try measured(process.threadCount, "the thread count")
+                print("input-flood: sent \(sent) bytes before the sends stopped; memory footprint \(before) then \(after) bytes; threads \(threadsBefore) then \(threadsAfter)")
+
+                // The sends stop soon after the 8 MiB backlog and the 1 MiB
+                // read-ahead are full. They do not stop before: that would be a
+                // smaller backlog than the design promises. A test machine
+                // measured 9,371,648 bytes.
+                #expect(sent >= 8 * 1024 * 1024, "sent only \(sent) bytes")
+                #expect(sent < 10 * 1024 * 1024 + 512 * 1024, "sent \(sent) bytes")
+                // The backlog and the read-ahead use about 10 MiB, and a test
+                // machine measured 13 MiB more than before.
+                #expect(after - before < 24 * 1024 * 1024, "the memory footprint grew from \(before) to \(after) bytes")
+                #expect(threadsAfter <= threadsBefore + 4, "threads went from \(threadsBefore) to \(threadsAfter)")
+
+                // The session process still serves other requests, and kill ends
+                // the session whose input waits.
+                #expect(try process.listedIdentifiers() == [identifier])
+                #expect(try process.runCommand(["kill", identifier]).status == 0)
+                #expect(try process.listedIdentifiers().isEmpty)
+                #expect(await eventually(timeout: .seconds(10)) { flood.isFinished.load(ordering: .sequentiallyConsistent) })
             }
         }
 
