@@ -165,6 +165,34 @@ private final class MessageFlood: Sendable {
     }
 }
 
+/// Reads a connection on its own thread until the session process closes it,
+/// and keeps how it ended: a clean close between two frames, or an error.
+private final class ClosedConnectionWatch: Sendable {
+    enum Ending: Sendable, Equatable {
+        case cleanClose
+        case failed(String)
+    }
+
+    private let ending = Mutex<Ending?>(nil)
+
+    init(client: RawClient) {
+        let thread = Thread { [self] in
+            let result: Ending
+            do {
+                while try client.connection.receive(ServerMessage.self) != nil {}
+                result = .cleanClose
+            } catch {
+                result = .failed("\(error)")
+            }
+            ending.withLock { $0 = result }
+        }
+        thread.start()
+    }
+
+    /// How the connection ended, or `nil` while it is open.
+    var result: Ending? { ending.withLock { $0 } }
+}
+
 /// The value of something that the system measures. A process always has
 /// memory, threads and descriptors, so a zero or a missing value means that
 /// the measurement failed, and a bound checked against it would prove nothing.
@@ -265,6 +293,44 @@ extension SessionProcessIntegration {
                 #expect(try process.listedIdentifiers().isEmpty)
                 #expect(await eventually(timeout: .seconds(10)) { flood.isFinished.load(ordering: .sequentiallyConsistent) })
             }
+        }
+
+        @Test func aClientWhoseInputWaitsCanDetachAndTheProcessCanStop() async throws {
+            let process = try RunningSessionProcess()
+            defer { process.stop() }
+            let goFile = process.directory.appendingPathComponent("go")
+            // After the go file, the program reads the filler, then counts what
+            // else arrives until no byte comes for a second.
+            let script = "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; "
+                + "head -c \(fillerByteCount) > /dev/null; stty min 0 time 10; "
+                + "printf 'extra=%s\\n' \"$(dd bs=65536 2>/dev/null | wc -c | tr -d ' ')\"; sleep 600"
+            let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+            #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+            try fillBacklog(of: identifier, in: process)
+
+            // The backlog is full, so this client's input waits.
+            let client = try RawClient(socketPath: process.socketPath)
+            try client.attach(to: identifier)
+            try client.connection.send(ClientMessage.input(Data(patternBytes(count: 64 * 1024))))
+            try client.connection.send(ClientMessage.detach)
+            let closed = ClosedConnectionWatch(client: client)
+            // The session process ends the connection cleanly. An error would
+            // also end the reader, and must not pass for a detach.
+            #expect(await eventually(timeout: .seconds(5)) { closed.result != nil })
+            #expect(closed.result == .cleanClose, "the connection ended with \(String(describing: closed.result))")
+            client.connection.shutdown()
+            #expect(try process.listedIdentifiers() == [identifier])
+
+            // The input that waited when the client left never reaches the
+            // program. The program reads the filler and then nothing more.
+            FileManager.default.createFile(atPath: goFile.path, contents: Data())
+            #expect(await process.waitForScreen(of: identifier, containing: "extra=", timeout: .seconds(60)))
+            let screen = try process.screenText(of: identifier)
+            #expect(lines(of: screen).contains("extra=0"), "screen: \(screen)")
+
+            // Stopping the process ends the program.
+            process.send(signal: SIGTERM)
+            #expect(await process.waitForExit(timeout: 10) == 0)
         }
 
         /// A reading thread that waits for room must notice
