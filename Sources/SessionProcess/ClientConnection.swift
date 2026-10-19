@@ -28,6 +28,13 @@ final class ClientConnection: Sendable {
         var phase = Phase.open
         var hasLeft = false
         var leaveHandlers: [@Sendable () -> Void] = []
+        /// The reading thread has returned.
+        var readingHasStopped = false
+        /// The write queue has run its last work, after the connection ended.
+        var writingHasStopped = false
+        /// The descriptor is closed.
+        var isClosed = false
+        var closeWaiters: [CheckedContinuation<Void, Never>] = []
     }
 
     private enum Admission {
@@ -53,6 +60,7 @@ final class ClientConnection: Sendable {
             defer {
                 continuation.finish()
                 self?.clientLeft()
+                self?.readingStopped()
             }
             do {
                 try connection.greetClient(within: ConnectionLimits.helloTimeLimit)
@@ -87,6 +95,20 @@ final class ClientConnection: Sendable {
             return state.hasLeft
         }
         if hasLeft { handler() }
+    }
+
+    /// Returns once the connection has ended, both of its threads are done
+    /// with the socket, and the descriptor is closed. After
+    /// `closeAfterSending`, that takes at most about
+    /// `ConnectionLimits.closingTimeLimit`.
+    func waitUntilClosed() async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let isClosed = state.withLock { state -> Bool in
+                if !state.isClosed { state.closeWaiters.append(continuation) }
+                return state.isClosed
+            }
+            if isClosed { continuation.resume() }
+        }
     }
 
     /// Queues a message for the client. Never blocks.
@@ -211,6 +233,9 @@ final class ClientConnection: Sendable {
         readAhead.close()
         connection.shutdown()
         clientLeft()
+        // Every write was queued before the phase changed, and none after. So
+        // when this runs, the write queue is done with the socket.
+        writeQueue.async { [self] in writingStopped() }
     }
 
     private func clientLeft() {
@@ -221,5 +246,29 @@ final class ClientConnection: Sendable {
             return state.leaveHandlers
         }
         handlers.forEach { $0() }
+    }
+
+    private func readingStopped() {
+        state.withLock { $0.readingHasStopped = true }
+        closeWhenUnused()
+    }
+
+    private func writingStopped() {
+        state.withLock { $0.writingHasStopped = true }
+        closeWhenUnused()
+    }
+
+    /// Closes the descriptor once neither thread uses it, and wakes those
+    /// that wait for it. Until then the client keeps its place among the
+    /// clients that the session process serves.
+    private func closeWhenUnused() {
+        let waiters = state.withLock { state -> [CheckedContinuation<Void, Never>] in
+            guard state.readingHasStopped, state.writingHasStopped, !state.isClosed else { return [] }
+            connection.close()
+            state.isClosed = true
+            defer { state.closeWaiters.removeAll() }
+            return state.closeWaiters
+        }
+        waiters.forEach { $0.resume() }
     }
 }

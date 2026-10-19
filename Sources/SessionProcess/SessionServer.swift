@@ -54,6 +54,11 @@ actor SessionServer {
         clients[key] = client
         let handler = Task {
             await self.serve(client)
+            // The place stays taken until the socket is closed and both of the
+            // client's threads are done with it. A client that detaches while
+            // its last messages still go out counts until then, so clients
+            // that come and go fast cannot hold more than the limit of sockets.
+            await client.waitUntilClosed()
             self.finish(key)
         }
         handlers[key] = handler
