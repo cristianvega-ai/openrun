@@ -16,3 +16,13 @@ public final class RunningSessionProcess: @unchecked Sendable {
         return URL(fileURLWithPath: path, isDirectory: true)
     }
 }
+
+/// Polls until the condition holds or the timeout passes.
+public func eventually(timeout: Duration = .seconds(15), _ condition: () async throws -> Bool) async rethrows -> Bool {
+    let deadline = ContinuousClock.now + timeout
+    while ContinuousClock.now < deadline {
+        if try await condition() { return true }
+        try? await Task.sleep(for: .milliseconds(25))
+    }
+    return try await condition()
+}

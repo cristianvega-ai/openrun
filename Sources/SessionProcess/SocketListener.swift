@@ -39,6 +39,32 @@ final class SocketListener: @unchecked Sendable {
         let queue = DispatchQueue(label: "SocketListener")
         let source = DispatchSource.makeReadSource(fileDescriptor: descriptor, queue: queue)
         self.source = source
+        source.setEventHandler {
+            while true {
+                let accepted = accept(descriptor, nil, nil)
+                if accepted >= 0 {
+                    // Some systems pass the non-blocking flag on to accepted
+                    // sockets. The connection code expects blocking calls.
+                    _ = fcntl(accepted, F_SETFL, 0)
+                    let connection = MessageConnection(descriptor: accepted)
+                    switch continuation.yield(connection) {
+                    case .enqueued:
+                        break
+                    case .dropped(let dropped):
+                        dropped.shutdown()
+                    case .terminated:
+                        connection.shutdown()
+                    @unknown default:
+                        connection.shutdown()
+                    }
+                    continue
+                }
+                let code = errno
+                if code == EINTR || code == ECONNABORTED { continue }
+                if code == EAGAIN { return }
+                return
+            }
+        }
         source.setCancelHandler {
             Darwin.close(descriptor)
             continuation.finish()
