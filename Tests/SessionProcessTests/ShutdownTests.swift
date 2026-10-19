@@ -40,5 +40,26 @@ extension SessionProcessIntegration {
             #expect(folderMode == 0o700)
             #expect(socketMode == 0o600)
         }
+
+        @Test func aSocketPathThatIsTooLongGetsAClearError() throws {
+            let directory = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let longPath = "/" + String(repeating: "x", count: 200)
+
+            let session = Process()
+            session.executableURL = RunningSessionProcess.sessionExecutable
+            session.arguments = ["--socket", longPath]
+            let errorPipe = Pipe()
+            session.standardError = errorPipe
+            try session.run()
+            session.waitUntilExit()
+            let sessionError = String(decoding: errorPipe.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self)
+            #expect(session.terminationStatus == 1)
+            #expect(sessionError.contains("too long"))
+
+            let tool = try RunningSessionProcess.runOpenrun(["list", "--socket", longPath], in: directory)
+            #expect(tool.status == 1)
+            #expect(tool.standardError.contains("too long"))
+        }
     }
 }

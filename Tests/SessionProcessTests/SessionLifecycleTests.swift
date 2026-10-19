@@ -26,5 +26,15 @@ extension SessionProcessIntegration {
             let mode = try FileManager.default.attributesOfItem(atPath: folders[0].path)[.posixPermissions] as? Int
             #expect(mode == 0o700)
         }
+
+        @Test func aMissingSessionProcessIsReportedClearly() throws {
+            let directory = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let socket = directory.appendingPathComponent("absent").path
+            let result = try RunningSessionProcess.runOpenrun(["list", "--socket", socket], in: directory)
+            #expect(result.status == 1)
+            #expect(result.standardError.contains("No session process"))
+            #expect(result.standardOutput.isEmpty)
+        }
     }
 }
