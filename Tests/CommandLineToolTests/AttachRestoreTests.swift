@@ -221,6 +221,67 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// `printf '\033[5;10r\033[4h'` and a detach used to leave the shell
+        /// scrolling rows 5 to 10, in insert mode.
+        @Test func detachingUndoesTheScrollRegionAndInsertModeThatTheProgramLeft() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = "stty -echo; read line; printf '\\033[5;10r\\033[4h'; echo modes-set; exec sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let afterwards = """
+                    number=0
+                    while [ $number -lt 30 ]; do echo line-$number; number=$((number+1)); done
+                    printf 'ABCDEFGH\\rxy\\n'
+                    echo end-of-lines
+                    """
+                let report = process.directory.appendingPathComponent("report")
+                let script = restoreScript(identifier: identifier, socketPath: process.socketPath, report: report, afterwards: afterwards)
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(try process.runCommand(["send", identifier, "--enter", "go"]).status == 0)
+                #expect(await terminal.waitForScreen(containing: "modes-set"))
+
+                terminal.type(bytes: controlBracket)
+                #expect(await terminal.waitForScreen(containing: "end-of-lines"))
+                #expect(await reportText(report) == "status=0 mode-restored")
+                let screen = terminal.screenText
+                // Insert mode is off: the second text overwrites the first.
+                #expect(screen.contains("xyCDEFGH") && !screen.contains("xyABCDEFGH"), "\(screen)")
+                // The whole screen scrolls, so the first row shows a late line.
+                let firstRow = screen.split(separator: "\n", omittingEmptySubsequences: false).first.map(String.init) ?? ""
+                #expect(firstRow.hasPrefix("line-"), "\(screen)")
+            }
+        }
+
+        @Test func closingLeavesTheAlternateScreenFirstAndResetsTheCursorShapeCharacterSetsAndColors() async throws {
+            try await RunningSessionProcess.run { process in
+                let changes = "\\033[4 q\\033]10;#ff0000\\033\\\\\\033]11;#00ff00\\033\\\\\\033]12;#0000ff\\033\\\\\\033[?7l\\033)0\\033(0"
+                let program = "stty -echo; printf '\\033[?1049h'; read line; printf '\(changes)'; exec sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let terminal = try AttachedTerminal(shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(try process.runCommand(["send", identifier, "--enter", "go"]).status == 0)
+                // The last change of the program arrived.
+                #expect(await eventually { contains("\u{1B})0\u{1B}(0", in: terminal.receivedBytes) })
+
+                terminal.type(bytes: controlBracket)
+                #expect(await terminal.waitForScreen(containing: "mode-"))
+                #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+                let received = terminal.receivedBytes
+                let changed = try #require(lastIndex(of: Array("\u{1B})0\u{1B}(0".utf8), in: received))
+                let closing = Array(received[(changed + 6)...])
+                #expect(Array(closing.prefix(3)) == endOfOpenSequence, "\(String(decoding: closing.prefix(40), as: UTF8.self))")
+                let leave = try #require(firstIndex(of: Array("\u{1B}[?1049l".utf8), in: closing))
+                for reset in ["\u{1B}[0m", "\u{1B}[r", "\u{1B}[4l", "\u{1B}[?7h", "\u{1B}[0 q", "\u{1B}(B", "\u{1B})B", "\u{0F}",
+                              "\u{1B}]110\u{1B}\\", "\u{1B}]111\u{1B}\\", "\u{1B}]112\u{1B}\\"] {
+                    let position = firstIndex(of: Array(reset.utf8), in: closing)
+                    #expect(position != nil, "missing \(Array(reset.utf8))")
+                    if let position { #expect(position > leave, "\(Array(reset.utf8)) comes before leaving the alternate screen") }
+                }
+            }
+        }
+
         /// A stop signal, and soon after it a signal to end, with the terminal
         /// taking no output: the closing sequences of the suspension wait for the
         /// terminal for a second, and the ending comes meanwhile. The tool then
@@ -305,6 +366,31 @@ extension CommandLineToolIntegration {
                 let afterwards = terminal.receivedBytes.dropFirst(beforeSuspension)
                 #expect(contains("\u{1B}[?1049l", in: afterwards))
                 #expect(contains("\u{1B}[23;0t", in: afterwards), "the title was not popped")
+            }
+        }
+
+        @Test func closingMovesTheCursorBackAfterAProgramSetOriginMode() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = "stty -echo; read line; printf '\\033[5;10r\\033[?6h\\033[2;3Hin-origin-mode'; exec sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let terminal = try AttachedTerminal(shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(try process.runCommand(["send", identifier, "--enter", "go"]).status == 0)
+                #expect(await terminal.waitForScreen(containing: "in-origin-mode"))
+
+                terminal.type(bytes: controlBracket)
+                #expect(await terminal.waitForScreen(containing: "mode-"))
+                #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+                let received = terminal.receivedBytes
+                let marker = try #require(lastIndex(of: Array("in-origin-mode".utf8), in: received))
+                let closing = Array(received[marker...])
+                // Origin mode comes off after the restore of the cursor, and a move puts the cursor back.
+                // Row 2 of the scroll region that starts at row 5 is row 6, and the text ends at column 17.
+                let restore = try #require(firstIndex(of: Array("\u{1B}8".utf8), in: closing))
+                let reset = try #require(lastIndex(of: Array("\u{1B}[?6l".utf8), in: closing))
+                #expect(reset > restore)
+                #expect(contains("\u{1B}[?6l\u{1B}[6;17H", in: closing), "\(String(decoding: closing, as: UTF8.self).debugDescription)")
             }
         }
 
