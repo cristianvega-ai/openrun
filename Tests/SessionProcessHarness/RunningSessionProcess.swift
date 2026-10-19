@@ -83,6 +83,20 @@ public final class RunningSessionProcess: @unchecked Sendable {
         }
     }
 
+    /// Runs a test body with a session process, and stops the process after
+    /// the body, even when the body throws.
+    public static func run<Result: Sendable>(_ body: (RunningSessionProcess) async throws -> Result) async throws -> Result {
+        let running = try RunningSessionProcess()
+        do {
+            let result = try await body(running)
+            running.stop()
+            return result
+        } catch {
+            running.stop()
+            throw error
+        }
+    }
+
     public var processIdentifier: pid_t { process.processIdentifier }
     public var isRunning: Bool { process.isRunning }
 
@@ -197,4 +211,49 @@ public func eventually(timeout: Duration = .seconds(15), _ condition: () async t
         try? await Task.sleep(for: .milliseconds(25))
     }
     return try await condition()
+}
+
+// Short forms of the commands that nearly every test uses.
+extension RunningSessionProcess {
+    /// Starts a session with `openrun new` and returns its identifier.
+    public func createSession(
+        program: [String] = [],
+        folder: URL? = nil,
+        environment: [String: String] = [:]
+    ) throws -> String {
+        var arguments = ["new"]
+        if let folder { arguments += ["--folder", folder.path] }
+        if !program.isEmpty { arguments += ["--"] + program }
+        let result = try runCommand(arguments, environment: environment)
+        guard result.status == 0, let identifier = result.outputLines.first else {
+            throw HarnessError.commandFailed(arguments: arguments, result: result)
+        }
+        return identifier
+    }
+
+    /// The identifiers that `openrun list` shows. Throws when the command
+    /// fails, so a dead session process is not read as an empty list.
+    public func listedIdentifiers() throws -> [String] {
+        try succeeding(["list"]).outputLines.compactMap { $0.split(separator: "\t").first.map(String.init) }
+    }
+
+    /// The text of a session's screen, from `openrun read`. Throws when the
+    /// command fails, so a dead session process is not read as an empty screen.
+    public func screenText(of identifier: String, includeScrollback: Bool = false) throws -> String {
+        try succeeding(["read", identifier] + (includeScrollback ? ["--scrollback"] : [])).standardOutput
+    }
+
+    /// Runs a command that must work: status 0 and nothing on standard error.
+    private func succeeding(_ arguments: [String]) throws -> CommandResult {
+        let result = try runCommand(arguments)
+        guard result.status == 0, result.standardError.isEmpty else {
+            throw HarnessError.commandFailed(arguments: arguments, result: result)
+        }
+        return result
+    }
+
+    /// Waits until a session's screen shows the text.
+    public func waitForScreen(of identifier: String, containing text: String, timeout: Duration = .seconds(15)) async -> Bool {
+        await eventually(timeout: timeout) { ((try? screenText(of: identifier)) ?? "").contains(text) }
+    }
 }

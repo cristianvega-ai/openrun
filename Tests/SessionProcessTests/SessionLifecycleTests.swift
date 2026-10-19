@@ -7,8 +7,33 @@ import Testing
 @testable import SessionProcess
 
 
+private func realPath(_ file: URL) -> String {
+    String(cString: realpath(file.path, nil))
+}
+
 extension SessionProcessIntegration {
     @Suite struct SessionLifecycleTests {
+
+        @Test func aSessionRunsTheGivenFolderAndCommand() async throws {
+            try await RunningSessionProcess.run { process in
+                let folder = try RunningSessionProcess.makeDirectory()
+                defer { try? FileManager.default.removeItem(at: folder) }
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "pwd; sleep 60"], folder: folder)
+                #expect(await process.waitForScreen(of: identifier, containing: realPath(folder)))
+                let listing = try process.runCommand(["list"]).outputLines
+                #expect(listing == ["\(identifier)\t\(folder.path)\t/bin/sh -c pwd; sleep 60"])
+            }
+        }
+
+        @Test func aSessionWithoutAFolderStartsInTheCurrentFolder() async throws {
+            try await RunningSessionProcess.run { process in
+                let folder = try RunningSessionProcess.makeDirectory()
+                defer { try? FileManager.default.removeItem(at: folder) }
+                let result = try process.runCommand(["new", "--", "/bin/sh", "-c", "pwd; sleep 60"], folder: folder)
+                let identifier = try #require(result.outputLines.first)
+                #expect(await process.waitForScreen(of: identifier, containing: realPath(folder)))
+            }
+        }
 
         /// A folder name with 32 random bits could silently
         /// reuse a folder that an earlier run left behind.
