@@ -56,8 +56,78 @@ final class ClientConnection: Sendable {
         thread.start()
     }
 
+    /// Queues a message for the client. Never blocks.
+    func send(_ message: ServerMessage, countsTowardOutputLimit: Bool = true) {
+        enqueue(message, countsTowardOutputLimit: countsTowardOutputLimit, whenWritten: nil)
+    }
+
+    func sendAndWait(_ message: ServerMessage) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            enqueue(message, countsTowardOutputLimit: false) { continuation.resume() }
+        }
+    }
+
+    func closeAfterSending() {
+        let starts = state.withLock { state -> Bool in
+            guard state.phase == .open else { return false }
+            state.phase = .closing
+            return true
+        }
+        guard starts else { return }
+        writeQueue.async { [self] in end() }
+    }
+
     // MARK: - Private
 
+
+    private func enqueue(_ message: ServerMessage, countsTowardOutputLimit: Bool, whenWritten: (@Sendable () -> Void)?) {
+        let frame: MessageFrame
+        do {
+            frame = try message.frame()
+        } catch {
+            end()
+            whenWritten?()
+            return
+        }
+        let size = countsTowardOutputLimit ? Self.countedByteCount(of: frame) : 0
+        let admission = state.withLock { state -> Admission in
+            guard state.phase == .open else { return .refused }
+            // Queued while the lock is held, so the write runs before the last
+            // work that `end` queues once it has changed the phase.
+            writeQueue.async { [self] in write(frame, countedAs: size, whenWritten: whenWritten) }
+            return .queued
+        }
+        switch admission {
+        case .refused:
+            whenWritten?()
+        case .queued:
+            break
+        }
+    }
+
+    private func write(_ frame: MessageFrame, countedAs size: Int, whenWritten: (@Sendable () -> Void)?) {
+        if !hasEnded {
+            do {
+                try connection.send(frame)
+            } catch {
+                end()
+            }
+        }
+        whenWritten?()
+    }
+
+    /// Terminal bytes count their payload, as the limit is written. A control
+    /// message counts its whole frame.
+    private static func countedByteCount(of frame: MessageFrame) -> Int {
+        switch frame.kind {
+        case .control: MessageFrame.lengthFieldSize + 1 + frame.payload.count
+        case .output, .snapshot, .input: frame.payload.count
+        }
+    }
+
+    private var hasEnded: Bool {
+        state.withLock { $0.phase == .ended }
+    }
 
     private func endIfOpen() {
         guard state.withLock({ $0.phase == .open }) else { return }
