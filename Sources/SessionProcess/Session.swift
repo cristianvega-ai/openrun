@@ -129,6 +129,9 @@ actor Session {
             ))
         }
         client.send(.attached(summary))
+        // A snapshot of a full, colorful scrollback can be larger than the
+        // limit for output that waits, so it does not count. The output that
+        // follows it does.
         client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
         clients[ObjectIdentifier(client)] = client
         if relaysRawOutput { relayingClients.insert(ObjectIdentifier(client)) }

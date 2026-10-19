@@ -133,6 +133,14 @@ private func createSession(in process: RunningSessionProcess, command: [String],
     return summary.identifier
 }
 
+/// What a slow client received after it attached.
+private struct SlowAttachment: Sendable {
+    var snapshotByteCount = 0
+    var snapshotText = ""
+    var outputAfterSnapshot = ""
+    var problem: String?
+}
+
 
 extension SessionProcessIntegration {
     @Suite struct ReattachTests {
@@ -382,6 +390,75 @@ extension SessionProcessIntegration {
                 #expect(afterwards.contains("row-\(String(format: "%05d", printed))"))
                 #expect(!afterwards.contains("row-00001"))
                 #expect((9_000...11_000).contains(second.terminal.scrollbackLineCount))
+            }
+        }
+
+        /// 8,000 lines of 239 characters, each character in its own color, then
+        /// a line every 20 milliseconds.
+        private static let styledLinesProgram = #"""
+            $| = 1;
+            for my $line (1 .. 8000) {
+                my $text = '';
+                for my $column (1 .. 239) {
+                    $text .= sprintf("\e[38;5;%dm%c", ($column * 7 + $line) % 256, 97 + ($column + $line) % 26);
+                }
+                print $text, "\e[0m\n";
+            }
+            print "styled-done\n";
+            while (1) {
+                print "tick\n";
+                select(undef, undef, undef, 0.02);
+            }
+            """#
+
+        /// A snapshot larger than the 8 MiB that a client may fall
+        /// behind made the next output frame end the connection mid-snapshot.
+        @Test func aStyledSnapshotLargerThanTheOutputLimitArrivesWholeWhileTheProgramPrints() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = process.directory.appendingPathComponent("styled-lines")
+                try Self.styledLinesProgram.write(to: program, atomically: true, encoding: .utf8)
+                let size = SessionSize(columns: 240, rows: 50)
+                let identifier = try createSession(in: process, command: ["/usr/bin/perl", program.path], size: size)
+                #expect(await process.waitForScreen(of: SessionSummary.text(for: identifier), containing: "tick", timeout: .seconds(120)))
+
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+                try connection.send(ClientMessage.attach(identifier: identifier, size: size))
+                // The client reads nothing for a second, so output waits behind the snapshot.
+                try await Task.sleep(for: .seconds(1))
+
+                let attachment = await Task.detached { () -> SlowAttachment in
+                    var attachment = SlowAttachment()
+                    do {
+                        guard case .attached = try receiveMessage(connection, within: 30) else {
+                            attachment.problem = "The first answer to attach was not attached."
+                            return attachment
+                        }
+                        guard case .snapshot(let bytes) = try receiveMessage(connection, within: 60) else {
+                            attachment.problem = "The second answer to attach was not a snapshot."
+                            return attachment
+                        }
+                        attachment.snapshotByteCount = bytes.count
+                        let terminal = try TerminalSnapshot(bytes: Array(bytes)).restoreTerminal(scrollbackLimit: 10_000)
+                        attachment.snapshotText = String(decoding: try terminal.formatted(.plainText, extent: .withScrollback), as: UTF8.self)
+                        while !attachment.outputAfterSnapshot.contains("tick") {
+                            guard let message = try receiveMessage(connection, within: 30) else {
+                                attachment.problem = "The connection closed after the snapshot."
+                                return attachment
+                            }
+                            if case .output(let output) = message { attachment.outputAfterSnapshot += String(decoding: output, as: UTF8.self) }
+                        }
+                    } catch {
+                        attachment.problem = "\(error)"
+                    }
+                    return attachment
+                }.value
+                print("large-snapshot: \(attachment.snapshotByteCount) bytes")
+                #expect(attachment.problem == nil, "\(attachment.problem ?? "")")
+                #expect(attachment.snapshotByteCount > 8 * 1024 * 1024, "the snapshot has \(attachment.snapshotByteCount) bytes")
+                #expect(attachment.snapshotText.contains("styled-done"))
+                #expect(attachment.outputAfterSnapshot.contains("tick"))
             }
         }
 

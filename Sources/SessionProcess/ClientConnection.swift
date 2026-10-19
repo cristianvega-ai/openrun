@@ -88,6 +88,8 @@ final class ClientConnection: Sendable {
 
 
     private func enqueue(_ message: ServerMessage, countsTowardOutputLimit: Bool, whenWritten: (@Sendable () -> Void)?) {
+        // The frame is made here, once, so a control message counts the bytes
+        // that really go out. A list of many sessions can be large.
         let frame: MessageFrame
         do {
             frame = try message.frame()
