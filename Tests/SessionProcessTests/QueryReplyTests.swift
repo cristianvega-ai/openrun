@@ -74,6 +74,96 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// The program asks the three queries that a headless session once left
+        /// unanswered. After each reply it listens for a second one.
+        private static let sizeAndSchemeScript = #"""
+        stty raw -echo opost
+        ask() {
+          printf "$2"
+          printf '%s=' "$1"
+          dd bs=1 count=$3 2>/dev/null | od -An -c
+          stty min 0 time 15
+          printf 'extra_%s=%s\n' "$1" "$(dd bs=1 count=64 2>/dev/null | wc -c | tr -d ' ')"
+          stty min 1 time 0
+        }
+        printf 'size=%s\n' "$(stty size)"
+        ask characters '\033[18t' 10
+        ask area '\033[14t' 12
+        ask scheme '\033[?996n' 9
+        printf 'DONE\n'
+        sleep 60
+        """#
+
+        @Test func sizeAndColorSchemeQueriesAreAnsweredOnceWithoutAClient() async throws {
+            try await RunningSessionProcess.run { process in
+                // No client ever attaches to this session.
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.sizeAndSchemeScript])
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE", timeout: .seconds(30)))
+                // od separates bytes with spaces, and long lines may wrap.
+                let screen = try process.screenText(of: identifier).filter { !$0.isWhitespace }
+                // The new session has the size of a plain 80 by 24 window.
+                #expect(screen.contains("size=2480"))
+                // CSI 18 t: ESC [ 8 ; 24 ; 80 t
+                #expect(screen.contains("characters=033[8;24;80t"))
+                #expect(screen.contains("extra_characters=0"))
+                // CSI 14 t: 24 rows of 16 pixels, 80 columns of 8 pixels.
+                #expect(screen.contains("area=033[4;384;640t"))
+                #expect(screen.contains("extra_area=0"))
+                // CSI ? 996 n: dark is 1 and light is 2.
+                #expect(screen.contains("scheme=033[?997;1n") || screen.contains("scheme=033[?997;2n"))
+                #expect(screen.contains("extra_scheme=0"))
+            }
+        }
+
+        /// The program asks for the foreground color, the background color, and
+        /// the size of the screen in pixels (12 bytes of reply). These sit outside the first set of
+        /// queries. After each reply it listens for a second one. A go file
+        /// lets a test attach a client first.
+        private static func colorAndDotSizeScript(goFolder: URL) -> String {
+            #"""
+            stty raw -echo opost
+            ask() {
+              printf "$2"
+              printf '%s=' "$1"
+              dd bs=1 count=$3 2>/dev/null | od -An -c
+              stty min 0 time 15
+              printf 'extra_%s=%s\n' "$1" "$(dd bs=1 count=64 2>/dev/null | wc -c | tr -d ' ')"
+              stty min 1 time 0
+            }
+            printf 'READY\n'
+            while [ ! -e '\#(goFolder.path)'/go ]; do sleep 0.1; done
+            ask foreground '\033]10;?\007' 24
+            ask background '\033]11;?\007' 24
+            ask dots '\033[15t' 12
+            printf 'DONE\n'
+            sleep 60
+            """#
+        }
+
+        /// The colors that the macOS appearance gives: black on white in light
+        /// mode, white on black in dark mode. The test cannot tell which mode
+        /// the Mac is in, so it accepts only the two matching pairs.
+        private static func expectColors(in screen: String) {
+            let light = screen.contains("foreground=033]10;rgb:0000/0000/0000\\a") && screen.contains("background=033]11;rgb:ffff/ffff/ffff\\a")
+            let dark = screen.contains("foreground=033]10;rgb:ffff/ffff/ffff\\a") && screen.contains("background=033]11;rgb:0000/0000/0000\\a")
+            #expect(light || dark, "colors: \(screen)")
+            // A 80 by 24 grid of 8 by 16 pixel cells: 384 high and 640 wide.
+            #expect(screen.contains("dots=033[5;384;640t"))
+            for name in ["foreground", "background", "dots"] {
+                #expect(screen.contains("extra_\(name)=0"), "extra_\(name): \(screen)")
+            }
+        }
+
+        @Test func colorAndDotSizeQueriesAreAnsweredOnceWithoutAClient() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.colorAndDotSizeScript(goFolder: process.directory)])
+                #expect(await process.waitForScreen(of: identifier, containing: "READY"))
+                FileManager.default.createFile(atPath: process.directory.appendingPathComponent("go").path, contents: Data())
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE", timeout: .seconds(30)))
+                Self.expectColors(in: try process.screenText(of: identifier).filter { !$0.isWhitespace })
+            }
+        }
+
         @Test func aReplyThatArrivesOneSecondLateIsSeenByTheDuplicateDetector() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
