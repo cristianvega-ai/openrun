@@ -4,6 +4,12 @@ import Darwin
 public enum SessionProcessError: Error, Equatable, Sendable, CustomStringConvertible {
     /// Another session process already answers on this socket.
     case alreadyRunning(path: String)
+    /// A file that is not a socket sits at the socket path. The session process
+    /// refuses to delete a file it did not create.
+    case pathIsNotASocket(path: String)
+    /// The file at the socket path changed while the session process
+    /// checked whether a session process listens there. It was left alone.
+    case socketFileReplaced(path: String)
     /// The lock file next to the socket was removed or replaced each
     /// time the session process took the lock.
     case lockFileKeepsChanging(path: String)
@@ -20,6 +26,10 @@ public enum SessionProcessError: Error, Equatable, Sendable, CustomStringConvert
         switch self {
         case .alreadyRunning(let path):
             "A session process already runs on \(path). Stop it first, or choose another socket with --socket."
+        case .pathIsNotASocket(let path):
+            "\(path) exists and is not a socket, so it was left alone. Choose another socket with --socket."
+        case .socketFileReplaced(let path):
+            "The file at \(path) was replaced while the session process checked whether another one listens there, so it was left alone. Start the session process again, or choose another socket with --socket."
         case .lockFileKeepsChanging(let path):
             "The lock file \(path) was replaced each time the session process took it. Check what changes files in that folder."
         case .lockFileIsNotARegularFile(let path):

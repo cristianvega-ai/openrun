@@ -11,6 +11,10 @@ final class SocketListener: @unchecked Sendable {
     /// Held until the listener goes away, which is the end of the process.
     private let lock: SocketLock
 
+    /// How long a program that listens on the path may take to answer hello
+    /// before it counts as no session process. A live one answers at once.
+    static let liveAnswerTimeLimit: Duration = .seconds(2)
+
     /// The most accepted connections that may wait for the server to take
     /// them. A connection that waits is outside the client limit and has no
     /// hello deadline yet, so each one would hold a descriptor for nothing.
@@ -32,6 +36,7 @@ final class SocketListener: @unchecked Sendable {
         self.location = location
         try Self.prepareFolder(for: location)
         lock = try SocketLock(socketPath: location.path)
+        try Self.removeStaleSocket(at: location)
         let descriptor = try Self.bindAndListen(at: location)
 
         // .bufferingOldest keeps the oldest waiting connections. When the
@@ -127,6 +132,51 @@ final class SocketListener: @unchecked Sendable {
         try location.checkFolder()
     }
 
+    // A crashed session process leaves its socket file behind. This process
+    // holds the lock, so no other session process of this version is alive
+    // on the path. What listens there may still be an older session process,
+    // or another program. Only a program that answers hello is a session
+    // process. A listener that does not answer, or no listener at all, makes
+    // the file stale.
+    //
+    // The check takes up to two seconds, and another program can replace the
+    // file meanwhile. Only the socket that was checked is removed.
+    private static func removeStaleSocket(at location: SocketLocation) throws {
+        var status = stat()
+        guard lstat(location.path, &status) == 0 else { return }
+        guard (status.st_mode & S_IFMT) == S_IFSOCK else {
+            throw SessionProcessError.pathIsNotASocket(path: location.path)
+        }
+        let checked = (device: status.st_dev, serialNumber: status.st_ino)
+        do {
+            let connection = try MessageConnection.connect(to: location)
+            defer { connection.shutdown() }
+            try connection.greetSessionProcess(within: liveAnswerTimeLimit)
+            throw SessionProcessError.alreadyRunning(path: location.path)
+        } catch SessionProtocolError.systemCallFailed("connect", let code) where code == ECONNREFUSED || code == ENOENT {
+            // Nothing listens: the file is stale.
+        } catch SessionProtocolError.incompatibleVersion, SessionProtocolError.refused {
+            // A session process of another version, or one that serves as
+            // many clients as it may. It is alive either way.
+            throw SessionProcessError.alreadyRunning(path: location.path)
+        } catch let error as SessionProtocolError {
+            switch error {
+            case .socketFolderOfAnotherUser, .socketFolderWritableByOthers, .socketFolderWritableThroughAccessControlList,
+                 .socketFolderIsNotADirectory, .peerIsAnotherUser:
+                throw error
+            default:
+                SessionServer.log("A program listened on \(location.path) and did not answer as a session process (\(error)). Its socket file is replaced.")
+            }
+        }
+        var current = stat()
+        // A file that went away leaves nothing to remove.
+        guard lstat(location.path, &current) == 0 else { return }
+        guard current.st_dev == checked.device, current.st_ino == checked.serialNumber,
+              (current.st_mode & S_IFMT) == S_IFSOCK else {
+            throw SessionProcessError.socketFileReplaced(path: location.path)
+        }
+        unlink(location.path)
+    }
 
     private static func bindAndListen(at location: SocketLocation) throws -> Int32 {
         let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)

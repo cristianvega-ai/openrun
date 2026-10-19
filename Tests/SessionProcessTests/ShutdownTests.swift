@@ -144,6 +144,19 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test func aStaleSocketFileIsReplaced() async throws {
+            let first = try RunningSessionProcess()
+            defer { first.stop() }
+            first.send(signal: SIGKILL)
+            #expect(await first.waitForExit() != nil)
+            // SIGKILL gives the process no time to remove its socket file.
+            #expect(FileManager.default.fileExists(atPath: first.socketPath))
+
+            let second = try RunningSessionProcess(directory: first.directory, logName: "second-log")
+            defer { second.stop() }
+            #expect(try second.listedIdentifiers().isEmpty)
+        }
+
         @Test func theSocketIsPrivateInsideAPrivateFolder() async throws {
             let process = try RunningSessionProcess(socketRelativePath: "private/socket")
             defer { process.stop() }
@@ -151,6 +164,18 @@ extension SessionProcessIntegration {
             let socketMode = try FileManager.default.attributesOfItem(atPath: process.socketPath)[.posixPermissions] as? Int
             #expect(folderMode == 0o700)
             #expect(socketMode == 0o600)
+        }
+
+        @Test func aFileThatIsNotASocketIsLeftAlone() async throws {
+            let directory = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: directory) }
+            let path = directory.appendingPathComponent("socket")
+            try Data("precious".utf8).write(to: path)
+            let process = try RunningSessionProcess(directory: directory, waitUntilReady: false)
+            defer { process.stop() }
+            #expect(await process.waitForExit() == 1)
+            #expect(process.log.contains("not a socket"))
+            #expect(try String(contentsOf: path, encoding: .utf8) == "precious")
         }
 
         @Test func aSocketPathThatIsTooLongGetsAClearError() throws {
