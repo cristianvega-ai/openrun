@@ -1,5 +1,16 @@
 import Foundation
 
+/// Counts the frames that were read from a client and not yet handled, and
+/// holds the reading thread while they are too many.
+///
+/// Each frame counts its size, length field included, and counts as one
+/// message. `ConnectionLimits` gives both limits. A client that sends faster
+/// than its program reads then meets backpressure on its own socket, and
+/// cannot make the session process read, decode or keep more.
+///
+/// One small control frame may go past the limits, into a reserve. Input that
+/// waits for the program can fill the read-ahead for as long as the program
+/// reads nothing, and the client must still be able to detach.
 final class ReadAhead: @unchecked Sendable {
     /// Where an admitted frame counts until it is handled.
     enum Room: Sendable {
