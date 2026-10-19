@@ -55,7 +55,7 @@ final class ClientConnection: Sendable {
                 self?.clientLeft()
             }
             do {
-                try connection.greetClient()
+                try connection.greetClient(within: ConnectionLimits.helloTimeLimit)
                 while true {
                     var byteCount = 0
                     var room = ReadAhead.Room.shared

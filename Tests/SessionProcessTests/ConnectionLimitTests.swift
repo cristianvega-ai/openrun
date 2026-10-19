@@ -110,6 +110,75 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// Nothing ended a client that stopped halfway, and a frame
+        /// header made the session process allocate the whole announced body.
+        @Test func slowAndSilentConnectionsAreEndedOnTimeAndHoldLittleMemory() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "seq 1 30000; sleep 600"])
+                #expect(await process.waitForScreen(of: identifier, containing: "30000"))
+                let footprintBefore = try #require(process.memoryFootprint)
+                let threadsBefore = try #require(process.threadCount)
+                let descriptorsBefore = try #require(process.descriptorCount)
+                let start = ContinuousClock.now
+
+                // These never send their hello.
+                let silent = try (0..<6).map { _ in try connectedSocket(to: process.socketPath) }
+                // These send two bytes of a hello and stop.
+                let partial = try (0..<6).map { _ in
+                    let descriptor = try connectedSocket(to: process.socketPath)
+                    #expect(writeAll([0, 0], to: descriptor))
+                    return descriptor
+                }
+                defer { (silent + partial).forEach { close($0) } }
+                // These say hello, announce a frame of 64 MiB, send 100 bytes
+                // of it, and stop.
+                let announced = try (0..<4).map { _ in
+                    let client = try greetedConnection(to: process.socketPath)
+                    #expect(writeAll([0x04, 0x00, 0x00, 0x01, 3] + [UInt8](repeating: 0x61, count: 100), to: client.descriptor))
+                    return client
+                }
+                // This one asks for the screen and its scrollback, and never
+                // reads the answer, which is larger than the socket holds.
+                let reader = try greetedConnection(to: process.socketPath)
+                try reader.connection.send(ClientMessage.readScreen(identifier: UUID(uuidString: identifier)!, includeScrollback: true))
+                defer { (announced + [reader]).forEach { $0.connection.shutdown() } }
+
+                try await Task.sleep(for: .seconds(2))
+                let footprint = try #require(process.memoryFootprint)
+                let threads = try #require(process.threadCount)
+                print("slow-connections: footprint \(footprintBefore) then \(footprint); threads \(threadsBefore) then \(threads)")
+                #expect(footprint - footprintBefore < 32 * 1024 * 1024, "footprint grew from \(footprintBefore) to \(footprint) bytes")
+                #expect(threads <= threadsBefore + 17 + 8, "threads went from \(threadsBefore) to \(threads)")
+                #expect(!(silent + partial).contains(where: isClosedBySessionProcess), "a connection was closed before its hello deadline")
+                // Other clients are served meanwhile.
+                #expect(try process.runCommand(["list"]).status == 0)
+
+                // Hello must arrive within 5 seconds.
+                let helloEnded = await eventually(timeout: start + .seconds(8) - ContinuousClock.now) {
+                    (silent + partial).allSatisfy(isClosedBySessionProcess)
+                }
+                #expect(helloEnded, "connections without a hello were still open \(ContinuousClock.now - start) after they connected")
+                // A write that makes no progress for 10 seconds ends the client.
+                let writeEnded = await eventually(timeout: start + .seconds(15) - ContinuousClock.now) { isClosedBySessionProcess(reader.descriptor) }
+                #expect(writeEnded, "a client that read nothing was still open \(ContinuousClock.now - start) after it asked")
+                #expect(!announced.contains { isClosedBySessionProcess($0.descriptor) }, "a frame was ended before its 30 second stall limit")
+                // A frame that stalls for 30 seconds ends the client.
+                let frameEnded = await eventually(timeout: start + .seconds(36) - ContinuousClock.now) {
+                    announced.allSatisfy { isClosedBySessionProcess($0.descriptor) }
+                }
+                #expect(frameEnded, "stalled frames were still open \(ContinuousClock.now - start) after they started")
+
+                var descriptorsAfter = Int.max
+                var threadsAfter = Int.max
+                let released = await eventually(timeout: .seconds(15)) {
+                    descriptorsAfter = process.descriptorCount ?? Int.max
+                    threadsAfter = process.threadCount ?? Int.max
+                    return descriptorsAfter <= descriptorsBefore + 1 && threadsAfter <= threadsBefore + 4
+                }
+                #expect(released, "descriptors \(descriptorsBefore) then \(descriptorsAfter); threads \(threadsBefore) then \(threadsAfter)")
+            }
+        }
+
         /// Every connection got a thread, without a limit.
         @Test func clientsPastTheLimitAreRefusedAndTheThreadsStayBounded() async throws {
             try await RunningSessionProcess.run { process in

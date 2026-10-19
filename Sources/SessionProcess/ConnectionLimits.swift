@@ -5,6 +5,9 @@ enum ConnectionLimits {
     /// go out after it detached, so the limit bounds descriptors and threads.
     static let maximumClientCount = 64
 
+    /// A new connection must deliver its whole hello in this time.
+    static let helloTimeLimit: Duration = .seconds(5)
+
     /// A client may wait as long as it likes between two frames. Once a frame
     /// has started, each part of it must follow within this time.
     static let frameStallLimit: Duration = .seconds(30)
