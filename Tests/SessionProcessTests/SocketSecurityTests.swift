@@ -32,6 +32,29 @@ extension SessionProcessIntegration {
             #expect(Harness.mode(of: lockPath) == 0o600)
         }
 
+        // MARK: - The command line of openrun-session
+        //
+        // These belong to the start of a session process, as the lock does.
+
+        @Test(arguments: [["--help", "extra"], ["--socket", "help-socket", "--help"], ["--help", "--help"]])
+        func helpWithOtherArgumentsIsAUsageError(arguments: [String]) async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let process = try Harness.StartedSessionProcess(arguments: arguments, folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 10) == 2)
+            #expect(process.log.contains("Usage: openrun-session"), "log: \(process.log)")
+        }
+
+        @Test func helpAloneShowsTheUsage() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let process = try Harness.StartedSessionProcess(arguments: ["--help"], folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 10) == 0)
+            #expect(process.log.contains("Usage: openrun-session"))
+        }
+
         // MARK: - The user at the other end
         //
         // This Mac has one user account, and a test cannot start a program as
