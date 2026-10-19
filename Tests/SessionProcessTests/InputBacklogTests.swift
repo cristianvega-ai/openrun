@@ -658,6 +658,44 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// The session process must notice a client that shuts down only
+        /// its sending side while its read-ahead is full. macOS reports
+        /// such a socket as closed by the
+        /// peer, so the client counts as gone, as one that closes between two
+        /// frames does: it is detached, its waiting input is dropped, and it
+        /// still reads the clean end of the connection.
+        @Test func aClientThatStopsSendingWithAFullReadAheadIsDetachedAtOnce() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let receivedFile = process.directory.appendingPathComponent("received")
+                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile)
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier, relaysRawOutput: true)
+                let flood = MessageFlood(client: client, frameSize: 64 * 1024, total: 16 * 1024 * 1024)
+                await flood.waitUntilStalled(timeout: .seconds(30), steadyFor: .seconds(1))
+                let sent = flood.sentBytes.load(ordering: .sequentiallyConsistent)
+                #expect(sent >= 512 * 1024 && sent < 4 * 1024 * 1024, "sent \(sent) bytes")
+
+                let closed = ClosedConnectionWatch(client: client)
+                client.closeSendingSide()
+                let start = ContinuousClock.now
+                let ended = await eventually(timeout: .seconds(1)) { closed.result != nil }
+                print("half-close: the session process ended the connection: \(ended) after \(ContinuousClock.now - start) with \(String(describing: closed.result))")
+                #expect(ended, "the session process did not notice within a second that the client stopped sending")
+                #expect(closed.result == .cleanClose, "the connection ended with \(String(describing: closed.result))")
+                client.connection.shutdown()
+                #expect(try process.listedIdentifiers() == [identifier])
+
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await process.waitForScreen(of: identifier, containing: "finished", timeout: .seconds(60)))
+                expectReceived(in: receivedFile, fillerThen: [], "after the client stopped sending")
+            }
+        }
+
         /// A reading thread that waits for room must notice
         /// a client that left within a second, whenever in its wait the client
         /// leaves. Here the client leaves 300 milliseconds into the wait, so a

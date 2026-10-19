@@ -47,6 +47,9 @@ actor SessionServer {
             self.finish(key)
         }
         handlers[key] = handler
+        // A client that leaves is served no further, also while its handler
+        // waits, for example for room for its text.
+        client.whenClientLeaves { handler.cancel() }
     }
 
     private func finish(_ key: ObjectIdentifier) {
@@ -68,6 +71,7 @@ actor SessionServer {
         var attachedSession: Session?
 
         messages: for await received in client.messages {
+            if Task.isCancelled { break }
             switch received.message {
             case .hello:
                 client.send(.failure(SessionFailure(reason: .invalidRequest, message: "Hello was already sent.")))

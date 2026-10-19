@@ -26,6 +26,8 @@ final class ClientConnection: Sendable {
     private struct State {
         var queuedOutputBytes = 0
         var phase = Phase.open
+        var hasLeft = false
+        var leaveHandlers: [@Sendable () -> Void] = []
     }
 
     private enum Admission {
@@ -50,6 +52,7 @@ final class ClientConnection: Sendable {
         let thread = Thread { [weak self] in
             defer {
                 continuation.finish()
+                self?.clientLeft()
             }
             do {
                 try connection.greetClient()
@@ -74,6 +77,16 @@ final class ClientConnection: Sendable {
         }
         thread.name = "ClientConnection.read"
         thread.start()
+    }
+
+    /// Runs `handler` once the client has left or its connection has ended.
+    /// Runs it at once when that already happened.
+    func whenClientLeaves(_ handler: @escaping @Sendable () -> Void) {
+        let hasLeft = state.withLock { state -> Bool in
+            if !state.hasLeft { state.leaveHandlers.append(handler) }
+            return state.hasLeft
+        }
+        if hasLeft { handler() }
     }
 
     /// Queues a message for the client. Never blocks.
@@ -189,5 +202,16 @@ final class ClientConnection: Sendable {
         guard ends else { return }
         readAhead.close()
         connection.shutdown()
+        clientLeft()
+    }
+
+    private func clientLeft() {
+        let handlers = state.withLock { state -> [@Sendable () -> Void] in
+            guard !state.hasLeft else { return [] }
+            state.hasLeft = true
+            defer { state.leaveHandlers.removeAll() }
+            return state.leaveHandlers
+        }
+        handlers.forEach { $0() }
     }
 }
