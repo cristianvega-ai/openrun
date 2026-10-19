@@ -77,6 +77,7 @@ The cap for an unfinished sequence is 32 MiB. A snapshot travels in one frame of
 
 `PrintableText.escaping(_:)` makes text from an untrusted source safe to print in a terminal or a log. The command-line tool and the log of the session process use it.
 
+The reply handler is described in "Query replies".
 
 ### PseudoTerminal
 
@@ -184,6 +185,8 @@ Examples of control payloads:
 {"exited":{"_0":{"exited":{"status":3}}}}
 {"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e-…","reason":"unknownSession"}}}
 ```
+
+`relaysRawOutput` is a new optional field of `attach`. It stays inside protocol version 1: a client that leaves it out, or sends `false`, does not relay raw output, and an older session process ignores the field.
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
 
 ### A conversation
@@ -243,6 +246,63 @@ The visible screen, the alternate screen, the cursor, the modes and an unfinishe
 The screens alone can also be too large. An example is an attach at 10,000 rows, which pulls the scrollback onto the screen. The client then gets a `failure` with reason `invalidRequest` in place of `attached`: "The screen of the session does not fit in one frame of 64 MiB, even without scrollback. Attach with fewer columns or rows." The session goes back to its earlier size, and the connection stays open and not attached. The program gets the new size and then the old one. The other clients get no `sizeChanged`, because the size did not change in the end.
 
 `ReattachTests.aSnapshotLargerThanOneFrameLosesOldScrollbackAndKeepsTheScreen` checks both cases in a session of 1000 columns. The client that attaches gets a snapshot near 64 MiB with the newest scrollback, and its screen is the screen that `openrun read` shows, also after more output.
+
+## Query replies
+
+Programs ask the terminal questions, such as "where is the cursor" (`ESC [ 6 n`) or "what are you" (`ESC [ c`). The terminal must send an answer back as input.
+
+libghostty-vt answers through callbacks. `Terminal.setReplyHandler` installs four callbacks and two more answers:
+
+- the callback for bytes that go back to the program (cursor position reports, mode reports, and more),
+- the callback for device attributes. The terminal answers only when this callback gives it the values. It reports level 2 with ANSI color,
+- the callback for size (`GHOSTTY_TERMINAL_OPT_SIZE`). It answers the XTWINOPS queries `CSI 14 t`, `CSI 16 t`, `CSI 18 t` and `CSI 19 t` from the grid of the terminal, and it enables the in-band size reports of mode 2048. A session has no window, so a cell is a nominal 8 by 16 pixels. For an 80 by 24 grid, `CSI 18 t` gets `ESC [ 8 ; 24 ; 80 t` and `CSI 14 t` gets `ESC [ 4 ; 384 ; 640 t`. The grid is read at each query, so the replies follow a resize, and `Terminal.resize` stores the pixel size of the grid (a cell of 8 by 16 pixels), so the in-band report of mode 2048 after a resize carries pixels too,
+- the callback for the color scheme (`GHOSTTY_TERMINAL_OPT_COLOR_SCHEME`). It answers `CSI ? 996 n` with `ESC [ ? 997 ; 1 n` for dark and `ESC [ ? 997 ; 2 n` for light. `TerminalColorScheme.current()` reads the macOS appearance (`AppleInterfaceStyle`) fresh, at most once each second. It asks CFPreferences to refresh its cache first, because the session process runs no main run loop. A change of appearance reaches a running program within about a second. The session process needs no change: `setReplyHandler` uses this default.
+- the default foreground and background colors of the terminal. libghostty-vt has no callback for `OSC 10` and `OSC 11` queries. It answers them from the default colors that the embedder sets with `ghostty_terminal_set`. `Terminal.write` sets them from the appearance before it parses output, and only when the appearance changed: black on white in light mode, white on black in dark mode. The reply has the form `ESC ] 10 ; rgb:0000/0000/0000 BEL` and ends with the terminator of the query. `setReplyHandler(nil)` clears the colors. While a reply handler is installed, `write` sets the foreground and the background again each time the appearance changes, so a color set with `setDefaultForegroundColor` or `setDefaultBackgroundColor` lasts only until then. A client that restores a snapshot installs no handler, so its colors stay. The cursor color and the palette are never set by the handler.
+- `CSI 15 t` (the size of the screen in pixels). libghostty-vt does not parse this query, so it has no callback. `Terminal.write` looks for the exact bytes `ESC [ 1 5 t` (also when a write ends inside them), parses the bytes up to the end of the query, and then sends `ESC [ 5 ; height ; width t` from the grid and the nominal cell, so the replies keep the order of the queries. For an 80 by 24 grid the reply is `ESC [ 5 ; 384 ; 640 t`.
+
+
+The handler's box is stored in `Terminal.replyBox` before libghostty-vt gets a pointer to it, and the old box lives until the new pointer is in place. If the installation fails half way, the terminal takes the callbacks back, or keeps the box alive when it cannot.
+
+The session process installs a handler on the session's `Terminal` before it starts the program. The handler writes the bytes to the pseudo terminal with `PseudoTerminal.write`, which never waits, unless a real terminal answers instead. An answer goes in behind typed input that waits for room, as a real terminal would send them.
+
+- While at least one attached client relays raw output (`relaysRawOutput` is `true` in its `attach` message), the session process sends no replies. The real terminal of that client answers.
+- With no client, or with only clients that do not relay, the session process answers. This holds for the colors (`OSC 10`, `OSC 11`) and for `CSI 15 t` too. With a relaying client attached, the handler of the session process stays silent for all queries.
+- A client that restores a snapshot and draws it itself, such as the app will, does not relay. It sends no `relaysRawOutput` or sends `false`, and the session process keeps answering for it. Its copy of the screen installs no handler, so each query gets one answer.
+
+The session process still parses every query when it stays silent, so its screen state is the same either way.
+
+### Size reports
+
+A program that turns on mode 2048 gets an in-band report of each new size, `ESC [ 48 ; rows ; columns ; height ; width t`. libghostty-vt makes the report when the session resizes its terminal. Only a terminal whose window changed knows of a change, so the rule differs from the rule for queries:
+
+- When a relaying client sends `resize`, its own window changed, and its real terminal sends the report. The session process stays silent.
+- No terminal reports any other change: a `resize` from a client that does not relay, an `attach` with another size, and the return to the old size after an attach that fails. So the session process sends the report, also while a relaying client is attached. It opens its reply gate only for that resize. The resize parses no output, so no query gets a second reply.
+
+When a program turns mode 2048 on, libghostty-vt also reports the size at once. That report is an answer to output, so it follows the rule for queries.
+`QueryReplyTests.eachSizeChangeIsReportedOnceWhileARelayingClientIsAttached` attaches a relaying client and another client. The program reads one report for the attach of the other client at 100 by 30, one for its resize to 120 by 40, and none for the resize of the relaying client to 90 by 25.
+
+### Attaching and detaching while a query is pending
+
+The decision is made once for each query, at the moment the session process parses its bytes.
+The session parses output, attaches and detaches on one serial context, so each query meets exactly one state of the client list. The rule is:
+
+- A query that the session parsed before a relaying client attached was answered by the session process. The client's snapshot holds the screen and not the bytes of the query, so the client's terminal never sees it and does not answer again.
+- A query that the session parsed while a relaying client was attached is sent to that client as output, and only its terminal answers.
+- If that client detaches, or loses its connection, before its terminal has answered, nobody answers. The program gets no reply, as it would when an `ssh` connection drops. The next query is answered by the session process again.
+
+
+Limit: two relaying clients attached at once both answer, so the program gets two replies. Attaching two terminal windows to one session is rare, and the app will not relay raw output.
+
+## Speed of dense output
+
+The session process parses every byte that a program writes, so the speed of libghostty-vt sets the speed of a session.
+`scripts/build-ghostty-library.sh` builds it with `-Doptimize=ReleaseFast`, the mode that Ghostty ships. Zig's default is Debug, and a Debug build needed more than 3 minutes to parse 16 MB of dense text.
+The script writes the mode to `Libraries/ghostty-vt.optimize-mode`. When that file does not name the mode in the script, the script deletes the old output and builds again, so a re-run never leaves a framework of the wrong mode in place.
+Before it fetches or checks out anything, the script refuses a Ghostty tree with changes, so an edit is never discarded. It checks again after the checkout. The script uses a Zig tree that it extracted in the same run, from an archive in `Libraries/zig` whose checksum matched the pin (or from a fresh download that matched). It deletes the tree that an earlier run left and extracts again, then checks the `zig` program against its pinned checksum. A Zig in the search path is never used. The checksum of the program alone would not cover the standard library beside it, and extracting again does.
+
+`ThroughputTests` run a program that writes 16 MB of printable text (`yes ... | head -c 16000000`). The session must reach the exit of the program within 5 seconds, once with no client and once with one client that reads all output.
+On the development Mac (Apple Silicon, debug build of the Swift code, ReleaseFast libghostty-vt), the runs took 1.7 to 2.5 seconds with no client and 1.3 to 3.5 seconds with one client. The time depends on how busy the Mac is.
+The Swift code is a debug build in the tests, so the limit of 5 seconds leaves little room on a slow or busy Mac.
 
 ## Environment variables
 
