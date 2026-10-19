@@ -29,6 +29,7 @@ final class KeySender: @unchecked Sendable {
     private let condition = NSCondition()
     private var queuedBytes = 0
     private var isStopped = false
+    private var isPaused = false
     private var detaching = false
 
     /// `inputDescriptor` is the terminal to read keys from.
@@ -62,6 +63,22 @@ final class KeySender: @unchecked Sendable {
         condition.unlock()
     }
 
+    /// Stops the reading of keys until `resume`. The keyboard thread reads no
+    /// key after this call returns, so the keys that the user types meanwhile
+    /// stay in the terminal for its next reader, such as the shell. `stop`
+    /// still ends the thread while the reading is paused.
+    func pause() {
+        condition.withLock { isPaused = true }
+    }
+
+    /// Lets the keyboard thread read keys again, after a `pause`.
+    func resume() {
+        condition.lock()
+        isPaused = false
+        condition.broadcast()
+        condition.unlock()
+    }
+
     /// Whether the user detached. A connection that closes after this ended
     /// because of the detach.
     var isDetaching: Bool {
@@ -80,7 +97,10 @@ final class KeySender: @unchecked Sendable {
         var buffer = [UInt8](repeating: 0, count: 4096)
         let idleTimeoutMilliseconds: Int64 = 100
         while true {
+            // A paused thread neither polls nor reads, so it cannot take a
+            // key that belongs to the shell. `stop` and `resume` wake it.
             let stopped = condition.withLock {
+                while isPaused && !isStopped { condition.wait() }
                 return isStopped
             }
             if stopped { return }
@@ -94,8 +114,11 @@ final class KeySender: @unchecked Sendable {
             var descriptor = pollfd(fd: inputDescriptor, events: Int16(POLLIN), revents: 0)
             let ready = poll(&descriptor, 1, Int32(timeoutMilliseconds))
             let step = Self.step(afterWaiting: ready, recognizer: &recognizer, now: { .now }) {
+                // The check and the read are one step under the lock, so
+                // `stop` or `pause` either comes first, and nothing is read,
+                // or waits for this read, which the poll just promised.
                 condition.withLock {
-                    if isStopped { return .nothing }
+                    if isStopped || isPaused { return .nothing }
                     let count = read(inputDescriptor, &buffer, buffer.count)
                     if count < 0 && (errno == EINTR || errno == EAGAIN) { return .nothing }
                     return count > 0 ? .keys(Array(buffer[0..<count])) : .endOfInput

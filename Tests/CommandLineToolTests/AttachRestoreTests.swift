@@ -30,6 +30,52 @@ extension CommandLineToolIntegration {
             #expect(TerminalControl.waitingInput(onTerminal: spare.path) == 12)
         }
 
+        /// The keyboard thread reads no key while it is paused, and the keys
+        /// stay in the terminal. `resume` lets it read them, and `stop` ends
+        /// it while it is paused.
+        @Test func pausedKeyboardThreadLeavesTheKeysInTheTerminalUntilItResumes() async throws {
+            let spare = try TerminalControl.SpareTerminal()
+            let descriptor = open(spare.path, O_RDWR | O_NOCTTY)
+            try #require(descriptor >= 0)
+            defer { close(descriptor) }
+            var settings = termios()
+            tcgetattr(descriptor, &settings)
+            settings.c_lflag &= ~tcflag_t(ECHO)
+            tcsetattr(descriptor, TCSANOW, &settings)
+            let mode = try RawTerminalMode(descriptor: descriptor)
+            defer { mode.restore() }
+
+            let (clientSide, sessionSide) = try MessageConnection.makePair()
+            let counter = ReceivedKeyCounter()
+            let receiver = Thread {
+                while let message = try? sessionSide.receive(ClientMessage.self) {
+                    if case .input(let keys) = message { counter.add(keys.count) }
+                }
+            }
+            receiver.start()
+            let sender = KeySender(connection: clientSide, inputDescriptor: descriptor)
+            sender.start(onDetach: {})
+            try await Task.sleep(for: .milliseconds(150))
+
+            sender.pause()
+            spare.type(Array("while-paused".utf8))
+            try await Task.sleep(for: .milliseconds(400))
+            #expect(counter.total == 0, "the session got keys while the reading was paused")
+            #expect(TerminalControl.waitingInput(onTerminal: spare.path) == 12)
+
+            sender.resume()
+            #expect(await eventually { counter.total == 12 })
+
+            sender.pause()
+            sender.stop()
+            spare.type(Array("after-stop".utf8))
+            try await Task.sleep(for: .milliseconds(300))
+            #expect(counter.total == 12)
+            #expect(TerminalControl.waitingInput(onTerminal: spare.path) == 10)
+            clientSide.shutdown()
+            sessionSide.shutdown()
+        }
+
         /// A key that arrives after `stop` is for the next reader of the terminal,
         /// the shell. The keyboard thread may be inside its wait for keys when
         /// `stop` lands, and it used to read the key and drop it.
