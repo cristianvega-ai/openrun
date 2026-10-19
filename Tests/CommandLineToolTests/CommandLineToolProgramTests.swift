@@ -59,5 +59,66 @@ extension CommandLineToolIntegration {
                 #expect(columns.last?.hasSuffix("ARG\\u{1B}[31m\\nINJECTED\\tCOLUMN\\\\") == true)
             }
         }
+
+        @Test func anErrorThatHoldsTextFromAClientDrivesNoTerminal() async throws {
+            try await RunningSessionProcess.run { process in
+                // The program does not exist, so the session process fails and
+                // names the program in its failure message.
+                let result = try RunningSessionProcess.runOpenrun(
+                    ["new", "--", "\u{1B}]52;c;QUJD\u{07}EVILPROGRAM"],
+                    environment: ["OPENRUN_SOCKET": process.socketPath],
+                    in: process.directory
+                )
+                #expect(result.status == 1)
+                #expect(result.standardError.contains("EVILPROGRAM"), "error: \(result.standardError.debugDescription)")
+                #expect(!Self.holdsControlCharacter(result.standardError), "error: \(result.standardError.debugDescription)")
+                #expect(result.standardError.contains("\\u{1B}]52;c;QUJD\\u{7}"))
+            }
+        }
+
+        @Test func anIdentifierTypedWithControlCharactersIsEscapedInTheError() async throws {
+            try await RunningSessionProcess.run { process in
+                let result = try RunningSessionProcess.runOpenrun(
+                    ["read", "zz\u{1B}[2Jzz"],
+                    environment: ["OPENRUN_SOCKET": process.socketPath],
+                    in: process.directory
+                )
+                #expect(result.status == 1)
+                #expect(!Self.holdsControlCharacter(result.standardError), "error: \(result.standardError.debugDescription)")
+                #expect(result.standardError.contains("zz\\u{1B}[2Jzz"))
+            }
+        }
+
+        @Test func theSocketComesFromTheEnvironmentWhenNoOptionIsGiven() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let result = try RunningSessionProcess.runOpenrun(["list"], environment: ["OPENRUN_SOCKET": process.socketPath], in: process.directory)
+                #expect(result.status == 0)
+                #expect(result.outputLines.first?.hasPrefix(identifier) == true)
+            }
+        }
+
+        @Test func theSocketOptionBeatsTheEnvironment() async throws {
+            try await RunningSessionProcess.run { process in
+                let result = try RunningSessionProcess.runOpenrun(
+                    ["list", "--socket", process.socketPath],
+                    environment: ["OPENRUN_SOCKET": "/no/such/socket"],
+                    in: process.directory
+                )
+                #expect(result.status == 0)
+            }
+        }
+
+        @Test func readPrintsScrollbackOnlyOnRequest() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "seq 1 100; sleep 60"])
+                #expect(await process.waitForScreen(of: identifier, containing: "100"))
+                let screen = try process.screenText(of: identifier)
+                let everything = try process.screenText(of: identifier, includeScrollback: true)
+                #expect(!screen.hasPrefix("1\n"))
+                #expect(everything.hasPrefix("1\n2\n"))
+                #expect(everything.hasSuffix(screen))
+            }
+        }
     }
 }

@@ -13,6 +13,23 @@ private func realPath(_ file: URL) -> String {
 
 extension SessionProcessIntegration {
     @Suite struct SessionLifecycleTests {
+        /// The folder of a session is text that a client chose. A terminal
+        /// that shows the log of the session process must not obey it.
+        @Test func theLogEscapesTheFolderThatAClientChose() async throws {
+            try await RunningSessionProcess.run { process in
+                let parent = try RunningSessionProcess.makeDirectory()
+                defer { try? FileManager.default.removeItem(at: parent) }
+                let escapeCharacter = "\u{1B}"
+                let folder = parent.appendingPathComponent("styled-" + escapeCharacter, isDirectory: true)
+                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: false)
+
+                _ = try process.createSession(program: ["/bin/sh"], folder: folder)
+
+                let log = process.log
+                #expect(log.contains("styled-\\u{1B}"))
+                #expect(!log.contains(escapeCharacter))
+            }
+        }
 
         @Test func aSessionRunsTheGivenFolderAndCommand() async throws {
             try await RunningSessionProcess.run { process in
