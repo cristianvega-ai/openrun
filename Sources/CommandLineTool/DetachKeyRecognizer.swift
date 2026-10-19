@@ -1,9 +1,87 @@
 struct DetachKeyRecognizer {
+    /// How long an incomplete start of a detach form waits for the rest. A
+    /// lone Escape key press reaches the program this much later.
+    static let holdDuration: Duration = .milliseconds(20)
+
+    /// What one read of keys means.
+    struct Scan: Equatable {
+        /// The bytes to send to the session. When the detach key was found,
+        /// these are the bytes before it.
+        var bytesToSend: [UInt8]
+        var foundDetachKey: Bool
+    }
+
     private static let escape: UInt8 = 0x1B
     private static let controlBracket: UInt8 = 0x1D
     /// The last byte of the kitty form, `u`, and of the modifyOtherKeys form, `~`.
     private static let kittyFinalByte: UInt8 = 0x75
     private static let modifyOtherKeysFinalByte: UInt8 = 0x7E
+
+    /// The longest escape sequence we hold back. A longer one is no key press
+    /// that we know, so it is sent on.
+    private static let longestHeldSequence = 64
+
+    /// The start of a detach form that the last read cut short.
+    private var heldBytes: [UInt8] = []
+    /// When the held bytes must be sent on.
+    private var holdDeadline: ContinuousClock.Instant?
+
+    /// How long the caller may wait for more keys before it must call
+    /// `releaseExpired`, or `nil` when nothing is held.
+    func remainingHold(at now: ContinuousClock.Instant) -> Duration? {
+        guard let holdDeadline else { return nil }
+        return max(.zero, holdDeadline - now)
+    }
+
+    /// The held bytes, when their time is up. They are keys for the program.
+    mutating func releaseExpired(at now: ContinuousClock.Instant) -> [UInt8] {
+        guard let holdDeadline, now >= holdDeadline else { return [] }
+        defer {
+            heldBytes = []
+            self.holdDeadline = nil
+        }
+        return heldBytes
+    }
+
+
+    // MARK: - Reading one sequence
+
+    private enum Sequence {
+        case detachKey
+        case otherSequence(length: Int)
+        /// The end of the input cuts the sequence short.
+        /// `couldBeDetachKey` is false when no detach form starts like this.
+        case incomplete(couldBeDetachKey: Bool)
+        case notASequence
+    }
+
+    /// Reads the control sequence that starts with the escape byte at `start`.
+    private static func sequence(in input: [UInt8], startingAt start: Int) -> Sequence {
+        guard start + 1 < input.count else { return .incomplete(couldBeDetachKey: true) }
+        guard input[start + 1] == UInt8(ascii: "[") else { return .notASequence }
+        var index = start + 2
+        while index < input.count {
+            let byte = input[index]
+            if (0x40...0x7E).contains(byte) {
+                let parameters = Array(input[(start + 2)..<index])
+                let isDetachKey = isDetachKey(parameters: parameters, final: byte)
+                return isDetachKey ? .detachKey : .otherSequence(length: index + 1 - start)
+            }
+            // Parameter bytes are 0x30...0x3F and intermediate bytes 0x20...0x2F.
+            guard (0x20...0x3F).contains(byte) else { return .notASequence }
+            index += 1
+        }
+        return .incomplete(couldBeDetachKey: couldBecomeDetachKey(parameters: Array(input[(start + 2)...])))
+    }
+
+    /// Whether the parameters so far are the start of a kitty or a
+    /// modifyOtherKeys detach form. Only such a start is worth holding.
+    private static func couldBecomeDetachKey(parameters: [UInt8]) -> Bool {
+        // Parameter bytes only. An intermediate byte starts no form we know.
+        guard parameters.allSatisfy({ (0x30...0x3F).contains($0) }) else { return false }
+        let fields = parameters.split(separator: UInt8(ascii: ";"), omittingEmptySubsequences: false).map(Array.init)
+        return couldBeModifyOtherKeysForm(fields) || couldBeKittyForm(fields)
+    }
 
     /// `27 ; 5 ; 93`. Fields before the last must be complete.
     private static func couldBeModifyOtherKeysForm(_ fields: [[UInt8]]) -> Bool {
