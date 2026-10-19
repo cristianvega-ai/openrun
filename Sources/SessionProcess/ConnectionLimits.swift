@@ -1,4 +1,8 @@
 enum ConnectionLimits {
+
+    /// A client may wait as long as it likes between two frames. Once a frame
+    /// has started, each part of it must follow within this time.
+    static let frameStallLimit: Duration = .seconds(30)
     /// Output may wait for a client up to this many bytes. Past that, it loses
     /// its connection: it can attach again and get a fresh snapshot, but the
     /// session process must not keep an unbounded backlog for it. Snapshots

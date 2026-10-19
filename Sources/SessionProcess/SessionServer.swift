@@ -54,7 +54,17 @@ actor SessionServer {
         handlers[key] = nil
     }
 
+    /// Reads messages from one client until it leaves. A connection does one
+    /// request after another, and an attach lasts until the client detaches.
+    ///
+    /// Each message counts against the client's read-ahead until it is handled.
+    /// Typed input is handled once it is in the program's backlog.
+    ///
+    /// When the client detaches or leaves, its input that has not gone to the
+    /// program yet is dropped, and its requests that were not handled yet are
+    /// dropped too. A client that leaves therefore holds no memory.
     private func serve(_ client: ClientConnection) async {
+        let owner = ObjectIdentifier(client)
         var attachedSession: Session?
 
         messages: for await received in client.messages {
@@ -82,6 +92,7 @@ actor SessionServer {
                 }
                 // The answer waits until the text is in the program's backlog,
                 // so a client never hears that text arrived when it was lost.
+                // The text goes in behind the input that this client typed.
                 do {
                     try await session.type(Array(text.utf8))
                     client.send(.acknowledged)
@@ -107,10 +118,12 @@ actor SessionServer {
                 // the answer. So the client leaves the session first, and gets
                 // the answer and then the exit status from here.
                 await session.detach(client)
+                session.withdrawTypedInput(from: owner)
                 attachedSession = nil
                 let exit = await session.terminate()
                 client.send(.acknowledged)
                 client.send(.exited(exit), countsTowardOutputLimit: false)
+                client.markHandled(received)
                 break messages
             case .attach(let identifier, let size, let relaysRawOutput, let receivesSizeChanges):
                 guard attachedSession == nil else {
@@ -137,17 +150,26 @@ actor SessionServer {
                 } catch {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "\(error)")))
                 }
+            case .input(let bytes):
+                guard let session = attachedSession else { break }
+                // The bytes go in behind this client's earlier input, and leave
+                // the read-ahead once they are in the backlog. The loop does not
+                // wait for them, so the client can still detach while its
+                // program reads nothing.
+                session.type(Array(bytes), from: owner) { client.markHandled(received) }
+                continue
             case .resize(let size):
                 try? await attachedSession?.resize(to: size, from: client)
             case .detach:
+                client.markHandled(received)
                 break messages
-            default:
-                client.send(.failure(SessionFailure(reason: .invalidRequest, message: "The session process does not handle this request yet.")))
             }
+            client.markHandled(received)
         }
 
         if let attachedSession {
             await attachedSession.detach(client)
+            attachedSession.withdrawTypedInput(from: owner)
         }
         client.closeAfterSending()
     }

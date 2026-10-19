@@ -6,8 +6,13 @@ final class ClientConnection: Sendable {
     /// A message from the client, and the room it takes in the read-ahead.
     struct Received: Sendable {
         let message: ClientMessage
+        fileprivate let byteCount: Int
+        fileprivate let room: ReadAhead.Room
     }
 
+    /// Messages from the client, in order. The stream finishes when the client
+    /// leaves, when the handshake fails, or when the connection ends. Call
+    /// `markHandled` for each message once it is dealt with.
     let messages: AsyncStream<Received>
 
     private enum Phase {
@@ -32,11 +37,16 @@ final class ClientConnection: Sendable {
     private let connection: MessageConnection
     private let writeQueue = DispatchQueue(label: "ClientConnection.write")
     private let state = Mutex(State())
+    private let readAhead = ReadAhead()
 
     init(connection: MessageConnection) {
         self.connection = connection
         let (stream, continuation) = AsyncStream.makeStream(of: Received.self)
         messages = stream
+        // A blocking read cannot be an async task, because it would hold one
+        // of the few threads that Swift concurrency owns. For the same reason
+        // the thread, and not a task, waits for room in the read-ahead.
+        let readAhead = readAhead
         let thread = Thread { [weak self] in
             defer {
                 continuation.finish()
@@ -44,11 +54,19 @@ final class ClientConnection: Sendable {
             do {
                 try connection.greetClient()
                 while true {
-                    let frame = try connection.receive(MessageFrame.self)
+                    var byteCount = 0
+                    var room = ReadAhead.Room.shared
+                    let frame = try connection.receive(MessageFrame.self, timeLimit: .stall(ConnectionLimits.frameStallLimit)) { frameByteCount, kind in
+                        guard let admitted = readAhead.admit(frameByteCount, isControl: kind == .control, peerHasClosed: { connection.peerHasClosed }) else {
+                            throw SessionProtocolError.connectionClosed
+                        }
+                        byteCount = frameByteCount
+                        room = admitted
+                    }
                     // The client closed the connection between two frames.
                     guard let frame else { return }
                     let message = try ClientMessage(frame: frame)
-                    continuation.yield(Received(message: message))
+                    continuation.yield(Received(message: message, byteCount: byteCount, room: room))
                 }
             } catch {
                 self?.endIfOpen()
@@ -74,6 +92,12 @@ final class ClientConnection: Sendable {
         }
     }
 
+    /// Frees the message's room in the read-ahead, so the reading thread can
+    /// read on.
+    func markHandled(_ received: Received) {
+        readAhead.release(received.byteCount, from: received.room)
+    }
+
     func closeAfterSending() {
         let starts = state.withLock { state -> Bool in
             guard state.phase == .open else { return false }
@@ -81,6 +105,9 @@ final class ClientConnection: Sendable {
             return true
         }
         guard starts else { return }
+        // No more messages are handled, so a reading thread that waits for
+        // room stops.
+        readAhead.close()
         writeQueue.async { [self] in end() }
     }
 
@@ -160,6 +187,7 @@ final class ClientConnection: Sendable {
             return true
         }
         guard ends else { return }
+        readAhead.close()
         connection.shutdown()
     }
 }

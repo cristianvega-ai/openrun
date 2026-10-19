@@ -214,7 +214,7 @@ client                                   session process
   | <----------------------- snapshot frame  |
   | <------------------------- output frame  |  every later output, in order
   | <------------------------- output frame  |
-  | resize, detach  ---------------------->  |
+  | input frame, resize, ...  ------------>  |
   | <--------------------------- exited(..)  |  when the program ends
 ```
 

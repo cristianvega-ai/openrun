@@ -159,6 +159,19 @@ actor Session {
         try await pseudoTerminal.type(bytes)
     }
 
+    /// Types the bytes of an attached client behind its earlier input, and
+    /// returns at once. `whenSettled` runs once the bytes are in the backlog,
+    /// or will never get there. See `PseudoTerminal.type(_:from:whenSettled:)`.
+    nonisolated func type(_ bytes: [UInt8], from owner: ObjectIdentifier, whenSettled: @escaping @Sendable () -> Void) {
+        pseudoTerminal.type(bytes, from: owner, whenSettled: whenSettled)
+    }
+
+    /// Drops the input of a client that left and that has not gone to the
+    /// program yet, so the client holds no memory after it has gone.
+    nonisolated func withdrawTypedInput(from owner: ObjectIdentifier) {
+        pseudoTerminal.withdrawTypedInput(from: owner)
+    }
+
     /// Resizes the program's terminal and the session's copy of it. The last
     /// client to resize wins, and the other clients that asked hear of it.
     func resize(to size: SessionSize, from requester: ClientConnection) throws {
