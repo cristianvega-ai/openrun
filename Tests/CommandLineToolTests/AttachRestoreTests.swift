@@ -369,6 +369,36 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// The program ended, which waits for the output before it ends the tool,
+        /// and then a signal came while the first picture still waited for the
+        /// terminal. The signal wins, also though it came second.
+        @Test func aSignalBeatsTheExitOfTheProgramThatCameBeforeIt() async throws {
+            let lines = (0..<23).map { "picture-line-\($0)-" + String(repeating: "abcdefghij", count: 6) }.joined(separator: "\r\n")
+            let standIn = try StandInSessionProcess(
+                snapshot: try TerminalControl.snapshotBytes(showing: lines),
+                afterSnapshot: [.exited(.exited(status: 3))]
+            )
+            defer { standIn.stop() }
+            let report = standIn.directory.appendingPathComponent("report")
+            let script = restoreScript(identifier: StandInSessionProcess.identifierText, socketPath: standIn.socketPath, report: report)
+            let terminal = try AttachedTerminal(shellScript: script, folder: standIn.directory)
+            terminal.pauseOutput()
+            defer {
+                terminal.resumeOutput()
+                terminal.closeNow()
+            }
+            let tool = try #require(await attachProcess(of: terminal))
+            #expect(await eventually { terminal.isInRawMode })
+            let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+            #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+            // Time for the exit to reach the tool, which holds it until the picture is written.
+            try await Task.sleep(for: .milliseconds(300))
+
+            kill(tool, SIGTERM)
+            #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) })
+            #expect(await reportText(report) == "status=143 mode-restored")
+        }
+
         /// The state that a program leaves in the terminal, and that the closing
         /// sequences must undo, with the title saved when attaching starts and
         /// put back at the end.
@@ -438,6 +468,49 @@ extension CommandLineToolIntegration {
             }
         }
 
+        @Test func aFailedWriteToTheTerminalEndsAttachWithTheModeRestored() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "while :; do echo tick-line; sleep 0.1; done"])
+                let spare = try TerminalControl.SpareTerminal()
+                // Standard output goes to a second terminal, standard input and
+                // standard error stay on this one.
+                let script = restoreScript(identifier: identifier, socketPath: process.socketPath, redirections: "> '\(spare.path)'")
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: spare.path) ?? 0) > 0 })
+
+                spare.closeWindow()
+                #expect(await terminal.waitForScreen(containing: "mode-"))
+                #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+                #expect(terminal.screenText.contains("status=1"), "\(terminal.screenText)")
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
+        /// Standard error is a pipe that nobody reads any longer, so the
+        /// message at the end cannot be written.
+        @Test func theMessageAtTheEndCannotEndAttachThroughABrokenPipe() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh"])
+                let executable = RunningSessionProcess.commandExecutable.path
+                let script = """
+                    saved=$(stty -g)
+                    exec 3>&1
+                    { '\(executable)' attach \(identifier) --socket '\(process.socketPath)' 2>&1 1>&3; echo "status=$?" >&3; } | true
+                    if [ "$(stty -g)" = "$saved" ]; then echo mode-restored; else echo mode-changed; fi
+                    """
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+
+                terminal.type(bytes: controlBracket)
+                #expect(await terminal.waitForScreen(containing: "mode-"))
+                #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+                #expect(terminal.screenText.contains("status=0"), "\(terminal.screenText)")
+            }
+        }
+
         @Test func aSnapshotThatCannotBeRestoredEndsAttachWithAnErrorAndLeavesTheTerminalAlone() async throws {
             let standIn = try StandInSessionProcess(snapshot: Array("not a snapshot".utf8), afterSnapshot: [])
             defer { standIn.stop() }
@@ -466,6 +539,22 @@ extension CommandLineToolIntegration {
             #expect(await terminal.waitForScreen(containing: "mode-"))
             #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
             #expect(terminal.screenText.contains("status=255"), "\(terminal.screenText)")
+        }
+
+        @Test func aLostConnectionEndsAttachWithTheModeRestored() async throws {
+            let standIn = try StandInSessionProcess(
+                snapshot: try TerminalControl.snapshotBytes(showing: "stand-in-screen"),
+                afterSnapshot: [],
+                closesAfterSnapshot: true
+            )
+            defer { standIn.stop() }
+            let script = restoreScript(identifier: StandInSessionProcess.identifierText, socketPath: standIn.socketPath)
+            let terminal = try AttachedTerminal(shellScript: script, folder: standIn.directory)
+            defer { terminal.closeNow() }
+            #expect(await terminal.waitForScreen(containing: "mode-"))
+            #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+            #expect(terminal.screenText.contains("status=1"), "\(terminal.screenText)")
+            #expect(terminal.screenText.contains("closed the connection"), "\(terminal.screenText)")
         }
 
         /// Keys typed before attaching and while leaving stay for the program
