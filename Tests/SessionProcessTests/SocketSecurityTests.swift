@@ -46,6 +46,42 @@ extension SessionProcessIntegration {
             #expect(Harness.mode(of: folder.path) == mode)
         }
 
+        /// A program of the same user listens in a folder that others can
+        /// write, and answers hello as a session process would. The client
+        /// refuses the folder before it connects, so the squatter learns
+        /// nothing: not the environment, the folder or the command of a new
+        /// session. The session process refuses to start there too.
+        @Test(arguments: [0o770, 0o777] as [mode_t])
+        func aSquatterInAFolderThatOtherUsersCanWriteGetsNothing(mode: mode_t) async throws {
+            let folder = try Harness.makeFolder(mode: mode)
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let logs = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: logs) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let squatter = try Harness.StandInListener(path: socketPath, behavior: .answers(helloFrame()))
+            defer { squatter.close() }
+            let squatterFile = Harness.fileIdentity(at: socketPath)
+
+            let new = try RunningSessionProcess.runOpenrun(
+                ["new", "--socket", socketPath, "--", "/bin/sh"],
+                environment: ["OPENRUN_TEST_SECRET": "a token the squatter must not see"],
+                in: logs
+            )
+            #expect(new.status == 1)
+            #expect(new.standardError.contains(folder.path) && new.standardError.contains("write"), "stderr: \(new.standardError)")
+            let list = try RunningSessionProcess.runOpenrun(["list", "--socket", socketPath], in: logs)
+            #expect(list.status == 1)
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: logs, logFile: logs.appendingPathComponent("log"))
+            defer { process.stop() }
+            #expect(await process.waitForExit(timeout: 5) == 1)
+            #expect(process.log.contains(folder.path) && process.log.contains("write"), "log: \(process.log)")
+
+            #expect(squatter.acceptedCount == 0, "the squatter accepted \(squatter.acceptedCount) connections")
+            #expect(squatter.receivedByteCount == 0, "the squatter received \(squatter.receivedByteCount) bytes")
+            #expect(Harness.fileIdentity(at: socketPath) == squatterFile)
+        }
+
         // MARK: - What counts as a live session process
 
         /// Only a program that answers hello is a session process. A listener
@@ -68,6 +104,40 @@ extension SessionProcessIntegration {
 
             let list = try RunningSessionProcess.runOpenrun(["list", "--socket", socketPath], in: folder)
             #expect(list.status == 0, "stderr: \(list.standardError)")
+        }
+
+        /// The check of a listener that never answers takes
+        /// two seconds, and the socket file was then removed without a look
+        /// at what the path held by then. A file that another program put
+        /// there meanwhile was lost.
+        @Test(arguments: [false, true])
+        func aFileThatReplacesTheSocketDuringTheCheckIsLeftAlone(replacementIsASocket: Bool) async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let socketPath = folder.appendingPathComponent("socket").path
+            let silent = try Harness.StandInListener(path: socketPath, behavior: .neverAnswers)
+            defer { silent.close() }
+
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", socketPath], folder: folder, logFile: folder.appendingPathComponent("log"))
+            defer { process.stop() }
+            // The session process has connected and now waits for hello.
+            try #require(await eventually(timeout: .seconds(5)) { silent.acceptedCount >= 1 }, "log: \(process.log)")
+            #expect(unlink(socketPath) == 0)
+            var replacement: Harness.StandInListener?
+            if replacementIsASocket {
+                replacement = try Harness.StandInListener(path: socketPath, behavior: .boundOnly)
+            } else {
+                #expect(FileManager.default.createFile(atPath: socketPath, contents: Data("marker".utf8)))
+            }
+            defer { replacement?.close() }
+            let replacementFile = try #require(Harness.fileIdentity(at: socketPath))
+
+            #expect(await process.waitForExit(timeout: 10) == 1, "log: \(process.log)")
+            #expect(process.log.contains(socketPath) && process.log.contains("left alone"), "log: \(process.log)")
+            #expect(Harness.fileIdentity(at: socketPath) == replacementFile)
+            if !replacementIsASocket {
+                #expect((try? String(contentsOfFile: socketPath, encoding: .utf8)) == "marker")
+            }
         }
         // MARK: - One session process per socket
 
