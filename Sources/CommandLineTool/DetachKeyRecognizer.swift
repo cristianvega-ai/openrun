@@ -43,6 +43,50 @@ struct DetachKeyRecognizer {
         return heldBytes
     }
 
+    /// Looks at one read of keys. An incomplete end that could still become a
+    /// detach form waits for the next read, until `holdDuration` has passed.
+    mutating func scan(_ bytes: [UInt8], at now: ContinuousClock.Instant) -> Scan {
+        let previouslyHeld = heldBytes.count
+        let input = heldBytes + bytes
+        heldBytes = []
+        let previousDeadline = holdDeadline
+        holdDeadline = nil
+        var bytesToSend: [UInt8] = []
+        var index = 0
+        while index < input.count {
+            let byte = input[index]
+            if byte == Self.controlBracket {
+                return Scan(bytesToSend: bytesToSend, foundDetachKey: true)
+            }
+            guard byte == Self.escape else {
+                bytesToSend.append(byte)
+                index += 1
+                continue
+            }
+            switch Self.sequence(in: input, startingAt: index) {
+            case .detachKey:
+                return Scan(bytesToSend: bytesToSend, foundDetachKey: true)
+            case .otherSequence(let length):
+                bytesToSend.append(contentsOf: input[index..<index + length])
+                index += length
+            case .incomplete(let couldBeDetachKey):
+                let held = Array(input[index...])
+                if couldBeDetachKey && held.count <= Self.longestHeldSequence {
+                    heldBytes = held
+                    // Bytes that were already waiting keep their deadline, so
+                    // a slow typist cannot extend the hold.
+                    holdDeadline = index == 0 && previouslyHeld > 0 ? previousDeadline : now + Self.holdDuration
+                    return Scan(bytesToSend: bytesToSend, foundDetachKey: false)
+                }
+                bytesToSend.append(byte)
+                index += 1
+            case .notASequence:
+                bytesToSend.append(byte)
+                index += 1
+            }
+        }
+        return Scan(bytesToSend: bytesToSend, foundDetachKey: false)
+    }
 
     // MARK: - Reading one sequence
 
