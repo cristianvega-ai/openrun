@@ -9,6 +9,25 @@ This document explains the code of the headless core, which is milestone 1 of ve
 It is for the owner. Read it with `documentation/product.md`, which holds the decisions, and `AGENTS.md`, which holds the rules of the code.
 Update it when you add a module or change the protocol.
 
+## What exists
+
+A background program, the session process, owns every shell and agent that the user starts.
+Clients connect to it over a Unix socket. The command-line tool `openrun` is the first client.
+The app will be another. A client can leave, and the programs keep running.
+
+```
+  openrun (client)        the app (later)
+        \                  /
+         \   Unix socket  /
+          v               v
+        +-------------------+
+        |  openrun-session  |   the session process
+        |                   |
+        |  session A -------+--> pseudo terminal --> /bin/zsh
+        |  session B -------+--> pseudo terminal --> claude
+        +-------------------+
+```
+
 
 ## Modules
 
@@ -20,9 +39,28 @@ A module uses another module only through its public types.
 | `TerminalEmulation` | Wraps libghostty-vt: the screen, the scrollback, snapshots, replies to the queries that programs send, and the default colors that a client sets | `Terminal`, `TerminalSnapshot`, `UnfinishedSequence`, `TerminalSize`, `TerminalCursorPosition`, `ScreenFormat`, `ScreenExtent`, `TerminalReplyHandler`, `TerminalColorScheme`, `TerminalColor`, `TerminalEmulationError`, `PrintableText` |
 | `PseudoTerminal` | Runs one program on a new pseudo terminal | `PseudoTerminal`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
 | `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
+| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown | `SessionProcess`, `SessionProcessError` |
+| `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
+
+The programs in `Sources/openrun` and `Sources/openrun-session` read their start-up input and call `CommandLineTool` and `SessionProcess`. They hold no other logic.
+
+### Dependency direction
+
+Dependencies point one way, from the programs down to the features.
+
+```
+openrun           -> CommandLineTool -> SessionProtocol
+                                     -> TerminalEmulation -> libghostty-vt
+openrun-session   -> SessionProcess  -> SessionProtocol
+                                     -> PseudoTerminal
+                                     -> TerminalEmulation -> libghostty-vt
+```
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
 `PseudoTerminal` and `SessionProtocol` depend on no other OpenRun module.
+So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionSize`) belongs to one module. `SessionProcess` converts between them at its edge.
+
+The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables.
 
 ### TerminalEmulation
 
@@ -33,6 +71,10 @@ A module uses another module only through its public types.
 `UnfinishedSequence(of:)` returns the start of an escape sequence or a UTF-8 character that the terminal has parsed and the program has not finished. It wraps `ghostty_terminal_continuation_alloc`, the documented libghostty-vt call for these bytes. libghostty-vt knows them only when it tracked them from the first byte: a new `Terminal` tracks from its start, and a restored terminal from its snapshot on.
 
 `Terminal` refuses values that no window has. A grid needs 1 to 10,000 columns and rows (`Terminal.maximumGridDimension`), at creation and in `resize`. The scrollback limit must be 0 to 1,000,000 lines (`Terminal.maximumScrollbackLines`); a negative number would reach libghostty-vt as an enormous unsigned one. A snapshot restore checks the limit too. Each refusal throws `TerminalEmulationError` before libghostty-vt is called.
+`TerminalColor` is a color of three channels, `red`, `green` and `blue`, each from 0 to 255. `Terminal` has calls for the default foreground, background and cursor color and for the default 256-color palette (file `TerminalDefaultColors.swift`). `setDefaultForegroundColor`, `setDefaultBackgroundColor` and `setDefaultCursorColor` set a default, or clear it when the color is `nil`. `setDefaultPalette` takes exactly 256 colors, or `nil` for the built-in palette; any other count throws `TerminalEmulationError`. `defaultForegroundColor`, `defaultBackgroundColor`, `defaultCursorColor` and `defaultPalette` read the defaults back. A snapshot carries the colors that are in force, so a restored terminal keeps the black and white defaults of the session process. The client calls these after it restores a snapshot, to give the terminal its own colors. libghostty-vt keeps a default apart from a color that a program sets with `OSC 4`, `OSC 10`, `OSC 11` or `OSC 12`. A new default does not replace a program color, and a reset by the program brings back the default. `TerminalColorTests.colorsThatAProgramSetsSurviveANewDefault` shows this.
+
+`PrintableText.escaping(_:)` makes text from an untrusted source safe to print in a terminal or a log. The command-line tool and the log of the session process use it.
+
 
 ### PseudoTerminal
 
@@ -46,6 +88,7 @@ The child shares the memory of a process that has other threads, so it must not 
 The parent prepares every C string before the fork. The child calls only system functions with plain numbers and pointers until `execve` replaces it:
 
 - The terminal is descriptors 0, 1 and 2. The child closes every other descriptor up to 10,240, so nothing leaks into the program.
+- All signals go back to their default action, and the signal mask is empty. The session process ignores some signals, and an ignored signal would otherwise survive `exec`.
 - The child sets the folder with `chdir`, and `IUTF8` on the terminal.
 - A failure in the child (a missing folder, an `execve` error) goes back through a pipe that closes on `execve`. The parent reads it before it returns, so `PseudoTerminal(launching:)` still throws for a program that cannot start. The parent checks the folder first (`stat`, then `access`), so a missing folder, a file, or a folder without search permission always shows as a `chdir` failure. Without that check, a relative `PATH` entry made it show as "program not found".
 - A file with the execute permission and no `#!` line makes `execve` fail with ENOEXEC. Like a shell, the child then runs `/bin/sh -- PROGRAM ARGUMENTS...`. The parent prepared that argument list before the fork. When the program still cannot start, the error is the first one, from the program itself.
@@ -64,6 +107,7 @@ The object offers:
 - `output`, an `AsyncStream` of the bytes that the program writes. `markOutputConsumed` gives the program flow control: when more than 4 MiB wait, the pseudo terminal stops reading, and the program blocks in its own write.
 - `type(_:)`, for typed input. Input that the program has not read yet waits in memory, up to 8 MiB. Past that, `type` waits, without blocking a thread, until the program reads enough. Calls that wait go in whole and in order. A single call with more than 8 MiB waits for an empty backlog. When the program ends, or closes its terminal, before the bytes are in the backlog, `type` throws `PseudoTerminalError.programEnded`. Cancelling the task that waits withdraws the bytes and throws `CancellationError`. Bytes that are in the backlog reach the program.
 - `write`, for a terminal's answers to queries. It never waits, because the terminal answers while it parses output. The answer joins the backlog even when the backlog is full. When typed input waits for room, the answer goes in right behind that input, because a real terminal sends its bytes in the order it made them. It waits only for the input in front of it, never for room. An answer that waits counts toward the 1 MiB of answers at once (see `waitForAnswerRoom`).
+- `waitForAnswerRoom`, which waits while more than 1 MiB of answers wait for the program. The session calls it after each chunk of output. A program that asks without end and never reads the answers then stops in its own output, as typed input stops at 8 MiB.
 - `resize`, which sets the size with `TIOCSWINSZ`. The kernel sends SIGWINCH to the program.
 - `waitForExit`, which returns a `ProgramExit`.
 - `terminate`, which ends the program and every other process of its terminal session. The program is a session leader (see `forkpty` above), so this means every process whose session identifier is the program's, also one that moved to another process group. SIGHUP goes to the program's process group first, then to each other process group of the session. A group with a stopped process also gets SIGCONT, because a stopped process acts on the hang-up only when it runs. After the grace period (one second), SIGKILL goes to every process of the session that is still alive, also when the program itself has already ended. A program that has already ended by itself when `terminate` is called leaves its background processes running. A process that started a session of its own (`setsid`), such as a daemon, is not in the session and keeps running. When the system cannot list the processes, the session counts as unknown, not as empty. `terminate` then sends SIGHUP to the program's process group, the process group of the session leader, and repeats it while it waits. It keeps waiting and signalling until the grace period (one second) has passed, and then sends SIGKILL to that group, repeatedly, for up to one more second (the killing limit). It never takes a failed list for a session with no process left.
@@ -107,6 +151,13 @@ Control messages are JSON because they are small, rare and easy to read. Termina
 
 The largest payload is 64 MiB. The receiver checks the length field before it reads or allocates anything, and refuses a larger frame. It reads the kind byte next and refuses an unknown kind. Only then does it read the payload, as the bytes arrive, so the memory grows only with what came. A zero length, an unknown kind, and a connection that closes in the middle of a frame are errors.
 
+### Version
+
+Both sides send their protocol version in their first message, `hello`. The current version is 1.
+A session process that gets another version answers with a `failure` whose reason is `incompatibleProtocol` and closes the connection. Its message is "This session process speaks protocol version N, not M." Every version must keep the words "protocol version" and its own number after them, because a client reads the number from there.
+A client that gets another version in the answer, or reads one from the failure, stops with an error that names both versions.
+Raise `MessageFrame.protocolVersion` when a change would confuse an older program.
+The `hello` message itself must stay readable by every version.
 
 ### Control messages
 
@@ -132,3 +183,17 @@ Examples of control payloads:
 {"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e-…","reason":"unknownSession"}}}
 ```
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
+## Environment variables
+
+Every program in a session gets these. They override the same names in the environment that the client sent. A client name that is empty or holds `=` or NUL is refused (see `createSession`), so a client cannot add a second entry for one of these names.
+
+| Variable | Value |
+|---|---|
+| `OPENRUN_SESSION` | The identifier of the session, in lower case |
+| `OPENRUN_SOCKET` | The absolute path of the socket of the session process |
+| `TERM` | `xterm-256color` |
+| `COLORTERM` | `truecolor` |
+| `TERM_PROGRAM` | `OpenRun` |
+
+`OPENRUN_SOCKET` also tells `openrun` inside a session where the session process is. The tool reads it when no `--socket` flag is given.
+

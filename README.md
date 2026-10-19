@@ -1,6 +1,7 @@
 # OpenRun
 
 OpenRun is a native macOS terminal for work with coding agents.
+This repository holds the headless core of version 1: a session process that owns every shell and agent, and the `openrun` command-line tool that talks to it.
 `documentation/product.md` holds the product decisions.
 `documentation/architecture.md` explains the code.
 
@@ -24,6 +25,7 @@ OpenRun supports macOS 26 and later. The code is Swift only.
    swift build
    ```
 
+The two programs are in `.build/debug/`: `openrun-session` and `openrun`.
 
 ## Test
 
@@ -38,5 +40,8 @@ swift test
 | `Sources/TerminalEmulation` | The only code that uses libghostty-vt: screen, scrollback, snapshots, replies |
 | `Sources/PseudoTerminal` | Runs a program on a pseudo terminal |
 | `Sources/SessionProtocol` | The socket protocol that the session process and its clients share |
+| `Sources/SessionProcess` | The background process that owns the sessions |
+| `Sources/CommandLineTool` | The `openrun` commands |
+| `Sources/openrun`, `Sources/openrun-session` | Thin programs that call the features above |
 
 Read `AGENTS.md` for the rules of the code.
