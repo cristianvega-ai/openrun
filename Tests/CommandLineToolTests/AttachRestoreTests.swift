@@ -221,6 +221,93 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// A stop signal, and soon after it a signal to end, with the terminal
+        /// taking no output: the closing sequences of the suspension wait for the
+        /// terminal for a second, and the ending comes meanwhile. The tool then
+        /// ends. It used to stop itself and wait for a continue that nobody sent.
+        @Test(arguments: [SIGTERM, SIGINT, SIGHUP, SIGQUIT])
+        func aSignalToEndThatFollowsAStopSignalEndsAttachInsteadOfStoppingIt(signal: Int32) async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "while :; do echo busy-output-line-$RANDOM; done"])
+                let report = process.directory.appendingPathComponent("report")
+                let script = restoreScript(identifier: identifier, socketPath: process.socketPath, report: report)
+                let terminal = try AttachedTerminal(shellScript: script, folder: process.directory)
+                let tool = try #require(await attachProcess(of: terminal))
+                defer {
+                    // A tool that stopped itself must not stay behind.
+                    if TerminalControl.exists(process: tool) { kill(tool, SIGCONT) }
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await terminal.waitForScreen(containing: "busy-output-line"))
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                terminal.pauseOutput()
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+                // The queue must be full and stay full. If room is left, the
+                // closing sequences of the suspension fit at once and the tool
+                // stops before the ending signal comes, which is allowed.
+                try await Task.sleep(for: .milliseconds(300))
+                let fullQueueLength = TerminalControl.waitingOutput(onTerminal: path) ?? 0
+                try await Task.sleep(for: .milliseconds(300))
+                try #require(TerminalControl.waitingOutput(onTerminal: path) == fullQueueLength, "the waiting output still grew")
+
+                kill(tool, SIGTSTP)
+                try await Task.sleep(for: .milliseconds(150))
+                // A tool that stopped already proves nothing about the ending
+                // signal, so this run must fail and not pass.
+                try #require(!TerminalControl.isStopped(process: tool),
+                             "the tool stopped before the ending signal \(signal), so this run proves nothing")
+                kill(tool, signal)
+
+                #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) }, "signal \(signal)")
+                #expect(!TerminalControl.isStopped(process: tool), "signal \(signal)")
+                #expect(await reportText(report) == "status=\(128 + signal) mode-restored", "signal \(signal)")
+            }
+        }
+
+        /// The closing sequences of the suspension timed out on the frozen
+        /// terminal, so they did not leave the alternate screen or pop the
+        /// title. The last closing must do both when the terminal takes
+        /// output again. It used to forget them, because the suspension had
+        /// already counted them as done.
+        @Test func aSuspensionThatTimedOutStillLeavesTheAlternateScreenAndPopsTheTitleAtTheEnd() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = "printf '\\033[?1049h'; while :; do echo busy-output-line-$RANDOM; done"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let terminal = try AttachedTerminal(shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath), folder: process.directory)
+                let tool = try #require(await attachProcess(of: terminal))
+                defer {
+                    if TerminalControl.exists(process: tool) { kill(tool, SIGCONT) }
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(await terminal.waitForScreen(containing: "busy-output-line"))
+                #expect(terminal.isAlternateScreenActive)
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                terminal.pauseOutput()
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+                try await Task.sleep(for: .milliseconds(300))
+
+                let beforeSuspension = terminal.receivedBytes.count
+                kill(tool, SIGTSTP)
+                try await Task.sleep(for: .milliseconds(150))
+                try #require(!TerminalControl.isStopped(process: tool), "the tool stopped, so this run proves nothing")
+                kill(tool, SIGTERM)
+                // The closing of the suspension waits one second and gives up.
+                // The terminal takes output again during the last closing.
+                try await Task.sleep(for: .milliseconds(1_300))
+                terminal.resumeOutput()
+
+                #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) })
+                #expect(await eventually { !terminal.isAlternateScreenActive }, "the alternate screen was not left")
+                let afterwards = terminal.receivedBytes.dropFirst(beforeSuspension)
+                #expect(contains("\u{1B}[?1049l", in: afterwards))
+                #expect(contains("\u{1B}[23;0t", in: afterwards), "the title was not popped")
+            }
+        }
+
         /// Keys typed before attaching and while leaving stay for the program
         /// that reads the terminal next.
         @Test func rawModeKeepsTheKeysTypedAheadWhenItStartsAndWhenItEnds() throws {
