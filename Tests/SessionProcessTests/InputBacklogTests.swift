@@ -495,6 +495,79 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// Requests counted 256 bytes at any size, so a client could
+        /// make the session process read and decode without limit.
+        @Test func aFloodOfRequestsWithLargeEnvironmentsMeetsTheReadAheadLimit() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
+                try fillBacklog(of: identifier, in: process)
+
+                // This text waits for room, so the session process handles no
+                // later request of this client until the program reads.
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.connection.send(ClientMessage.sendText(identifier: UUID(uuidString: identifier)!, text: String(repeating: "w", count: 64 * 1024)))
+                try await Task.sleep(for: .milliseconds(300))
+                let footprintBefore = try measured(process.memoryFootprint, "the memory footprint")
+                let threadsBefore = try measured(process.threadCount, "the thread count")
+
+                var environment: [String: String] = [:]
+                for number in 0..<16_384 {
+                    environment["VARIABLE_\(number)"] = String(repeating: "v", count: 48)
+                }
+                let request = ClientMessage.createSession(folder: "/", command: ["/usr/bin/true"], size: SessionSize(columns: 0, rows: 0), environment: environment)
+                let requestSize = try request.frame().encoded().count
+                let flood = MessageFlood(client: client, message: request, byteCount: requestSize, count: 48)
+                await flood.waitUntilStalled(timeout: .seconds(60), steadyFor: .milliseconds(1500))
+                let sent = flood.sentMessages.load(ordering: .sequentiallyConsistent)
+                let footprintAfter = try measured(process.memoryFootprint, "the memory footprint")
+                let threadsAfter = try measured(process.threadCount, "the thread count")
+                print("environment-flood: \(sent) requests of \(requestSize) bytes went out; footprint \(footprintBefore) then \(footprintAfter); threads \(threadsBefore) then \(threadsAfter)")
+
+                #expect(sent <= 2, "\(sent) requests of \(requestSize) bytes went out")
+                #expect(footprintAfter - footprintBefore < 32 * 1024 * 1024, "footprint grew from \(footprintBefore) to \(footprintAfter) bytes")
+                #expect(threadsAfter <= threadsBefore + 4, "threads went from \(threadsBefore) to \(threadsAfter)")
+
+                client.vanish()
+                #expect(try process.runCommand(["kill", identifier]).status == 0)
+                #expect(try process.listedIdentifiers().isEmpty)
+            }
+        }
+
+        /// The sendText call went around the typed input of its own
+        /// connection, so the program read them out of order.
+        @Test func sendTextWaitsBehindTheTypedInputOfItsOwnConnection() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let script = "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; "
+                    + "head -c \(fillerByteCount) > /dev/null; stty min 0 time 10; "
+                    + "printf 'order=%s\\n' \"$(dd bs=65536 2>/dev/null | tr -s 'acb')\"; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+
+                // Two input frames and then sendText, all on one attached
+                // connection, all waiting for room.
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier)
+                try client.connection.send(ClientMessage.input(Data(repeating: UInt8(ascii: "a"), count: 64 * 1024)))
+                try client.connection.send(ClientMessage.input(Data(repeating: UInt8(ascii: "c"), count: 64 * 1024)))
+                try client.connection.send(ClientMessage.sendText(identifier: UUID(uuidString: identifier)!, text: String(repeating: "b", count: 64 * 1024)))
+                try await Task.sleep(for: .milliseconds(300))
+
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                var answer: ServerMessage?
+                while let message = try client.receive(within: 60) {
+                    if case .output = message { continue }
+                    answer = message
+                    break
+                }
+                #expect(answer == .acknowledged)
+                #expect(await process.waitForScreen(of: identifier, containing: "order=", timeout: .seconds(60)))
+                let screen = try process.screenText(of: identifier)
+                #expect(lines(of: screen).contains("order=acb"), "screen: \(screen)")
+            }
+        }
+
         /// A reading thread that waits for room must notice
         /// a client that left within a second, whenever in its wait the client
         /// leaves. Here the client leaves 300 milliseconds into the wait, so a
