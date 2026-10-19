@@ -266,5 +266,49 @@ extension CommandLineToolIntegration {
                 #expect(try process.listedIdentifiers() == [identifier])
             }
         }
+
+        /// The program writes the first part, waits for a line, and then writes
+        /// the second part. `openrun attach` draws its first picture in between,
+        /// inside an escape sequence or a UTF-8 character.
+        @Test(arguments: [
+            UnfinishedOutput(firstPart: "\\033[3", secondPart: "1mRED\\033[0m after", shown: "RED after", styled: "\u{1B}[38;5;1mRED"),
+            UnfinishedOutput(firstPart: "\\342\\202", secondPart: "\\254 after", shown: "\u{20AC} after", styled: nil),
+        ])
+        func aPictureDrawnInsideAnUnfinishedSequenceLetsTheOutputFinishIt(output: UnfinishedOutput) async throws {
+            try await RunningSessionProcess.run { process in
+                let script = "stty -echo; printf 'before\\n\(output.firstPart)'; read line; printf '\(output.secondPart)\\n'; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "before"))
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await terminal.waitForScreen(containing: "before"))
+                #expect(await eventually { terminal.isInRawMode })
+
+                #expect(try process.runCommand(["send", identifier, "--enter", "go"]).status == 0)
+                #expect(await terminal.waitForScreen(containing: "after"))
+                // Without the start of the sequence, the terminal would show its
+                // tail, such as "1mRED", as text.
+                #expect(terminal.screenText.contains("before\n" + output.shown), "screen: \(terminal.screenText)")
+                if let styled = output.styled {
+                    #expect(terminal.screenWithStyles.contains(styled))
+                }
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+            }
+        }
     }
+}
+
+/// Output that a program writes in two parts, with the first picture of
+/// `openrun attach` in between.
+struct UnfinishedOutput: Sendable, CustomTestStringConvertible {
+    /// The parts, as `printf` format text.
+    var firstPart: String
+    var secondPart: String
+    /// Text that the terminal must show once both parts arrived.
+    var shown: String
+    /// Sequences that must come right before the text, for a style.
+    var styled: String?
+
+    var testDescription: String { firstPart }
 }

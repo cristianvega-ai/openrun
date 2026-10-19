@@ -369,6 +369,50 @@ extension CommandLineToolIntegration {
             }
         }
 
+        /// The state that a program leaves in the terminal, and that the closing
+        /// sequences must undo, with the title saved when attaching starts and
+        /// put back at the end.
+        @Test func closingAlsoEndsSynchronizedOutputAnOpenLinkAndTheModesThatTheProgramLeft() async throws {
+            try await RunningSessionProcess.run { process in
+                let changes = [
+                    "\\033[?2026h", "\\033]8;;https://example.org\\033\\\\linked-text",
+                    "\\033[?5h", "\\033[?1005h", "\\033[?1015h", "\\033[?1016h", "\\033[?9h",
+                    "\\033[?67h", "\\033[?69h", "\\033[?2031h", "\\033[?2033h", "\\033[?2048h", "\\033[20h",
+                ].joined()
+                let program = "stty -echo; read line; printf '\(changes)'; echo; echo end-of-changes; exec sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let terminal = try AttachedTerminal(shellScript: restoreScript(identifier: identifier, socketPath: process.socketPath), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                #expect(try process.runCommand(["send", identifier, "--enter", "go"]).status == 0)
+                #expect(await terminal.waitForScreen(containing: "end-of-changes"))
+
+                terminal.type(bytes: controlBracket)
+                #expect(await terminal.waitForScreen(containing: "mode-"))
+                #expect(terminal.screenText.contains("mode-restored"), "\(terminal.screenText)")
+                let received = terminal.receivedBytes
+                let marker = try #require(lastIndex(of: Array("end-of-changes".utf8), in: received))
+                let closing = Array(received[marker...])
+                let end = try #require(firstIndex(of: endOfOpenSequence, in: closing))
+                let afterEnd = Array(closing[(end + 3)...])
+                // Synchronized output goes off first, because it holds back everything else.
+                #expect(Array(afterEnd.prefix(8)) == Array("\u{1B}[?2026l".utf8), "\(String(decoding: afterEnd.prefix(20), as: UTF8.self))")
+                for reset in ["\u{1B}]8;;\u{1B}\\", "\u{1B}[?5l", "\u{1B}[?1005l", "\u{1B}[?1015l", "\u{1B}[?1016l", "\u{1B}[?9l",
+                              "\u{1B}[?67l", "\u{1B}[?69l", "\u{1B}[?2031l", "\u{1B}[?2033l", "\u{1B}[?2048l", "\u{1B}[20l"] {
+                    #expect(firstIndex(of: Array(reset.utf8), in: afterEnd) != nil, "missing \(Array(reset.utf8))")
+                }
+                // Origin mode is reset between the save and the restore of the cursor, so the cursor stays.
+                #expect(contains("\u{1B}7\u{1B}[r\u{1B}[?6l\u{1B}8", in: afterEnd))
+                // The title: saved before the program's changes, put back after every other reset.
+                let saved = try #require(firstIndex(of: Array("\u{1B}[22;0t".utf8), in: received))
+                let linked = try #require(firstIndex(of: Array("linked-text".utf8), in: received))
+                #expect(saved < linked)
+                let lastReset = try #require(lastIndex(of: Array("\u{1B}[?2048l".utf8), in: afterEnd))
+                let putBack = try #require(lastIndex(of: Array("\u{1B}[23;0t".utf8), in: afterEnd))
+                #expect(putBack > lastReset)
+            }
+        }
+
         @Test func closingMovesTheCursorBackAfterAProgramSetOriginMode() async throws {
             try await RunningSessionProcess.run { process in
                 let program = "stty -echo; read line; printf '\\033[5;10r\\033[?6h\\033[2;3Hin-origin-mode'; exec sleep 60"
