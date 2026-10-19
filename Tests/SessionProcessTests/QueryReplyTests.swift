@@ -39,6 +39,14 @@ extension SessionProcessIntegration {
             FileManager.default.createFile(atPath: folder.appendingPathComponent("\(round)").path, contents: Data())
         }
 
+        private static func attach(to identifier: String, of process: RunningSessionProcess) throws -> AttachedTerminal {
+            let executable = RunningSessionProcess.commandExecutable.path
+            return try AttachedTerminal(
+                shellScript: "'\(executable)' attach \(identifier) --socket '\(process.socketPath)'",
+                folder: process.directory
+            )
+        }
+
         @Test func aDeviceAttributesQueryIsAnsweredOnceWithoutAClient() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
@@ -48,6 +56,64 @@ extension SessionProcessIntegration {
                 let screen = try process.screenText(of: identifier)
                 #expect(screen.contains(Self.expectedReply))
                 #expect(screen.contains("extra1=0"))
+            }
+        }
+
+        @Test func aDeviceAttributesQueryIsAnsweredOnceByTheRealTerminalOfAnAttachedClient() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
+                let attached = try Self.attach(to: identifier, of: process)
+                defer { attached.closeNow() }
+                // The snapshot shows READY, and the session registered the
+                // client in the same step that it took the snapshot.
+                #expect(await attached.waitForScreen(containing: "READY"))
+                Self.releaseProgram(in: process.directory, round: 1)
+                #expect(await attached.waitForScreen(containing: "DONE1"))
+                let screen = attached.screenText
+                #expect(screen.contains(Self.expectedReply))
+                #expect(screen.contains("extra1=0"))
+                // The window answered, so the session process stayed silent.
+                #expect(attached.repliesSent == 1)
+            }
+        }
+
+        @Test func theSessionProcessAnswersAgainAfterTheRelayingClientDetaches() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
+                let attached = try Self.attach(to: identifier, of: process)
+                defer { attached.closeNow() }
+                #expect(await attached.waitForScreen(containing: "READY"))
+                Self.releaseProgram(in: process.directory, round: 1)
+                #expect(await attached.waitForScreen(containing: "DONE1"))
+
+                attached.type(bytes: [0x1D])
+                #expect(await attached.waitForExit() != nil)
+                Self.releaseProgram(in: process.directory, round: 2)
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE2"))
+                let screen = try process.screenText(of: identifier)
+                #expect(screen.contains("extra1=0"))
+                #expect(screen.contains("reply2="))
+                #expect(screen.contains(Self.expectedReply))
+                #expect(screen.contains("extra2=0"))
+                // The window answered round 1 only. It was gone for round 2.
+                #expect(attached.repliesSent == 1)
+            }
+        }
+
+        @Test func aClientThatAttachesAfterTheAnswerDoesNotAnswerAgain() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
+                #expect(await process.waitForScreen(of: identifier, containing: "READY"))
+                Self.releaseProgram(in: process.directory, round: 1)
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE1"))
+
+                // The snapshot holds the screen and not the bytes of the query.
+                let attached = try Self.attach(to: identifier, of: process)
+                defer { attached.closeNow() }
+                #expect(await attached.waitForScreen(containing: "DONE1"))
+                #expect(attached.screenText.contains(Self.expectedReply))
+                #expect(attached.repliesSent == 0)
+                #expect(try process.screenText(of: identifier).contains("extra1=0"))
             }
         }
 
@@ -161,6 +227,20 @@ extension SessionProcessIntegration {
                 FileManager.default.createFile(atPath: process.directory.appendingPathComponent("go").path, contents: Data())
                 #expect(await process.waitForScreen(of: identifier, containing: "DONE", timeout: .seconds(30)))
                 Self.expectColors(in: try process.screenText(of: identifier).filter { !$0.isWhitespace })
+            }
+        }
+
+        @Test func colorAndDotSizeQueriesAreAnsweredOnlyByTheRealTerminalOfAnAttachedClient() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.colorAndDotSizeScript(goFolder: process.directory)])
+                let attached = try Self.attach(to: identifier, of: process)
+                defer { attached.closeNow() }
+                #expect(await attached.waitForScreen(containing: "READY"))
+                FileManager.default.createFile(atPath: process.directory.appendingPathComponent("go").path, contents: Data())
+                #expect(await attached.waitForScreen(containing: "DONE", timeout: .seconds(30)))
+                Self.expectColors(in: attached.screenText.filter { !$0.isWhitespace })
+                // One answer for each of the three queries, all from the window.
+                #expect(attached.repliesSent == 3)
             }
         }
 

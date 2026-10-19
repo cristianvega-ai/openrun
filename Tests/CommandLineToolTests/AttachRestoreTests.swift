@@ -81,6 +81,10 @@ private let fullScreenProgram = """
     """
 
 extension CommandLineToolIntegration {
+    /// Every way that `openrun attach` ends must give the terminal back as it
+    /// was, with the right exit code: signals while output flows, a terminal
+    /// that takes no output, a signal during the first picture, suspending,
+    /// a failed write, and answers that the tool cannot use.
     @Suite struct AttachRestoreTests {
         /// The process identifier of `openrun attach`, the child of the script's shell.
         private func attachProcess(of terminal: AttachedTerminal) async -> pid_t? {
