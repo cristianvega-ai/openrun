@@ -123,6 +123,37 @@ private func lines(of screen: String) -> [String] {
     screen.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
 }
 
+/// The script of a program that prints `ready`, reads nothing until the go
+/// file exists, runs `beforeReading`, and then copies all of its input to the
+/// received file until no byte comes for 5 seconds. Then it prints `finished`.
+///
+/// The program does not read the filler with `head -c`. On a terminal, `head`
+/// reads through a buffer and can take bytes past its count, such as a reply
+/// right behind the filler, and those bytes are lost. That made a test fail
+/// now and then on a busy Mac, and it could hide input that leaked through.
+private func scriptThatReadsEverything(goFile: URL, receivedFile: URL, beforeReading: String = "") -> String {
+    "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.02; done; \(beforeReading)"
+        + "stty min 0 time 50; dd bs=65536 2>/dev/null > '\(receivedFile.path)'; echo finished; sleep 60"
+}
+
+/// Checks that the program read exactly the filler that `fillBacklog`
+/// sent, and then exactly `after`.
+private func expectReceived(in file: URL, fillerThen after: [UInt8], _ context: Comment) {
+    let received = (try? Data(contentsOf: file)) ?? Data()
+    var expected = Data(capacity: fillerByteCount + after.count)
+    let piece = patternBytes(count: 1024 * 1024)
+    for _ in 0..<(fillerByteCount / piece.count) { expected.append(contentsOf: piece) }
+    expected.append(contentsOf: after)
+    guard received != expected else { return }
+    let receivedBytes = [UInt8](received)
+    let expectedBytes = [UInt8](expected)
+    let commonCount = min(receivedBytes.count, expectedBytes.count)
+    let firstDifference = (0..<commonCount).first { receivedBytes[$0] != expectedBytes[$0] } ?? commonCount
+    Issue.record(
+        "\(context): the program read \(receivedBytes.count) bytes, not \(expectedBytes.count); they differ from byte \(firstDifference), where it read \(Array(receivedBytes.dropFirst(firstDifference).prefix(16)))"
+    )
+}
+
 /// Sends messages on its own thread until the count is sent or a send fails,
 /// and counts what went out.
 private final class MessageFlood: Sendable {
@@ -413,6 +444,54 @@ extension SessionProcessIntegration {
                     if case .exited(let ended) = message { exit = ended }
                 }
                 #expect(exit == .exited(status: 3))
+            }
+        }
+
+        /// A relaying client that vanished while its read-ahead was
+        /// full stayed attached, so the session process never answered again.
+        /// The program asks first and reads the filler later, so the reply
+        /// waits behind the filler. Only a session process that noticed the
+        /// vanished client on its own opens the way for it.
+        ///
+        /// The test measures when the session process closes the socket of
+        /// the vanished client, and that must happen within a second. A fixed
+        /// wait of 4 seconds before the program asked would also pass for a
+        /// session process that took seconds to notice. The
+        /// program reads its input into a file, because `head -c` lost the
+        /// reply now and then on a busy Mac (see `scriptThatReadsEverything`).
+        @Test func aRelayingClientThatVanishesWithAFullReadAheadNoLongerSilencesTheSession() async throws {
+            try await RunningSessionProcess.run { process in
+                let goFile = process.directory.appendingPathComponent("go")
+                let receivedFile = process.directory.appendingPathComponent("received")
+                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile, beforeReading: "printf '\\033[c'; sleep 1; ")
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                try fillBacklog(of: identifier, in: process)
+
+                let client = try RawClient(socketPath: process.socketPath)
+                try client.attach(to: identifier, relaysRawOutput: true)
+                let flood = MessageFlood(client: client, frameSize: 64 * 1024, total: 16 * 1024 * 1024)
+                await flood.waitUntilStalled(timeout: .seconds(30), steadyFor: .seconds(1))
+                let sent = flood.sentBytes.load(ordering: .sequentiallyConsistent)
+                #expect(sent >= 512 * 1024 && sent < 4 * 1024 * 1024, "sent \(sent) bytes")
+                let descriptorsBefore = try measured(process.descriptorCount, "the descriptor count")
+
+                client.vanish()
+                let vanished = ContinuousClock.now
+                // The session process checks every 100 milliseconds whether the
+                // client has left. Once it has, it detaches the client and closes
+                // the client's socket.
+                let noticed = await eventually(timeout: .seconds(1)) { (process.descriptorCount ?? Int.max) < descriptorsBefore }
+                print("vanished-relaying-client: noticed \(noticed) after \(ContinuousClock.now - vanished)")
+                #expect(noticed, "the session process did not notice within a second that the client vanished")
+                // The detach reaches the session a moment after the socket closes.
+                try await Task.sleep(for: .milliseconds(500))
+
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                #expect(await process.waitForScreen(of: identifier, containing: "finished", timeout: .seconds(60)))
+                // The session process answered the query, and none of the input
+                // of the vanished client arrived.
+                expectReceived(in: receivedFile, fillerThen: Array("\u{1B}[?62;22c".utf8), "after the relaying client vanished")
             }
         }
 
