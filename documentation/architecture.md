@@ -61,7 +61,7 @@ openrun-session   -> SessionProcess  -> SessionProtocol
 `PseudoTerminal` and `SessionProtocol` depend on no other OpenRun module.
 So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionSize`) belongs to one module. `SessionProcess` converts between them at its edge.
 
-The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables.
+The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables and plays the part of a terminal window.
 
 ### TerminalEmulation
 

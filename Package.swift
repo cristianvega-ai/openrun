@@ -54,7 +54,7 @@ let package = Package(
             dependencies: ["PseudoTerminal"]
         ),
         // Support code for the integration tests. It starts the real
-        // executables.
+        // executables and plays the part of a terminal window.
         .target(
             name: "SessionProcessHarness",
             dependencies: ["PseudoTerminal", "TerminalEmulation", "openrun", "openrun-session"],
