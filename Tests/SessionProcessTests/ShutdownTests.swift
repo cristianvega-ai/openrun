@@ -99,7 +99,8 @@ struct SessionProgramFamily {
 
 extension SessionProcessIntegration {
     @Suite struct ShutdownTests {
-        /// Shutdown signalled only the program's process group, so both children lived on.
+        /// Shutdown signalled only the program's process group, so both
+        /// children lived on.
         @Test func shutdownEndsEveryProcessOfTheTerminalSession() async throws {
             let process = try RunningSessionProcess()
             defer { process.stop() }

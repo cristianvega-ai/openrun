@@ -632,8 +632,7 @@ extension SessionProcessIntegration {
             }
         }
 
-        /// The limit of 1024 messages in the
-        /// read-ahead had no test, and the suite stayed green without it. One-byte frames
+        /// The read-ahead holds at most 1024 messages. One-byte frames
         /// that wait for the program reach that limit long before 1 MiB.
         @Test func aFloodOfTinyInputFramesMeetsTheMessageLimitOfTheReadAhead() async throws {
             try await RunningSessionProcess.run { process in
