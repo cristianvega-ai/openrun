@@ -353,7 +353,8 @@ extension SessionProcessIntegration {
 
         @Test func aClientThatFloodsInputMeetsBackpressureAndTheProcessStaysSmall() async throws {
             try await RunningSessionProcess.run { process in
-                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 600"])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 let client = try RawClient(socketPath: process.socketPath)
                 try client.attach(to: identifier)
                 let before = try measured(process.memoryFootprint, "the memory footprint")
@@ -559,7 +560,10 @@ extension SessionProcessIntegration {
         /// make the session process read and decode without limit.
         @Test func aFloodOfRequestsWithLargeEnvironmentsMeetsTheReadAheadLimit() async throws {
             try await RunningSessionProcess.run { process in
-                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
+                // Before raw mode, the terminal drops input that has no line
+                // end, so a fill then leaves room in the backlog.
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; echo ready; exec sleep 600"])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 try fillBacklog(of: identifier, in: process)
 
                 // This text waits for room, so the session process handles no
