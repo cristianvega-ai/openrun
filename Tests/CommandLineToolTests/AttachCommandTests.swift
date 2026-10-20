@@ -17,6 +17,31 @@ private func attachScript(identifier: String, process: RunningSessionProcess) ->
         """
 }
 
+/// One attempt to detach while frames pile up in the connection of the tool.
+private func detachWhileTheSessionWritesOutput(attempt: Int, identifier: String, process: RunningSessionProcess) async throws {
+    let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+    defer { terminal.closeNow() }
+    #expect(await eventually { terminal.isInRawMode })
+    // Let output flow, then stop reading it for a while, as a slow
+    // terminal window does. The tool blocks while it draws a frame,
+    // and more frames pile up in its connection. Then let output
+    // flow again and type the key at once. The relay loop is then
+    // reading the piled-up frames, so the key arrives while it is
+    // in the middle of one, which is when the detach used to be
+    // reported as a lost connection. The terminal must not hold
+    // output back while the key is typed: the key would not reach
+    // the tool at that moment, and the race would not happen.
+    try await Task.sleep(for: .milliseconds(100))
+    terminal.pauseOutput()
+    try await Task.sleep(for: .milliseconds(300))
+    terminal.resumeOutput()
+    terminal.type(bytes: [0x1D])
+    #expect(await terminal.waitForScreen(containing: "mode-restored"), "attempt \(attempt)")
+    #expect(terminal.screenText.contains("status=0"), "attempt \(attempt)")
+    #expect(terminal.screenText.contains("[detached]"), "attempt \(attempt)")
+    #expect(!terminal.screenText.contains("connection lost"), "attempt \(attempt)")
+}
+
 extension CommandLineToolIntegration {
     @Suite struct AttachCommandTests {
         @Test func attachDrawsTheScreenInRawModeRelaysKeysAndDetachesWithControlBracket() async throws {
@@ -340,28 +365,15 @@ extension CommandLineToolIntegration {
         @Test func detachingWhileTheSessionWritesOutputAlwaysReportsDetachedWithStatusZero() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "while :; do echo busy-output-line-$RANDOM; done"])
-                for attempt in 0..<12 {
-                    let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
-                    defer { terminal.closeNow() }
-                    #expect(await eventually { terminal.isInRawMode })
-                    // Let output flow, then stop reading it for a while, as a slow
-                    // terminal window does. The tool blocks while it draws a frame,
-                    // and more frames pile up in its connection. Then let output
-                    // flow again and type the key at once. The relay loop is then
-                    // reading the piled-up frames, so the key arrives while it is
-                    // in the middle of one, which is when the detach used to be
-                    // reported as a lost connection. The terminal must not hold
-                    // output back while the key is typed: the key would not reach
-                    // the tool at that moment, and the race would not happen.
-                    try await Task.sleep(for: .milliseconds(100))
-                    terminal.pauseOutput()
-                    try await Task.sleep(for: .milliseconds(300))
-                    terminal.resumeOutput()
-                    terminal.type(bytes: [0x1D])
-                    #expect(await terminal.waitForScreen(containing: "mode-restored"), "attempt \(attempt)")
-                    #expect(terminal.screenText.contains("status=0"), "attempt \(attempt)")
-                    #expect(terminal.screenText.contains("[detached]"), "attempt \(attempt)")
-                    #expect(!terminal.screenText.contains("connection lost"), "attempt \(attempt)")
+                // Each attempt has its own terminal and tool, so four can run
+                // at once. The attempts do not depend on each other.
+                for firstAttempt in stride(from: 0, to: 12, by: 4) {
+                    try await withThrowingTaskGroup(of: Void.self) { group in
+                        for attempt in firstAttempt..<firstAttempt + 4 {
+                            group.addTask { try await detachWhileTheSessionWritesOutput(attempt: attempt, identifier: identifier, process: process) }
+                        }
+                        try await group.waitForAll()
+                    }
                 }
                 #expect(try process.listedIdentifiers() == [identifier])
             }
