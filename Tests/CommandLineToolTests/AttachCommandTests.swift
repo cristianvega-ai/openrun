@@ -174,11 +174,13 @@ extension CommandLineToolIntegration {
                     plainDelays.append(try #require(delayUntilReported(key: 0x71, in: terminal)))
                     escapeDelays.append(try #require(delayUntilReported(key: 0x1B, in: terminal)))
                 }
-                let plain = median(plainDelays)
-                let escape = median(escapeDelays)
+                // Load only adds delay to a sample, so the smallest delays
+                // show the hold. A longer hold raises every Escape sample.
+                let plain = plainDelays.min()!
+                let escape = escapeDelays.min()!
                 print("lone-escape-delay: plain \(plain), escape \(escape), extra \(escape - plain)")
-                // The hold is 20 ms. The rest of the allowance covers the noise of
-                // the program's own commands, so a longer hold fails.
+                // The hold is 20 ms. The rest of the allowance covers the
+                // program's own commands, so a longer hold fails.
                 #expect(escape - plain <= .milliseconds(40), "plain \(plainDelays), escape \(escapeDelays)")
 
                 terminal.type(bytes: [0x1D])
@@ -194,7 +196,7 @@ extension CommandLineToolIntegration {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh"])
                 var conclusiveRounds = 0
-                for round in 0..<6 where conclusiveRounds == 0 {
+                for round in 0..<30 where conclusiveRounds == 0 {
                     let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
                     defer { terminal.closeNow() }
                     guard try await typeAKeyInHalvesWhileTheToolStops(terminal) else {
@@ -221,7 +223,17 @@ extension CommandLineToolIntegration {
 
             let typed = ContinuousClock.now
             terminal.type(bytes: Array("\u{1B}[93".utf8))
-            usleep(3_000)
+            // Stop the tool as soon as it has read the first half. A fixed
+            // pause cannot tell this moment on a busy Mac. The tool can read
+            // the half between two polls, so a quiet queue after 5 ms also
+            // ends the wait. The checks below reject a round that is wrong.
+            var sawFirstHalf = false
+            while ContinuousClock.now - typed < .milliseconds(200) {
+                let waitingNow = TerminalControl.waitingInput(onTerminal: path) ?? 0
+                sawFirstHalf = sawFirstHalf || waitingNow > 0
+                if waitingNow == 0 && (sawFirstHalf || ContinuousClock.now - typed > .milliseconds(5)) { break }
+                usleep(50)
+            }
             kill(tool, SIGSTOP)
             let stoppedAfter = ContinuousClock.now - typed
             terminal.type(bytes: Array(";5u".utf8))
@@ -602,11 +614,6 @@ private func occurrences(of pattern: [UInt8], in bytes: [UInt8]) -> Int {
         }
     }
     return count
-}
-
-private func median(_ values: [Duration]) -> Duration {
-    let sorted = values.sorted()
-    return sorted[sorted.count / 2]
 }
 
 /// Where `pattern` last occurs in `bytes`.
