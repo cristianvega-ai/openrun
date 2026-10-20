@@ -84,14 +84,19 @@ extension SessionProcessIntegration {
             }
         }
 
+        // The program writes its folder to a file. The screen would wrap a long
+        // path at 80 columns, and the test would read a broken line.
         @Test func aSessionRunsTheGivenFolderAndCommand() async throws {
             try await RunningSessionProcess.run { process in
                 let folder = try RunningSessionProcess.makeDirectory()
                 defer { try? FileManager.default.removeItem(at: folder) }
-                let identifier = try process.createSession(program: ["/bin/sh", "-c", "pwd; sleep 60"], folder: folder)
-                #expect(await process.waitForScreen(of: identifier, containing: realPath(folder)))
+                let file = process.directory.appendingPathComponent("working-folder")
+                let script = "pwd > '\(file.path)'; sleep 60"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script], folder: folder)
+                #expect(await eventually { (try? String(contentsOf: file, encoding: .utf8))?.hasSuffix("\n") == true })
+                #expect(((try? String(contentsOf: file, encoding: .utf8)) ?? "") == realPath(folder) + "\n")
                 let listing = try process.runCommand(["list"]).outputLines
-                #expect(listing == ["\(identifier)\t\(folder.path)\t/bin/sh -c pwd; sleep 60"])
+                #expect(listing == ["\(identifier)\t\(folder.path)\t/bin/sh -c \(script)"])
             }
         }
 
@@ -99,9 +104,11 @@ extension SessionProcessIntegration {
             try await RunningSessionProcess.run { process in
                 let folder = try RunningSessionProcess.makeDirectory()
                 defer { try? FileManager.default.removeItem(at: folder) }
-                let result = try process.runCommand(["new", "--", "/bin/sh", "-c", "pwd; sleep 60"], folder: folder)
-                let identifier = try #require(result.outputLines.first)
-                #expect(await process.waitForScreen(of: identifier, containing: realPath(folder)))
+                let file = process.directory.appendingPathComponent("working-folder")
+                let result = try process.runCommand(["new", "--", "/bin/sh", "-c", "pwd > '\(file.path)'; sleep 60"], folder: folder)
+                #expect(result.outputLines.first != nil)
+                #expect(await eventually { (try? String(contentsOf: file, encoding: .utf8))?.hasSuffix("\n") == true })
+                #expect(((try? String(contentsOf: file, encoding: .utf8)) ?? "") == realPath(folder) + "\n")
             }
         }
 
