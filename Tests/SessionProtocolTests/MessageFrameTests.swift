@@ -181,8 +181,12 @@ import Testing
     func aDeeplyNestedRequestIsRefusedWithoutExhaustingTheStack(opening: String) async throws {
         let openingBytes = Array(opening.utf8)
         let depth = 64 * 1024 * 1024 / openingBytes.count - 1
-        var payload = Data(capacity: depth * openingBytes.count + 1)
-        for _ in 0..<depth { payload.append(contentsOf: openingBytes) }
+        // Doubling takes about 25 appends. One append for each opening took
+        // 67 million appends, which is slow in a debug build.
+        let length = depth * openingBytes.count
+        var payload = Data(openingBytes)
+        while payload.count < length { payload.append(payload) }
+        payload.removeSubrange(length...)
         let ending = Mutex<(any Error)?>(nil)
         let finished = Mutex(false)
         let payloadToDecode = payload
