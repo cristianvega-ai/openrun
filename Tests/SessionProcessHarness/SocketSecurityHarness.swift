@@ -212,8 +212,17 @@ extension SocketSecurityHarness {
         public let path: String
         private let descriptor: Int32
         private let counts = Mutex((accepted: 0, received: 0))
-        private let accepted = Mutex<[Int32]>([])
+        /// The accepted connections that are still open. Each reading thread
+        /// closes its own connection, and takes it out of this set first.
+        /// Tests run side by side in one process, so a closed number can
+        /// belong to a socket of another test at once. `close` must not shut
+        /// that socket down.
+        private let openConnections = Mutex<Set<Int32>>([])
         private let stopped = Atomic<Bool>(false)
+        /// The threads that use the descriptors. The listening socket closes
+        /// only after they end, so no thread polls or accepts on a number
+        /// that another test opened meanwhile.
+        private let threads = DispatchGroup()
 
         public init(path: String, behavior: Behavior) throws {
             self.path = path
@@ -238,7 +247,11 @@ extension SocketSecurityHarness {
                 Darwin.close(descriptor)
                 throw HarnessError.commandFailed(description: "listen failed: \(code)")
             }
-            let thread = Thread { [self] in serve(behavior) }
+            threads.enter()
+            let thread = Thread { [self] in
+                serve(behavior)
+                threads.leave()
+            }
             thread.name = "StandInListener"
             thread.start()
         }
@@ -251,9 +264,16 @@ extension SocketSecurityHarness {
         /// Stops accepting and closes every connection. The socket file stays.
         public func close() {
             guard !stopped.exchange(true, ordering: .sequentiallyConsistent) else { return }
-            Darwin.shutdown(descriptor, SHUT_RDWR)
+            // The lock keeps a reading thread from closing its connection
+            // while this shuts it down.
+            openConnections.withLock { connections in
+                for connection in connections { Darwin.shutdown(connection, SHUT_RDWR) }
+            }
+            // Each thread sees the stop within 50 milliseconds. A thread that
+            // does not end keeps the socket open, which is safer than a
+            // number that a thread could still use.
+            guard threads.wait(timeout: .now() + 10) == .success else { return }
             Darwin.close(descriptor)
-            for connection in accepted.withLock({ $0 }) { Darwin.shutdown(connection, SHUT_RDWR) }
         }
 
         private func serve(_ behavior: Behavior) {
@@ -263,14 +283,21 @@ extension SocketSecurityHarness {
                 let connection = accept(descriptor, nil, nil)
                 guard connection >= 0 else { continue }
                 counts.withLock { $0.accepted += 1 }
-                accepted.withLock { $0.append(connection) }
-                let reader = Thread { [self] in read(from: connection, behavior) }
+                openConnections.withLock { _ = $0.insert(connection) }
+                threads.enter()
+                let reader = Thread { [self] in
+                    read(from: connection, behavior)
+                    threads.leave()
+                }
                 reader.start()
             }
         }
 
         private func read(from connection: Int32, _ behavior: Behavior) {
-            defer { Darwin.close(connection) }
+            defer {
+                openConnections.withLock { _ = $0.remove(connection) }
+                Darwin.close(connection)
+            }
             var answeredAt: Date?
             var buffer = [UInt8](repeating: 0, count: 64 * 1024)
             while !stopped.load(ordering: .sequentiallyConsistent) {
