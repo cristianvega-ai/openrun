@@ -25,6 +25,23 @@ private func answersHello(_ socketPath: String) -> Bool {
     return (try? connection.greetSessionProcess()) != nil
 }
 
+/// Connects, and tries again while the system refuses because its queue of
+/// waiting connections is full. The queue holds as many connections as the
+/// listener asks for. On a busy machine the listener accepts late, so a burst
+/// that is longer than the queue meets a full queue. The refusal comes from
+/// the burst and not from the limit under test, so the test waits for the
+/// listener to accept and connects again.
+private func connectWhenTheQueueHasRoom(to location: SocketLocation) async throws -> MessageConnection {
+    let deadline = ContinuousClock.now + .seconds(30)
+    while true {
+        do {
+            return try MessageConnection.connect(to: location)
+        } catch SessionProtocolError.systemCallFailed("connect", let code) where code == ECONNREFUSED && ContinuousClock.now < deadline {
+            try await Task.sleep(for: .milliseconds(10))
+        }
+    }
+}
+
 /// The path with every symbolic link resolved, to compare two spellings.
 private func resolved(_ path: String) -> String {
     URL(fileURLWithPath: path).resolvingSymlinksInPath().path
@@ -533,7 +550,7 @@ extension SessionProcessIntegration {
             var clients: [MessageConnection] = []
             defer { clients.forEach { $0.shutdown() } }
             for _ in 0..<clientCount {
-                clients.append(try MessageConnection.connect(to: location))
+                clients.append(try await connectWhenTheQueueHasRoom(to: location))
             }
 
             let closed = await eventually(timeout: .seconds(5)) {
