@@ -157,13 +157,18 @@ private struct SessionFamily {
         #expect(await eventuallyTrue { SessionFamily.isStopped(stopped) }, "the child never stopped")
 
         let ending = Task { await terminal.terminate(gracePeriod: .seconds(4)) }
-        // The parent of the stopped process ignores SIGHUP, so terminate waits
-        // the whole grace period. The stopped process must not wait for it.
+        // The parent of the stopped process ignores SIGHUP, so terminate would
+        // wait the whole grace period. The stopped process must not wait for it.
         let start = ContinuousClock.now
         while family.isInSession(stopped), ContinuousClock.now - start < .seconds(2) {
             try await Task.sleep(for: .milliseconds(20))
         }
         let endedEarly = !family.isInSession(stopped)
+        // Without the parent, the session has no process left, so terminate
+        // returns before the grace period ends. A process that did not end
+        // keeps the parent, because the system continues a stopped group
+        // when the group loses its last parent outside the group.
+        if endedEarly, family.isInSession(family.ignoring) { kill(family.ignoring, SIGKILL) }
         await ending.value
         #expect(endedEarly, "the stopped process waited for SIGKILL")
         // Only a continued process runs its handler, before any forced kill.
@@ -251,7 +256,7 @@ private struct SessionFamily {
         let terminal = try PseudoTerminal(launching: scriptLaunch("sleep 300;"))
         var session = TerminalSessionProcesses(sessionIdentifier: terminal.processIdentifier)
         session.listProcessIdentifiers = { nil }
-        await terminal.terminate(gracePeriod: .seconds(2), session: session)
+        await terminal.terminate(gracePeriod: .milliseconds(300), session: session)
         // With an empty list taken for the truth, nothing sent SIGHUP and
         // SIGKILL ended the program after the grace period.
         #expect(await terminal.waitForExit() == .signaled(signal: SIGHUP))
