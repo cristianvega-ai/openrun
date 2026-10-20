@@ -369,28 +369,47 @@ private func poll(timeout: Duration, _ condition: () -> Bool) async -> Bool {
         )))
     }
 
-    /// The session process closes a client's descriptor
-    /// itself, to know when the socket is gone. The connection must not
-    /// close the number again when it goes away: by then the system may
-    /// have given it to another file.
+    /// The session process closes a client's descriptor itself, to know when
+    /// the socket is gone. The connection must not close the number again
+    /// when it goes away: by then the system may have given it to another
+    /// file.
+    ///
+    /// The tests of this product run side by side in one process, and they
+    /// open and close descriptors all the time. The lowest free numbers
+    /// belong to them, so this test works at a number near the top of the
+    /// limit, which no other test meets. It proves the first close at the
+    /// other end of the socket, because the number itself may be in use
+    /// elsewhere.
     @Test func closeEndsTheDescriptorOnceAndLaterCallsFail() throws {
+        var limit = rlimit()
+        #expect(getrlimit(RLIMIT_NOFILE, &limit) == 0)
+        let reserved = Int32(min(limit.rlim_cur, 10_240)) - 8
         var descriptors: [Int32] = [0, 0]
         #expect(socketpair(AF_UNIX, SOCK_STREAM, 0, &descriptors) == 0)
         defer { close(descriptors[0]) }
-        var connection: MessageConnection? = MessageConnection(descriptor: descriptors[1])
+        #expect(fcntl(descriptors[1], F_DUPFD, reserved) == reserved, "the reserved number is taken")
+        close(descriptors[1])
+        var connection: MessageConnection? = MessageConnection(descriptor: reserved)
         connection?.close()
-        #expect(fcntl(descriptors[1], F_GETFD) == -1 && errno == EBADF, "the descriptor is still open")
+        var byte: UInt8 = 0
+        #expect(recv(descriptors[0], &byte, 1, MSG_DONTWAIT) == 0, "the other end of the socket is still open")
         #expect(throws: SessionProtocolError.self) { try connection?.send(ClientMessage.listSessions) }
         #expect(try connection?.receive(ClientMessage.self) == nil)
         connection?.close()
 
-        // The next file gets the number that was freed.
+        // A file that takes the freed number must survive the connection.
         var pipeDescriptors: [Int32] = [0, 0]
         #expect(pipe(&pipeDescriptors) == 0)
-        defer { close(pipeDescriptors[0]); close(pipeDescriptors[1]) }
-        let reused = pipeDescriptors.contains(descriptors[1])
+        defer { close(pipeDescriptors[1]) }
+        #expect(fcntl(pipeDescriptors[0], F_DUPFD, reserved) == reserved, "the freed number is taken")
+        close(pipeDescriptors[0])
+        defer { close(reserved) }
+        var before = stat()
+        #expect(fstat(reserved, &before) == 0)
         connection = nil
-        #expect(pipeDescriptors.allSatisfy { fcntl($0, F_GETFD) != -1 }, "the connection closed a descriptor it no longer owned (reused: \(reused))")
+        var after = stat()
+        #expect(fstat(reserved, &after) == 0, "the connection closed a descriptor it no longer owned")
+        #expect(before.st_dev == after.st_dev && before.st_ino == after.st_ino, "another file holds the number now")
     }
 
     /// macOS reports a peer that shut down only its sending side while
