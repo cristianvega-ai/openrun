@@ -356,7 +356,7 @@ extension SessionProcessIntegration {
             // The first clients leave and free descriptors. The waiting ones
             // are then accepted and served.
             first.forEach { shutdown($0, SHUT_RDWR) }
-            let served = await Task.detached { () -> Int in
+            let served = await BlockingWork.onNewThread { () -> Int in
                 var served = 0
                 let deadline = Date().addingTimeInterval(4)
                 for connection in waiting {
@@ -366,7 +366,7 @@ extension SessionProcessIntegration {
                     watchdog.cancel()
                 }
                 return served
-            }.value
+            }
             print("descriptor-limit: \(served) of \(waiting.count) waiting clients were served")
             #expect(served >= 10, "\(served) of the \(waiting.count) waiting clients were served")
         }

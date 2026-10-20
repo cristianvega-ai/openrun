@@ -163,7 +163,7 @@ extension SessionProcessIntegration {
                 let clock = ContinuousClock()
                 let start = clock.now
                 FileManager.default.createFile(atPath: releaseFile, contents: Data())
-                let rawReceived = try await Task.detached { try Self.readUntilExit(connection) }.value
+                let rawReceived = try await BlockingWork.onNewThread { try Self.readUntilExit(connection) }
                 let elapsed = clock.now - start
                 print("Throughput, one client: \(rawReceived.count) bytes reached the exit in \(elapsed)")
                 let received = Self.removingRepeatedCarriageReturns(from: rawReceived)

@@ -428,7 +428,7 @@ extension SessionProcessIntegration {
                 // The client reads nothing for a second, so output waits behind the snapshot.
                 try await Task.sleep(for: .seconds(1))
 
-                let attachment = await Task.detached { () -> SlowAttachment in
+                let attachment = await BlockingWork.onNewThread { () -> SlowAttachment in
                     var attachment = SlowAttachment()
                     do {
                         guard case .attached = try receiveMessage(connection, within: 30) else {
@@ -453,7 +453,7 @@ extension SessionProcessIntegration {
                         attachment.problem = "\(error)"
                     }
                     return attachment
-                }.value
+                }
                 print("large-snapshot: \(attachment.snapshotByteCount) bytes")
                 #expect(attachment.problem == nil, "\(attachment.problem ?? "")")
                 #expect(attachment.snapshotByteCount > 8 * 1024 * 1024, "the snapshot has \(attachment.snapshotByteCount) bytes")
@@ -568,7 +568,7 @@ extension SessionProcessIntegration {
                 try connection.send(ClientMessage.readScreen(identifier: identifier, includeScrollback: true))
                 try await Task.sleep(for: .milliseconds(300))
 
-                let (outputByteCount, screen, problem) = await Task.detached { () -> (Int, String?, String?) in
+                let (outputByteCount, screen, problem) = await BlockingWork.onNewThread { () -> (Int, String?, String?) in
                     var outputByteCount = 0
                     do {
                         while let message = try receiveMessage(connection, within: 30) {
@@ -582,7 +582,7 @@ extension SessionProcessIntegration {
                     } catch {
                         return (outputByteCount, nil, "\(error)")
                     }
-                }.value
+                }
                 print("screen-answer: \(outputByteCount) output bytes, then a screen of \(screen?.utf8.count ?? 0) bytes")
                 #expect(problem == nil, "\(problem ?? "")")
                 #expect(outputByteCount >= 7 * 1024 * 1024)

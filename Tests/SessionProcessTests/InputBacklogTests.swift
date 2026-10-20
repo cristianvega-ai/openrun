@@ -333,7 +333,7 @@ extension SessionProcessIntegration {
                 // This text waits for room. Other requests and other sessions go on meanwhile.
                 let waitingText = String(decoding: patternBytes(count: 512 * 1024), as: UTF8.self)
                 let descriptorsBefore = try measured(process.descriptorCount, "the descriptor count")
-                let waiting = Task.detached { try process.runCommand(["send", identifier, waitingText]) }
+                let waiting = Task { try await BlockingWork.onNewThread { try process.runCommand(["send", identifier, waitingText]) } }
                 // The session process holds a descriptor for the connection of
                 // the send tool once it has accepted it. The requests below come
                 // later on other connections, so the text is waiting by then.
