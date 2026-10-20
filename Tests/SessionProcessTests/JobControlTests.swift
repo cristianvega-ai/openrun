@@ -10,6 +10,11 @@ extension SessionProcessIntegration {
     @Suite struct JobControlTests {
         private static let interrupt = "\u{03}"
 
+        /// How long Control-C may take. A program that has no controlling
+        /// terminal never ends, so any limit finds that defect. A wide limit
+        /// keeps a busy machine from failing the test.
+        private static let interruptLimit = Duration.seconds(10)
+
         /// Types text into a session without attaching, as `openrun send` does.
         private static func type(_ text: String, into identifier: String, of process: RunningSessionProcess, pressEnter: Bool = false) throws {
             let result = try process.runCommand(["send", identifier] + (pressEnter ? ["--enter"] : []) + ["--", text])
@@ -68,11 +73,11 @@ extension SessionProcessIntegration {
                 let clock = ContinuousClock()
                 let start = clock.now
                 try Self.type(Self.interrupt, into: identifier, of: process)
-                let interrupted = await process.waitForScreen(of: identifier, containing: "status=130", timeout: .seconds(2))
+                let interrupted = await process.waitForScreen(of: identifier, containing: "status=130", timeout: Self.interruptLimit)
                 let elapsed = clock.now - start
                 print("Control-C interrupted the foreground sleep after \(elapsed)")
                 #expect(interrupted)
-                #expect(elapsed < .seconds(2))
+                #expect(elapsed < Self.interruptLimit)
             }
         }
 
@@ -81,11 +86,15 @@ extension SessionProcessIntegration {
                 // sleep never opens the terminal itself, so it has a
                 // controlling terminal only when the launch gives it one.
                 let identifier = try process.createSession(program: ["/bin/sleep", "30"])
-                try await Task.sleep(for: .milliseconds(300))
+                // The interrupt must find sleep running, or it would meet a
+                // program that has not yet started.
+                let sessionProcessIdentifier = process.processIdentifier
+                let sleepRuns = await eventually { Self.runs(command: "/bin/sleep 30", below: sessionProcessIdentifier) }
+                #expect(sleepRuns)
                 let clock = ContinuousClock()
                 let start = clock.now
                 try Self.type(Self.interrupt, into: identifier, of: process)
-                let ended = await eventually(timeout: .seconds(2)) { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty }
+                let ended = await eventually(timeout: Self.interruptLimit) { ((try? process.listedIdentifiers()) ?? [identifier]).isEmpty }
                 print("Control-C ended a bare sleep after \(clock.now - start)")
                 #expect(ended)
             }
