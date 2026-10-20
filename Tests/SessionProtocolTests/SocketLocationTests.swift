@@ -1,5 +1,6 @@
 import Darwin
 import Foundation
+import Synchronization
 import Testing
 @testable import SessionProtocol
 
@@ -16,11 +17,23 @@ func removeFolderAndItsAccessControlList(_ path: String) {
     try? FileManager.default.removeItem(atPath: path)
 }
 
+/// Held while this process starts a child, and by every test that looks for
+/// the end of a socket. A child holds a copy of each descriptor of its
+/// parent until its `exec` closes the ones that are marked close-on-exec,
+/// and `socketpair` cannot mark them. A child that starts at the wrong time
+/// keeps the other end of a pair open for a short while.
+private let childStartGate = Mutex<Void>(())
+
+/// Runs `body` while no thread of this process starts a child.
+func whileNoChildStarts<Result>(_ body: () throws -> Result) throws -> Result {
+    try childStartGate.withLock { _ in try body() }
+}
+
 private func changeMode(_ arguments: [String]) throws -> Int32 {
     let process = Process()
     process.executableURL = URL(fileURLWithPath: "/bin/chmod")
     process.arguments = arguments
-    try process.run()
+    try whileNoChildStarts { try process.run() }
     process.waitUntilExit()
     return process.terminationStatus
 }
