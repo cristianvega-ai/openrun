@@ -123,9 +123,36 @@ private func lines(of screen: String) -> [String] {
     screen.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
 }
 
+/// The text that a test types after the step under test. The program copies
+/// its input to a file and never stops on its own, so the test cannot wait for
+/// silence. Waiting input goes in whole and in order, so input that should
+/// have been dropped would stand in front of the marker and show.
+private let endMarker = Array("END-OF-INPUT-MARK".utf8)
+
+/// Types the end marker into the program from a new connection. It waits for
+/// room, so the program must be reading, or must start to read, before it
+/// returns.
+private func sendEndMarker(to identifier: String, in process: RunningSessionProcess) throws {
+    let client = try RawClient(socketPath: process.socketPath)
+    #expect(try client.sendText(endMarker[...], to: identifier) == .acknowledged)
+}
+
+/// Waits until the file ends with the marker. It reads only the end of the
+/// file, because the file holds megabytes.
+private func fileEnds(_ file: URL, with marker: [UInt8], timeout: Duration) async -> Bool {
+    await eventually(timeout: timeout) {
+        guard let handle = try? FileHandle(forReadingFrom: file) else { return false }
+        defer { try? handle.close() }
+        guard let size = try? handle.seekToEnd(), size >= UInt64(marker.count) else { return false }
+        try? handle.seek(toOffset: size - UInt64(marker.count))
+        return (try? handle.readToEnd()).map { [UInt8]($0) == marker } ?? false
+    }
+}
+
 /// The script of a program that prints `ready`, reads nothing until the go
 /// file exists, runs `beforeReading`, and then copies all of its input to the
-/// received file until no byte comes for 5 seconds. Then it prints `finished`.
+/// received file. It does not stop on its own: the test ends the copy with
+/// `sendEndMarker`.
 ///
 /// The program does not read the filler with `head -c`. On a terminal, `head`
 /// reads through a buffer and can take bytes past its count, such as a reply
@@ -133,7 +160,7 @@ private func lines(of screen: String) -> [String] {
 /// now and then on a busy Mac, and it could hide input that leaked through.
 private func scriptThatReadsEverything(goFile: URL, receivedFile: URL, beforeReading: String = "") -> String {
     "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.02; done; \(beforeReading)"
-        + "stty min 0 time 50; dd bs=65536 2>/dev/null > '\(receivedFile.path)'; echo finished; sleep 60"
+        + "dd bs=65536 2>/dev/null > '\(receivedFile.path)'"
 }
 
 /// Checks that the program read exactly the filler that `fillBacklog`
@@ -486,7 +513,7 @@ extension SessionProcessIntegration {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
                 let receivedFile = process.directory.appendingPathComponent("received")
-                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile, beforeReading: "printf '\\033[c'; sleep 1; ")
+                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile, beforeReading: "printf '\\033[c'; echo asked; ")
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
                 #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 try fillBacklog(of: identifier, in: process)
@@ -507,14 +534,18 @@ extension SessionProcessIntegration {
                 let noticed = await eventually(timeout: .seconds(1)) { (process.descriptorCount ?? Int.max) < descriptorsBefore }
                 print("vanished-relaying-client: noticed \(noticed) after \(ContinuousClock.now - vanished)")
                 #expect(noticed, "the session process did not notice within a second that the client vanished")
-                // The detach reaches the session a moment after the socket closes.
-                try await Task.sleep(for: .milliseconds(500))
 
+                // The program prints `asked` right after the query. The session
+                // process reads the output in order, so when `asked` is on the
+                // screen, the reply to the query is already on its way into the
+                // backlog.
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
-                #expect(await process.waitForScreen(of: identifier, containing: "finished", timeout: .seconds(60)))
+                #expect(await process.waitForScreen(of: identifier, containing: "asked", timeout: .seconds(60)))
+                try sendEndMarker(to: identifier, in: process)
+                #expect(await fileEnds(receivedFile, with: endMarker, timeout: .seconds(60)))
                 // The session process answered the query, and none of the input
                 // of the vanished client arrived.
-                expectReceived(in: receivedFile, fillerThen: Array("\u{1B}[?62;22c".utf8), "after the relaying client vanished")
+                expectReceived(in: receivedFile, fillerThen: Array("\u{1B}[?62;22c".utf8) + endMarker, "after the relaying client vanished")
             }
         }
 
@@ -653,8 +684,9 @@ extension SessionProcessIntegration {
                 // The input that waited when the client detached never reaches
                 // the program.
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
-                #expect(await process.waitForScreen(of: identifier, containing: "finished", timeout: .seconds(60)))
-                expectReceived(in: receivedFile, fillerThen: [], "after the detach behind a read-ahead full of \(filling.rawValue)")
+                try sendEndMarker(to: identifier, in: process)
+                #expect(await fileEnds(receivedFile, with: endMarker, timeout: .seconds(60)))
+                expectReceived(in: receivedFile, fillerThen: endMarker, "after the detach behind a read-ahead full of \(filling.rawValue)")
             }
         }
 
@@ -691,8 +723,9 @@ extension SessionProcessIntegration {
                 #expect(try process.listedIdentifiers() == [identifier])
 
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
-                #expect(await process.waitForScreen(of: identifier, containing: "finished", timeout: .seconds(60)))
-                expectReceived(in: receivedFile, fillerThen: [], "after the client stopped sending")
+                try sendEndMarker(to: identifier, in: process)
+                #expect(await fileEnds(receivedFile, with: endMarker, timeout: .seconds(60)))
+                expectReceived(in: receivedFile, fillerThen: endMarker, "after the client stopped sending")
             }
         }
 
