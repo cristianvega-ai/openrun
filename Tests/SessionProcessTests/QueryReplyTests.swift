@@ -248,12 +248,18 @@ extension SessionProcessIntegration {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.script(goFolder: process.directory)])
                 #expect(await process.waitForScreen(of: identifier, containing: "READY"))
+                // The connection opens before the program listens. Starting
+                // the `openrun send` program inside the two second window
+                // could take longer than the window on a busy computer.
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.close() }
+                try connection.greetSessionProcess()
                 Self.releaseProgram(in: process.directory, round: 1)
                 #expect(await process.waitForScreen(of: identifier, containing: Self.expectedReply))
                 // The program has read its reply and now listens for a second
                 // one. These two bytes play a late duplicate.
                 try await Task.sleep(for: .seconds(1))
-                _ = try process.runCommand(["send", identifier, "ZZ"])
+                try connection.send(ClientMessage.sendText(identifier: try #require(UUID(uuidString: identifier)), text: "ZZ"))
                 #expect(await process.waitForScreen(of: identifier, containing: "DONE1"))
                 #expect(try process.screenText(of: identifier).contains("extra1=2"))
             }
