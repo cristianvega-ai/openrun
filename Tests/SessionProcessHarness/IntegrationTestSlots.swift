@@ -9,6 +9,10 @@ extension Tag {
     /// A test that checks wall time. It takes every slot, so no other
     /// integration test of its product runs beside it.
     @Tag public static var takesEverySlot: Self
+    /// A test that pushes megabytes of input through a pseudo terminal.
+    /// Eight such tests at once spend most of their time in the kernel and
+    /// end no sooner than one after another.
+    @Tag public static var floodsTerminalInput: Self
 }
 
 /// Lets at most `slotCount` integration tests of one test product run at
@@ -19,18 +23,25 @@ actor IntegrationTestSlots {
     /// full test runs that start at the same time.
     static let slotCount = 8
 
+    /// At most this many tests with the tag `floodsTerminalInput` run at
+    /// once. Each one also takes a slot.
+    static let floodingTestCount = 3
+
     static let shared = IntegrationTestSlots()
 
     private enum Need {
-        case noSlot, oneSlot, everySlot
+        case noSlot, oneSlot, floodingSlot, everySlot
 
         init(_ test: Test) {
-            self = test.tags.contains(.takesEverySlot) ? .everySlot : test.tags.contains(.startsAtOnce) ? .noSlot : .oneSlot
+            let tags = test.tags
+            self = tags.contains(.takesEverySlot) ? .everySlot : tags.contains(.startsAtOnce) ? .noSlot
+                : tags.contains(.floodsTerminalInput) ? .floodingSlot : .oneSlot
         }
     }
 
     private var slotsInUse = 0
     private var testsWithoutSlot = 0
+    private var floodingTests = 0
     private var aTestHasEverySlot = false
     private var waitingTests: [(need: Need, continuation: CheckedContinuation<Void, Never>)] = []
 
@@ -74,6 +85,7 @@ actor IntegrationTestSlots {
         switch need {
         case .noSlot: !aTestHasEverySlot
         case .oneSlot: slotsInUse < Self.slotCount
+        case .floodingSlot: slotsInUse < Self.slotCount && floodingTests < Self.floodingTestCount
         case .everySlot: slotsInUse == 0 && testsWithoutSlot == 0
         }
     }
@@ -82,6 +94,9 @@ actor IntegrationTestSlots {
         switch need {
         case .noSlot: testsWithoutSlot += step
         case .oneSlot: slotsInUse += step
+        case .floodingSlot:
+            slotsInUse += step
+            floodingTests += step
         case .everySlot:
             slotsInUse += step * Self.slotCount
             aTestHasEverySlot = step > 0

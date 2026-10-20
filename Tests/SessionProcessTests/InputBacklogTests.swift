@@ -282,7 +282,7 @@ extension SessionProcessIntegration {
     /// Input that a program has not read yet waits in the session process, up
     /// to 8 MiB. Past that, a writer waits for room. Nothing is dropped while
     /// its client is there. Input of a client that has left holds nothing.
-    @Suite struct InputBacklogTests {
+    @Suite(.tags(.floodsTerminalInput)) struct InputBacklogTests {
         @Test func moreTextThanTheBacklogHoldsReachesASlowReaderCompleteAndInOrder() async throws {
             try await RunningSessionProcess.run { process in
                 let total = 10 * 1024 * 1024

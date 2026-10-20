@@ -64,6 +64,7 @@ So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionS
 The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables and plays the part of a terminal window.
 The integration tests run side by side, each on a thread of its own.
 At most 8 run at a time (`IntegrationTestSlots`), apart from long tests that mostly wait and start at once.
+Of these, at most 3 push megabytes of input through a pseudo terminal at the same time.
 The time that a test shows includes its wait for a slot.
 `ThroughputTests` run with no other integration test beside them.
 
