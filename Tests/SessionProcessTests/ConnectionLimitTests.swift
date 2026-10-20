@@ -123,7 +123,9 @@ extension SessionProcessIntegration {
 
         /// Nothing ended a client that stopped halfway, and a frame
         /// header made the session process allocate the whole announced body.
-        @Test func slowAndSilentConnectionsAreEndedOnTimeAndHoldLittleMemory() async throws {
+        /// It waits for the real limits of about 30 seconds and uses little
+        /// processor time, so it starts at once.
+        @Test(.tags(.startsAtOnce)) func slowAndSilentConnectionsAreEndedOnTimeAndHoldLittleMemory() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "seq 1 30000; sleep 600"])
                 #expect(await process.waitForScreen(of: identifier, containing: "30000"))

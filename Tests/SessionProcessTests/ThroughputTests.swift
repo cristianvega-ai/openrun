@@ -10,7 +10,10 @@ extension SessionProcessIntegration {
     ///
     /// The program numbers its lines. A test can then tell a run that parsed
     /// all of the output from a run that lost, repeated or reordered some of it.
-    @Suite struct ThroughputTests {
+    ///
+    /// The time limit is wall time, so each test runs with no other
+    /// integration test beside it.
+    @Suite(.tags(.takesEverySlot)) struct ThroughputTests {
         private static let lineCount = 250_000
         /// Six digits, a space, 56 printable characters and a line feed.
         private static let lineLength = 64
