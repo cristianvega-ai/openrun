@@ -287,16 +287,24 @@ extension SessionProcessIntegration {
             try await RunningSessionProcess.run { process in
                 let total = 10 * 1024 * 1024
                 let file = process.directory.appendingPathComponent("received-checksum")
-                // The program reads nothing for two seconds, so the text piles up
-                // past the 8 MiB backlog before it reads.
-                let script = "stty raw -echo; sleep 2; head -c \(total) | shasum -a 256 > '\(file.path)'; sleep 60"
+                let goFile = process.directory.appendingPathComponent("go")
+                // The program reads nothing until the go file exists, so the
+                // text piles up past the 8 MiB backlog before it reads.
+                let script = "stty raw -echo; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.02; done; "
+                    + "head -c \(total) | shasum -a 256 > '\(file.path)'; sleep 60"
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 let text = patternBytes(count: total)
                 let client = try RawClient(socketPath: process.socketPath)
 
                 var answers: [ServerMessage?] = []
                 for offset in stride(from: 0, to: total, by: 512 * 1024) {
                     answers.append(try client.sendText(text[offset..<offset + 512 * 1024], to: identifier))
+                    // The backlog holds 8 MiB. The next text waits for room, and
+                    // the program reads only when the go file exists.
+                    if offset + 512 * 1024 == fillerByteCount {
+                        FileManager.default.createFile(atPath: goFile.path, contents: Data())
+                    }
                 }
                 #expect(answers.allSatisfy { $0 == .acknowledged })
 
@@ -310,8 +318,11 @@ extension SessionProcessIntegration {
 
         @Test func textThatWaitsWhenTheProgramEndsIsReportedAsAFailure() async throws {
             try await RunningSessionProcess.run { process in
-                // The program never reads, and ends after four seconds.
-                let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; sleep 4"])
+                // The program never reads, and ends when the go file exists.
+                let goFile = process.directory.appendingPathComponent("go")
+                let script = "stty raw -echo; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.02; done"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 let client = try RawClient(socketPath: process.socketPath)
                 let piece = patternBytes(count: 1024 * 1024)
                 // This fills the backlog.
@@ -321,13 +332,19 @@ extension SessionProcessIntegration {
 
                 // This text waits for room. Other requests and other sessions go on meanwhile.
                 let waitingText = String(decoding: patternBytes(count: 512 * 1024), as: UTF8.self)
+                let descriptorsBefore = try measured(process.descriptorCount, "the descriptor count")
                 let waiting = Task.detached { try process.runCommand(["send", identifier, waitingText]) }
-                try await Task.sleep(for: .milliseconds(300))
+                // The session process holds a descriptor for the connection of
+                // the send tool once it has accepted it. The requests below come
+                // later on other connections, so the text is waiting by then.
+                #expect(await eventually(timeout: .seconds(60)) { (process.descriptorCount ?? 0) > descriptorsBefore })
                 #expect(try process.listedIdentifiers().contains(identifier))
                 let other = try process.createSession(program: ["/bin/sh"])
                 #expect(try process.runCommand(["send", other, "--enter", "echo other-$((6*7))"]).status == 0)
                 #expect(await process.waitForScreen(of: other, containing: "other-42"))
 
+                // Only now does the program end, while the text still waits.
+                FileManager.default.createFile(atPath: goFile.path, contents: Data())
                 let result = try await waiting.value
                 #expect(result.status == 1)
                 #expect(result.standardError.contains("ended"), "standard error: \(result.standardError)")
