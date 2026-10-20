@@ -90,7 +90,7 @@ extension CommandLineToolIntegration {
         private func attachProcess(of terminal: AttachedTerminal) async -> pid_t? {
             var found: pid_t?
             _ = await eventually(timeout: .seconds(10)) {
-                found = terminal.childProcessIdentifiers().first
+                found = terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent)
                 return found != nil
             }
             return found

@@ -216,7 +216,7 @@ extension CommandLineToolIntegration {
         /// before its 20 ms hold ended.
         private func typeAKeyInHalvesWhileTheToolStops(_ terminal: AttachedTerminal) async throws -> Bool {
             #expect(await eventually { terminal.isInRawMode })
-            let tool = try #require(terminal.childProcessIdentifiers().first)
+            let tool = try #require(terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent))
             let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
 
             let typed = ContinuousClock.now
@@ -248,7 +248,7 @@ extension CommandLineToolIntegration {
                 let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
                 defer { terminal.closeNow() }
                 #expect(await eventually { terminal.isInRawMode })
-                let tool = try #require(terminal.childProcessIdentifiers().first)
+                let tool = try #require(terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent))
                 let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
                 let before = try #require(TerminalControl.memoryFootprint(of: tool))
 
@@ -308,7 +308,7 @@ extension CommandLineToolIntegration {
                     terminal.closeNow()
                 }
                 #expect(await eventually { terminal.isInRawMode })
-                let tool = try #require(terminal.childProcessIdentifiers().first)
+                let tool = try #require(terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent))
                 let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
                 #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
 
@@ -442,8 +442,7 @@ extension CommandLineToolIntegration {
                 defer { terminal.closeNow() }
                 #expect(await eventually { terminal.isInRawMode })
 
-                let children = terminal.childProcessIdentifiers()
-                let tool = try #require(children.first)
+                let tool = try #require(terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent))
                 kill(tool, signal)
                 #expect(await terminal.waitForScreen(containing: "mode-restored"))
                 #expect(terminal.screenText.contains("status=\(128 + signal)"))

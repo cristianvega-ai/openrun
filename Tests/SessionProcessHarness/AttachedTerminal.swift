@@ -178,17 +178,20 @@ public final class AttachedTerminal: @unchecked Sendable {
             && attributes.c_cflag & tcflag_t(CSIZE) == tcflag_t(CS8)
     }
 
-    /// The process identifiers of the children of the script's shell.
-    public func childProcessIdentifiers() -> [pid_t] {
+    /// The child of the script's shell that runs the program with this name.
+    /// The first child is not the tool while the script still runs a command
+    /// substitution, such as `stty -g`, so a test that signals "the first
+    /// child" can signal a process that is about to end.
+    public func childProcessIdentifier(named name: String) -> pid_t? {
         let childLister = Process()
         childLister.executableURL = URL(fileURLWithPath: "/usr/bin/pgrep")
-        childLister.arguments = ["-P", String(processIdentifier)]
+        childLister.arguments = ["-P", String(processIdentifier), "-x", name]
         let pipe = Pipe()
         childLister.standardOutput = pipe
-        guard (try? childLister.run()) != nil else { return [] }
+        guard (try? childLister.run()) != nil else { return nil }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         childLister.waitUntilExit()
-        return String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { pid_t($0) }
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").compactMap { pid_t($0) }.first
     }
 
     /// Waits for the script to end.
