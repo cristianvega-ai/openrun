@@ -252,7 +252,12 @@ extension SessionProcessIntegration {
             #expect(await process.waitForScreen(of: identifier, containing: "printed-everything"))
 
             process.send(signal: SIGTERM)
-            try await Task.sleep(for: .milliseconds(800))
+            // The socket file goes first when shutdown starts. An event
+            // replaces a fixed wait that a busy computer could stretch past
+            // the closing limit of 2 seconds.
+            let socketPath = process.socketPath
+            let shutdownStarted = await eventually { !FileManager.default.fileExists(atPath: socketPath) }
+            #expect(shutdownStarted, "the socket file stayed after the stop signal")
 
             var exit: SessionExit?
             let reading = try withTimeLimit(30, on: connection) {
