@@ -214,38 +214,44 @@ func lines(_ text: String) -> [String] {
     }
 
     @Test func inputPastTheBacklogLimitWaitsAndArrivesCompleteAndInOrder() async throws {
-        // 12 MiB is more than the 8 MiB backlog. The program reads nothing for
-        // a second, so the later writes must wait for room instead of being lost.
-        let total = 12 * 1024 * 1024
+        // 9 MiB is more than the 8 MiB backlog. The program reads nothing until
+        // the go file exists, so the later writes must wait for room instead
+        // of being lost.
+        let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: goFile) }
+        let total = 9 * 1024 * 1024
         let input = patternBytes(count: total)
-        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 1; head -c \(total) | shasum -a 256; sleep 60"))
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; head -c \(total) | shasum -a 256; sleep 60"))
         let output = OutputCollector(reading: terminal)
         #expect(await output.waitFor("ready", timeout: .seconds(10)))
 
-        let start = ContinuousClock.now
-        for offset in stride(from: 0, to: total, by: 256 * 1024) {
-            try await terminal.type(Array(input[offset..<offset + 256 * 1024]))
+        let typing = Task {
+            for offset in stride(from: 0, to: total, by: 256 * 1024) {
+                try await terminal.type(Array(input[offset..<offset + 256 * 1024]))
+            }
         }
-        // The last writes waited until the program began to read.
-        #expect(ContinuousClock.now - start > .milliseconds(500))
-        let arrived = await output.waitFor(checksum(input), timeout: .seconds(30))
+        // The last writes wait until the program begins to read.
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { terminal.waitingTypedByteCountForTesting > 0 })
+        FileManager.default.createFile(atPath: goFile, contents: nil)
+        try await typing.value
+        let arrived = await output.waitFor(checksum(input), timeout: .seconds(120))
         await terminal.terminate()
         #expect(arrived, "output: \(output.text)")
     }
 
     @Test func typedInputThatWaitsFailsWhenTheProgramEnds() async throws {
-        let piece = patternBytes(count: 1024 * 1024)
-        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 2"))
+        let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: goFile) }
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done"), typedInputLimit: Self.smallTypedInputLimit)
         let output = OutputCollector(reading: terminal)
         #expect(await output.waitFor("ready", timeout: .seconds(10)))
         // The program never reads. This fills the backlog.
-        for _ in 0..<8 {
-            try await terminal.type(piece)
-        }
+        try await terminal.type(patternBytes(count: Self.smallTypedInputLimit))
         // This write waits for room until the program ends.
-        await #expect(throws: PseudoTerminalError.self) {
-            try await terminal.type(patternBytes(count: 64 * 1024))
-        }
+        let waiting = Task { try await terminal.type(patternBytes(count: 64 * 1024)) }
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { terminal.waitingTypedByteCountForTesting > 0 })
+        FileManager.default.createFile(atPath: goFile, contents: nil)
+        await #expect(throws: PseudoTerminalError.self) { try await waiting.value }
         _ = await terminal.waitForExit()
         // A write after the end fails at once.
         await #expect(throws: PseudoTerminalError.self) {
@@ -285,11 +291,13 @@ func lines(_ text: String) -> [String] {
 
         // This waits for room, and the task that waits is cancelled.
         let waiting = Task { try await terminal.type(patternBytes(count: 64 * 1024)) }
-        try await Task.sleep(for: .milliseconds(200))
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { terminal.waitingTypedByteCountForTesting > 0 })
         waiting.cancel()
-        await #expect(throws: CancellationError.self) { try await waiting.value }
-
+        // The program reads after the withdrawal, so bytes that a cancel left
+        // behind reach it, and the wait below ends.
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { terminal.waitingTypedByteCountForTesting == 0 })
         FileManager.default.createFile(atPath: goFile, contents: nil)
+        await #expect(throws: CancellationError.self) { try await waiting.value }
         try await Self.expectCopied(filler, by: terminal, output: output)
         await terminal.terminate()
     }
@@ -309,7 +317,7 @@ func lines(_ text: String) -> [String] {
         for _ in 0..<2 {
             terminal.type(patternBytes(count: 64 * 1024), from: ObjectIdentifier(owner)) { settled.withLock { $0 += 1 } }
         }
-        try await Task.sleep(for: .milliseconds(200))
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { terminal.waitingTypedByteCountForTesting == 2 * 64 * 1024 })
         #expect(settled.withLock { $0 } == 0)
         terminal.withdrawTypedInput(from: ObjectIdentifier(owner))
         #expect(await eventuallyTrue(timeout: .seconds(60)) { settled.withLock { $0 } == 2 })
@@ -321,8 +329,10 @@ func lines(_ text: String) -> [String] {
     }
 
     @Test func answersNeverWaitButHoldTheOutputReaderPastTheirLimit() async throws {
+        let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
+        defer { try? FileManager.default.removeItem(atPath: goFile) }
         let total = 2 * 1024 * 1024
-        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; sleep 1.5; head -c \(total) > /dev/null; echo drained; sleep 60"))
+        let terminal = try PseudoTerminal(launching: shell("stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; head -c \(total) > /dev/null; echo drained; sleep 60"))
         let output = OutputCollector(reading: terminal)
         #expect(await output.waitFor("ready", timeout: .seconds(10)))
 
@@ -331,11 +341,16 @@ func lines(_ text: String) -> [String] {
             terminal.write(patternBytes(count: 64 * 1024))
         }
         // More answers wait than their limit, so the reader of the output must
-        // wait until the program reads them.
-        let start = ContinuousClock.now
-        await terminal.waitForAnswerRoom()
-        #expect(ContinuousClock.now - start > .milliseconds(500))
-        #expect(await output.waitFor("drained", timeout: .seconds(20)))
+        // wait until the program reads them. The program reads nothing for
+        // half a second, and then the go file lets it read.
+        let reader = Task {
+            await terminal.waitForAnswerRoom()
+            return FileManager.default.fileExists(atPath: goFile)
+        }
+        try await Task.sleep(for: .milliseconds(500))
+        FileManager.default.createFile(atPath: goFile, contents: nil)
+        #expect(await reader.value, "the reader of the output went on before the program read")
+        #expect(await output.waitFor("drained", timeout: .seconds(60)))
         await terminal.terminate()
     }
 
@@ -462,7 +477,7 @@ func lines(_ text: String) -> [String] {
         // The program reads nothing yet. This fills the backlog.
         try await terminal.type(filler)
         let waiting = Task { try await terminal.type(waitingText) }
-        try await Task.sleep(for: .milliseconds(200))
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { terminal.waitingTypedByteCountForTesting == waitingText.count })
         terminal.write(answer)
 
         FileManager.default.createFile(atPath: goFile, contents: nil)

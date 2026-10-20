@@ -128,6 +128,10 @@ struct InputBacklog {
 
     var isEmpty: Bool { pieces.isEmpty }
     var hasWaitingInput: Bool { !waiting.isEmpty }
+    /// The bytes of typed input that wait for room.
+    var waitingTypedByteCount: Int {
+        waiting.elements.reduce(0) { total, input in input.isAnswer ? total : total + input.bytes.count }
+    }
     var answersAreWithinLimit: Bool { pendingAnswerByteCount <= Self.answerLimit }
 
     /// The bytes that go to the terminal next.

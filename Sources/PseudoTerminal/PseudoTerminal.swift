@@ -487,6 +487,12 @@ public final class PseudoTerminal: @unchecked Sendable {
         queue.sync { unconsumedBytes }
     }
 
+    /// The bytes of typed input that wait for room. A test waits for this
+    /// event, because the time that the input takes to get there can vary.
+    var waitingTypedByteCountForTesting: Int {
+        queue.sync { input.waitingTypedByteCount }
+    }
+
     private var hasExited: Bool {
         queue.sync { exit != nil }
     }
