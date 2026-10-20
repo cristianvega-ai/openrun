@@ -67,6 +67,7 @@ At most 8 run at a time (`IntegrationTestSlots`), apart from long tests that mos
 Of these, at most 3 push megabytes of input through a pseudo terminal at the same time.
 The time that a test shows includes its wait for a slot.
 `ThroughputTests` run with no other integration test beside them.
+So do the two tests that run a `SocketListener` in the test process, because it sets the umask of the whole process while it binds the socket.
 
 ### TerminalEmulation
 

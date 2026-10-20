@@ -6,7 +6,8 @@ extension Tag {
     /// starts at once without a slot, so the longest test of a run does not
     /// also wait in the queue.
     @Tag public static var startsAtOnce: Self
-    /// A test that checks wall time. It takes every slot, so no other
+    /// A test that checks wall time, or that changes a setting of the whole
+    /// test process, such as the umask. It takes every slot, so no other
     /// integration test of its product runs beside it.
     @Tag public static var takesEverySlot: Self
     /// A test that pushes megabytes of input through a pseudo terminal.

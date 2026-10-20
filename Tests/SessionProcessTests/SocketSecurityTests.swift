@@ -500,7 +500,12 @@ extension SessionProcessIntegration {
 
         /// The session process closes a connection of another user before it
         /// sends a byte, and never serves it.
-        @Test func theSessionProcessRefusesAClientOfAnotherUser() async throws {
+        ///
+        /// The listener runs in the test process. While it binds, its umask
+        /// applies to the whole process: a folder that another test makes
+        /// then refuses files, and a second listener that binds at the same
+        /// time can leave that umask in place. So this test takes every slot.
+        @Test(.tags(.takesEverySlot)) func theSessionProcessRefusesAClientOfAnotherUser() async throws {
             let folder = try RunningSessionProcess.makeDirectory()
             defer { try? FileManager.default.removeItem(at: folder) }
             let anotherUser = PeerIdentity(userIdentifier: geteuid() &+ 1)
@@ -539,7 +544,10 @@ extension SessionProcessIntegration {
         /// until the server took it, with no limit, outside the client limit
         /// and before the hello deadline. Now a fixed number wait, and the
         /// listener closes the rest at once.
-        @Test func connectionsPastTheLimitThatWaitForTheServerAreClosedAtOnce() async throws {
+        ///
+        /// The listener runs in the test process, so this test takes every
+        /// slot for the same reason as the test above.
+        @Test(.tags(.takesEverySlot)) func connectionsPastTheLimitThatWaitForTheServerAreClosedAtOnce() async throws {
             let folder = try RunningSessionProcess.makeDirectory()
             defer { try? FileManager.default.removeItem(at: folder) }
             let location = try SocketLocation(path: folder.appendingPathComponent("socket").path)
