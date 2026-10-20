@@ -215,15 +215,15 @@ extension SessionProcessIntegration {
         @Test func aRelativeSocketPathIsMadeAbsoluteBeforeAnyoneUsesIt() async throws {
             let root = try RunningSessionProcess.makeDirectory()
             defer { try? FileManager.default.removeItem(at: root) }
-            let serverFolder = root.appendingPathComponent("server")
+            let serverFolder = root.appendingPathComponent("srv")
             let callerFolder = root.appendingPathComponent("caller")
             let sessionFolder = root.appendingPathComponent("session")
             for folder in [serverFolder, callerFolder, sessionFolder] {
                 try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
             }
-            let socketPath = serverFolder.appendingPathComponent("session.socket").path
+            let socketPath = serverFolder.appendingPathComponent("socket").path
 
-            let process = try Harness.StartedSessionProcess(arguments: ["--socket", "session.socket"], folder: serverFolder, logFile: root.appendingPathComponent("log"))
+            let process = try Harness.StartedSessionProcess(arguments: ["--socket", "socket"], folder: serverFolder, logFile: root.appendingPathComponent("log"))
             defer { process.stop() }
             try #require(await process.waitForLog(containing: "Listening on"), "log: \(process.log)")
             #expect(FileManager.default.fileExists(atPath: socketPath))
@@ -231,13 +231,13 @@ extension SessionProcessIntegration {
             // A client in another folder gives a relative path of its own.
             let seenFile = sessionFolder.appendingPathComponent("seen")
             let created = try RunningSessionProcess.runOpenrun(
-                ["new", "--socket", "../server/session.socket", "--folder", sessionFolder.path, "--",
+                ["new", "--socket", "../srv/socket", "--folder", sessionFolder.path, "--",
                  "/bin/sh", "-c", "printf '%s' \"$OPENRUN_SOCKET\" > seen; exec sleep 300"],
                 folder: callerFolder,
                 in: root
             )
             #expect(created.status == 0, "stderr: \(created.standardError)")
-            #expect(await eventually { ((try? String(contentsOf: seenFile, encoding: .utf8)) ?? "").hasSuffix("session.socket") })
+            #expect(await eventually { ((try? String(contentsOf: seenFile, encoding: .utf8)) ?? "").hasSuffix("socket") })
             let seen = (try? String(contentsOf: seenFile, encoding: .utf8)) ?? ""
             #expect(seen.hasPrefix("/"), "OPENRUN_SOCKET=\(seen)")
             #expect(resolved(seen) == resolved(socketPath), "OPENRUN_SOCKET=\(seen)")
@@ -246,7 +246,7 @@ extension SessionProcessIntegration {
             // session process. A relative OPENRUN_SOCKET works as well.
             let fromSession = try RunningSessionProcess.runOpenrun(["list"], folder: sessionFolder, environment: ["OPENRUN_SOCKET": seen], in: root)
             #expect(fromSession.status == 0 && fromSession.outputLines.count == 1, "stderr: \(fromSession.standardError)")
-            let fromCaller = try RunningSessionProcess.runOpenrun(["list"], folder: callerFolder, environment: ["OPENRUN_SOCKET": "../server/session.socket"], in: root)
+            let fromCaller = try RunningSessionProcess.runOpenrun(["list"], folder: callerFolder, environment: ["OPENRUN_SOCKET": "../srv/socket"], in: root)
             #expect(fromCaller.status == 0 && fromCaller.outputLines.count == 1, "stderr: \(fromCaller.standardError)")
         }
 
@@ -255,12 +255,10 @@ extension SessionProcessIntegration {
         @Test func anAbsoluteSocketPathReachesProgramsWithoutItsDots() async throws {
             let root = try RunningSessionProcess.makeDirectory()
             defer { try? FileManager.default.removeItem(at: root) }
-            let serverFolder = root.appendingPathComponent("server")
-            for folder in [serverFolder, root.appendingPathComponent("other")] {
-                try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
-            }
-            let plainPath = serverFolder.appendingPathComponent("session.socket").path
-            let spelledPath = root.path + "/other/../server/./session.socket"
+            let serverFolder = root.appendingPathComponent("srv")
+            try FileManager.default.createDirectory(at: serverFolder, withIntermediateDirectories: true)
+            let plainPath = serverFolder.appendingPathComponent("socket").path
+            let spelledPath = root.path + "/srv/../srv/./socket"
 
             let process = try Harness.StartedSessionProcess(arguments: ["--socket", spelledPath], folder: root, logFile: root.appendingPathComponent("log"))
             defer { process.stop() }
@@ -274,7 +272,7 @@ extension SessionProcessIntegration {
                 in: root
             )
             #expect(created.status == 0, "stderr: \(created.standardError)")
-            #expect(await eventually { ((try? String(contentsOf: seenFile, encoding: .utf8)) ?? "").hasSuffix("session.socket") })
+            #expect(await eventually { ((try? String(contentsOf: seenFile, encoding: .utf8)) ?? "").hasSuffix("socket") })
             let seen = (try? String(contentsOf: seenFile, encoding: .utf8)) ?? ""
             #expect(seen == plainPath, "OPENRUN_SOCKET=\(seen)")
         }

@@ -26,6 +26,10 @@ public final class RunningSessionProcess: @unchecked Sendable {
         return Bundle.main.bundleURL.deletingLastPathComponent()
     }()
 
+    /// The most bytes in the path of a Unix socket on macOS. The address
+    /// structure holds 104, and the last one ends the text.
+    static let longestSocketPath = 103
+
     public static var sessionExecutable: URL { productsDirectory.appendingPathComponent("openrun-session") }
     public static var commandExecutable: URL { productsDirectory.appendingPathComponent("openrun") }
 
@@ -87,6 +91,13 @@ public final class RunningSessionProcess: @unchecked Sendable {
         ownsDirectory = directory == nil
         self.directory = try directory ?? Self.makeDirectory()
         socketPath = self.directory.appendingPathComponent(socketRelativePath).path
+        // The system refuses a longer address with an error that does not name
+        // the cause. A long TMPDIR is the usual reason, so the message names it.
+        if socketPath.utf8.count > Self.longestSocketPath {
+            if ownsDirectory { try? FileManager.default.removeItem(at: self.directory) }
+            let base = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+            throw HarnessError.commandFailed(description: "The socket path \(socketPath) has \(socketPath.utf8.count) bytes, and a Unix socket address holds \(Self.longestSocketPath). TMPDIR is \(base), with \(base.utf8.count) characters. Use a shorter TMPDIR.")
+        }
         logFile = self.directory.appendingPathComponent(logName)
         FileManager.default.createFile(atPath: logFile.path, contents: nil)
         if let descriptorLimit {
