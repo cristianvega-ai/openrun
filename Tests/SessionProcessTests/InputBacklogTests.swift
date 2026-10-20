@@ -118,11 +118,6 @@ private func fillBacklog(of identifier: String, in process: RunningSessionProces
     }
 }
 
-/// The lines of a screen, so a test can match a whole line.
-private func lines(of screen: String) -> [String] {
-    screen.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
-}
-
 /// The text that a test types after the step under test. The program copies
 /// its input to a file and never stops on its own, so the test cannot wait for
 /// silence. Waiting input goes in whole and in order, so input that should
@@ -380,11 +375,8 @@ extension SessionProcessIntegration {
             let process = try RunningSessionProcess()
             defer { process.stop() }
             let goFile = process.directory.appendingPathComponent("go")
-            // After the go file, the program reads the filler, then counts what
-            // else arrives until no byte comes for a second.
-            let script = "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; "
-                + "head -c \(fillerByteCount) > /dev/null; stty min 0 time 10; "
-                + "printf 'extra=%s\\n' \"$(dd bs=65536 2>/dev/null | wc -c | tr -d ' ')\"; sleep 600"
+            let receivedFile = process.directory.appendingPathComponent("received")
+            let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile)
             let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
             #expect(await process.waitForScreen(of: identifier, containing: "ready"))
             try fillBacklog(of: identifier, in: process)
@@ -405,9 +397,9 @@ extension SessionProcessIntegration {
             // The input that waited when the client left never reaches the
             // program. The program reads the filler and then nothing more.
             FileManager.default.createFile(atPath: goFile.path, contents: Data())
-            #expect(await process.waitForScreen(of: identifier, containing: "extra=", timeout: .seconds(60)))
-            let screen = try process.screenText(of: identifier)
-            #expect(lines(of: screen).contains("extra=0"), "screen: \(screen)")
+            try sendEndMarker(to: identifier, in: process)
+            #expect(await fileEnds(receivedFile, with: endMarker, timeout: .seconds(60)))
+            expectReceived(in: receivedFile, fillerThen: endMarker, "after the client with waiting input detached")
 
             // Stopping the process ends the program.
             process.send(signal: SIGTERM)
@@ -419,11 +411,8 @@ extension SessionProcessIntegration {
         @Test func clientsThatFloodInputAndLeaveHoldNothingAndTheirInputNeverArrives() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
-                // After the go file, the program reads the filler, then counts
-                // what else arrives until no byte comes for a second.
-                let script = "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; "
-                    + "head -c \(fillerByteCount) > /dev/null; stty min 0 time 10; "
-                    + "printf 'extra=%s\\n' \"$(dd bs=65536 2>/dev/null | wc -c | tr -d ' ')\"; sleep 60"
+                let receivedFile = process.directory.appendingPathComponent("received")
+                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile)
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
                 #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 try fillBacklog(of: identifier, in: process)
@@ -464,9 +453,9 @@ extension SessionProcessIntegration {
                 // The program gets the filler, which was acknowledged, and none of
                 // the input of the clients that left.
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
-                #expect(await process.waitForScreen(of: identifier, containing: "extra=", timeout: .seconds(60)))
-                let screen = try process.screenText(of: identifier)
-                #expect(lines(of: screen).contains("extra=0"), "screen: \(screen)")
+                try sendEndMarker(to: identifier, in: process)
+                #expect(await fileEnds(receivedFile, with: endMarker, timeout: .seconds(60)))
+                expectReceived(in: receivedFile, fillerThen: endMarker, "after the clients that flooded input left")
             }
         }
 
@@ -592,9 +581,8 @@ extension SessionProcessIntegration {
         @Test func sendTextWaitsBehindTheTypedInputOfItsOwnConnection() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
-                let script = "stty raw -echo opost; echo ready; while [ ! -e '\(goFile.path)' ]; do sleep 0.1; done; "
-                    + "head -c \(fillerByteCount) > /dev/null; stty min 0 time 10; "
-                    + "printf 'order=%s\\n' \"$(dd bs=65536 2>/dev/null | tr -s 'acb')\"; sleep 60"
+                let receivedFile = process.directory.appendingPathComponent("received")
+                let script = scriptThatReadsEverything(goFile: goFile, receivedFile: receivedFile)
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
                 #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 try fillBacklog(of: identifier, in: process)
@@ -616,9 +604,10 @@ extension SessionProcessIntegration {
                     break
                 }
                 #expect(answer == .acknowledged)
-                #expect(await process.waitForScreen(of: identifier, containing: "order=", timeout: .seconds(60)))
-                let screen = try process.screenText(of: identifier)
-                #expect(lines(of: screen).contains("order=acb"), "screen: \(screen)")
+                try sendEndMarker(to: identifier, in: process)
+                #expect(await fileEnds(receivedFile, with: endMarker, timeout: .seconds(60)))
+                let inOrder = [UInt8(ascii: "a"), UInt8(ascii: "c"), UInt8(ascii: "b")].flatMap { Array(repeating: $0, count: 64 * 1024) }
+                expectReceived(in: receivedFile, fillerThen: inOrder + endMarker, "after the input frames and the sent text")
             }
         }
 
