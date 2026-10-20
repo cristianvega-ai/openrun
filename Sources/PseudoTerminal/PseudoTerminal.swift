@@ -53,14 +53,22 @@ public final class PseudoTerminal: @unchecked Sendable {
     private var unconsumedBytes = 0
     private var sourcesStillUsingMaster = 2
     /// Input that has not gone to the terminal yet. See `InputBacklog`.
-    private var input = InputBacklog()
+    private var input: InputBacklog
     private var answerRoomWaiters: [CheckedContinuation<Void, Never>] = []
     private var exit: ProgramExit?
     private var exitWaiters: [CheckedContinuation<ProgramExit, Never>] = []
 
     /// Starts the program.
-    public init(launching launch: ProgramLaunch) throws {
+    public convenience init(launching launch: ProgramLaunch) throws {
+        try self.init(launching: launch, typedInputLimit: InputBacklog.typedLimit)
+    }
+
+    /// `typedInputLimit` is a parameter only so that a test can fill the
+    /// backlog with little input. A busy machine moves typed input through a
+    /// pseudo terminal slowly, so 8 MiB can take more than half a minute.
+    init(launching launch: ProgramLaunch, typedInputLimit: Int) throws {
         let started = try launch.start()
+        input = InputBacklog(typedInputLimit: typedInputLimit)
         master = started.masterDescriptor
         processIdentifier = started.processIdentifier
         terminalPath = started.terminalPath

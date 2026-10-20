@@ -2,7 +2,7 @@
 ///
 /// It has two parts. The backlog holds the bytes that the terminal takes as
 /// fast as the program reads. Typed input that does not fit waits for room,
-/// in the order it was typed. The backlog holds at most `typedLimit` bytes
+/// in the order it was typed. The backlog holds at most `typedInputLimit` bytes
 /// before typed input waits, so a program that never reads cannot make the
 /// session process grow. Answers to the program's queries never wait for room,
 /// because a terminal must not wait while it parses output. An answer goes
@@ -39,11 +39,18 @@ struct InputBacklog {
         }
     }
 
-    /// Typed input waits for room past this many bytes in the backlog. A
-    /// single piece that is larger waits for an empty backlog.
+    /// The standard `typedInputLimit`.
     static let typedLimit = 8 * 1024 * 1024
     /// Answers past this many bytes make `answersAreWithinLimit` false.
     static let answerLimit = 1 * 1024 * 1024
+
+    /// Typed input waits for room past this many bytes in the backlog. A
+    /// single piece that is larger waits for an empty backlog.
+    let typedInputLimit: Int
+
+    init(typedInputLimit: Int = InputBacklog.typedLimit) {
+        self.typedInputLimit = typedInputLimit
+    }
 
     private struct Piece {
         var bytes: ArraySlice<UInt8>
@@ -154,7 +161,7 @@ struct InputBacklog {
     mutating func admitWaiting() -> [Notice] {
         var notices: [Notice] = []
         while let next = waiting.first,
-              next.isAnswer || pendingByteCount == 0 || pendingByteCount + next.bytes.count <= Self.typedLimit {
+              next.isAnswer || pendingByteCount == 0 || pendingByteCount + next.bytes.count <= typedInputLimit {
             waiting.removeFirst()
             if !next.bytes.isEmpty {
                 let owner = next.staysWithoutOwner ? nil : next.owner

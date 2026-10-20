@@ -78,9 +78,9 @@ func patternBytes(count: Int) -> [UInt8] {
     return bytes
 }
 
-/// Polls until the condition holds, for at most five seconds.
-func eventuallyTrue(_ condition: () -> Bool) async -> Bool {
-    let deadline = ContinuousClock.now + .seconds(5)
+/// Polls until the condition holds, for at most `timeout`.
+func eventuallyTrue(timeout: Duration = .seconds(5), _ condition: () -> Bool) async -> Bool {
+    let deadline = ContinuousClock.now + timeout
     while !condition() {
         guard ContinuousClock.now < deadline else { return false }
         try? await Task.sleep(for: .milliseconds(20))
@@ -253,19 +253,35 @@ func lines(_ text: String) -> [String] {
         }
     }
 
-    /// A program that reads 8 MiB after a go file, then counts what else
-    /// arrives until no byte comes for a second.
-    private static func countingReader(goFile: String) -> ProgramLaunch {
-        shell("stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; head -c \(8 * 1024 * 1024) > /dev/null; stty min 0 time 10; printf 'extra=%s\\n' \"$(dd bs=65536 2>/dev/null | wc -c | tr -d ' ')\"; sleep 60")
+    /// The typed input limit in the tests of input that waits. A small limit
+    /// keeps them fast on a busy machine. 8 MiB has a test of its own.
+    private static let smallTypedInputLimit = 64 * 1024
+    private static let endMarker = "END-OF-INPUT-MARK"
+
+    /// A program that copies all its input to its output once the go file
+    /// exists. The raw mode keeps each byte as it is.
+    private static func copyingReader(goFile: String) -> ProgramLaunch {
+        shell("stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; exec cat")
+    }
+
+    /// Types `endMarker` and requires that the program copied `expected` and
+    /// then the marker. Input goes in whole and in order, so bytes that a
+    /// withdrawal left behind would come before the marker.
+    private static func expectCopied(_ expected: [UInt8], by terminal: PseudoTerminal, output: OutputCollector) async throws {
+        try await terminal.type(Array(endMarker.utf8))
+        #expect(await output.waitFor(endMarker, timeout: .seconds(60)))
+        let complete = output.text == "ready\n" + String(decoding: expected, as: UTF8.self) + endMarker
+        #expect(complete, "the program copied \(output.text.utf8.count) bytes, ending with: \(output.text.suffix(60))")
     }
 
     @Test func cancellingATypeThatWaitsWithdrawsItsBytes() async throws {
         let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
         defer { try? FileManager.default.removeItem(atPath: goFile) }
-        let terminal = try PseudoTerminal(launching: Self.countingReader(goFile: goFile))
+        let terminal = try PseudoTerminal(launching: Self.copyingReader(goFile: goFile), typedInputLimit: Self.smallTypedInputLimit)
         let output = OutputCollector(reading: terminal)
         #expect(await output.waitFor("ready", timeout: .seconds(10)))
-        for _ in 0..<8 { try await terminal.type(patternBytes(count: 1024 * 1024)) }
+        let filler = patternBytes(count: Self.smallTypedInputLimit)
+        try await terminal.type(filler)
 
         // This waits for room, and the task that waits is cancelled.
         let waiting = Task { try await terminal.type(patternBytes(count: 64 * 1024)) }
@@ -274,18 +290,18 @@ func lines(_ text: String) -> [String] {
         await #expect(throws: CancellationError.self) { try await waiting.value }
 
         FileManager.default.createFile(atPath: goFile, contents: nil)
-        #expect(await output.waitFor("extra=", timeout: .seconds(30)))
+        try await Self.expectCopied(filler, by: terminal, output: output)
         await terminal.terminate()
-        #expect(lines(output.text).contains("extra=0"), "output: \(output.text.suffix(200))")
     }
 
     @Test func withdrawingTheInputOfAnOwnerRemovesWhatHasNotGoneOut() async throws {
         let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
         defer { try? FileManager.default.removeItem(atPath: goFile) }
-        let terminal = try PseudoTerminal(launching: Self.countingReader(goFile: goFile))
+        let terminal = try PseudoTerminal(launching: Self.copyingReader(goFile: goFile), typedInputLimit: Self.smallTypedInputLimit)
         let output = OutputCollector(reading: terminal)
         #expect(await output.waitFor("ready", timeout: .seconds(10)))
-        for _ in 0..<8 { try await terminal.type(patternBytes(count: 1024 * 1024)) }
+        let filler = patternBytes(count: Self.smallTypedInputLimit)
+        try await terminal.type(filler)
 
         // The owner types twice. Neither fits, so both wait.
         let owner = NSObject()
@@ -296,13 +312,12 @@ func lines(_ text: String) -> [String] {
         try await Task.sleep(for: .milliseconds(200))
         #expect(settled.withLock { $0 } == 0)
         terminal.withdrawTypedInput(from: ObjectIdentifier(owner))
-        #expect(await eventuallyTrue { settled.withLock { $0 } == 2 })
+        #expect(await eventuallyTrue(timeout: .seconds(60)) { settled.withLock { $0 } == 2 })
 
         FileManager.default.createFile(atPath: goFile, contents: nil)
-        #expect(await output.waitFor("extra=", timeout: .seconds(30)))
+        try await Self.expectCopied(filler, by: terminal, output: output)
         await terminal.terminate()
         withExtendedLifetime(owner) {}
-        #expect(lines(output.text).contains("extra=0"), "output: \(output.text.suffix(200))")
     }
 
     @Test func answersNeverWaitButHoldTheOutputReaderPastTheirLimit() async throws {
@@ -438,27 +453,22 @@ func lines(_ text: String) -> [String] {
     @Test func anAnswerReachesTheProgramBehindTypedInputThatWaits() async throws {
         let goFile = NSTemporaryDirectory() + "go-\(UInt32.random(in: 0...UInt32.max))"
         defer { try? FileManager.default.removeItem(atPath: goFile) }
-        let piece = patternBytes(count: 1024 * 1024)
+        let filler = patternBytes(count: Self.smallTypedInputLimit)
         let waitingText = [UInt8](repeating: UInt8(ascii: "T"), count: 64 * 1024)
         let answer = Array("ANSWER-MARK".utf8)
-        let total = 8 * piece.count + waitingText.count + answer.count
-        let terminal = try PseudoTerminal(launching: shell(
-            "stty raw -echo; echo ready; while [ ! -e '\(goFile)' ]; do sleep 0.05; done; head -c \(total) | tail -c 40; echo; echo finished; sleep 60"
-        ))
+        let terminal = try PseudoTerminal(launching: Self.copyingReader(goFile: goFile), typedInputLimit: Self.smallTypedInputLimit)
         let output = OutputCollector(reading: terminal)
         #expect(await output.waitFor("ready", timeout: .seconds(10)))
         // The program reads nothing yet. This fills the backlog.
-        for _ in 0..<8 { try await terminal.type(piece) }
+        try await terminal.type(filler)
         let waiting = Task { try await terminal.type(waitingText) }
         try await Task.sleep(for: .milliseconds(200))
         terminal.write(answer)
 
         FileManager.default.createFile(atPath: goFile, contents: nil)
         try await waiting.value
-        #expect(await output.waitFor("finished", timeout: .seconds(30)))
+        try await Self.expectCopied(filler + waitingText + answer, by: terminal, output: output)
         await terminal.terminate()
-        let expectedEnd = String(repeating: "T", count: 40 - answer.count) + "ANSWER-MARK"
-        #expect(output.text.contains(expectedEnd), "the last 40 bytes the program read: \(output.text.suffix(80))")
     }
 
     @Test func terminateAfterTheExitDoesNothing() async throws {
