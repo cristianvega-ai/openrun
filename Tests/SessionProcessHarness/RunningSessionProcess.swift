@@ -289,7 +289,8 @@ extension RunningSessionProcess {
     }
 
     /// The processor time that the process has used so far, in user and
-    /// system mode together.
+    /// system mode together. The system reports nothing for a process that it
+    /// has reaped, so read it while the process runs, before `stop()`.
     public var processorTime: Duration? {
         guard let usage = resourceUsage else { return nil }
         // The system counts this time in ticks of the machine clock, not in

@@ -476,9 +476,12 @@ The session process parses every byte that a program writes, so the speed of lib
 The script writes the mode to `Libraries/ghostty-vt.optimize-mode`. When that file does not name the mode in the script, the script deletes the old output and builds again, so a re-run never leaves a framework of the wrong mode in place.
 Before it fetches or checks out anything, the script refuses a Ghostty tree with changes, so an edit is never discarded. It checks again after the checkout. The script uses a Zig tree that it extracted in the same run, from an archive in `Libraries/zig` whose checksum matched the pin (or from a fresh download that matched). It deletes the tree that an earlier run left and extracts again, then checks the `zig` program against its pinned checksum. A Zig in the search path is never used. The checksum of the program alone would not cover the standard library beside it, and extracting again does.
 
-`ThroughputTests` run a program that writes 16 MB of printable text (`yes ... | head -c 16000000`). The session must reach the exit of the program within 5 seconds, once with no client and once with one client that reads all output.
-On the development Mac (Apple Silicon, debug build of the Swift code, ReleaseFast libghostty-vt), the runs took 1.7 to 2.5 seconds with no client and 1.3 to 3.5 seconds with one client. The time depends on how busy the Mac is.
-The Swift code is a debug build in the tests, so the limit of 5 seconds leaves little room on a slow or busy Mac.
+`ThroughputTests` run a program that writes 16 MB of printable text (`yes ... | head -c 16000000`), once with no client and once with one client that reads all output.
+The session process must use less than 5 seconds of processor time (user and system together) to reach the exit of the program. `RunningSessionProcess.processorTime` reads it while the process runs.
+Wall time is not the bound, because other programs on a busy Mac take processor time from the session process and make a correct run slow.
+A wall-time limit of 60 seconds ends a test that hangs.
+On the development Mac (Apple Silicon, debug build of the Swift code, ReleaseFast libghostty-vt), a run used about 1.0 to 1.6 seconds of processor time.
+The Swift code is a debug build in the tests, so the limit of 5 seconds leaves little room on a slow Mac.
 
 ## Environment variables
 

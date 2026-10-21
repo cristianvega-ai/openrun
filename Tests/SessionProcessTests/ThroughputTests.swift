@@ -11,17 +11,28 @@ extension SessionProcessIntegration {
     /// The program numbers its lines. A test can then tell a run that parsed
     /// all of the output from a run that lost, repeated or reordered some of it.
     ///
-    /// The time limit is wall time, so each test runs with no other
-    /// integration test beside it.
+    /// The limit is processor time of the session process, so a busy Mac does
+    /// not fail a test that the code passes. A wall-time limit ends a test
+    /// that hangs.
     @Suite(.tags(.takesEverySlot)) struct ThroughputTests {
         private static let lineCount = 250_000
         /// Six digits, a space, 56 printable characters and a line feed.
         private static let lineLength = 64
         private static let byteCount = lineCount * lineLength
-        private static let timeLimit = Duration.seconds(5)
+        private static let processorTimeLimit = Duration.seconds(5)
+        private static let wallTimeLimit = Duration.seconds(60)
         private static let padding = "0123456789abcdef0123456789abcdef0123456789abcdef01234567"
 
         private static let writeCommand = "awk 'BEGIN { for (n = 1; n <= \(lineCount); n++) printf \"%06d \(padding)\\n\", n }'"
+
+        /// Both limits hold when the test reaches its end. Read the processor
+        /// time here, while the session process still runs.
+        private static func expectLimits(of process: RunningSessionProcess, wallTime: Duration) throws {
+            let processorTime = try #require(process.processorTime, "The processor time of the session process cannot be read.")
+            print("Throughput: the session process used \(processorTime) of processor time")
+            #expect(wallTime < wallTimeLimit, "The test took \(wallTime) of wall time, and the limit is \(wallTimeLimit).")
+            #expect(processorTime < processorTimeLimit, "The session process used \(processorTime) of processor time, and the limit is \(processorTimeLimit).")
+        }
 
         private static func line(_ number: Int) -> String {
             String(format: "%06d ", number) + padding
@@ -70,7 +81,7 @@ extension SessionProcessIntegration {
                 // other answer, a closed connection or a timeout is a failure.
                 var elapsed = clock.now - start
                 var ended = false
-                while elapsed < .seconds(30) {
+                while elapsed < Self.wallTimeLimit {
                     try connection.send(ClientMessage.listSessions)
                     guard let reply = try connection.receive(ServerMessage.self) else {
                         Issue.record("The session process closed the connection while the session was running.")
@@ -88,9 +99,9 @@ extension SessionProcessIntegration {
                     try await Task.sleep(for: .milliseconds(5))
                 }
                 print("Throughput, no client: \(Self.byteCount) bytes reached the exit in \(elapsed)")
-                #expect(ended, "The session was still listed after 30 seconds.")
+                #expect(ended, "The session was still listed after \(Self.wallTimeLimit).")
                 #expect(process.isRunning, "The session process died.")
-                #expect(elapsed < Self.timeLimit)
+                try Self.expectLimits(of: process, wallTime: elapsed)
             }
         }
 
@@ -111,7 +122,7 @@ extension SessionProcessIntegration {
                 let lastLine = Self.line(Self.lineCount)
                 var screen = ""
                 var elapsed = clock.now - start
-                while elapsed < .seconds(30) {
+                while elapsed < Self.wallTimeLimit {
                     try connection.send(ClientMessage.readScreen(identifier: session, includeScrollback: false))
                     guard let reply = try connection.receive(ServerMessage.self) else {
                         Issue.record("The session process closed the connection while the session was running.")
@@ -128,7 +139,7 @@ extension SessionProcessIntegration {
                 }
                 print("Throughput, no client: the screen showed line \(Self.lineCount) after \(elapsed)")
                 #expect(screen.contains(lastLine), "The last line never reached the screen.")
-                #expect(elapsed < Self.timeLimit)
+                try Self.expectLimits(of: process, wallTime: elapsed)
 
                 // Every row of the screen must hold the right line. The last
                 // line is on the screen, so the rows above it are the lines
@@ -166,6 +177,13 @@ extension SessionProcessIntegration {
                 let clock = ContinuousClock()
                 let start = clock.now
                 FileManager.default.createFile(atPath: releaseFile, contents: Data())
+                // The read below waits for ever when the session hangs. Closing
+                // the connection after the wall-time limit makes it fail.
+                let watchdog = Task {
+                    try await Task.sleep(for: Self.wallTimeLimit)
+                    connection.shutdown()
+                }
+                defer { watchdog.cancel() }
                 let rawReceived = try await BlockingWork.onNewThread { try Self.readUntilExit(connection) }
                 let elapsed = clock.now - start
                 print("Throughput, one client: \(rawReceived.count) bytes reached the exit in \(elapsed)")
@@ -178,7 +196,7 @@ extension SessionProcessIntegration {
                     let offset = zip(received, expected).enumerated().first { $0.element.0 != $0.element.1 }?.offset ?? min(received.count, expected.count)
                     Issue.record("The output differs from the lines that the program wrote, first at byte \(offset).")
                 }
-                #expect(elapsed < Self.timeLimit)
+                try Self.expectLimits(of: process, wallTime: elapsed)
             }
         }
 
