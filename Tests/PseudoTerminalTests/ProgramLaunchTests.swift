@@ -8,7 +8,13 @@ import Testing
 /// session process runs somewhere else, so a lookup against its own folder
 /// would find the wrong files.
 private func makeLaunchFolder() throws -> URL {
-    let base = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+    // The test target has no access to the harness, so it repeats the harness
+    // rule: a long TMPDIR gives way to the temporary folder of the user.
+    var base = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+    if base.utf8.count > 76 {
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        if confstr(_CS_DARWIN_USER_TEMP_DIR, &buffer, buffer.count) > 0 { base = String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self) }
+    }
     let folder = URL(fileURLWithPath: base, isDirectory: true).appendingPathComponent("launch-" + UUID().uuidString, isDirectory: true)
     try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
     return folder

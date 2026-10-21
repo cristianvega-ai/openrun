@@ -2,8 +2,9 @@ import Darwin
 import Foundation
 
 /// A real `openrun-session` process on a socket in a private folder, for
-/// integration tests. The folder lives under `TMPDIR`, because a Unix socket
-/// path must stay short.
+/// integration tests. The folder lives under `TMPDIR`, or under the temporary
+/// folder of the user when `TMPDIR` is long, because a Unix socket path must
+/// stay short.
 public final class RunningSessionProcess: @unchecked Sendable {
     public let directory: URL
     public let socketPath: String
@@ -33,11 +34,27 @@ public final class RunningSessionProcess: @unchecked Sendable {
     public static var sessionExecutable: URL { productsDirectory.appendingPathComponent("openrun-session") }
     public static var commandExecutable: URL { productsDirectory.appendingPathComponent("openrun") }
 
+    /// The most characters in `TMPDIR` for which every socket path of the tests
+    /// still fits in a socket address.
+    static let longestTemporaryDirectory = 76
+
+    /// `TMPDIR`, unless it is too long for the socket paths of the tests. Then
+    /// it is the temporary folder that the system makes for the user, which is
+    /// about 49 characters long. A long `TMPDIR` is common in a scratch folder
+    /// of a build tool, and the tests have no way to shorten a socket path.
+    public static func temporaryDirectory() -> String {
+        let configured = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+        guard configured.utf8.count > longestTemporaryDirectory else { return configured }
+        var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+        guard confstr(_CS_DARWIN_USER_TEMP_DIR, &buffer, buffer.count) > 0 else { return configured }
+        return String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self)
+    }
+
     /// A new private folder with a short name under `TMPDIR`. The system
     /// makes the name and refuses one that exists, so two calls never share a
     /// folder, also when an earlier run left one behind.
     public static func makeDirectory() throws -> URL {
-        let base = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+        let base = temporaryDirectory()
         var template = Array((base as NSString).appendingPathComponent("test-" + String(repeating: "X", count: 6)).utf8CString)
         guard mkdtemp(&template) != nil else {
             throw HarnessError.commandFailed(description: "A folder under \(base) cannot be made: \(String(cString: strerror(errno)))")
@@ -93,9 +110,10 @@ public final class RunningSessionProcess: @unchecked Sendable {
         socketPath = self.directory.appendingPathComponent(socketRelativePath).path
         // The system refuses a longer address with an error that does not name
         // the cause. A long TMPDIR is the usual reason, so the message names it.
+        // The user folder replaces a long TMPDIR, so this error is rare.
         if socketPath.utf8.count > Self.longestSocketPath {
             if ownsDirectory { try? FileManager.default.removeItem(at: self.directory) }
-            let base = ProcessInfo.processInfo.environment["TMPDIR"] ?? NSTemporaryDirectory()
+            let base = Self.temporaryDirectory()
             throw HarnessError.commandFailed(description: "The socket path \(socketPath) has \(socketPath.utf8.count) bytes, and a Unix socket address holds \(Self.longestSocketPath). TMPDIR is \(base), with \(base.utf8.count) characters. Use a shorter TMPDIR.")
         }
         logFile = self.directory.appendingPathComponent(logName)
