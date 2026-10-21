@@ -66,7 +66,7 @@ The integration tests run side by side, each on a thread of its own.
 At most 8 run at a time (`IntegrationTestSlots`), apart from long tests that mostly wait and start at once.
 Floods of input through pseudo terminals slow each other down in the kernel: 3 transfers of 4 MiB at once take 4.2 s each, and one alone takes 0.19 s.
 So a test with the tag `floodsTerminalInput`, one that pushes about 1 MiB or more through a pseudo terminal, also takes a lock for the whole Mac (`TerminalFloodLock`, a `flock` on `openrun-terminal-floods.lock` in the temporary folder of the user), and only one such test runs at a time, in every test process of the user.
-The lock comes after the slot and goes back before it. A wait for the lock ends after 120 s, and then the test runs without the lock, so a stopped test process of another run cannot block a run for ever.
+The lock comes after the slot and goes back before it. A wait for the lock ends after 120 s, and then the test runs without the lock, so a stopped test process of another run cannot block a run for ever. After that wait, each later test of the same process tries the lock once and goes on at once when it is still held, so a stuck lock costs at most one wait of 120 s for each test process.
 `PseudoTerminalTests` cannot use the harness, so its one 9 MiB transfer runs outside the lock.
 A test that only waits, or whose program never reads, has a normal slot and does not take the lock.
 The time that a test shows includes its wait for a slot and for the lock.
