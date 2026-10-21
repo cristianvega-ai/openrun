@@ -12,6 +12,8 @@ import TerminalEmulation
 /// test can tell who answered.
 public final class AttachedTerminal: @unchecked Sendable {
     private let pseudoTerminal: PseudoTerminal
+    /// The terminal, opened while the shell runs. See `openTerminal(of:)`.
+    private let terminalDescriptor: Int32
     private let screen: Terminal
     private let lock = NSLock()
     private let replies = ReplyCounter()
@@ -35,6 +37,7 @@ public final class AttachedTerminal: @unchecked Sendable {
         )
         let pseudoTerminal = try PseudoTerminal(launching: launch)
         self.pseudoTerminal = pseudoTerminal
+        terminalDescriptor = Self.openTerminal(of: pseudoTerminal)
         let (keys, typing) = AsyncStream.makeStream(of: [UInt8].self)
         self.typing = typing
         // The screen keeps its reply handler, so the handler must not hold
@@ -61,6 +64,29 @@ public final class AttachedTerminal: @unchecked Sendable {
                 }
             }
         }
+    }
+
+    deinit {
+        if terminalDescriptor >= 0 { close(terminalDescriptor) }
+    }
+
+    /// The system gives the number of an ended terminal to the next new
+    /// terminal, often one of a test that runs beside this one. A call
+    /// through the path after the shell ended, such as a `resumeOutput` in
+    /// a `defer`, could then restart output that the other test holds back.
+    /// A descriptor that was opened while the shell ran keeps to this
+    /// terminal: when the shell ends, the system revokes it, and later calls
+    /// through it fail.
+    private static func openTerminal(of pseudoTerminal: PseudoTerminal) -> Int32 {
+        // O_NOCTTY keeps the test from adopting the terminal.
+        let descriptor = open(pseudoTerminal.terminalPath, O_RDWR | O_NOCTTY | O_CLOEXEC)
+        // The number is free only after the shell was reaped, so a shell that
+        // is still there proves that the open reached this terminal.
+        guard descriptor >= 0, kill(pseudoTerminal.processIdentifier, 0) == 0 else {
+            if descriptor >= 0 { close(descriptor) }
+            return -1
+        }
+        return descriptor
     }
 
     /// The process identifier of the script's shell.
@@ -113,7 +139,7 @@ public final class AttachedTerminal: @unchecked Sendable {
     /// holds the output back instead.
     public func pauseOutput() {
         clearAnyKeyRestart()
-        controlOutput(TCOOFF)
+        tcflow(terminalDescriptor, TCOOFF)
     }
 
     /// `cfmakeraw` leaves IXANY set. With it, any key that the terminal reads,
@@ -121,27 +147,15 @@ public final class AttachedTerminal: @unchecked Sendable {
     /// stopped, and the test would no longer hold the output back at the
     /// moment it types the key.
     private func clearAnyKeyRestart() {
-        let descriptor = open(pseudoTerminal.terminalPath, O_RDWR | O_NOCTTY)
-        guard descriptor >= 0 else { return }
-        defer { close(descriptor) }
         var attributes = termios()
-        guard tcgetattr(descriptor, &attributes) == 0 else { return }
+        guard tcgetattr(terminalDescriptor, &attributes) == 0 else { return }
         attributes.c_iflag &= ~tcflag_t(IXANY)
-        tcsetattr(descriptor, TCSANOW, &attributes)
+        tcsetattr(terminalDescriptor, TCSANOW, &attributes)
     }
 
     /// Lets the output that `pauseOutput` held back flow again.
     public func resumeOutput() {
-        controlOutput(TCOON)
-    }
-
-    private func controlOutput(_ action: Int32) {
-        // Opening the terminal by its path reaches the same terminal that the
-        // program uses. O_NOCTTY keeps the test from adopting it.
-        let descriptor = open(pseudoTerminal.terminalPath, O_RDWR | O_NOCTTY)
-        guard descriptor >= 0 else { return }
-        defer { close(descriptor) }
-        tcflow(descriptor, action)
+        tcflow(terminalDescriptor, TCOON)
     }
 
     /// Waits until the screen shows the text.
@@ -157,13 +171,8 @@ public final class AttachedTerminal: @unchecked Sendable {
 
     /// Whether the terminal is in raw mode: no line editing and no echo.
     public var isInRawMode: Bool {
-        // Opening the terminal by its path shows the settings that the
-        // program under test made. O_NOCTTY keeps the test from adopting it.
-        let descriptor = open(pseudoTerminal.terminalPath, O_RDONLY | O_NOCTTY)
-        guard descriptor >= 0 else { return false }
-        defer { close(descriptor) }
         var attributes = termios()
-        guard tcgetattr(descriptor, &attributes) == 0 else { return false }
+        guard tcgetattr(terminalDescriptor, &attributes) == 0 else { return false }
         // Every flag that `cfmakeraw` clears must be clear, and the program
         // must read eight bits without parity. Checking only line editing and
         // echo would accept a terminal that still turns Control-C into a
