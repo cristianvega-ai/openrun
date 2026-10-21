@@ -10,9 +10,11 @@ extension Tag {
     /// test process, such as the umask. It takes every slot, so no other
     /// integration test of its product runs beside it.
     @Tag public static var takesEverySlot: Self
-    /// A test that pushes megabytes of input through a pseudo terminal.
-    /// Eight such tests at once spend most of their time in the kernel and
-    /// end no sooner than one after another.
+    /// A test that pushes megabytes of input through a pseudo terminal. It
+    /// also takes the lock of `TerminalFloodLock`, so one such test runs at a
+    /// time on the whole Mac, whatever the number of test processes. Floods
+    /// that run at once slow each other down in the kernel: three at once
+    /// take 4.2 s each for 4 MiB, against 0.19 s alone.
     @Tag public static var floodsTerminalInput: Self
 }
 
@@ -24,9 +26,11 @@ actor IntegrationTestSlots {
     /// full test runs that start at the same time.
     static let slotCount = 8
 
-    /// At most this many tests with the tag `floodsTerminalInput` run at
-    /// once. Each one also takes a slot.
-    static let floodingTestCount = 3
+    /// At most this many tests with the tag `floodsTerminalInput` of one test
+    /// process hold a slot at once. The lock of `TerminalFloodLock` lets one
+    /// flood run at a time on the whole Mac, so a second one in this process
+    /// would only hold a slot while it waits for the lock.
+    static let floodingTestCount = 1
 
     static let shared = IntegrationTestSlots()
 

@@ -64,8 +64,11 @@ So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionS
 The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables and plays the part of a terminal window.
 The integration tests run side by side, each on a thread of its own.
 At most 8 run at a time (`IntegrationTestSlots`), apart from long tests that mostly wait and start at once.
-Of these, at most 3 push megabytes of input through a pseudo terminal at the same time.
-The time that a test shows includes its wait for a slot.
+Floods of input through pseudo terminals slow each other down in the kernel: 3 transfers of 4 MiB at once take 4.2 s each, and one alone takes 0.19 s.
+So a test with the tag `floodsTerminalInput` also takes a lock for the whole Mac (`TerminalFloodLock`, a `flock` on `openrun-terminal-floods.lock` in the temporary folder of the user), and only one such test runs at a time, in every test process of the user.
+The lock comes after the slot and goes back before it. A wait for the lock ends after 120 s, and then the test runs without the lock, so a stopped test process of another run cannot block a run for ever.
+`PseudoTerminalTests` cannot use the harness, so its one 9 MiB transfer runs outside the lock.
+The time that a test shows includes its wait for a slot and for the lock.
 `ThroughputTests` run with no other integration test beside them.
 So do the two tests that run a `SocketListener` in the test process, because it sets the umask of the whole process while it binds the socket.
 

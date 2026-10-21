@@ -17,6 +17,10 @@ public struct IsolatedThreadTrait: SuiteTrait, TestTrait, TestScoping {
     ) async throws {
         let slots = IntegrationTestSlots.shared
         await slots.enter(for: test)
+        // The lock comes after the slot, so a test that waits for the lock
+        // holds a slot, and it goes back first, so the next flood starts
+        // as soon as this one ends.
+        let floodLock = test.tags.contains(.floodsTerminalInput) ? await BlockingWork.onNewThread { TerminalFloodLock.take() } : nil
         do {
             // Unstructured tasks that the test starts do not get this
             // preference, so they keep the threads of Swift concurrency.
@@ -24,9 +28,11 @@ public struct IsolatedThreadTrait: SuiteTrait, TestTrait, TestScoping {
                 try await function()
             }
         } catch {
+            floodLock?.give()
             await slots.leave(for: test)
             throw error
         }
+        floodLock?.give()
         await slots.leave(for: test)
     }
 }

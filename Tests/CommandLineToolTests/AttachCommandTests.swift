@@ -279,7 +279,7 @@ extension CommandLineToolIntegration {
         /// A program that never reads input, and keys that keep coming. The
         /// keys that wait in the tool have a limit, so the tool stops reading
         /// the terminal instead of growing.
-        @Test func keysThatWaitForAProgramThatNeverReadsUseBoundedMemory() async throws {
+        @Test(.tags(.floodsTerminalInput)) func keysThatWaitForAProgramThatNeverReadsUseBoundedMemory() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "stty raw -echo; exec sleep 600"])
                 let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
@@ -379,7 +379,7 @@ extension CommandLineToolIntegration {
             }
         }
 
-        @Test func controlBracketDetachesWhileTypedKeysWaitForTheProgram() async throws {
+        @Test(.tags(.floodsTerminalInput)) func controlBracketDetachesWhileTypedKeysWaitForTheProgram() async throws {
             try await RunningSessionProcess.run { process in
                 // The program never reads, so typed keys pile up until the
                 // session process holds as much as it may and the sends wait.
