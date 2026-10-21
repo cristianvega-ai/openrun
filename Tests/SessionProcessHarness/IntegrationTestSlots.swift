@@ -10,11 +10,14 @@ extension Tag {
     /// test process, such as the umask. It takes every slot, so no other
     /// integration test of its product runs beside it.
     @Tag public static var takesEverySlot: Self
-    /// A test that pushes megabytes of input through a pseudo terminal. It
-    /// also takes the lock of `TerminalFloodLock`, so one such test runs at a
-    /// time on the whole Mac, whatever the number of test processes. Floods
-    /// that run at once slow each other down in the kernel: three at once
-    /// take 4.2 s each for 4 MiB, against 0.19 s alone.
+    /// A test that pushes about 1 MiB or more of input through a pseudo
+    /// terminal. A test that only waits, or that fills the backlog of a
+    /// program that never reads, does not have this tag, because the input
+    /// then stays in the session process. A tagged test also takes the lock
+    /// of `TerminalFloodLock`, so one such test runs at a time on the whole
+    /// Mac, whatever the number of test processes. Floods that run at once
+    /// slow each other down in the kernel: three at once take 4.2 s each for
+    /// 4 MiB, against 0.19 s alone.
     @Tag public static var floodsTerminalInput: Self
 }
 

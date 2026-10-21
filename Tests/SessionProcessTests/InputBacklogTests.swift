@@ -282,8 +282,13 @@ extension SessionProcessIntegration {
     /// Input that a program has not read yet waits in the session process, up
     /// to 8 MiB. Past that, a writer waits for room. Nothing is dropped while
     /// its client is there. Input of a client that has left holds nothing.
-    @Suite(.tags(.floodsTerminalInput)) struct InputBacklogTests {
-        @Test func moreTextThanTheBacklogHoldsReachesASlowReaderCompleteAndInOrder() async throws {
+    ///
+    /// Only the tests that push megabytes through the pseudo terminal of the
+    /// program have the tag `floodsTerminalInput`. In the others the program
+    /// reads nothing, so the input stays in the session process and the
+    /// kernel does little work.
+    @Suite struct InputBacklogTests {
+        @Test(.tags(.floodsTerminalInput)) func moreTextThanTheBacklogHoldsReachesASlowReaderCompleteAndInOrder() async throws {
             try await RunningSessionProcess.run { process in
                 let total = 10 * 1024 * 1024
                 let file = process.directory.appendingPathComponent("received-checksum")
@@ -389,7 +394,7 @@ extension SessionProcessIntegration {
             }
         }
 
-        @Test func aClientWhoseInputWaitsCanDetachAndTheProcessCanStop() async throws {
+        @Test(.tags(.floodsTerminalInput)) func aClientWhoseInputWaitsCanDetachAndTheProcessCanStop() async throws {
             let process = try RunningSessionProcess()
             defer { process.stop() }
             let goFile = process.directory.appendingPathComponent("go")
@@ -426,7 +431,7 @@ extension SessionProcessIntegration {
 
         /// Each client that floods input and leaves used to leave its
         /// waiting input, and the thread that read it, behind for good.
-        @Test func clientsThatFloodInputAndLeaveHoldNothingAndTheirInputNeverArrives() async throws {
+        @Test(.tags(.floodsTerminalInput)) func clientsThatFloodInputAndLeaveHoldNothingAndTheirInputNeverArrives() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
                 let receivedFile = process.directory.appendingPathComponent("received")
@@ -516,7 +521,7 @@ extension SessionProcessIntegration {
         /// session process that took seconds to notice. The
         /// program reads its input into a file, because `head -c` lost the
         /// reply now and then on a busy Mac (see `scriptThatReadsEverything`).
-        @Test func aRelayingClientThatVanishesWithAFullReadAheadNoLongerSilencesTheSession() async throws {
+        @Test(.tags(.floodsTerminalInput)) func aRelayingClientThatVanishesWithAFullReadAheadNoLongerSilencesTheSession() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
                 let receivedFile = process.directory.appendingPathComponent("received")
@@ -599,7 +604,7 @@ extension SessionProcessIntegration {
 
         /// The sendText call went around the typed input of its own
         /// connection, so the program read them out of order.
-        @Test func sendTextWaitsBehindTheTypedInputOfItsOwnConnection() async throws {
+        @Test(.tags(.floodsTerminalInput)) func sendTextWaitsBehindTheTypedInputOfItsOwnConnection() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
                 let receivedFile = process.directory.appendingPathComponent("received")
@@ -665,7 +670,7 @@ extension SessionProcessIntegration {
         /// A client whose read-ahead was full of input that its
         /// program did not read could not detach. The detach behind the input
         /// waited until the program read.
-        @Test(arguments: ReadAheadFilling.allCases)
+        @Test(.tags(.floodsTerminalInput), arguments: ReadAheadFilling.allCases)
         func aClientWhoseReadAheadIsFullOfInputCanStillDetach(filling: ReadAheadFilling) async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
@@ -705,7 +710,7 @@ extension SessionProcessIntegration {
         /// peer, so the client counts as gone, as one that closes between two
         /// frames does: it is detached, its waiting input is dropped, and it
         /// still reads the clean end of the connection.
-        @Test func aClientThatStopsSendingWithAFullReadAheadIsDetachedAtOnce() async throws {
+        @Test(.tags(.floodsTerminalInput)) func aClientThatStopsSendingWithAFullReadAheadIsDetachedAtOnce() async throws {
             try await RunningSessionProcess.run { process in
                 let goFile = process.directory.appendingPathComponent("go")
                 let receivedFile = process.directory.appendingPathComponent("received")
