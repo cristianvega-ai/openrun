@@ -443,6 +443,45 @@ extension CommandLineToolIntegration {
             }
         }
 
+        @Test func aResizeBeforeASuspensionAndAResumeKeepsTheLocalScreenAtTheSizeOfTheWindow() async throws {
+            try await RunningSessionProcess.run { process in
+                // The program prints when the session terminal has the new
+                // size, and the tool resizes its local screen before it
+                // sends that size. The line is longer than the new width.
+                let longLine = "1234567890123456789012345678901234567890abcdefghijklmnopqrst"
+                let program = """
+                    while [ "$(stty size)" != "24 40" ]; do sleep 0.05; done
+                    echo '\(longLine)'
+                    printf MARK
+                    exec cat
+                    """
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                let terminal = try AttachedTerminal(shellScript: attachScript(identifier: identifier, process: process), folder: process.directory)
+                defer { terminal.closeNow() }
+                #expect(await eventually { terminal.isInRawMode })
+                let tool = try #require(terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent))
+
+                // The system sends SIGWINCH to the tool, as it does for a window.
+                try terminal.resize(columns: 40, rows: 24)
+                #expect(await terminal.waitForScreen(containing: "MARK"))
+
+                kill(tool, SIGTSTP)
+                #expect(await eventually(timeout: .seconds(10)) { TerminalControl.isStopped(process: tool) })
+                let beforeContinue = terminal.receivedBytes.count
+                kill(tool, SIGCONT)
+                #expect(await eventually { terminal.isInRawMode && terminal.receivedBytes.count > beforeContinue })
+                // The picture of the local screen is on the window again.
+                #expect(await terminal.waitForScreen(containing: "MARK"))
+
+                terminal.type("X")
+                #expect(await terminal.waitForScreen(containing: "MARKX"), "\(terminal.screenText)")
+                let lines = terminal.screenText.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
+                #expect(lines.prefix(3) == ["1234567890123456789012345678901234567890", "abcdefghijklmnopqrst", "MARKX"], "\(lines.prefix(4))")
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+            }
+        }
+
         @Test func attachEndsAndRestoresTheModeWhenTheProgramExits() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: ["/bin/sh", "-c", "read line; exit 7"])

@@ -5,7 +5,8 @@ import Foundation
 ///
 /// Only the main thread writes. The other threads ask it: the thread that
 /// receives from the session process hands it output, and the keyboard
-/// thread and the signal handlers ask it to end or to suspend. A signal
+/// thread and the signal handlers ask it to end, to suspend, or to follow a
+/// change of the window size. A signal
 /// therefore never writes its closing sequences into the middle of an
 /// output frame. When two requests to end arrive, `requestEnd` says which
 /// one decides the exit code.
@@ -28,6 +29,8 @@ final class TerminalWriter: @unchecked Sendable {
         case end(Ending)
         case suspend
         case resume
+        /// The window changed size. The main thread reads the new size.
+        case resize
     }
 
     enum WriteResult: Equatable {
@@ -68,6 +71,7 @@ final class TerminalWriter: @unchecked Sendable {
     private var urgentEnding: Ending?
     private var endingAfterOutput: Ending?
     private var wantsSuspension = false
+    private var wantsResize = false
     private var queuedOutput: [UInt8] = []
     private var isClosed = false
     private var hasStoppedWriting = false
@@ -153,6 +157,16 @@ final class TerminalWriter: @unchecked Sendable {
         wake()
     }
 
+    /// Asks the writer to hand the main thread a `resize` request. Several
+    /// requests that come before it is handled count as one, because the
+    /// main thread reads the size of the window when it handles them.
+    func requestResize() {
+        condition.lock()
+        wantsResize = true
+        condition.unlock()
+        wake()
+    }
+
     /// A request to end that came before the terminal changed. Attaching
     /// then ends without touching the terminal.
     var endingBeforeStart: Ending? {
@@ -190,6 +204,8 @@ final class TerminalWriter: @unchecked Sendable {
                 .end(urgentEnding)
             } else if wantsSuspension != isSuspended {
                 wantsSuspension ? .suspend : .resume
+            } else if wantsResize && !isSuspended {
+                .resize
             } else if waiting && !isSuspended && !queuedOutput.isEmpty {
                 .write(queuedOutput)
             } else if waiting && !isSuspended, let endingAfterOutput {
@@ -197,6 +213,7 @@ final class TerminalWriter: @unchecked Sendable {
             } else {
                 nil
             }
+            if case .resize = request { wantsResize = false }
             if case .write = request {
                 queuedOutput = []
                 condition.broadcast()
@@ -288,7 +305,7 @@ final class TerminalWriter: @unchecked Sendable {
     // MARK: - Waking
 
     private var hasUrgentRequest: Bool {
-        condition.withLock { urgentEnding != nil || wantsSuspension }
+        condition.withLock { urgentEnding != nil || wantsSuspension || wantsResize }
     }
 
     private func wake() {

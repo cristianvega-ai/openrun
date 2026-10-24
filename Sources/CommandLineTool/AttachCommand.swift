@@ -68,7 +68,7 @@ struct AttachCommand {
             case .resume:
                 writer.requestSuspension(false)
             case .resize:
-                resizes.async { Self.sendWindowSize(on: connection) }
+                writer.requestResize()
             }
         }
         defer { signals.cancel() }
@@ -86,7 +86,7 @@ struct AttachCommand {
         receiver.start()
         // The window may have changed between the attach request and the
         // signal handler, and that change would be lost.
-        resizes.async { Self.sendWindowSize(on: connection) }
+        writer.requestResize()
 
         let ending = relay(writer: writer, screen: screen, mode: mode, keys: keys, resizes: resizes, connection: connection)
 
@@ -181,6 +181,13 @@ struct AttachCommand {
                 && count >= titleLength + Self.enterAlternateScreen.count {
                 windowIsOnAlternateScreen = true
             }
+        }
+
+        /// Gives the local terminal the size of the window, as the window
+        /// itself changed size. A size that the terminal refuses leaves it as
+        /// it was.
+        func resize(to size: SessionSize) {
+            try? terminal.resize(to: TerminalSize(columns: size.columns, rows: size.rows))
         }
 
         /// Follows output that reached the terminal.
@@ -304,14 +311,27 @@ struct AttachCommand {
                         // the signal handler again after the continue.
                         kill(getpid(), SIGSTOP)
                     }
+                case .resize:
+                    // The local terminal changes size before it takes more
+                    // output, so it wraps lines where the window does. The
+                    // picture that waits is made again at the new size.
+                    if let size = RawTerminalMode.windowSize(of: STDOUT_FILENO) {
+                        screen.resize(to: size)
+                        if pictureToDraw != nil { pictureToDraw = try? screen.picture() }
+                        resizes.async { Self.send(size, on: connection) }
+                    }
                 case .resume:
+                    // The window can change size while the tool is stopped,
+                    // and no signal reaches the tool then.
+                    let size = RawTerminalMode.windowSize(of: STDOUT_FILENO)
+                    if let size { screen.resize(to: size) }
                     guard (try? mode.enter()) != nil, let picture = try? screen.picture() else {
                         return TerminalWriter.Ending(exitCode: 1, message: "the terminal cannot be set up again after the suspension")
                     }
                     keys.resume()
                     pictureToDraw = picture
                     isSuspended = false
-                    resizes.async { Self.sendWindowSize(on: connection) }
+                    if let size { resizes.async { Self.send(size, on: connection) } }
                 }
                 continue
             }
@@ -376,9 +396,7 @@ struct AttachCommand {
         return Int32(Swift.min(Swift.max(code, 0), 255))
     }
 
-    private static func sendWindowSize(on connection: MessageConnection) {
-        if let size = RawTerminalMode.windowSize(of: STDOUT_FILENO) {
-            try? connection.send(ClientMessage.resize(size))
-        }
+    private static func send(_ size: SessionSize, on connection: MessageConnection) {
+        try? connection.send(ClientMessage.resize(size))
     }
 }
