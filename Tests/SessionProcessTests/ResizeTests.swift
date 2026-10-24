@@ -111,6 +111,52 @@ extension SessionProcessIntegration {
             #expect(await process.waitForScreen(of: identifier, containing: "size=30 100"))
         }
 
+        /// A snapshot capture that throws, because an unfinished sequence is
+        /// larger than the continuation limit, used to leave the new size in
+        /// place and to announce it to the other clients.
+        @Test func anAttachWhoseCaptureThrowsLeavesTheSizeAndTellsNoClient() async throws {
+            let oversized = 33_554_500
+            let program = ["/bin/sh", "-c", "stty -echo; echo ready; read line; printf '\\033]0;'; head -c \(oversized) /dev/zero | tr '\\0' a; sleep 60"]
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: program)
+                #expect(await process.waitForScreen(of: identifier, containing: "ready"))
+                let session = try #require(UUID(uuidString: identifier))
+                let first = try WatchedConnection(socketPath: process.socketPath)
+                let size = SessionSize(columns: 80, rows: 24)
+                guard case .attached = try first.request(.attach(identifier: session, size: size, receivesSizeChanges: true)) else {
+                    Issue.record("The first client did not attach.")
+                    return
+                }
+                try first.connection.send(ClientMessage.input(Data("\n".utf8)))
+                // The session parses the bytes before it sends them on, so the
+                // unfinished sequence is in the terminal when all have arrived.
+                var received = 0
+                while received < oversized, let message = try first.connection.receive(ServerMessage.self) {
+                    if case .output(let bytes) = message { received += bytes.count }
+                }
+                #expect(received >= oversized)
+
+                let answer = try WatchedConnection(socketPath: process.socketPath)
+                    .request(.attach(identifier: session, size: SessionSize(columns: 40, rows: 20)))
+                guard case .failure = answer else {
+                    Issue.record("An attach with a capture that throws was answered with \(String(describing: answer)).")
+                    return
+                }
+                guard case .sessionList(let summaries) = try WatchedConnection(socketPath: process.socketPath).request(.listSessions) else {
+                    Issue.record("The list request failed.")
+                    return
+                }
+                #expect(summaries.first?.size == size)
+
+                try first.connection.send(ClientMessage.detach)
+                var announced: [SessionSize] = []
+                while let message = try first.connection.receive(ServerMessage.self) {
+                    if case .sizeChanged(let changed) = message { announced.append(changed) }
+                }
+                #expect(announced == [])
+            }
+        }
+
         /// A client was not told when another client changed
         /// the size of its session.
         @Test func onlyTheOtherClientsThatAskedHearOfANewSize() async throws {

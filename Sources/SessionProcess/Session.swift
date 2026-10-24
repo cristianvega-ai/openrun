@@ -109,8 +109,12 @@ actor Session {
     ///
     /// The snapshot travels in one frame. A larger snapshot loses its oldest
     /// scrollback until it fits. When the screens alone do not fit, the
-    /// client is refused before `attached`, and the session keeps its size.
-    /// The other clients that asked hear of a new size.
+    /// client is refused before `attached`. A capture that throws also
+    /// ends the attach. In both cases the terminal model and the program's
+    /// terminal go back to the previous size, and no client hears of a size
+    /// change. The program may see the new size for a short time.
+    /// After a successful attach, the other clients that asked hear of a
+    /// new size once.
     ///
     /// A client that relays raw output has a real terminal that answers queries.
     /// While one is attached, the session process sends no replies. Two such
@@ -120,7 +124,15 @@ actor Session {
         let previousSize = summary.size
         defer { if summary.size != previousSize { announceSize(changedBy: client) } }
         try apply(size)
-        guard let snapshot = try TerminalSnapshot(capturing: terminal, byteLimit: MessageFrame.maximumPayloadLength) else {
+        let snapshot: TerminalSnapshot?
+        do {
+            snapshot = try TerminalSnapshot(capturing: terminal, byteLimit: MessageFrame.maximumPayloadLength)
+        } catch {
+            // The capture failed, so the client does not attach and its size does not stay.
+            _ = try? apply(previousSize)
+            throw error
+        }
+        guard let snapshot else {
             // The client does not attach, so its size does not stay either.
             _ = try? apply(previousSize)
             return .refused(SessionFailure(
