@@ -20,7 +20,7 @@ The owner makes each decision. The assistant asks the questions and records the 
 
 ## Vision
 
-OpenRun is a native macOS terminal for work with coding agents.
+OpenRun is a native terminal for work with coding agents, on macOS and Linux. The Mac app comes first.
 Version 1 is the terminal itself: built on libghostty, with a polished interface.
 Version 2 brings the feature set of Claude Code Projects to the user's own terminal, with the agents and accounts the user chooses.
 In Claude Code Projects, a coordinator splits a goal into threads that run in parallel, and then assembles the results.
@@ -38,7 +38,7 @@ After that, OpenRun ships free and open source to any Mac developer who runs cod
 ## Principles
 
 - The owner understands the codebase from the start.
-- The codebase stays small. It holds no Windows or Linux code.
+- The codebase stays small. It holds no Windows code. Linux code stays in the platform parts of the shared core and in the Linux app.
 - OpenRun has its own user experience. It looks like a polished Mac app.
 - OpenRun is simple and straightforward to use. Bear is the model.
 - Users choose their agents and models. OpenRun does not tie them to one provider.
@@ -57,7 +57,7 @@ The suite goals also apply until a phase changes them:
 
 ## Out of scope
 
-- Windows and Linux.
+- Windows.
 - iOS in version 1. An iOS companion comes in a later version.
 - A fork of Warp.
 
@@ -130,6 +130,8 @@ Each row holds the date, the decision, and the reason.
 | 2026-10-19 | The socket protocol grows only by addition inside version 1: a new optional field, or a new message that only a client that asks for it receives. The version number changes only when a change would confuse an older program. | A client that does not ask never meets a message it does not know. Older clients and older session processes keep working, and the app and the command-line tool can change at their own pace. |
 | 2026-10-19 | A client that attaches while `openrun kill` waits for a program that ignores SIGHUP gets `attached`, the last screen, and then the exit status. | The session is still there until the program ends. The client sees the last screen and how the program ended, as it would for an attach just before the kill. A refusal would show a session that is about to disappear as one that never existed. |
 | 2026-10-19 | `AGENTS.md` gets a Commits section: at most 100 changed lines in at most 10 files, one logical slice that builds, a subject of at most 50 characters, and a body in ASD-STE100. Milestone 1, which is to land on `main`, is cut again into small commits. | There are no pull requests, so each commit is the unit of review. The owner can read a small commit alone. The first milestone was one large change that is hard to review. |
+| 2026-10-19 | OpenRun supports macOS and Linux, starting with Ubuntu. One shared core serves two native apps. The core is the Swift modules that use no AppKit: the terminal emulation, the pseudo terminal, the protocol, the session process, and the command-line tool. The Mac app uses AppKit. The Linux app uses the native tools of the Linux desktop. The Mac app comes first. The Linux app starts after the features of the Mac app settle. This replaces the decision of 2026-10-11 that OpenRun supports only macOS. | The owner wants OpenRun on Ubuntu too. The core holds most of the logic and needs few platform calls. A native app on each system keeps the polished look that one shared interface toolkit would lose. Ghostty has the same shape: one shared core and a native app for each system. |
+| 2026-10-19 | The core builds and passes its tests on macOS and on Linux before milestone 2 starts. The owner's Linux machine is the Linux build and test machine. Each feature asks for its platform services, such as the process list and the peer check, through a small interface of its own, with one version for each system. | Milestone 2 adds much shared code. Code that is checked on Linux from the start costs less than a port later. An interface in each feature keeps the platform code next to the feature that needs it, with no grab-bag module. |
 
 ## Reference: libghostty and cmux
 
@@ -236,6 +238,19 @@ The answer also decides whether OpenRun uses the Agent Client Protocol.
 
 **Question 9: Which Claude Code Projects features does version 2 need first?**
 The candidates are the coordinator, parallel threads, shared memory, the library, routines, and work that continues after the user leaves.
+
+### Linux app
+
+These wait until the Linux app starts:
+
+- The toolkit and the language of the Linux app, such as GTK 4 with Swift, or GTK 4 with another language.
+- How the Linux app draws the terminal, such as OpenGL or Vulkan with FreeType and HarfBuzz.
+- How the session process starts on Linux, such as a systemd user service in place of launchd.
+- Where the key for the screen snapshots lives on Linux, such as the Secret Service in place of the Keychain.
+- Sync on Linux, where there is no iCloud.
+- Updates and packages, such as deb, Flatpak, or Snap, in place of Sparkle.
+- Which Ubuntu versions OpenRun supports.
+- How the session process answers the OSC 10 and OSC 11 color queries on Linux, where it cannot read the macOS appearance.
 
 ### Later versions
 
