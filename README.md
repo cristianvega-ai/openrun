@@ -36,7 +36,7 @@ swift test
 The tests include integration tests. They start the real `openrun-session` and `openrun` programs on short socket paths under `TMPDIR`, and they stop every process they start.
 Among other things, they check what needs the real programs:
 
-- Dense output stays fast: a program that writes 16 MB of text must reach its exit within 5 seconds, with and without an attached client (`ThroughputTests`).
+- Dense output stays fast: while a program writes 16 MB of text, the session process uses less than 5 seconds of processor time, with and without an attached client. The tests bound processor time, so a busy Mac does not fail them, and a wall-time limit of 60 seconds ends only a test that hangs (`ThroughputTests`).
 - Each terminal query gets one reply: from the session process when no real terminal is attached, and from the real terminal when `openrun attach` is. A program that turned on mode 2048 gets exactly one size report for each size change, also when another client changes the size while `openrun attach` is attached (`QueryReplyTests`).
 - A client that asks hears of each size that another client sets, before the output for that size. The client that set the size, and a client that did not ask, hear nothing (`ResizeTests`).
 - The program has a controlling terminal: Control-C interrupts a foreground job, and an interactive zsh runs jobs in the background and brings them back with `fg` (`JobControlTests`).
