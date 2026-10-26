@@ -8,17 +8,22 @@ import GhosttyVt
 /// with another thread holds its lock for `beginUpdate` alone.
 public final class RenderState {
     let handle: GhosttyRenderState
+    private let rowIterator: GhosttyRenderStateRowIterator
 
     public init() throws {
         var state: GhosttyRenderState?
         try TerminalEmulationError.check(ghostty_render_state_new(nil, &state), from: "ghostty_render_state_new")
-        guard let state else {
+        var iterator: GhosttyRenderStateRowIterator?
+        guard ghostty_render_state_row_iterator_new(nil, &iterator) == GHOSTTY_SUCCESS, let iterator, let state else {
+            ghostty_render_state_free(state)
             throw TerminalEmulationError.invalidValue(in: "RenderState.init")
         }
         handle = state
+        rowIterator = iterator
     }
 
     deinit {
+        ghostty_render_state_row_iterator_free(rowIterator)
         ghostty_render_state_free(handle)
     }
 
@@ -89,5 +94,25 @@ public final class RenderState {
             isAtPasswordInput: cursor.password_input,
             style: CursorStyle(cursor.visual_style)
         )
+    }
+
+    /// Calls `body` for each row from the top. A `RenderRow` is valid only
+    /// inside `body`, because the next update reuses its memory.
+    ///
+    /// - Parameter onlyChanged: Visits only the rows that changed, or every
+    ///   row when the whole picture changed.
+    public func forEachRow(onlyChanged: Bool, _ body: (RenderRow) throws -> Void) throws {
+        var iterator: GhosttyRenderStateRowIterator? = rowIterator
+        try TerminalEmulationError.check(
+            ghostty_render_state_get(handle, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &iterator),
+            from: "ghostty_render_state_get"
+        )
+        let row = RenderRow(iterator: rowIterator)
+        var viewportRow: UInt16 = 0
+        while onlyChanged
+            ? ghostty_render_state_row_iterator_next_dirty(rowIterator, &viewportRow)
+            : ghostty_render_state_row_iterator_next(rowIterator) {
+            try body(row)
+        }
     }
 }
