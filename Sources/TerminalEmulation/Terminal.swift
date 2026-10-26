@@ -27,9 +27,9 @@ public final class Terminal {
 
     let handle: GhosttyTerminal
 
-    /// The installed reply handler. It lives here because an extension cannot
-    /// hold stored properties. See `setReplyHandler`.
-    var replyBox: TerminalReplyBox?
+    /// Everything the callbacks of libghostty-vt reach. It lives here because
+    /// an extension cannot hold stored properties.
+    let callbackBox = TerminalCallbackBox()
 
     /// Creates an empty terminal.
     ///
@@ -57,6 +57,11 @@ public final class Terminal {
         }
         handle = created
         // A throw from here runs deinit, which frees the terminal once.
+        // The box is part of this object, so it outlives the pointer.
+        try TerminalEmulationError.check(
+            ghostty_terminal_set(created, GHOSTTY_TERMINAL_OPT_USERDATA, Unmanaged.passUnretained(callbackBox).toOpaque()),
+            from: "ghostty_terminal_set"
+        )
         try configure(scrollbackLimit: scrollbackLimit)
     }
 

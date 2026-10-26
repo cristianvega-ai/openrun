@@ -364,6 +364,17 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
 
     // MARK: - Installing
 
+    @Test func aRemovedHandlerStaysSilentAndANewOneAnswers() throws {
+        let (terminal, first) = try makeRecordingTerminal()
+        try terminal.setReplyHandler(nil)
+        terminal.write("\u{1B}[6n")
+        #expect(first.replies.isEmpty)
+        let second = ReplyRecorder()
+        try terminal.setReplyHandler { second.replies.append($0) }
+        terminal.write("\u{1B}[6n")
+        #expect(second.text == "\u{1B}[1;1R" && first.replies.isEmpty)
+    }
+
     @Test func theBoxIsStoredBeforeLibghosttyReceivesItsPointer() throws {
         let terminal = try makeTerminal()
         let box = TerminalReplyBox(handler: { _ in }, colorScheme: { .dark })

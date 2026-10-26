@@ -57,6 +57,12 @@ final class TerminalReplyBox {
 }
 
 extension Terminal {
+    /// The installed reply handler, kept in the callback box of the terminal.
+    var replyBox: TerminalReplyBox? {
+        get { callbackBox.reply }
+        set { callbackBox.reply = newValue }
+    }
+
     /// Whether the terminal answers the queries its program sends.
     ///
     /// A terminal answers nothing until a handler is installed. The session
@@ -85,7 +91,7 @@ extension Terminal {
     ) throws {
         guard let handler else {
             let previous = replyBox
-            try installCallbacks(userdata: nil, enabled: false)
+            try installCallbacks(enabled: false)
             replyBox = nil
             clearDefaultColors()
             withExtendedLifetime(previous) {}
@@ -94,11 +100,10 @@ extension Terminal {
         try install(TerminalReplyBox(handler: handler, colorScheme: colorScheme))
     }
 
-    /// Stores the box, then points libghostty-vt at it.
+    /// Stores the box, then sets the callbacks of libghostty-vt.
     ///
-    /// The box must be stored first. If the install failed half way after a
-    /// pointer was handed over, a box that nothing owns would leave
-    /// libghostty-vt with a dangling pointer.
+    /// The box must be stored first, because a callback finds it through the
+    /// callback box and can run as soon as it is set.
     /// - Parameter beforeInstalling: Runs between the two steps. Tests use it.
     func install(_ box: TerminalReplyBox, beforeInstalling: () -> Void = {}) throws {
         // The old box stays alive until libghostty-vt stopped using it.
@@ -106,11 +111,11 @@ extension Terminal {
         replyBox = box
         beforeInstalling()
         do {
-            try installCallbacks(userdata: Unmanaged.passUnretained(box).toOpaque(), enabled: true)
+            try installCallbacks(enabled: true)
         } catch {
             // Take the callbacks back. When that fails too, libghostty-vt may
             // still hold the pointer, so the box stays stored and alive.
-            if (try? installCallbacks(userdata: nil, enabled: false)) != nil {
+            if (try? installCallbacks(enabled: false)) != nil {
                 replyBox = nil
             }
             withExtendedLifetime(previous) {}
@@ -155,8 +160,8 @@ extension Terminal {
 
     private static let replyWriteCallback: GhosttyTerminalWritePtyFn = { _, userdata, bytes, length in
         guard let userdata, let bytes, length > 0 else { return }
-        let box = Unmanaged<TerminalReplyBox>.fromOpaque(userdata).takeUnretainedValue()
-        box.handler(Array(UnsafeBufferPointer(start: bytes, count: length)))
+        let box = Unmanaged<TerminalCallbackBox>.fromOpaque(userdata).takeUnretainedValue()
+        box.reply?.handler(Array(UnsafeBufferPointer(start: bytes, count: length)))
     }
 
     // libghostty-vt answers a device attributes query only when it can ask
@@ -197,16 +202,16 @@ extension Terminal {
     }
 
     private static let colorSchemeCallback: GhosttyTerminalColorSchemeFn = { _, userdata, scheme in
-        guard let userdata, let scheme else { return false }
-        let box = Unmanaged<TerminalReplyBox>.fromOpaque(userdata).takeUnretainedValue()
+        guard let userdata, let scheme,
+              let box = Unmanaged<TerminalCallbackBox>.fromOpaque(userdata).takeUnretainedValue().reply
+        else { return false }
         scheme.pointee = box.colorScheme() == .dark ? GHOSTTY_COLOR_SCHEME_DARK : GHOSTTY_COLOR_SCHEME_LIGHT
         return true
     }
 
     /// Sets or clears every callback that answers a query.
-    private func installCallbacks(userdata: UnsafeMutableRawPointer?, enabled: Bool) throws {
-        // Clear the callbacks before the userdata changes, so none runs with
-        // a pointer to a box that is gone.
+    private func installCallbacks(enabled: Bool) throws {
+        // Clear the callbacks first, so none runs while the set changes.
         let callbacks: [(GhosttyTerminalOption, UnsafeRawPointer)] = [
             (GHOSTTY_TERMINAL_OPT_WRITE_PTY, unsafeBitCast(Self.replyWriteCallback, to: UnsafeRawPointer.self)),
             (GHOSTTY_TERMINAL_OPT_DEVICE_ATTRIBUTES, unsafeBitCast(Self.deviceAttributesCallback, to: UnsafeRawPointer.self)),
@@ -216,10 +221,6 @@ extension Terminal {
         for (option, _) in callbacks {
             try TerminalEmulationError.check(ghostty_terminal_set(handle, option, nil), from: "ghostty_terminal_set")
         }
-        try TerminalEmulationError.check(
-            ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_USERDATA, userdata),
-            from: "ghostty_terminal_set"
-        )
         guard enabled else { return }
         for (option, function) in callbacks {
             try TerminalEmulationError.check(ghostty_terminal_set(handle, option, function), from: "ghostty_terminal_set")
