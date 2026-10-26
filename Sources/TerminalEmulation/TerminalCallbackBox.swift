@@ -6,4 +6,6 @@
 final class TerminalCallbackBox {
     /// The handler for the replies to queries. See `Terminal.setReplyHandler`.
     var reply: TerminalReplyBox?
+    /// The handler for the bell, the title and render holds.
+    var events: TerminalEventHandler?
 }
