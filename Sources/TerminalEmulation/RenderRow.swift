@@ -4,9 +4,11 @@ import GhosttyVt
 /// that received it.
 public struct RenderRow {
     private let iterator: GhosttyRenderStateRowIterator
+    private let cells: GhosttyRenderStateRowCells
 
-    init(iterator: GhosttyRenderStateRowIterator) {
+    init(iterator: GhosttyRenderStateRowIterator, cells: GhosttyRenderStateRowCells) {
         self.iterator = iterator
+        self.cells = cells
     }
 
     /// The identity of the row across updates. A renderer keeps its prepared
@@ -28,5 +30,30 @@ public struct RenderRow {
         var dirty = false
         _ = ghostty_render_state_row_get(iterator, GHOSTTY_RENDER_STATE_ROW_DATA_DIRTY, &dirty)
         return dirty
+    }
+
+    /// Calls `body` for each cell from the left.
+    public func forEachCell(_ body: (RenderCell) throws -> Void) throws {
+        var handle: GhosttyRenderStateRowCells? = cells
+        try TerminalEmulationError.check(
+            ghostty_render_state_row_get(iterator, GHOSTTY_RENDER_STATE_ROW_DATA_CELLS, &handle),
+            from: "ghostty_render_state_row_get"
+        )
+        var column: UInt16 = 0
+        var codepoints = [UInt32](repeating: 0, count: 16)
+        while ghostty_render_state_row_cells_next(cells) {
+            defer { column += 1 }
+            var raw: GhosttyCell = 0, length: UInt32 = 0
+            var wide = GHOSTTY_CELL_WIDE_NARROW
+            _ = ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_RAW, &raw)
+            _ = ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_LEN, &length)
+            _ = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_WIDE, &wide)
+            // One buffer serves every cell, because most cells hold one scalar.
+            let count = Int(length)
+            if count > codepoints.count { codepoints = [UInt32](repeating: 0, count: count) }
+            _ = ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_GRAPHEMES_BUF, &codepoints)
+            let scalars = codepoints.prefix(count).compactMap(Unicode.Scalar.init)
+            try body(RenderCell(column: column, base: scalars.first, extraScalars: Array(scalars.dropFirst()), width: CellWidth(wide)))
+        }
     }
 }

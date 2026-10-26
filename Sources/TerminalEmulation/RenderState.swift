@@ -9,20 +9,28 @@ import GhosttyVt
 public final class RenderState {
     let handle: GhosttyRenderState
     private let rowIterator: GhosttyRenderStateRowIterator
+    private let rowCells: GhosttyRenderStateRowCells
 
     public init() throws {
         var state: GhosttyRenderState?
         try TerminalEmulationError.check(ghostty_render_state_new(nil, &state), from: "ghostty_render_state_new")
         var iterator: GhosttyRenderStateRowIterator?
-        guard ghostty_render_state_row_iterator_new(nil, &iterator) == GHOSTTY_SUCCESS, let iterator, let state else {
+        var cells: GhosttyRenderStateRowCells?
+        guard ghostty_render_state_row_iterator_new(nil, &iterator) == GHOSTTY_SUCCESS,
+              ghostty_render_state_row_cells_new(nil, &cells) == GHOSTTY_SUCCESS,
+              let iterator, let cells, let state
+        else {
+            ghostty_render_state_row_iterator_free(iterator)
             ghostty_render_state_free(state)
             throw TerminalEmulationError.invalidValue(in: "RenderState.init")
         }
         handle = state
         rowIterator = iterator
+        rowCells = cells
     }
 
     deinit {
+        ghostty_render_state_row_cells_free(rowCells)
         ghostty_render_state_row_iterator_free(rowIterator)
         ghostty_render_state_free(handle)
     }
@@ -107,7 +115,7 @@ public final class RenderState {
             ghostty_render_state_get(handle, GHOSTTY_RENDER_STATE_DATA_ROW_ITERATOR, &iterator),
             from: "ghostty_render_state_get"
         )
-        let row = RenderRow(iterator: rowIterator)
+        let row = RenderRow(iterator: rowIterator, cells: rowCells)
         var viewportRow: UInt16 = 0
         while onlyChanged
             ? ghostty_render_state_row_iterator_next_dirty(rowIterator, &viewportRow)
