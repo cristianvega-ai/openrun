@@ -31,6 +31,7 @@ The owner makes each decision. Record a new decision in its decision log.
 
 - Write Swift only, in the Swift 6 language mode with strict concurrency checking.
   libghostty-vt is the one C library.
+  The TLA+ models in `specifications/` are the one exception. The app, `swift build`, and `swift test` do not use them.
 - Ask the owner before you add a C target or a third-party Swift package.
 - The app uses AppKit only, not SwiftUI.
 - OpenRun supports macOS 26 and later.
@@ -39,6 +40,7 @@ The owner makes each decision. Record a new decision in its decision log.
 
 - `scripts/build-ghostty-library.sh` builds libghostty-vt from the Ghostty commit pinned in the script. Run it once before you build.
 - `swift build` builds every module. `swift test` runs every test.
+- `scripts/check-specifications.sh` runs the TLA+ models. It runs the quick set by default and every configuration with `--all`, the long run before a milestone review. It needs Java.
 
 ## Comments and documents
 
@@ -51,6 +53,7 @@ The owner makes each decision. Record a new decision in its decision log.
 There are no pull requests. Each commit is the unit of review, so each one must be easy to review alone.
 
 - A commit changes at most 100 lines in at most 10 files. Count the added and removed lines that `git diff --cached --shortstat` prints, in every file, tests and documents included.
+  The exception: a commit that adds one model to `specifications/` with its configuration files may change more than 100 lines when it changes no other file. It still has at most 10 files.
 - Each commit is one logical slice of work that has value by itself. It builds, and `swift test` passes.
 - Split larger work into a series of such commits. Each one still builds and works on its own.
 - Commits go onto `main` in a straight line, with no merge commits. Work on a temporary branch, such as work in parallel, goes onto `main` one commit at a time.
