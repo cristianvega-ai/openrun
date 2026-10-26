@@ -143,7 +143,7 @@ Each row holds the date, the decision, and the reason.
 
 ## Reference: libghostty and cmux
 
-The assistant checked these facts on 2026-10-11.
+These facts were current on 2026-10-11.
 
 - Ghostty uses the MIT license. A product that embeds it can choose its own license.
 - The public library is libghostty-vt. It parses terminal sequences and keeps the terminal state.
@@ -156,7 +156,7 @@ The assistant checked these facts on 2026-10-11.
 - Code copied from cmux brings the GPL with it.
 - cmux is mostly Swift. It offers a command-line tool and a Unix socket interface for automation.
 
-The assistant checked these facts on 2026-10-15.
+These facts were current on 2026-10-15.
 
 - libghostty-vt builds as an XCFramework that a Swift package can use. Ghostty's `example/swift-vt-xcframework` shows how.
 - libghostty-vt has a render-state API. It gives rows, cells, styles, colors, the cursor, the selection, and dirty tracking to an app's renderer.
@@ -198,7 +198,7 @@ A file opens in a preview with the thread beside it.
 The Agent Client Protocol connects an app to a coding agent through JSON-RPC over standard input and output.
 Zed created it in August 2025.
 Zed runs Gemini CLI, Claude Code, and Codex through it. Claude Code and Codex need adapters.
-The assistant checked these facts on 2026-10-15 with the installed agents.
+The facts below were current on 2026-10-15, with the agents installed on that day.
 
 - Claude Code 2.1.300 resumes a conversation with `claude --resume <id>`. It can start one with a chosen ID through `--session-id <uuid>`. Its hooks report the session ID.
 - Claude Code 2.1.300 can also run sessions in the background with `--bg`, and reattach with `claude attach`.
@@ -211,7 +211,7 @@ Sources: [Claude Code status line](https://code.claude.com/docs/en/statusline), 
 
 ## Reference: subscription terms
 
-The assistant checked these facts on 2026-10-15.
+These facts were current on 2026-10-15.
 
 - Anthropic's Claude Code legal page says subscription sign-in supports ordinary use of Claude Code and Anthropic's own apps.
 - Anthropic does not permit other apps to offer Claude sign-in, to route requests through Free, Pro, or Max credentials for their users, or to collect, store, or intermediate Claude credentials or session tokens.
