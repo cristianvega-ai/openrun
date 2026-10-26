@@ -42,6 +42,22 @@ private func detachWhileTheSessionWritesOutput(attempt: Int, identifier: String,
     #expect(!terminal.screenText.contains("connection lost"), "attempt \(attempt)")
 }
 
+/// How many times `pattern` occurs in `bytes`, without overlaps.
+private func occurrences(of pattern: String, in bytes: [UInt8]) -> Int {
+    let pattern = Array(pattern.utf8)
+    var count = 0
+    var start = 0
+    while start + pattern.count <= bytes.count {
+        if bytes[start..<start + pattern.count].elementsEqual(pattern) {
+            count += 1
+            start += pattern.count
+        } else {
+            start += 1
+        }
+    }
+    return count
+}
+
 extension CommandLineToolIntegration {
     @Suite struct AttachCommandTests {
         @Test func attachDrawsTheScreenInRawModeRelaysKeysAndDetachesWithControlBracket() async throws {
@@ -359,6 +375,52 @@ extension CommandLineToolIntegration {
                 })
                 terminal.type(bytes: [0x1D])
                 #expect(await terminal.waitForScreen(containing: "mode-restored"))
+            }
+        }
+
+        /// The window changes size after the title push of the first picture
+        /// reached it. The picture is made again, and it must not push the
+        /// title a second time, because the closing pops it only once.
+        @Test func aResizeThatInterruptsThePictureLeavesNoExtraTitleOnTheStackOfTheWindow() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = """
+                    number=0
+                    while [ $number -lt 23 ]; do
+                      printf 'picture-line-%02d-%s\\n' $number 'abcdefghijklmnopqrstuvwxyzabcdefghijklmnopqrstuvwxyzabcdefgh'
+                      number=$((number+1))
+                    done
+                    exec /bin/sh
+                    """
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", program])
+                #expect(await process.waitForScreen(of: identifier, containing: "picture-line-22"))
+                let terminal = try AttachedTerminal(
+                    shellScript: attachScript(identifier: identifier, process: process),
+                    columns: 100,
+                    rows: 30,
+                    folder: process.directory
+                )
+                terminal.pauseOutput()
+                defer {
+                    terminal.resumeOutput()
+                    terminal.closeNow()
+                }
+                #expect(await eventually { terminal.isInRawMode })
+                let tool = try #require(terminal.childProcessIdentifier(named: RunningSessionProcess.commandExecutable.lastPathComponent))
+                let path = try #require(TerminalControl.terminalPath(ofProcess: tool))
+                #expect(await eventually { (TerminalControl.waitingOutput(onTerminal: path) ?? 0) >= 512 })
+
+                // The tool waits with the picture half written. Its first bytes,
+                // the title push, are in the queue of the terminal.
+                try terminal.resize(columns: 70, rows: 20)
+                try await Task.sleep(for: .milliseconds(300))
+                terminal.resumeOutput()
+                #expect(await terminal.waitForScreen(containing: "picture-line-22"))
+                terminal.type(bytes: [0x1D])
+                #expect(await terminal.waitForScreen(containing: "mode-restored"))
+
+                let received = terminal.receivedBytes
+                #expect(occurrences(of: "\u{1B}[22;0t", in: received) == occurrences(of: "\u{1B}[23;0t", in: received))
+                #expect(occurrences(of: "\u{1B}[23;0t", in: received) == 1)
             }
         }
 

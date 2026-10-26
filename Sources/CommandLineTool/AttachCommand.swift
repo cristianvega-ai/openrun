@@ -150,20 +150,24 @@ struct AttachCommand {
         init(snapshot: TerminalSnapshot) throws {
             do {
                 terminal = try snapshot.restoreTerminal(scrollbackLimit: 10_000)
-                firstPicture = try Self.picture(of: terminal)
+                firstPicture = try Self.picture(of: terminal, titleIsSaved: false, windowIsOnAlternateScreen: false)
             } catch {
                 throw CommandLineToolError.failure("The snapshot of the session cannot be restored: \(error).")
             }
         }
 
         /// Saves the title, clears the terminal and draws the visible screen.
+        /// A picture that is made again after an interrupted one leaves out
+        /// what already reached the window: the closing pops the title once,
+        /// and a second entry to the alternate screen would save the cursor
+        /// of that screen.
         func picture() throws -> [UInt8] {
-            try Self.picture(of: terminal)
+            try Self.picture(of: terminal, titleIsSaved: windowHoldsTheTitle, windowIsOnAlternateScreen: windowIsOnAlternateScreen)
         }
 
-        private static func picture(of terminal: Terminal) throws -> [UInt8] {
-            var picture = pushTitle
-            if terminal.isAlternateScreenActive { picture += enterAlternateScreen }
+        private static func picture(of terminal: Terminal, titleIsSaved: Bool, windowIsOnAlternateScreen: Bool) throws -> [UInt8] {
+            var picture = titleIsSaved ? [] : pushTitle
+            if terminal.isAlternateScreenActive && !windowIsOnAlternateScreen { picture += enterAlternateScreen }
             picture += Array("\u{1B}[H\u{1B}[2J".utf8)
             picture += try terminal.formatted(.virtualTerminalSequences, extent: .visible)
             // The snapshot can fall inside an escape sequence or a UTF-8 character.
@@ -175,8 +179,9 @@ struct AttachCommand {
 
         /// Notes how much of a picture reached the terminal.
         func pictureReached(_ count: Int, of picture: [UInt8]) {
-            let titleLength = Self.pushTitle.count
-            if count >= titleLength { windowHoldsTheTitle = true }
+            // A picture has no title push when the window holds the title.
+            let titleLength = picture.starts(with: Self.pushTitle) ? Self.pushTitle.count : 0
+            if titleLength > 0 && count >= titleLength { windowHoldsTheTitle = true }
             if picture.dropFirst(titleLength).starts(with: Self.enterAlternateScreen)
                 && count >= titleLength + Self.enterAlternateScreen.count {
                 windowIsOnAlternateScreen = true
@@ -200,7 +205,7 @@ struct AttachCommand {
         /// for a mode, but its picture names every mode that differs from the
         /// default.
         private var originModeIsOn: Bool {
-            guard let picture = try? Self.picture(of: terminal) else { return false }
+            guard let picture = try? Self.picture(of: terminal, titleIsSaved: true, windowIsOnAlternateScreen: true) else { return false }
             return picture.indices.contains { start in
                 picture[start...].starts(with: Array("\u{1B}[?6h".utf8))
             }
