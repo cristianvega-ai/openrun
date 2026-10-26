@@ -16,3 +16,18 @@ extension TerminalColor {
         self.init(red: color.r, green: color.g, blue: color.b)
     }
 }
+
+extension TerminalColor {
+    /// Resolves a style color, or returns `nil` for the default color.
+    init?(_ color: GhosttyStyleColor, palette: [TerminalColor]) {
+        switch color.tag {
+        case GHOSTTY_STYLE_COLOR_RGB:
+            self.init(color.value.rgb)
+        case GHOSTTY_STYLE_COLOR_PALETTE:
+            guard Int(color.value.palette) < palette.count else { return nil }
+            self = palette[Int(color.value.palette)]
+        default:
+            return nil
+        }
+    }
+}

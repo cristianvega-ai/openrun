@@ -2,14 +2,14 @@ import Testing
 @testable import TerminalEmulation
 
 @Suite struct RenderCellTests {
-    private func cells(of text: String) throws -> [RenderCell] {
+    func cells(of text: String) throws -> [RenderCell] {
         let terminal = try makeTerminal(columns: 10, rows: 2)
         let state = try RenderState()
         terminal.write(text)
         try state.update(from: terminal)
         var result: [RenderCell] = []
         try state.forEachRow(onlyChanged: false) { row in
-            if row.viewportRow == 0 { try row.forEachCell { result.append($0) } }
+            if row.viewportRow == 0 { try row.forEachCell(palette: state.colors.palette) { result.append($0) } }
         }
         return result
     }
