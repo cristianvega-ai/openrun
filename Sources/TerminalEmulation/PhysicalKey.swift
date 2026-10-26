@@ -15,6 +15,13 @@ public enum PhysicalKey: Sendable, CaseIterable {
     case pageUp, pageDown, arrowUp, arrowDown, arrowLeft, arrowRight
     case shiftLeft, shiftRight, controlLeft, controlRight, altLeft
     case altRight, metaLeft, metaRight, capsLock, contextMenu
+    case numberLock, numberPad0, numberPad1, numberPad2, numberPad3
+    case numberPad4, numberPad5, numberPad6, numberPad7, numberPad8
+    case numberPad9, numberPadAdd, numberPadSubtract, numberPadMultiply
+    case numberPadDivide, numberPadDecimal, numberPadEnter
+    case numberPadEqual, numberPadClear, numberPadComma
+    case f1, f2, f3, f4, f5, f6, f7, f8, f9, f10, f11, f12, f13, f14
+    case f15, f16, f17, f18, f19, f20, function
 
     var raw: GhosttyKey {
         switch self {
@@ -94,6 +101,47 @@ public enum PhysicalKey: Sendable, CaseIterable {
         case .metaRight: GHOSTTY_KEY_META_RIGHT
         case .capsLock: GHOSTTY_KEY_CAPS_LOCK
         case .contextMenu: GHOSTTY_KEY_CONTEXT_MENU
+        case .numberLock: GHOSTTY_KEY_NUM_LOCK
+        case .numberPad0: GHOSTTY_KEY_NUMPAD_0
+        case .numberPad1: GHOSTTY_KEY_NUMPAD_1
+        case .numberPad2: GHOSTTY_KEY_NUMPAD_2
+        case .numberPad3: GHOSTTY_KEY_NUMPAD_3
+        case .numberPad4: GHOSTTY_KEY_NUMPAD_4
+        case .numberPad5: GHOSTTY_KEY_NUMPAD_5
+        case .numberPad6: GHOSTTY_KEY_NUMPAD_6
+        case .numberPad7: GHOSTTY_KEY_NUMPAD_7
+        case .numberPad8: GHOSTTY_KEY_NUMPAD_8
+        case .numberPad9: GHOSTTY_KEY_NUMPAD_9
+        case .numberPadAdd: GHOSTTY_KEY_NUMPAD_ADD
+        case .numberPadSubtract: GHOSTTY_KEY_NUMPAD_SUBTRACT
+        case .numberPadMultiply: GHOSTTY_KEY_NUMPAD_MULTIPLY
+        case .numberPadDivide: GHOSTTY_KEY_NUMPAD_DIVIDE
+        case .numberPadDecimal: GHOSTTY_KEY_NUMPAD_DECIMAL
+        case .numberPadEnter: GHOSTTY_KEY_NUMPAD_ENTER
+        case .numberPadEqual: GHOSTTY_KEY_NUMPAD_EQUAL
+        case .numberPadClear: GHOSTTY_KEY_NUMPAD_CLEAR
+        case .numberPadComma: GHOSTTY_KEY_NUMPAD_COMMA
+        case .f1: GHOSTTY_KEY_F1
+        case .f2: GHOSTTY_KEY_F2
+        case .f3: GHOSTTY_KEY_F3
+        case .f4: GHOSTTY_KEY_F4
+        case .f5: GHOSTTY_KEY_F5
+        case .f6: GHOSTTY_KEY_F6
+        case .f7: GHOSTTY_KEY_F7
+        case .f8: GHOSTTY_KEY_F8
+        case .f9: GHOSTTY_KEY_F9
+        case .f10: GHOSTTY_KEY_F10
+        case .f11: GHOSTTY_KEY_F11
+        case .f12: GHOSTTY_KEY_F12
+        case .f13: GHOSTTY_KEY_F13
+        case .f14: GHOSTTY_KEY_F14
+        case .f15: GHOSTTY_KEY_F15
+        case .f16: GHOSTTY_KEY_F16
+        case .f17: GHOSTTY_KEY_F17
+        case .f18: GHOSTTY_KEY_F18
+        case .f19: GHOSTTY_KEY_F19
+        case .f20: GHOSTTY_KEY_F20
+        case .function: GHOSTTY_KEY_FN
         }
     }
 }
