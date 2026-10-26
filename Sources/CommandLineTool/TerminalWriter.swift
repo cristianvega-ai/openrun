@@ -6,15 +6,15 @@ import Foundation
 /// Only the main thread writes. The other threads ask it: the thread that
 /// receives from the session process hands it output, and the keyboard
 /// thread and the signal handlers ask it to end, to suspend, or to follow a
-/// change of the window size. A signal
-/// therefore never writes its closing sequences into the middle of an
-/// output frame. When two requests to end arrive, `requestEnd` says which
-/// one decides the exit code.
+/// change of the window size. A signal therefore never writes its closing
+/// sequences into the middle of an output frame. When two requests to end
+/// arrive, `requestEnd` says which one decides the exit code.
 ///
 /// A write never blocks without limit. The writer opens the terminal a
 /// second time, without blocking, so a terminal that takes no output, such
 /// as a frozen `ssh`, cannot hold it in `write`. It waits for room with
-/// `poll`, and a request to end or to suspend wakes it.
+/// `poll`, and a request to end, to suspend, or to follow a change of the
+/// window size wakes it.
 final class TerminalWriter: @unchecked Sendable {
     /// How attaching ends: the exit code of the tool and its last message.
     struct Ending: Equatable, Sendable {
@@ -35,7 +35,8 @@ final class TerminalWriter: @unchecked Sendable {
 
     enum WriteResult: Equatable {
         case written
-        /// A request to end or to suspend came first.
+        /// A request to end, to suspend, or to follow a change of the window
+        /// size came first.
         case interrupted(writtenCount: Int)
         case timedOut(writtenCount: Int)
         case failed(writtenCount: Int, reason: String)
@@ -194,7 +195,8 @@ final class TerminalWriter: @unchecked Sendable {
     // MARK: - The main thread
 
     /// The next request. A request to end that is not after the output comes
-    /// first, then a change of suspension. Output and the ending after it
+    /// first, then a change of suspension, then a request to follow a change
+    /// of the window size when not suspended. Output and the ending after it
     /// come only when the main thread has nothing left to write and is not
     /// suspended. Without `waiting`, returns `nil` when nothing is there.
     func nextRequest(isSuspended: Bool, waiting: Bool) -> Request? {
@@ -224,9 +226,9 @@ final class TerminalWriter: @unchecked Sendable {
         }
     }
 
-    /// Writes all bytes, unless a request to end or to suspend comes first
-    /// (with `stoppingForRequests`), the deadline passes, or the terminal
-    /// fails.
+    /// Writes all bytes, unless a request to end, to suspend, or to follow a
+    /// change of the window size comes first (with `stoppingForRequests`), the
+    /// deadline passes, or the terminal fails.
     func write(_ bytes: [UInt8], until deadline: ContinuousClock.Instant? = nil, stoppingForRequests: Bool = true) -> WriteResult {
         var offset = 0
         while offset < bytes.count {

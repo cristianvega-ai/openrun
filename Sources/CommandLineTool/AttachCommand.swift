@@ -322,7 +322,14 @@ struct AttachCommand {
                     // picture that waits is made again at the new size.
                     if let size = RawTerminalMode.windowSize(of: STDOUT_FILENO) {
                         screen.resize(to: size)
-                        if pictureToDraw != nil { pictureToDraw = try? screen.picture() }
+                        if pictureToDraw != nil {
+                            // The rest of the old picture is not drawn, so the window
+                            // would keep a part of it, and the end says why.
+                            guard let picture = try? screen.picture() else {
+                                return TerminalWriter.Ending(exitCode: 1, message: "the screen cannot be drawn again after the window changed size")
+                            }
+                            pictureToDraw = picture
+                        }
                         resizes.async { Self.send(size, on: connection) }
                     }
                 case .resume:

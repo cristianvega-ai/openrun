@@ -4,9 +4,10 @@ import Dispatch
 /// The signals that `openrun attach` handles, turned into events.
 ///
 /// A handler never writes to the terminal. It asks the terminal writer to
-/// end or to suspend, so its bytes cannot land in the middle of the output
-/// that the writer relays. Raw mode turns off the keys that make SIGINT,
-/// SIGQUIT and SIGTSTP, so these come from another process.
+/// end, to suspend, or to follow a change of the window size, so its bytes
+/// cannot land in the middle of the output that the writer relays. Raw mode
+/// turns off the keys that make SIGINT, SIGQUIT and SIGTSTP, so these come
+/// from another process.
 final class AttachSignals {
     enum Event: Equatable, Sendable {
         /// SIGINT, SIGTERM, SIGHUP or SIGQUIT: restore the terminal and exit
