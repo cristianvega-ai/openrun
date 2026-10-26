@@ -140,6 +140,41 @@ Each row holds the date, the decision, and the reason.
 | 2026-10-24 | Until milestone 5, the session process and its clients come from the same build. A snapshot is restored only by the build that made it. Milestone 5 decides what happens when the app updates while an older session process runs. The protocol rule of 2026-10-19 still holds: the socket protocol grows only by addition, and only the snapshot needs the same build. | Milestone 5 adds the restart and the update path, and it needs that answer. Before it, the owner builds both programs together. |
 | 2026-10-25 | The TLA+ models of OpenRun are in the top-level folder `specifications/`. Each model is one `.tla` file, with its TLC configuration files (`.cfg`) beside it. The models are the one exception to the rule to write Swift only. The app, `swift build`, and `swift test` do not use them. A commit that adds one model with its configuration files may change more than 100 lines when it changes no other file. It still has at most 10 files. Every other commit keeps the limit of 100 lines in 10 files, and so does a later change to a model. Each model keeps its controls. A control is a configuration that removes one protection of the code. It must fail with a named property, because a model that only passes proves nothing. `scripts/check-specifications.sh` runs the configurations and fails when an outcome differs from the expected one. It downloads the TLA+ tools at a pinned version and checks their SHA-256. The tools, the logs, and the TLC state stay out of git. The script needs Java (it looks in `JAVA_HOME`, then Homebrew `openjdk`, then the `PATH`), and only this check uses Java. When a change alters what a model describes, the same commit updates the model when the limits permit. Otherwise the next commit does. The description covers the attach sequence, size changes, the reply gate, shutdown, typed input and its withdrawal, and the local screen of `openrun attach`. Such a change runs the quick set of the script. A milestone review runs the full set with `--all`. | The TLA+ review of 2026-10-25 reproduced two defects with these models, and its controls show that the models find real defects. The attach sequence, the shutdown, and the input path change again in milestones 2, 4, and 5 of version 1, so the models must keep up with the code. |
 | 2026-10-25 | The terminal view of the app in milestone 2 asks for size changes when it attaches (`receivesSizeChanges` is true). After it restores the snapshot, it sends a `resize` with its own window size when that size differs from the size of the snapshot. The window can change while the snapshot is on its way, and the session does not tell a client about a change that the client itself asked for. When a size change comes from the session, the view gives its local terminal that size. It does not answer with a `resize` of its own, so two clients cannot make each other change size again and again. This follows the size row of 2026-10-24: the client that attached or changed its size last sets the size. Milestone 2 decides how the view shows a grid that differs from its window. | The TLA+ model of the attach sequence found a client that changes size before its snapshot arrives and then keeps the old size. `openrun attach` already sends its window size after the restore (`AttachCommand.run`), and the app must do the same. |
+| 2026-10-26 | Milestone 2 delivers OpenRun.app with a plain window that holds one terminal view for one session. The window attaches to a running session or starts a new one in the home folder. The view has the full terminal behavior: drawing, keys, input methods, mouse, selection, copy and paste, and scrollback. The three-pane window, the sessions list, and splits stay in milestone 3. | The terminal view is the heart of the app. A plain window lets the owner judge the view alone, before the panes around it. |
+| 2026-10-26 | Milestone 2 also brings the launch agent of the decision of 2026-10-15. The app registers the session process with SMAppService, and launchd starts it when a client connects, so nobody starts it by hand. This changes the session process and the command-line tool. | The owner wants the app to work end to end from milestone 2. |
+| 2026-10-26 | The terminal view uses SF Mono at 13 points, with the CoreText fallback for emoji and other scripts. Command-plus and Command-minus change the size. A font setting comes with milestone 3. | SF Mono is the monospaced font of macOS, so every Mac has it and it matches the system. |
+| 2026-10-26 | The view uses the Graphite theme from milestone 2. Its light version shows in the light mode of macOS, and its dark version in dark mode. The theme sets the background, the text, the cursor, the selection, and the first 16 colors of the 256-color palette. The other 240 stay standard. The section "Graphite theme" lists the colors. The session process answers color queries with the Graphite colors of the current appearance, in place of the black on white or white on black of the decision of 2026-10-17. A theme setting comes with milestone 3. | The owner chose Graphite on 2026-10-26 from five theme designs. Its dark colors come from a terminal that the owner likes. The app draws its own snapshot and does not relay raw output, so the session process answers the queries of its programs. Programs and the view must agree on the colors. |
+| 2026-10-26 | The three-pane window of milestone 3 follows the design that the owner chose on 2026-10-26. The first pane lists the projects, the second the sessions of one project or of all projects, and the third shows one session. There are no tabs at the top, because the sessions list is the vertical tabs. Each fact shows in one place only. Icons are outlines in one color, with no colored tiles and no chevrons. Each session row has a title and one line under it. The top of the second pane filters the list to all sessions, the ones that need the user, the ones in progress, or the stale ones, and it orders the list. The user can also drag a row to order the list. Each pane keeps its controls in its top row, with no empty space above them. The second and third panes lie over the pane at their left like stacked sheets, with a soft shadow at their left edge. | The owner refined the design over several rounds. Many sessions can run at once, so the list must stay compact and easy to scan. |
+
+## Graphite theme
+
+These are the colors of the Graphite theme (decision of 2026-10-26). Colors 0 to 15 are the palette that programs pick with escape codes. In both versions, colors 1 to 6 and 8 to 14 have a contrast of at least 4.5 to 1 against the background.
+
+| Color | Light | Dark |
+|---|---|---|
+| First pane | `#eceef0` | `#272a2c` |
+| Second pane | `#f3f4f6` | `#232628` |
+| Dividers | `#dcdfe2` | `#323437` |
+| Terminal background | `#fafbfc` | `#1e2022` |
+| Text | `#1e2022` | `#e6eef4` |
+| Cursor | `#1e2022` | `#e6eef4` |
+| Selection | `#dfe6ee` | `#3a4147` |
+| 0 black | `#1e2022` | `#2e3134` |
+| 1 red | `#b8364b` | `#e87382` |
+| 2 green | `#327339` | `#9fcb8b` |
+| 3 yellow | `#81600e` | `#e2c27f` |
+| 4 blue | `#2b67b1` | `#79aee6` |
+| 5 magenta | `#8748bc` | `#c59de6` |
+| 6 cyan | `#137073` | `#67c9cb` |
+| 7 white | `#d6dade` | `#c8cfd5` |
+| 8 bright black | `#6e7277` | `#8a8f94` |
+| 9 bright red | `#ce3b53` | `#f08f9b` |
+| 10 bright green | `#3d8044` | `#b4d8a3` |
+| 11 bright yellow | `#8f6c15` | `#ebd29b` |
+| 12 bright blue | `#3073c5` | `#97c1ee` |
+| 13 bright magenta | `#9553cb` | `#d5b5ee` |
+| 14 bright cyan | `#197e80` | `#88d8d9` |
+| 15 bright white | `#f3f4f6` | `#e6eef4` |
 
 ## Reference: libghostty and cmux
 
