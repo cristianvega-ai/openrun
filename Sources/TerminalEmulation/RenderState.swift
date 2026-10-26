@@ -60,4 +60,34 @@ public final class RenderState {
         _ = ghostty_render_state_get(handle, GHOSTTY_RENDER_STATE_DATA_ROWS, &rows)
         return TerminalSize(columns: columns, rows: rows)
     }
+
+    public var colors: RenderColors {
+        var colors = GhosttyRenderStateColors()
+        colors.size = MemoryLayout<GhosttyRenderStateColors>.size
+        _ = ghostty_render_state_get(handle, GHOSTTY_RENDER_STATE_DATA_COLORS, &colors)
+        let palette = withUnsafeBytes(of: colors.palette) { raw in
+            raw.bindMemory(to: GhosttyColorRgb.self).map(TerminalColor.init)
+        }
+        return RenderColors(
+            background: TerminalColor(colors.background),
+            foreground: TerminalColor(colors.foreground),
+            cursor: colors.cursor_has_value ? TerminalColor(colors.cursor) : nil,
+            palette: palette
+        )
+    }
+
+    public var cursor: RenderCursor {
+        var cursor = GhosttyRenderStateCursor()
+        cursor.size = MemoryLayout<GhosttyRenderStateCursor>.size
+        _ = ghostty_render_state_get(handle, GHOSTTY_RENDER_STATE_DATA_CURSOR, &cursor)
+        return RenderCursor(
+            position: cursor.viewport_has_value
+                ? TerminalCursorPosition(column: cursor.viewport_x, row: cursor.viewport_y) : nil,
+            isOnWideCharacterTail: cursor.viewport_has_value && cursor.wide_tail,
+            isVisible: cursor.visible,
+            isBlinking: cursor.blinking,
+            isAtPasswordInput: cursor.password_input,
+            style: CursorStyle(cursor.visual_style)
+        )
+    }
 }
