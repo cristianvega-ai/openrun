@@ -113,8 +113,8 @@ actor Session {
     /// ends the attach. In both cases the terminal model and the program's
     /// terminal go back to the previous size, and no client hears of a size
     /// change. The program may see the new size for a short time. When the
-    /// program's terminal refuses the previous size, both copies keep the
-    /// new size, and the clients that asked hear of it.
+    /// terminal model or the program's terminal refuses the previous size,
+    /// both copies keep the new size, and the clients that asked hear of it.
     /// After a successful attach, the other clients that asked hear of a
     /// new size once.
     ///
