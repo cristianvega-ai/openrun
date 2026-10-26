@@ -32,6 +32,19 @@ Piece(owner, sequenceNumber, isAnswer, isSend, stays) ==
   [owner |-> owner, sequenceNumber |-> sequenceNumber, isAnswer |-> isAnswer,
    isSend |-> isSend, stays |-> stays]
 
+\* nextByte      for each owner, the sequence number of its next byte
+\* nextAnswer    the sequence number of the next terminal answer
+\* waiting       the pieces that wait to go into the backlog, in order
+\* backlog       the pieces in the backlog that the program has not read
+\* admitted      every piece that went into the backlog, in order
+\* delivered     every piece that the program read, in order
+\* pendingBytes  the number of pieces in the backlog; a piece is one byte
+\* pendingTyped  the number of typed pieces in the backlog
+\* left          for each owner, whether its client left
+\* withdrawMark  for each owner that left, the length of delivered then
+\* programEnded  the program ended, and the backlog closed
+\* sendState     for each owner, its `sendText`: idle, waiting, taken or
+\*               failed
 VARIABLES nextByte, nextAnswer, waiting, backlog, admitted, delivered,
           pendingBytes, pendingTyped, left, withdrawMark, programEnded,
           sendState
