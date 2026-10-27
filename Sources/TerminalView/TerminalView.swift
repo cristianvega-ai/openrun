@@ -69,13 +69,13 @@ public final class TerminalView: NSView {
         host = MetalLayerHost(device: device)
         super.init(frame: .zero)
         wantsLayer = true
-        // A mouse motion with no button comes only through a tracking area.
         focus.onChange = { [weak self] isKey in self?.windowKeyChanged(isKey) }
         addSubview(scrollBar)
         scrollBar.onScroll = { [weak self] scroll in
             self?.terminal.scrollViewport(scroll)
             self?.requestFrame()
         }
+        // A mouse motion with no button comes only through a tracking area.
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
         blink = CursorBlink(clock: clock) { [weak self] isShown in
             self?.renderer.isCursorShown = isShown
@@ -324,9 +324,9 @@ public final class TerminalView: NSView {
 
     /// Takes the keys that a program wants before the menu and the other views
     /// have them. `KeyEquivalentRoute` tells which keys. A key with Command goes
-    /// to the menu first. Then the view runs the font actions: Command-plus and
-    /// Command-equals make the text larger, Command-minus smaller, and Command-0
-    /// goes back to the standard size.
+    /// to the menu first. Then the view runs its own actions: Command-plus and
+    /// Command-equals make the text larger, Command-minus smaller, Command-0
+    /// goes back to the standard size, and Command-C and Command-V copy and paste.
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
         // A window can hold more than one view, and only the view with the keyboard focus takes keys.
         guard window?.firstResponder === self else { return false }
