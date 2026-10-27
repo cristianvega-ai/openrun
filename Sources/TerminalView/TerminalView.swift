@@ -24,7 +24,9 @@ public final class TerminalView: NSView {
     public weak var delegate: TerminalViewDelegate?
     /// How many frames reached the graphics processor.
     private(set) var framesDrawn = 0
+    private let device: MTLDevice
     private let host: MetalLayerHost
+    private var fontSize = FontSizeControl()
     private var schedule: DisplaySchedule?
     private let parser = OutputParser()
     private var isParseScheduled = false
@@ -39,6 +41,7 @@ public final class TerminalView: NSView {
         state = try RenderState()
         let fonts = FontSet(pointSize: Self.defaultPointSize, scale: NSScreen.main?.backingScaleFactor ?? 2)
         renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
+        self.device = device
         host = MetalLayerHost(device: device)
         super.init(frame: .zero)
         wantsLayer = true
@@ -85,6 +88,18 @@ public final class TerminalView: NSView {
     public var gridSize: TerminalSize { terminal.size }
 
     public override var isOpaque: Bool { true }
+
+    // The menu of a later unit sends these actions through the responder chain.
+    @objc public func increaseFontSize(_ sender: Any?) { changeFontSize { $0.larger() } }
+    @objc public func decreaseFontSize(_ sender: Any?) { changeFontSize { $0.smaller() } }
+    @objc public func resetFontSize(_ sender: Any?) { changeFontSize { $0.reset() } }
+
+    public override func viewDidChangeBackingProperties() {
+        super.viewDidChangeBackingProperties()
+        // A screen with another scale needs new cells, so the text stays sharp.
+        guard let scale = window?.backingScaleFactor, scale != renderer.fonts.scale else { return }
+        rebuildRenderer(scale: scale)
+    }
 
     public override func viewDidChangeEffectiveAppearance() {
         super.viewDidChangeEffectiveAppearance()
@@ -137,6 +152,26 @@ public final class TerminalView: NSView {
         state.markClean()
         framesDrawn += 1
         return true
+    }
+
+    private func changeFontSize(_ change: (inout FontSizeControl) -> Bool) {
+        if change(&fontSize) { rebuildRenderer(scale: renderer.fonts.scale) }
+    }
+
+    /// New cells need a new renderer with its atlas, and a new grid.
+    private func rebuildRenderer(scale: CGFloat) {
+        do {
+            let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale)
+            let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
+            (new.isFocused, new.markedText) = (renderer.isFocused, renderer.markedText)
+            renderer = new
+        } catch {
+            logger.error("The renderer failed: \(String(describing: error), privacy: .private)")
+            return
+        }
+        host.resize(to: bounds.size, scale: scale)
+        fitGrid()
+        schedule?.requestFrame()
     }
 
     /// A program can still set its own colors, and they stay when the theme changes.
