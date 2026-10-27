@@ -8,6 +8,7 @@ import os
 final class KeyboardInput {
     /// The marked text and the texts of the key now handled.
     var textInput = TextInputState()
+    var layout = KeyboardLayoutWatch()
     private let terminal: Terminal
     private let encoder: KeyEncoder
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "KeyboardInput")
@@ -24,9 +25,14 @@ final class KeyboardInput {
     ///   every key.
     func bytes(forKeyDown event: NSEvent, interpret: (NSEvent) -> Void) -> [UInt8] {
         let hadMarkedText = textInput.hasMarkedText
+        // An input method can change its own input source while it composes, so only a key
+        // with no marked text can tell a change of the layout.
+        let layoutBefore = hadMarkedText ? nil : layout.identifier()
         textInput.beginKey()
         interpret(translationEvent(for: event))
         let key = textInput.endKey()
+        // A key that changes the layout, such as a shortcut for the input source, sends nothing.
+        guard hadMarkedText || layout.identifier() == layoutBefore else { return [] }
         let action: KeyEvent.Action = event.isARepeat ? .repeated : .press
         if hadMarkedText || textInput.hasMarkedText {
             // The input method owns the key. The text that it committed goes

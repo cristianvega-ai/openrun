@@ -82,6 +82,27 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
     }
 }
 
+@MainActor @Suite(.enabled(if: usLayoutIsCurrent)) struct InputSourceChangeTests {
+    @Test func aKeyThatChangesTheInputSourceSendsNothing() throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        var source = "com.apple.keylayout.US"
+        view.keyboard.layout = KeyboardLayoutWatch { source }
+        func press(_ key: Int, _ change: String? = nil) -> String {
+            view.sendTyped(view.keyboard.bytes(forKeyDown: keyEvent(key)) { _ in
+                if let change { source = change }
+                view.insertText("a", replacementRange: nowhere)
+            })
+            return delegate.takeSent()
+        }
+        #expect(press(kVK_ANSI_A) == "a")
+        #expect(press(kVK_Space, "com.apple.inputmethod.Kotoeri.Japanese") == "")
+        #expect(press(kVK_ANSI_A) == "a")
+        #expect(KeyboardLayoutWatch().identifier() != nil)
+    }
+}
+
 @MainActor @Suite(.enabled(if: usLayoutIsCurrent)) struct KeyThroughInputMethodTests {
     private let rightOption = ModifierReader.DeviceBit.rightOption
     private let leftOption = ModifierReader.DeviceBit.leftOption
