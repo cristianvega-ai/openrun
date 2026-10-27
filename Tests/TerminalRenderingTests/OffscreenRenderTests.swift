@@ -102,10 +102,10 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
 
 @Suite struct FrameTimeTests {
     /// Prints the median time of the work that the processor does for a frame.
-    @Test func aFullRedrawAndAOneRowChangeOnA160By48Grid() throws {
+    @Test func aFullRedrawAndAOneRowChangeAndAScrollOnA160By48Grid() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)
-        let terminal = try Terminal(size: TerminalSize(columns: 160, rows: 48), scrollbackLimit: 0)
+        let terminal = try Terminal(size: TerminalSize(columns: 160, rows: 48), scrollbackLimit: 10_000)
         try theme.apply(to: terminal)
         let state = try RenderState()
         let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection)
@@ -131,8 +131,15 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
         let full = try median { for _ in 0..<48 { terminal.write(line + "\r\n") } }
         var column = 0
         let one = try median { terminal.write("\u{1B}[20;\(column % 150 + 1)HX"); column += 1 }
+        // The view scrolls up and down in turn, so the viewport stays inside the scrollback.
+        var isUp = true
+        let row = try median { terminal.scrollViewport(.byRows(isUp ? -1 : 1)); isUp.toggle() }
+        let page = try median { terminal.scrollViewport(.byRows(isUp ? -48 : 48)); isUp.toggle() }
         print("FRAME TIMES 160x48 cells, scale 2: full redraw \(full.milliseconds) ms (\(full.rows) rows read), one-row change \(one.milliseconds) ms (\(one.rows) row read)")
+        print("FRAME TIMES 160x48 cells, scale 2: scroll by one row \(row.milliseconds) ms (\(row.rows) rows read), scroll by one page \(page.milliseconds) ms (\(page.rows) rows read)")
         #expect(full.rows == 48)
         #expect(one.rows == 1)
+        // libghostty-vt marks every row as changed after a scroll, so a scroll reads all rows.
+        #expect(row.rows == 48 && page.rows == 48)
     }
 }
