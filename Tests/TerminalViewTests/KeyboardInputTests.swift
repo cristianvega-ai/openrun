@@ -74,4 +74,25 @@ import Testing
         view.keyDown(with: keyEvent(kVK_UpArrow))
         #expect(delegate.takeSent() == "\u{1B}OA")
     }
+
+    @Test func theLeftOptionKeyIsAltAndTheRightOptionKeyTypesACharacter() throws {
+        let (view, delegate) = try makeView()
+        let left = ModifierReader.DeviceBit.leftOption, right = ModifierReader.DeviceBit.rightOption
+        let keys: [(String, NSEvent, String)] = [
+            ("left Option-b", keyEvent(kVK_ANSI_B, .option, deviceBits: left), "\u{1B}b"),
+            ("left Option-Shift-b", keyEvent(kVK_ANSI_B, [.option, .shift], deviceBits: left), "\u{1B}B"),
+            ("left Option-Backspace", keyEvent(kVK_Delete, .option, deviceBits: left), "\u{1B}\u{7F}"),
+            ("left Option-period", keyEvent(kVK_ANSI_Period, .option, deviceBits: left), "\u{1B}."),
+            ("right Option-g", keyEvent(kVK_ANSI_G, .option, deviceBits: right), "©"),
+            ("right Option-2", keyEvent(kVK_ANSI_2, .option, deviceBits: right), "™"),
+        ]
+        for (name, event, bytes) in keys {
+            view.keyDown(with: event)
+            #expect(delegate.takeSent() == bytes, "\(name)")
+        }
+        view.terminal.write("\u{1B}[>1u")
+        view.keyDown(with: keys[0].1)
+        view.keyDown(with: keys[4].1)
+        #expect(delegate.takeSent() == "\u{1B}[98;3u©")
+    }
 }
