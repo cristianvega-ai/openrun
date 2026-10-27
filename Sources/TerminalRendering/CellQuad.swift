@@ -22,6 +22,12 @@ struct CellQuad {
             atlasOrigin: [Float(entry.x), Float(entry.y)], isColor: entry.isColor ? 1 : 0, color: vector(color))
     }
 
+    func moved(x: Int, y: Int) -> CellQuad {
+        var quad = self
+        quad.origin += [Float(x), Float(y)]
+        return quad
+    }
+
     static func vector(_ color: TerminalColor) -> SIMD4<Float> {
         SIMD4(Float(color.red) / 255, Float(color.green) / 255, Float(color.blue) / 255, 1)
     }
