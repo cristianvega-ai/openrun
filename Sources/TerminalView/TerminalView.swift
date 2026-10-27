@@ -13,8 +13,6 @@ import os
 /// The view and its terminal run on the main thread, so they need no lock.
 @MainActor
 public final class TerminalView: NSView {
-    /// SF Mono at 13 points, as the decision of 2026-10-26 says.
-    static let defaultPointSize: CGFloat = 13
     let terminal: Terminal
     let state: RenderState
     private(set) var renderer: TerminalRenderer
@@ -39,7 +37,7 @@ public final class TerminalView: NSView {
         guard let device = MTLCreateSystemDefaultDevice() else { throw RenderingError.deviceUnavailable }
         terminal = try Terminal(size: initialGrid, scrollbackLimit: 10_000)
         state = try RenderState()
-        let fonts = FontSet(pointSize: Self.defaultPointSize, scale: NSScreen.main?.backingScaleFactor ?? 2)
+        let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
         renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
         self.device = device
         host = MetalLayerHost(device: device)
