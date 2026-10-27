@@ -24,3 +24,34 @@ import Testing
         #expect(metrics.underlinePosition + metrics.underlineThickness <= metrics.height)
     }
 }
+
+@Suite struct GlyphRasterizerTests {
+    private let fonts = FontSet(pointSize: 13, scale: 2)
+
+    private func bitmap(_ text: String, _ face: FontFace = .regular, columns: Int = 1) -> GlyphRasterizer.Bitmap? {
+        GlyphRasterizer(fonts: fonts).bitmap(for: GlyphKey(text: text, face: face, columns: columns))
+    }
+
+    @Test func aLetterStandsOnTheBaselineOfTheCell() throws {
+        let letter = try #require(bitmap("A"))
+        #expect(letter.pixels.contains { $0 > 200 })
+        let bottom = letter.offsetY + letter.height - GlyphRasterizer.padding
+        #expect(abs(bottom - fonts.metrics.baseline) <= 1)
+    }
+
+    @Test func aSpaceDrawsNothing() {
+        #expect(bitmap(" ") == nil)
+    }
+
+    @Test func aWideCharacterSitsInsideItsTwoCells() throws {
+        let wide = try #require(bitmap("日", columns: 2))
+        #expect(wide.offsetX + GlyphRasterizer.padding >= 0)
+        #expect(wide.offsetX + wide.width - GlyphRasterizer.padding <= 2 * fonts.cellWidth)
+    }
+
+    @Test func theBoldFaceCoversMorePixels() throws {
+        let regular = try #require(bitmap("M")).pixels.reduce(0) { $0 + Int($1) }
+        let bold = try #require(bitmap("M", .bold)).pixels.reduce(0) { $0 + Int($1) }
+        #expect(bold > regular)
+    }
+}
