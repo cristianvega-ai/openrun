@@ -27,6 +27,16 @@ OpenRun supports macOS 26 and later. The code is Swift only.
 
 The two programs are in `.build/debug/`: `openrun-session` and `openrun`.
 
+3. Build OpenRun.app. The script builds the package in release mode, assembles the bundle in the folder that you name, and signs it.
+
+   ```sh
+   scripts/build-application.sh /Applications
+   ```
+
+   The bundle holds the app as `Contents/MacOS/OpenRun`, the session process as `Contents/MacOS/openrun-session`, the tool as `Contents/Helpers/openrun`, and the property list of the launch agent in `Contents/Library/LaunchAgents`.
+   The script signs with the one Apple Development identity of the keychain, and stops when there is none or more than one. `OPENRUN_SIGNING_IDENTITY` names the identity to use, and `-` signs ad hoc for a test build. With an ad hoc signature, launchd ties the launch agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
+   The script replaces each file of an existing bundle by a rename, so a session process that runs keeps its own file.
+
 ## Test
 
 ```sh
