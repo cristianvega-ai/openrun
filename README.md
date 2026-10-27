@@ -127,7 +127,10 @@ When `openrun new` is given a program name without a slash, the session process 
 | `Sources/PseudoTerminal` | Runs a program on a pseudo terminal |
 | `Sources/SessionProtocol` | The socket protocol that the session process and its clients share |
 | `Sources/SessionProcess` | The background process that owns the sessions |
+| `Sources/SessionLaunch` | How launchd starts the session process: the launch agent, its wake, and its registration |
 | `Sources/CommandLineTool` | The `openrun` commands |
-| `Sources/openrun`, `Sources/openrun-session` | Thin programs that call the features above |
+| `Sources/OpenRunApplication` | The app, which registers the launch agent at its start |
+| `Sources/openrun`, `Sources/openrun-session`, `Sources/openrun-application` | Thin programs that call the features above |
+| `Bundle` | The property lists of OpenRun.app and of its launch agent |
 
 Read `AGENTS.md` for the rules of the code.

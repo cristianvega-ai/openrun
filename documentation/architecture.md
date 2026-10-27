@@ -44,22 +44,28 @@ A module uses another module only through its public types.
 | `PseudoTerminal` | Runs one program on a new pseudo terminal | `PseudoTerminal`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
 | `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
 | `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, and the attach conversation | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionIdentifierMatch`, `SessionConnectionError` |
-| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown | `SessionProcess`, `SessionProcessError` |
+| `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
+| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
+| `OpenRunApplication` | The app. In milestone 2 so far, the application delegate and the setup of the launch agent at the start | `OpenRunApplication` |
 
-The programs in `Sources/openrun` and `Sources/openrun-session` read their start-up input and call `CommandLineTool` and `SessionProcess`. They hold no other logic.
+The programs in `Sources/openrun`, `Sources/openrun-session` and `Sources/openrun-application` read their start-up input and call `CommandLineTool`, `SessionProcess` and `OpenRunApplication`. They hold no other logic.
 
 ### Dependency direction
 
 Dependencies point one way, from the programs down to the features.
 
 ```
-openrun           -> CommandLineTool -> SessionConnection -> SessionProtocol
-                                     -> SessionProtocol
-                                     -> TerminalEmulation -> libghostty-vt
-openrun-session   -> SessionProcess  -> SessionProtocol
-                                     -> PseudoTerminal
-                                     -> TerminalEmulation -> libghostty-vt
+openrun             -> CommandLineTool -> SessionConnection -> SessionProtocol
+                                                              -> SessionLaunch
+                                       -> SessionProtocol
+                                       -> TerminalEmulation -> libghostty-vt
+openrun-session     -> SessionProcess  -> SessionProtocol
+                                       -> SessionLaunch
+                                       -> PseudoTerminal
+                                       -> TerminalEmulation -> libghostty-vt
+openrun-application -> OpenRunApplication -> SessionConnection
+                                          -> SessionLaunch
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
                   -> TerminalTheme     -> TerminalEmulation
 ```
@@ -67,7 +73,7 @@ TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
 No program uses `TerminalView` yet. The app of milestone 2 will. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
-`PseudoTerminal` and `SessionProtocol` depend on no other OpenRun module. `SessionConnection` depends only on `SessionProtocol`.
+`PseudoTerminal`, `SessionProtocol` and `SessionLaunch` depend on no other OpenRun module. `SessionConnection` depends on `SessionProtocol` and `SessionLaunch`.
 So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionSize`) belongs to one module. `SessionProcess` converts between them at its edge.
 
 The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables and plays the part of a terminal window.
@@ -196,7 +202,7 @@ The client side of the socket, for the command-line tool and the window of the a
 - `SessionAttachment.startReceiving` starts a thread that receives the rest. It hands each `SessionAttachmentEvent` to its handler in order, on that thread: `output` and `sizeChanged`, and last `exited`, `closed` or `failed`. A message that does not belong after the snapshot is ignored. The events are `Sendable`, so a window can hand each one on to the main queue. While the handler runs, the socket holds the later frames.
 - `send(input:)`, `send(size:)` and `detach()` work from any thread. `shutdown()` ends the connection and wakes the receiving thread.
 - `SessionConnectionError` names each failure. Its text names no command or option of a client, so `CommandLineToolError(_:)` gives each error the words of the tool, such as "choose a socket with --socket".
-- A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. `SessionClient.connect(to:)` is the one place that learns this, so the wake of the launch agent will go there.
+- A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. On the default socket, `SessionClient(location:)` first sends one wake to the launch agent and connects again. A connection that closes before `hello` leads to the same wake, because a launch agent that ends at its idle exit closes such a connection. A wake that fails gives `wakeFailed` with the `SessionWakeFailure`. Tests pass their own wake to `SessionClient(location:wake:)`.
 
 ### SessionProcess
 
@@ -213,6 +219,9 @@ The client side of the socket, for the command-line tool and the window of the a
 | `SessionRegistry` | An actor. The sessions, found by identifier |
 | `Session` | An actor. One program, one `Terminal`, and the attached clients |
 | `ShutdownSignals` | Turns the stop signals into a value to wait for |
+| `IdleExit` | The time limit of the idle exit of the launch agent, 30 seconds, and the wait for it. See "Launch agent" |
+| `SessionLog` | Writes each line of the log to standard error and to the unified log |
+| `HelperSearchPath` | The folder `Contents/Helpers` of the bundle that holds the process, which goes first on the `PATH` of each new session |
 
 The log of the session process (`SessionLog`) escapes every line with `PrintableText.escaping`. A log line can include text that a client chose, such as a folder, a command or an error message, and a terminal that shows the log must not obey it.
 Each line goes to standard error and to the unified log, with the subsystem `ai.cristianvega.openrun`, because launchd sends the standard error of the launch agent to /dev/null. In the unified log, each path, command line and error text is private, and only the words of OpenRun, counts and identifiers are public. `log show --predicate 'subsystem == "ai.cristianvega.openrun"'` shows the lines.
