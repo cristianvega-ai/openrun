@@ -22,6 +22,8 @@ AttachSequence AttachSequenceThreeClients no-error long
 SessionLifecycle SessionLifecycle no-error quick
 SessionLifecycle SessionLifecycleWithoutStoppingState invariant:NoSessionStartsDuringShutdown quick
 SessionLifecycle SessionLifecycleLiveness no-error quick
+SessionLifecycle SessionLifecycleIdleExit no-error quick
+SessionLifecycle SessionLifecycleWithoutIdleCheck invariant:IdleExitEndsNoSession quick
 InputBacklog InputBacklog no-error quick
 InputBacklog InputBacklogWithoutWithdrawal invariant:NoByteAfterWithdraw quick
 InputBacklog InputBacklogLiveness no-error quick
