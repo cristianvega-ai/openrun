@@ -43,6 +43,31 @@ import Testing
     }
 }
 
+@MainActor @Suite struct SystemInputClockTests {
+    @Test func aTimerRunsOnceAfterItsDelayAndACanceledTimerDoesNotRun() {
+        let clock = SystemInputClock()
+        var runs = 0, canceledRuns = 0
+        let timer = clock.schedule(after: .milliseconds(20)) { runs += 1 }
+        clock.schedule(after: .milliseconds(20)) { canceledRuns += 1 }.cancel()
+        wait(seconds: 3) { runs > 0 }
+        wait(seconds: 0.1) { false }
+        #expect(runs == 1 && canceledRuns == 0)
+        timer.cancel()
+    }
+
+    @Test func aRepeatingTimerRunsForEachInterval() {
+        let clock = SystemInputClock()
+        var runs = 0
+        let timer = clock.schedule(after: .milliseconds(10), repeating: .milliseconds(10)) { runs += 1 }
+        wait(seconds: 3) { runs >= 3 }
+        timer.cancel()
+        let count = runs
+        wait(seconds: 0.1) { false }
+        #expect(count >= 3 && runs == count)
+        #expect(clock.now <= ContinuousClock.now)
+    }
+}
+
 @MainActor @Suite struct TerminalViewTests {
     @Test func outputAppearsInTheColorsOfTheTheme() throws {
         let view = try TerminalView()
