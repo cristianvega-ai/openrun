@@ -31,6 +31,8 @@ let package = Package(
         .testTarget(name: "TerminalThemeTests", dependencies: ["TerminalTheme", "TerminalEmulation"]),
         .target(name: "TerminalRendering", dependencies: ["TerminalEmulation"]),
         .testTarget(name: "TerminalRenderingTests", dependencies: ["TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
+        .target(name: "TerminalView", dependencies: ["TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
+        .testTarget(name: "TerminalViewTests", dependencies: ["TerminalView", "TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
