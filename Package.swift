@@ -11,6 +11,8 @@ let package = Package(
         .library(name: "TerminalEmulation", targets: ["TerminalEmulation"]),
         .executable(name: "openrun", targets: ["openrun"]),
         .executable(name: "openrun-session", targets: ["openrun-session"]),
+        // The bundle script installs it as Contents/MacOS/OpenRun.
+        .executable(name: "openrun-application", targets: ["openrun-application"]),
     ],
     targets: [
         // Built by scripts/build-ghostty-library.sh. Only TerminalEmulation
@@ -64,6 +66,7 @@ let package = Package(
         // The app. In milestone 2 it registers the launch agent at its start.
         .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch"]),
+        .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
         .testTarget(
             name: "PseudoTerminalTests",
             dependencies: ["PseudoTerminal"]
