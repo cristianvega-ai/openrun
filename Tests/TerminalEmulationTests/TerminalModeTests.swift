@@ -37,4 +37,12 @@ import Testing
         terminal.write("\u{1B}[?1000h\u{1B}[>5u\u{1B}]22;pointer\u{07}")
         #expect(terminal.isMouseTrackingActive && terminal.kittyKeyboardFlags == 5 && terminal.pointerShape == .pointingHand)
     }
+
+    @Test func theMouseModesIncludeEveryTrackingModeAndFormat() throws {
+        let terminal = try makeTerminal()
+        let modes = TerminalMode.mouseModes
+        #expect(modes.count == 8 && modes.allSatisfy { !terminal.isModeEnabled($0) })
+        terminal.write("\u{1B}[?9h\u{1B}[?1000h\u{1B}[?1002h\u{1B}[?1003h\u{1B}[?1005h\u{1B}[?1006h\u{1B}[?1015h\u{1B}[?1016h")
+        #expect(modes.allSatisfy { terminal.isModeEnabled($0) })
+    }
 }

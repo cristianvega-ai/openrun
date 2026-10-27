@@ -40,6 +40,12 @@ public final class MouseEncoder {
         ghostty_mouse_encoder_setopt(encoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed)
     }
 
+    /// Tells the encoder whether a button is down. Unlike `update`, it keeps the last cell.
+    public func setAnyButtonPressed(_ pressed: Bool) {
+        var pressed = pressed
+        ghostty_mouse_encoder_setopt(encoder, GHOSTTY_MOUSE_ENCODER_OPT_ANY_BUTTON_PRESSED, &pressed)
+    }
+
     public func encode(_ mouse: MouseEvent) throws -> [UInt8] {
         ghostty_mouse_event_set_action(event, GhosttyMouseAction(rawValue: mouse.action.rawValue))
         switch mouse.button {

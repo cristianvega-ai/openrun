@@ -7,9 +7,21 @@ public enum TerminalMode: Sendable, CaseIterable {
     case focusReports
     case alternateScroll
     case synchronizedOutput
+    case x10MouseReports
     case normalMouseReports
     case buttonMouseReports
     case anyMouseReports
+    case utf8MouseFormat
+    case selectGraphicRenditionMouseFormat
+    case rxvtUnicodeMouseFormat
+    case pixelMouseFormat
+
+    /// The modes that change how the mouse encoder reports. A view reads the
+    /// encoder again when one of them changes.
+    public static let mouseModes: [TerminalMode] = [
+        .x10MouseReports, .normalMouseReports, .buttonMouseReports, .anyMouseReports,
+        .utf8MouseFormat, .selectGraphicRenditionMouseFormat, .rxvtUnicodeMouseFormat, .pixelMouseFormat,
+    ]
 
     /// The mode constants of libghostty-vt are C macros that call a static
     /// inline function, and Swift cannot import macros. So the number of
@@ -21,9 +33,14 @@ public enum TerminalMode: Sendable, CaseIterable {
         case .focusReports: ghostty_mode_new(1004, false)
         case .alternateScroll: ghostty_mode_new(1007, false)
         case .synchronizedOutput: ghostty_mode_new(2026, false)
+        case .x10MouseReports: ghostty_mode_new(9, false)
         case .normalMouseReports: ghostty_mode_new(1000, false)
         case .buttonMouseReports: ghostty_mode_new(1002, false)
         case .anyMouseReports: ghostty_mode_new(1003, false)
+        case .utf8MouseFormat: ghostty_mode_new(1005, false)
+        case .selectGraphicRenditionMouseFormat: ghostty_mode_new(1006, false)
+        case .rxvtUnicodeMouseFormat: ghostty_mode_new(1015, false)
+        case .pixelMouseFormat: ghostty_mode_new(1016, false)
         }
     }
 }

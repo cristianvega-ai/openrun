@@ -18,4 +18,17 @@ import Testing
         let motion = MouseEvent(action: .motion, button: nil, x: 40, y: 40)
         #expect(try send(motion, MouseEvent(action: .motion, button: nil, x: 41, y: 41)) == ["\u{1B}[<35;3;2M", ""])
     }
+
+    @Test func aButtonStateKeepsTheLastCellButUpdateForgetsIt() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 10)
+        terminal.write("\u{1B}[?1003h\u{1B}[?1006h")
+        let encoder = try MouseEncoder()
+        encoder.update(from: terminal, cellWidth: 16, cellHeight: 32, anyButtonPressed: false)
+        func motion(_ x: Float) throws -> String { String(decoding: try encoder.encode(MouseEvent(action: .motion, button: nil, x: x, y: 5)), as: UTF8.self) }
+        #expect(try motion(40) == "\u{1B}[<35;3;1M")
+        encoder.setAnyButtonPressed(true)
+        #expect(try motion(41) == "")
+        encoder.update(from: terminal, cellWidth: 16, cellHeight: 32, anyButtonPressed: false)
+        #expect(try motion(42) == "\u{1B}[<35;3;1M")
+    }
 }
