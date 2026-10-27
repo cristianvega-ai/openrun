@@ -22,12 +22,12 @@ public struct SessionProcess: Sendable {
         let signals = ShutdownSignals()
         let server = try SessionServer(location: socketLocation)
         await server.start()
-        SessionServer.log("Listening on \(socketLocation.path)")
+        SessionLog.write("Listening on ", detail: socketLocation.path)
 
         let signal = await signals.wait()
-        SessionServer.log("Received signal \(signal). Ending all sessions.")
+        SessionLog.write("Received signal \(signal). Ending all sessions.")
         await server.shutDown()
-        SessionServer.log("Stopped.")
+        SessionLog.write("Stopped.")
     }
 
     /// The whole of `openrun-session`: read the options, run, and report.
@@ -53,7 +53,7 @@ public struct SessionProcess: Sendable {
             try await SessionProcess(socketLocation: location).run()
             return 0
         } catch {
-            SessionServer.log("\(error)")
+            SessionLog.write("", detail: "\(error)")
             return 1
         }
     }

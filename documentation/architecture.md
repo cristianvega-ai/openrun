@@ -214,7 +214,8 @@ The client side of the socket, for the command-line tool and the window of the a
 | `Session` | An actor. One program, one `Terminal`, and the attached clients |
 | `ShutdownSignals` | Turns the stop signals into a value to wait for |
 
-The log of the session process (`SessionServer.log`) escapes every line with `PrintableText.escaping`. A log line can include text that a client chose, such as a folder, a command or an error message, and a terminal that shows the log must not obey it.
+The log of the session process (`SessionLog`) escapes every line with `PrintableText.escaping`. A log line can include text that a client chose, such as a folder, a command or an error message, and a terminal that shows the log must not obey it.
+Each line goes to standard error and to the unified log, with the subsystem `ai.cristianvega.openrun`, because launchd sends the standard error of the launch agent to /dev/null. In the unified log, each path, command line and error text is private, and only the words of OpenRun, counts and identifiers are public. `log show --predicate 'subsystem == "ai.cristianvega.openrun"'` shows the lines.
 
 ### CommandLineTool
 

@@ -206,7 +206,7 @@ actor SessionServer {
         }
         do {
             let summary = try await registry.create(folder: folder, command: command, size: size, environment: environment)
-            Self.log("Started session \(summary.identifierText) in \(folder)")
+            SessionLog.write("Started session \(summary.identifierText) in ", detail: folder)
             return .sessionCreated(summary)
         } catch {
             return .failure(SessionFailure(reason: .launchFailed, message: "\(error)"))
@@ -226,12 +226,9 @@ actor SessionServer {
         .failure(SessionFailure(reason: .unknownSession, message: "No session has the identifier \(SessionSummary.text(for: identifier))."))
     }
 
-    /// The session process runs in the foreground and logs to standard error.
-    /// A message can include text that a client chose, such as a folder, a
-    /// command or an error message, and a terminal that shows the log must not
-    /// obey it. Every log line passes here, so one escape covers them all, and
-    /// a value with a line break cannot forge a second line.
+    /// Logs a message that can hold a path or an error text, so all of it
+    /// is private in the unified log. See `SessionLog`.
     static func log(_ message: String) {
-        FileHandle.standardError.write(Data("openrun-session: \(PrintableText.escaping(message))\n".utf8))
+        SessionLog.write("", detail: message)
     }
 }
