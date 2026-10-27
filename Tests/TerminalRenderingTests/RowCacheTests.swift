@@ -1,3 +1,4 @@
+import Metal
 import Testing
 import TerminalEmulation
 @testable import TerminalRendering
@@ -59,5 +60,24 @@ import TerminalEmulation
         try terminal.setDefaultBackgroundColor(TerminalColor(red: 1, green: 2, blue: 3))
         try state.update(from: terminal)
         #expect(try update(&cache, from: state, atlas: atlas).rowsPrepared == 5)
+    }
+}
+
+@Suite struct RendererPrepareTests {
+    @Test func aChangeInOneRowReadsOneRow() throws {
+        let screen = try makeScreen("a\r\nb", rows: 5)
+        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts)
+        #expect(try renderer.prepare(from: screen.state).rowsPrepared == 5)
+        screen.state.markClean()
+        screen.terminal.write("x")
+        try screen.state.update(from: screen.terminal)
+        #expect(try renderer.prepare(from: screen.state) == FrameStatistics(rowsPrepared: 1, rowsReused: 4))
+    }
+
+    @Test func aGridAndItsPaddingMakeThePixelSize() throws {
+        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts)
+        let size = renderer.pixelSize(for: TerminalSize(columns: 10, rows: 3))
+        #expect(size.width == 2 * 16 + 10 * testFonts.cellWidth)
+        #expect(size.height == 2 * 16 + 3 * testFonts.cellHeight)
     }
 }
