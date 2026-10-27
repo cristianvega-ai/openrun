@@ -1,3 +1,4 @@
+import Foundation
 import Metal
 import Testing
 import TerminalEmulation
@@ -73,5 +74,65 @@ import TerminalTheme
         #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.selection)
         #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.selection)
         #expect(pixel(of: screen.target, column: 3, x: 0, y: 0) == screen.theme.background)
+    }
+}
+
+/// Run with `OPENRUN_RENDER_OUTPUT=<folder>` to save the renders as PNG files for a review.
+private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"]
+
+@Suite struct ScreenshotTests {
+    @Test(.enabled(if: screenshotFolder != nil), arguments: [TerminalColorScheme.dark, .light])
+    func theShowcaseScreenInLightAndDark(scheme: TerminalColorScheme) throws {
+        let screen = try renderScreen(showcaseScreen, columns: 100, rows: 17, scheme: scheme, selecting: ViewportCell(column: 10, row: 0))
+        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/graphite-\(scheme).png"))
+    }
+
+    @Test(.enabled(if: screenshotFolder != nil), arguments: ["block": "2", "bar": "6", "underline": "4"])
+    func theCursorShapes(name: String, code: String) throws {
+        let screen = try renderScreen("cursor\u{1B}[\(code) q", columns: 12, rows: 1)
+        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-\(name).png"))
+    }
+
+    @Test(.enabled(if: screenshotFolder != nil))
+    func theHollowBlockOfAViewWithoutFocus() throws {
+        let screen = try renderScreen("cursor\u{1B}[2 q", columns: 12, rows: 1, isFocused: false)
+        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-hollow-block.png"))
+    }
+}
+
+@Suite struct FrameTimeTests {
+    /// Prints the median time of the work that the processor does for a frame.
+    @Test func aFullRedrawAndAOneRowChangeOnA160By48Grid() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let terminal = try Terminal(size: TerminalSize(columns: 160, rows: 48), scrollbackLimit: 0)
+        try theme.apply(to: terminal)
+        let state = try RenderState()
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection)
+        let size = renderer.pixelSize(for: terminal.size)
+        let target = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        let line = (0..<12).map { "\u{1B}[3\($0 % 7 + 1)mlet value\($0)\u{1B}[0m = render(\"text\") + 日本 " }.joined()
+        func frame(_ change: () -> Void) throws -> (milliseconds: Double, rows: Int) {
+            change()
+            let start = ContinuousClock.now
+            try state.update(from: terminal)
+            let statistics = try renderer.prepare(from: state)
+            state.markClean()
+            renderer.draw(into: target)
+            let time = start.duration(to: .now).components
+            _ = target.pixel(x: 0, y: 0)
+            return (Double(time.attoseconds) / 1e15 + Double(time.seconds) * 1e3, statistics.rowsPrepared)
+        }
+        func median(_ change: @escaping () -> Void) throws -> (milliseconds: Double, rows: Int) {
+            let frames = try (0..<40).map { _ in try frame(change) }
+            return (frames.map(\.milliseconds).sorted()[20], frames.last?.rows ?? 0)
+        }
+        _ = try frame { for _ in 0..<48 { terminal.write(line + "\r\n") } }
+        let full = try median { for _ in 0..<48 { terminal.write(line + "\r\n") } }
+        var column = 0
+        let one = try median { terminal.write("\u{1B}[20;\(column % 150 + 1)HX"); column += 1 }
+        print("FRAME TIMES 160x48 cells, scale 2: full redraw \(full.milliseconds) ms (\(full.rows) rows read), one-row change \(one.milliseconds) ms (\(one.rows) row read)")
+        #expect(full.rows == 48)
+        #expect(one.rows == 1)
     }
 }
