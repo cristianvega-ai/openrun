@@ -21,10 +21,14 @@ final class OverlayScrollBar: NSView {
     let scrollView = PassiveScrollView()
     /// Whether the user can see and use the bar.
     private(set) var isRevealed = false
+    /// Called when the user moves the knob or clicks in the slot of the bar.
+    var onScroll: ((ViewportScroll) -> Void)?
     private let clock: any InputClock
     private var fadeTimer: (any InputTimer)?
     /// What the knob shows now. Each frame calls `update`, and most of the time nothing changes.
     private var last: (scrollbar: Scrollbar, height: CGFloat)?
+    /// A move of the clip view that `update` makes is no move of the user.
+    private var isUpdating = false
 
     var scroller: NSScroller { scrollView.verticalScroller! }
 
@@ -38,6 +42,8 @@ final class OverlayScrollBar: NSView {
         scrollView.drawsBackground = false
         scrollView.documentView = TopDownView()
         addSubview(scrollView)
+        scrollView.contentView.postsBoundsChangedNotifications = true
+        NotificationCenter.default.addObserver(self, selector: #selector(clipMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
     }
 
     /// A bar that is not shown must not take the clicks and the wheel of the grid below it.
@@ -55,8 +61,17 @@ final class OverlayScrollBar: NSView {
         // A visible row has the height of the bar divided by the number of visible rows.
         let rowHeight = bounds.height / CGFloat(scrollbar.visibleRows)
         document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: rowHeight * CGFloat(scrollbar.totalRows))
+        isUpdating = true
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: rowHeight * CGFloat(scrollbar.firstVisibleRow)))
         scrollView.reflectScrolledClipView(scrollView.contentView)
+        isUpdating = false
+    }
+
+    /// The user moved the knob, or clicked above or below it. The row at the top of the clip view is the new first row.
+    @objc private func clipMoved(_ notification: Notification) {
+        guard !isUpdating, let (scrollbar, height) = last else { return }
+        reveal()
+        onScroll?(.toRow(Int((scrollView.contentView.bounds.origin.y / (height / CGFloat(scrollbar.visibleRows))).rounded())))
     }
 
     /// Shows the bar while the user scrolls. AppKit fades the knob, and the bar takes no event after one second.

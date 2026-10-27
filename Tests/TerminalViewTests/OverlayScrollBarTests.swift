@@ -60,4 +60,33 @@ import Testing
         let cgEvent = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
         return try #require(NSEvent(cgEvent: cgEvent))
     }
+
+    /// Moves the clip view of a bar, as the scroll view does when the user drags the knob.
+    private func dragKnob(of bar: OverlayScrollBar, toRow row: Int, of scrollbar: Scrollbar) {
+        let clip = bar.scrollView.contentView
+        clip.scroll(to: NSPoint(x: 0, y: bar.bounds.height / CGFloat(scrollbar.visibleRows) * CGFloat(row)))
+        bar.scrollView.reflectScrolledClipView(clip)
+    }
+
+    @Test func aDragOfTheKnobGivesTheRowToTheOwnerButAnUpdateDoesNot() throws {
+        let bar = OverlayScrollBar(clock: ManualClock())
+        var received: [ViewportScroll] = []
+        bar.onScroll = { received.append($0) }
+        let all = try scrollbar(lines: 80)
+        bar.update(from: all)
+        #expect(received.isEmpty)
+        dragKnob(of: bar, toRow: 40, of: all)
+        #expect(received == [.toRow(40)] && bar.isRevealed)
+    }
+
+    @Test func aDragOfTheKnobScrollsTheViewToARow() throws {
+        let view = try TerminalView(initialGrid: TerminalSize(columns: 20, rows: 10), clock: ManualClock())
+        view.terminal.write(String(repeating: "line\r\n", count: 90))
+        view.updateScrollBar()
+        let all = view.terminal.scrollbar
+        dragKnob(of: view.scrollBar, toRow: 0, of: all)
+        #expect(view.terminal.scrollbar.firstVisibleRow == 0)
+        dragKnob(of: view.scrollBar, toRow: Int(all.totalRows - all.visibleRows), of: all)
+        #expect(view.terminal.isViewportAtBottom)
+    }
 }

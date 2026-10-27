@@ -59,6 +59,10 @@ public final class TerminalView: NSView {
         wantsLayer = true
         // A mouse motion with no button comes only through a tracking area.
         addSubview(scrollBar)
+        scrollBar.onScroll = { [weak self] scroll in
+            self?.terminal.scrollViewport(scroll)
+            self?.requestFrame()
+        }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
