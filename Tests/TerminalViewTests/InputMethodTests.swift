@@ -10,7 +10,7 @@ import Testing
         state.mark("にほん")
         #expect(state.hasMarkedText)
         let waits = state.insert("日本")
-        #expect(waits)
+        #expect(waits == nil)
         state.record(#selector(NSResponder.deleteBackward(_:)))
         #expect(!state.hasMarkedText)
         let key = state.endKey()
@@ -21,10 +21,21 @@ import Testing
     @Test func textBetweenKeysIsNotKept() {
         var state = TextInputState()
         state.mark("zhong")
-        let waits = state.insert("中")
-        #expect(!waits)
+        let text = state.insert("中")
+        #expect(text == "中")
         state.record(#selector(NSResponder.insertNewline(_:)))
         #expect(!state.hasMarkedText && state.endKey().texts.isEmpty)
+    }
+
+    @Test func aBareControlCharacterIsDroppedOnlyWhileTheTextIsMarked() {
+        var state = TextInputState()
+        state.beginKey()
+        let kept = state.insert("\u{03}")
+        state.mark("にほん")
+        let dropped = state.insert("\u{03}\r")
+        let text = state.insert("日\r")
+        #expect(kept == nil && dropped == nil && text == nil)
+        #expect(state.endKey().texts == ["\u{03}", "日\r"])
     }
 
     @Test func unmarkEndsTheMarkedTextWithoutAText() {
@@ -79,6 +90,21 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         let content = window.contentRect(forFrameRect: window.frame), cell = view.cellSize
         // The cursor is in column 2 of row 1. The bottom of the row is 2 rows under the padding.
         #expect(rect == NSRect(x: content.minX + view.gridPadding + 2 * cell.width, y: content.maxY - view.gridPadding - 2 * cell.height, width: cell.width, height: cell.height))
+    }
+}
+
+@MainActor @Suite(.enabled(if: usLayoutIsCurrent)) struct ComposingKeyTests {
+    @Test func aControlCharacterAndAModifierKeySendNothingWhileTheTextIsMarked() throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.terminal.write("\u{1B}[>11u")
+        view.flagsChanged(with: keyEvent(kVK_Shift, .shift, deviceBits: ModifierReader.DeviceBit.leftShift, type: .flagsChanged))
+        #expect(delegate.takeSent() == "\u{1B}[57441;2u")
+        view.setMarkedText("ㅎ", selectedRange: nowhere, replacementRange: nowhere)
+        view.flagsChanged(with: keyEvent(kVK_Shift, type: .flagsChanged))
+        view.sendTyped(view.keyboard.bytes(forKeyDown: keyEvent(kVK_ANSI_C, .control)) { _ in view.insertText("\u{03}", replacementRange: nowhere) })
+        #expect(delegate.takeSent() == "" && view.renderer.markedText == "ㅎ")
     }
 }
 

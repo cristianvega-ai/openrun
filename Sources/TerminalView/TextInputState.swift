@@ -28,13 +28,16 @@ struct TextInputState {
 
     /// Commits text, which ends the marked text.
     ///
-    /// - Returns: `true` when the text waits for the end of the key. It is
-    ///   `false` between keys, and then the caller must use the text at once.
-    mutating func insert(_ text: String) -> Bool {
+    /// - Returns: The text that the caller must use at once, because no key waits for it.
+    ///   It is `nil` when the text waits for the end of the key, or when the state drops it.
+    mutating func insert(_ text: String) -> String? {
+        // A control key such as Control-c can give its control character as text
+        // while an input method holds marked text. The program must not read it.
+        if hasMarkedText, !text.isEmpty, text.unicodeScalars.allSatisfy({ $0.value < 0x20 }) { return nil }
         markedText = ""
-        guard committedTexts != nil else { return false }
+        guard committedTexts != nil else { return text }
         committedTexts?.append(text)
-        return true
+        return nil
     }
 
     /// Notes a command of the text input system. The view does not run it,

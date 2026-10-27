@@ -61,7 +61,7 @@ final class KeyboardInput {
     /// The bytes for a text that the text input system commits. There are none
     /// while a key waits for its end, because the key sends the text then.
     func bytes(forInsertedText text: String) -> [UInt8] {
-        textInput.insert(text) ? [] : Array(text.utf8)
+        Array((textInput.insert(text) ?? "").utf8)
     }
 
     /// The bytes for a key that went up. Only a program that asked for key events reads them.
@@ -72,7 +72,8 @@ final class KeyboardInput {
     /// The bytes for a modifier key that went down or up. Only a program that
     /// asked for all keys as escape codes reads them.
     func bytes(forFlagsChanged event: NSEvent) -> [UInt8] {
-        guard let isDown = ModifierReader.isKeyDown(keyCode: event.keyCode, flags: event.modifierFlags) else { return [] }
+        // A modifier key does not end the marked text of an input method.
+        guard !textInput.hasMarkedText, let isDown = ModifierReader.isKeyDown(keyCode: event.keyCode, flags: event.modifierFlags) else { return [] }
         return encode(event, action: isDown ? .press : .release, text: nil)
     }
 
