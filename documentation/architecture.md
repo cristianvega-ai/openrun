@@ -89,6 +89,15 @@ The cap for an unfinished sequence is 32 MiB. A snapshot travels in one frame of
 
 The reply handler is described in "Query replies".
 
+The rest of `TerminalEmulation` gives a view what it needs to draw the screen and to send input. Every type has a full-word name, and no other module imports libghostty-vt.
+
+- `RenderState` keeps a picture of the visible screen. `update(from:)` reads a `Terminal`. `beginUpdate(from:)` and `endUpdate()` split the update in two, and only the first one reads the terminal. `dirtiness` is a `RenderDirtiness`: `nothing`, `someRows` or `everything`. `markClean()` resets it after a frame. Output that scrolls the screen marks `everything`, although the rows keep their identifiers.
+- `RenderState.forEachRow(onlyChanged:)` gives each `RenderRow` from the top. A row is valid only inside the call. It has a `RowIdentifier` that stays with the row when it moves, `viewportRow`, `isDirty` and `selectedColumns`. `forEachCell(palette:)` gives each `RenderCell`: the text (`base` and `extraScalars`), the `CellWidth`, the `CellStyle` with its `UnderlineStyle`, the resolved colors (`nil` is the default color) and `hasHyperlink`. `colors` is a `RenderColors` and `cursor` is a `RenderCursor` with a `CursorStyle`.
+- `TerminalMode` names the modes that a view reads. `Terminal.isModeEnabled` and `setMode` use them. Swift cannot import the mode macros of libghostty-vt, so each mode number comes from `ghostty_mode_new`. `Terminal` also gives `title`, `pointerShape` (a `PointerShape`), `isMouseTrackingActive` and `kittyKeyboardFlags`.
+- `TerminalEventHandler` holds the closures for the bell, a new title and a render hold (mode 2026). `Terminal.setEventHandler` installs it. It shares the user data pointer with the reply handler (see "Query replies").
+- `KeyEncoder` turns a `KeyEvent` (a `PhysicalKey`, `KeyModifiers`, text) into bytes. Call `update(from:optionAsAlternate:)` before each key. It sets the Option choice again after libghostty-vt reads the terminal, because that read removes it. `leftOnly` makes the left Option key send Alt. `MouseEncoder` does the same for a `MouseEvent`. Call its `update` only when the modes or the cell size change, because it forgets the last cell. `FocusReport` makes the bytes of mode 1004, and `PasteText` the bytes of a paste. `PasteText` does not use `ghostty_terminal_paste`, because that function needs the write callback.
+- `Terminal.scrollViewport(_:)` takes a `ViewportScroll`. `scrollbar` and `isViewportAtBottom` tell where the viewport is. `selectWord(at:)`, `selectLine(at:)`, `clearSelection()`, `selectedText()` and `hyperlink(at:)` take a `ViewportCell`. `SelectionGesture` turns presses, drags and releases of the pointer into a selection.
+
 ### PseudoTerminal
 
 `PseudoTerminal(launching:)` starts a program as a session leader with the pseudo terminal as its controlling terminal.
@@ -438,7 +447,9 @@ libghostty-vt answers through callbacks. `Terminal.setReplyHandler` installs fou
 
 The default colors are a setting of the terminal, not output. The snapshot carries them, but the picture of `openrun attach` (the visible screen as sequences from a restored snapshot) and the text of `openrun read` do not change. `TerminalReplyTests.theQueriesChangeNoPictureOrText` compares plain text, sequences and hypertext markup, with and without the colors, for eleven kinds of output, also after the restore and more output.
 
-The handler's box is stored in `Terminal.replyBox` before libghostty-vt gets a pointer to it, and the old box lives until the new pointer is in place. If the installation fails half way, the terminal takes the callbacks back, or keeps the box alive when it cannot.
+libghostty-vt has one user data pointer for all callbacks. `Terminal` sets it once, when the terminal starts, to a `TerminalCallbackBox`. The box lives as long as the terminal. It holds the reply handler (`Terminal.replyBox`) and the event handler. The handler's box is stored before the callbacks are set, and the old box lives until the new callbacks are in place. If the installation fails half way, the terminal takes the callbacks back, or keeps the box alive when it cannot.
+
+A client terminal never installs the write callback. It would answer each query a second time, against the rule below. The view encodes pastes with `PasteText` for this reason.
 
 The session process installs a handler on the session's `Terminal` before it starts the program. The handler writes the bytes to the pseudo terminal with `PseudoTerminal.write`, which never waits, unless a real terminal answers instead. An answer goes in behind typed input that waits for room, as a real terminal would send them.
 
