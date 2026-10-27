@@ -11,7 +11,7 @@ public enum PhysicalKey: Sendable, CaseIterable {
     case backquote, backslash, bracketLeft, bracketRight, comma, equal
     case minus, period, quote, semicolon, slash, internationalBackslash
     case internationalRo, internationalYen
-    case space, tab, enter, escape, backspace, delete, help, home, end
+    case space, tab, enter, escape, backspace, delete, help, insert, home, end
     case pageUp, pageDown, arrowUp, arrowDown, arrowLeft, arrowRight
     case shiftLeft, shiftRight, controlLeft, controlRight, altLeft
     case altRight, metaLeft, metaRight, capsLock, contextMenu
@@ -83,6 +83,7 @@ public enum PhysicalKey: Sendable, CaseIterable {
         case .backspace: GHOSTTY_KEY_BACKSPACE
         case .delete: GHOSTTY_KEY_DELETE
         case .help: GHOSTTY_KEY_HELP
+        case .insert: GHOSTTY_KEY_INSERT
         case .home: GHOSTTY_KEY_HOME
         case .end: GHOSTTY_KEY_END
         case .pageUp: GHOSTTY_KEY_PAGE_UP

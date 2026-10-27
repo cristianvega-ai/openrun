@@ -41,6 +41,11 @@ import Testing
         #expect(try bytes(KeyEvent(action: .press, key: .arrowUp), after: "\u{1B}[?1h") == "\u{1B}OA")
     }
 
+    @Test func theInsertAndForwardDeleteKeysHaveTheirOwnSequences() throws {
+        #expect(try bytes(KeyEvent(action: .press, key: .insert)) == "\u{1B}[2~")
+        #expect(try bytes(KeyEvent(action: .press, key: .delete)) == "\u{1B}[3~")
+    }
+
     @Test func onlyTheLeftOptionKeyActsAsAlt() throws {
         let left = KeyEvent(action: .press, key: .b, modifiers: .alternate, text: "b", unshiftedScalar: "b")
         let right = KeyEvent(
