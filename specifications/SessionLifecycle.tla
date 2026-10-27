@@ -14,9 +14,18 @@
 \*   FALSE  A control that removes the protection.  A session can start after
 \*          shutdown began, and terminateAll does not end it.  TLC must find
 \*          that NoSessionStartsDuringShutdown is false.
+\*
+\* LaunchAgent is TRUE for a process that launchd started, which has the idle
+\* exit.  IdleCheckExists switches one protection of it.
+\*   TRUE   The code.  After the registry answered, closeWhenIdle checks
+\*          again that no client is there and that none left.
+\*   FALSE  A control.  A client that connects during the check can start a
+\*          session, and the idle exit ends it.  TLC must find that
+\*          IdleExitEndsNoSession is false.
 EXTENDS Naturals, FiniteSets
 
-CONSTANTS SessionCount, ClientCount, StoppingStateExists
+CONSTANTS SessionCount, ClientCount, StoppingStateExists, LaunchAgent,
+          IdleCheckExists
 
 Sessions  == 1..SessionCount
 Clients   == 1..ClientCount
@@ -40,13 +49,21 @@ AllProcesses == InSession \cup Daemons
 \*               of its program
 \* killAnswers   the pairs <<client, session>> that got the answer to a kill
 \* exitAnswers   the pairs <<client, session>> that got the exit status
+\* connected     clients that the server greeted
+\* idleCheck     the step of closeWhenIdle: "none", "clients" (no client; the
+\*               registry did not answer yet) or "sessions" (no session)
+\* leftDuringCheck a client left during the check (finish sets lastBusy)
+\* idleExitTargets the sessions that were alive when the idle exit began
 VARIABLES liveSessions, aliveProcesses, used, stopping, shutdownBegan,
           shutdownTargets, killing, startedDuringShutdown,
-          killWaiters, exitWaiters, killAnswers, exitAnswers
+          killWaiters, exitWaiters, killAnswers, exitAnswers,
+          connected, idleCheck, leftDuringCheck, idleExitTargets
 
-variables == <<liveSessions, aliveProcesses, used, stopping, shutdownBegan,
-          shutdownTargets, killing, startedDuringShutdown, killWaiters,
-          exitWaiters, killAnswers, exitAnswers>>
+lifecycleVariables == <<liveSessions, aliveProcesses, used, stopping,
+          shutdownBegan, shutdownTargets, killing, startedDuringShutdown,
+          killWaiters, exitWaiters, killAnswers, exitAnswers>>
+clientVariables == <<connected, idleCheck, leftDuringCheck, idleExitTargets>>
+variables == <<lifecycleVariables, clientVariables>>
 
 ProgramEnded(session) == <<session, 1>> \notin aliveProcesses
 InSessionProcesses(session) == {<<session, index>> : index \in 1..2}
@@ -64,11 +81,15 @@ InitialState ==
   /\ exitWaiters = [session \in Sessions |-> {}]
   /\ killAnswers = {}
   /\ exitAnswers = {}
+  \* Without the idle exit, clients that come and go change nothing.
+  /\ connected = IF LaunchAgent THEN {} ELSE Clients
+  /\ idleCheck = "none" /\ leftDuringCheck = FALSE /\ idleExitTargets = {}
 
 \* SessionServer.create and SessionRegistry.create.  The registry refuses
 \* from the moment `isStopping` is set.  Before that, and without the
 \* stopping state, a new program starts.  The program starts in Session.init.
 Create(client, session) ==
+  /\ client \in connected
   /\ session \notin used
   /\ (StoppingStateExists => ~stopping)
   /\ used' = used \cup {session}
@@ -128,6 +149,7 @@ KillRemainingProcesses(session) ==
   /\ UNCHANGED <<used, stopping, shutdownBegan, shutdownTargets, killing,
        startedDuringShutdown, killWaiters, exitWaiters, killAnswers,
        exitAnswers>>
+  /\ UNCHANGED clientVariables
 
 \* TerminalSessionProcesses: a process that calls setsid leaves the program's
 \* session.  `openrun kill` and shutdown do not reach it.
@@ -166,6 +188,7 @@ AnswerKill(client, session) ==
   /\ UNCHANGED <<liveSessions, aliveProcesses, used, stopping, shutdownBegan,
        shutdownTargets, killing, startedDuringShutdown, killWaiters,
        exitWaiters, exitAnswers>>
+  /\ UNCHANGED clientVariables
 
 AnswerExit(client, session) ==
   /\ client \in exitWaiters[session]
@@ -175,8 +198,45 @@ AnswerExit(client, session) ==
   /\ UNCHANGED <<liveSessions, aliveProcesses, used, stopping, shutdownBegan,
        shutdownTargets, killing, startedDuringShutdown, killWaiters,
        exitWaiters, killAnswers>>
+  /\ UNCHANGED clientVariables
 
-Next ==
+\* SessionServer.accept greets a client while the socket is open.  After the
+\* close, a connection closes before hello, and its client wakes the next
+\* process.
+Connect(client) ==
+  /\ LaunchAgent /\ ~shutdownBegan /\ client \notin connected
+  /\ connected' = connected \cup {client}
+  /\ UNCHANGED <<lifecycleVariables, idleCheck, leftDuringCheck,
+       idleExitTargets>>
+
+Leave(client) ==
+  /\ LaunchAgent /\ client \in connected
+  /\ connected' = connected \ {client} /\ leftDuringCheck' = TRUE
+  /\ UNCHANGED <<lifecycleVariables, idleCheck, idleExitTargets>>
+
+\* SessionServer.closeWhenIdle up to its wait for SessionRegistry.isEmpty.
+CheckClients ==
+  /\ LaunchAgent /\ ~shutdownBegan /\ idleCheck = "none" /\ connected = {}
+  /\ idleCheck' = "clients" /\ leftDuringCheck' = FALSE
+  /\ UNCHANGED <<lifecycleVariables, connected, idleExitTargets>>
+
+CheckSessions ==
+  /\ idleCheck = "clients"
+  /\ idleCheck' = IF liveSessions = {} THEN "sessions" ELSE "none"
+  /\ UNCHANGED <<lifecycleVariables, connected, leftDuringCheck,
+       idleExitTargets>>
+
+\* The socket closes and the shutdown begins in one step, unless the
+\* protection finds a client that is there or that left.
+CloseWhenIdle ==
+  /\ idleCheck = "sessions" /\ idleCheck' = "none"
+  /\ IF IdleCheckExists /\ (connected # {} \/ leftDuringCheck)
+     THEN UNCHANGED <<lifecycleVariables, connected, leftDuringCheck,
+            idleExitTargets>>
+     ELSE /\ BeginShutdown /\ idleExitTargets' = liveSessions
+          /\ UNCHANGED <<connected, leftDuringCheck>>
+
+LifecycleNext ==
   \/ (\E client \in Clients, session \in Sessions : Create(client, session))
   \/ BeginShutdown
   \/ (\E session \in Sessions : RequestKill(session))
@@ -187,6 +247,11 @@ Next ==
         WaitForKill(client, session) \/ WaitForExit(client, session))
   \/ (\E client \in Clients, session \in Sessions :
         AnswerKill(client, session) \/ AnswerExit(client, session))
+
+Next ==
+  \/ (LifecycleNext /\ UNCHANGED clientVariables)
+  \/ (\E client \in Clients : Connect(client) \/ Leave(client))
+  \/ CheckClients \/ CheckSessions \/ CloseWhenIdle
 
 Specification == InitialState /\ [][Next]_variables
 
@@ -208,6 +273,9 @@ StatusAnsweredAtMostOnce ==
 LiveSessionsHavePrograms ==
   \A session \in liveSessions : <<session, 1>> \in aliveProcesses
 
+\* The idle exit ends no session.  The control makes this false.
+IdleExitEndsNoSession == idleExitTargets = {}
+
 \* ---------------------------------------------------------------------------
 \* Liveness under weak fairness.
 \* ---------------------------------------------------------------------------
@@ -217,6 +285,8 @@ Fairness ==
   /\ (\A client \in Clients, session \in Sessions :
         WF_variables(AnswerKill(client, session))
         /\ WF_variables(AnswerExit(client, session)))
+  /\ WF_variables(CheckClients) /\ WF_variables(CheckSessions)
+  /\ WF_variables(CloseWhenIdle)
 
 LiveSpecification == Specification /\ Fairness
 
@@ -238,5 +308,10 @@ EveryWaiterAnswered ==
     /\ (((client \in exitWaiters[session])
          /\ ProgramEnded(session)) ~>
         (<<client, session>> \in exitAnswers))
+
+\* a launch agent with no client and no session closes, unless one comes.
+IdleAgentCloses ==
+  (LaunchAgent /\ connected = {} /\ liveSessions = {})
+    ~> (shutdownBegan \/ connected # {} \/ liveSessions # {})
 
 =============================================================================
