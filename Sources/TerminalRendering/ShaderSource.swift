@@ -7,7 +7,7 @@ enum ShaderSource {
     #include <metal_stdlib>
     using namespace metal;
 
-    struct Quad { float2 origin; float2 size; float2 atlasOrigin; uint isColor; uint unused; float4 color; };
+    struct Quad { float2 origin; float2 size; float2 atlasOrigin; uint isColor; uint column; float4 color; };
     struct Corner { float4 position [[position]]; float2 atlas; float4 color; uint isColor [[flat]]; };
 
     constant float2 corners[4] = { float2(0, 0), float2(1, 0), float2(0, 1), float2(1, 1) };

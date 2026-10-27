@@ -12,6 +12,13 @@ import TerminalEmulation
         #expect(rows[1].glyphs.isEmpty)
     }
 
+    @Test func glyphQuadsKnowTheirColumnsAndWideCharactersAreListed() throws {
+        let screen = try makeScreen("a日 b", columns: 8)
+        let row = try quads(of: screen.state, atlas: makeAtlas())[0]
+        #expect(row.glyphs.map(\.column) == [0, 1, 4])
+        #expect(row.wideColumns == [1])
+    }
+
     @Test func aBackgroundThatDiffersFromTheDefaultMakesARectangleForEachCell() throws {
         let screen = try makeScreen("\u{1B}[44m  ")
         let row = try quads(of: screen.state, atlas: makeAtlas())[0]
