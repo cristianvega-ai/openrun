@@ -39,6 +39,7 @@ public final class TerminalView: NSView {
     private var autoscrollTimer: SelectionAutoscrollTimer?
     private var blink: CursorBlink?
     private var hold: SynchronizedOutputHold?
+    private var bellFlash: BellFlash?
     private let parser = OutputParser()
     private var isParseScheduled = false
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
@@ -81,8 +82,13 @@ public final class TerminalView: NSView {
             try? self?.terminal.setMode(.synchronizedOutput, enabled: false)
             self?.requestFrame()
         }
+        bellFlash = BellFlash(clock: clock) { [weak self] isFlashing in
+            self?.renderer.isFlashing = isFlashing
+            self?.requestFrame()
+        }
         try terminal.setEventHandler(TerminalEventHandler(
-            bell: {}, titleChanged: {}, renderHold: { [weak self] isHeld in MainActor.assumeIsolated { self?.renderHold(isHeld) } }))
+            bell: { [weak self] in MainActor.assumeIsolated { self?.bellFlash?.ring() } }, titleChanged: {},
+            renderHold: { [weak self] isHeld in MainActor.assumeIsolated { self?.renderHold(isHeld) } }))
         autoscrollTimer = SelectionAutoscrollTimer(clock: clock) { [weak self] in self?.autoscrollSelection() }
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
@@ -427,7 +433,7 @@ public final class TerminalView: NSView {
         do {
             let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
-            (new.isFocused, new.markedText, new.isCursorShown) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown)
+            (new.isFocused, new.markedText, new.isCursorShown, new.isFlashing) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown, renderer.isFlashing)
             renderer = new
         } catch {
             logger.error("The renderer failed: \(String(describing: error), privacy: .private)")
