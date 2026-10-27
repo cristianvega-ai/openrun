@@ -38,6 +38,9 @@ A module uses another module only through its public types.
 | Module | What it does | Public types |
 |---|---|---|
 | `TerminalEmulation` | Wraps libghostty-vt: the screen, the scrollback, snapshots, replies to the queries that programs send, and the default colors that a client sets | `Terminal`, `TerminalSnapshot`, `UnfinishedSequence`, `TerminalSize`, `TerminalCursorPosition`, `ScreenFormat`, `ScreenExtent`, `TerminalReplyHandler`, `TerminalColorScheme`, `TerminalColor`, `TerminalEmulationError`, `PrintableText` |
+| `TerminalTheme` | The Graphite colors for the light and the dark appearance, and the call that gives them to a terminal | `TerminalTheme` |
+| `TerminalRendering` | Draws a terminal with Metal and CoreText: fonts, glyph textures, shaders, rows, cursor, selection and marked text | `TerminalRenderer`, `FontSet`, `FrameStatistics`, `RenderTarget`, `OffscreenTarget`, `DrawableTarget`, `RenderingError` |
+| `TerminalView` | The AppKit view that shows one terminal: output, grid size, appearance and font size | `TerminalView`, `TerminalViewDelegate` |
 | `PseudoTerminal` | Runs one program on a new pseudo terminal | `PseudoTerminal`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
 | `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown | `SessionProcess`, `SessionProcessError` |
@@ -55,7 +58,11 @@ openrun           -> CommandLineTool -> SessionProtocol
 openrun-session   -> SessionProcess  -> SessionProtocol
                                      -> PseudoTerminal
                                      -> TerminalEmulation -> libghostty-vt
+TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
+                  -> TerminalTheme     -> TerminalEmulation
 ```
+
+No program uses `TerminalView` yet. The app of milestone 2 will. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
 `PseudoTerminal` and `SessionProtocol` depend on no other OpenRun module.
@@ -97,6 +104,13 @@ The rest of `TerminalEmulation` gives a view what it needs to draw the screen an
 - `TerminalEventHandler` holds the closures for the bell, a new title and a render hold (mode 2026). `Terminal.setEventHandler` installs it. It shares the user data pointer with the reply handler (see "Query replies").
 - `KeyEncoder` turns a `KeyEvent` (a `PhysicalKey`, `KeyModifiers`, text) into bytes. Call `update(from:optionAsAlternate:)` before each key. It sets the Option choice again after libghostty-vt reads the terminal, because that read removes it. `leftOnly` makes the left Option key send Alt. `MouseEncoder` does the same for a `MouseEvent`. Call its `update` only when the modes or the cell size change, because it forgets the last cell. `FocusReport` makes the bytes of mode 1004, and `PasteText` the bytes of a paste. `PasteText` does not use `ghostty_terminal_paste`, because that function needs the write callback.
 - `Terminal.scrollViewport(_:)` takes a `ViewportScroll`. `scrollbar` and `isViewportAtBottom` tell where the viewport is. `selectWord(at:)`, `selectLine(at:)`, `clearSelection()`, `selectedText()` and `hyperlink(at:)` take a `ViewportCell`. `SelectionGesture` turns presses, drags and releases of the pointer into a selection.
+
+### TerminalTheme
+
+`TerminalTheme` holds the colors of the Graphite theme (decision of 2026-10-26): the background, the text, the cursor, the selection and the first 16 colors of the palette. The table "Graphite theme" in `documentation/product.md` lists the values.
+`TerminalTheme.graphite(for:)` gives the light or the dark version for a `TerminalColorScheme`. `apply(to:)` sets the default colors of a `Terminal`.
+A program can still set its own colors with `OSC 4`, `OSC 10`, `OSC 11` and `OSC 12`. They stay when the theme changes.
+The module has no AppKit code, so the session process can use it later to answer color queries.
 
 ### PseudoTerminal
 
