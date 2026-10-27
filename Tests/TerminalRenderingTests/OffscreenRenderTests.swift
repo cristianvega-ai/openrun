@@ -28,4 +28,26 @@ import TerminalTheme
         #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.firstSixteenColors[1])
         #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
     }
+
+    @Test(arguments: [TerminalColorScheme.dark, .light])
+    func aFullBlockHasTheGraphiteTextColor(scheme: TerminalColorScheme) throws {
+        let screen = try renderScreen("█", scheme: scheme)
+        #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.foreground)
+    }
+
+    @Test func aWideCharacterCoversItsTwoCellsAndNoMore() throws {
+        let screen = try renderScreen("\u{1B}[?25l日", columns: 6)
+        #expect(inkCount(of: screen, columns: 0..<2, rows: 0..<1) > 100)
+        #expect(inkCount(of: screen, columns: 2..<6, rows: 0..<3) == 0)
+    }
+
+    @Test func anEmojiHasItsOwnColorsAndStaysInsideItsTwoCells() throws {
+        let screen = try renderScreen("\u{1B}[?25l🙂", columns: 6)
+        let yellow = (0..<2 * testFonts.cellWidth).flatMap { x in (0..<testFonts.cellHeight).map { (x, $0) } }
+            .map { screen.target.pixel(x: testPadding + $0, y: testPadding + $1) }.filter { Int($0.red) > Int($0.blue) + 80 }
+        #expect(yellow.count > 50)
+        #expect(inkCount(of: screen, columns: 0..<2, rows: 0..<1) > 100)
+        #expect(inkCount(of: screen, columns: 2..<6, rows: 0..<3) == 0)
+        #expect(inkCount(of: screen, columns: 0..<2, rows: 1..<3) == 0)
+    }
 }

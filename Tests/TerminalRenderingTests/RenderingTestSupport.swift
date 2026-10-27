@@ -6,6 +6,8 @@ import TerminalTheme
 
 /// SF Mono at 13 points on a Retina screen, as the app draws it.
 var testFonts: FontSet { FontSet(pointSize: 13, scale: 2) }
+/// The space around the grid: 8 points.
+var testPadding: Int { Int((8 * testFonts.scale).rounded()) }
 
 /// A terminal that already ran `output`, with a render state that read it.
 func makeScreen(_ output: String, columns: UInt16 = 20, rows: UInt16 = 3) throws -> (terminal: Terminal, state: RenderState) {
@@ -57,8 +59,14 @@ func renderScreen(
 
 /// The color of the pixel in the middle of a cell.
 func middle(of target: OffscreenTarget, column: Int, row: Int) -> TerminalColor {
-    let padding = Int((8 * testFonts.scale).rounded())
     return target.pixel(
-        x: padding + column * testFonts.cellWidth + testFonts.cellWidth / 2,
-        y: padding + row * testFonts.cellHeight + testFonts.cellHeight / 2)
+        x: testPadding + column * testFonts.cellWidth + testFonts.cellWidth / 2,
+        y: testPadding + row * testFonts.cellHeight + testFonts.cellHeight / 2)
+}
+
+/// How many pixels of a block of cells have another color than the background.
+func inkCount(of screen: (target: OffscreenTarget, theme: TerminalTheme), columns: Range<Int>, rows: Range<Int>) -> Int {
+    let xs = testPadding + columns.lowerBound * testFonts.cellWidth..<testPadding + columns.upperBound * testFonts.cellWidth
+    let ys = testPadding + rows.lowerBound * testFonts.cellHeight..<testPadding + rows.upperBound * testFonts.cellHeight
+    return ys.flatMap { y in xs.map { screen.target.pixel(x: $0, y: y) } }.filter { $0 != screen.theme.background }.count
 }
