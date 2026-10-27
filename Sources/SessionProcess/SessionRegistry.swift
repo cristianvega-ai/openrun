@@ -6,13 +6,15 @@ import SessionProtocol
 actor SessionRegistry {
     private var sessions: [UUID: Session] = [:]
     private let socketPath: String
+    private let helperSearchPath: HelperSearchPath
     /// Set before `terminateAll` first suspends. A client that is already
     /// connected can still send `createSession` while the programs end, and
     /// that program would outlive the session process.
     private var isStopping = false
 
-    init(socketPath: String) {
+    init(socketPath: String, helperSearchPath: HelperSearchPath) {
         self.socketPath = socketPath
+        self.helperSearchPath = helperSearchPath
     }
 
     /// Starts a session and adds it to the list.
@@ -22,7 +24,7 @@ actor SessionRegistry {
         // already fixed by then.
         guard !isStopping else { throw SessionProcessError.stopping }
         let identifier = UUID()
-        var programEnvironment = environment
+        var programEnvironment = helperSearchPath.adding(to: environment)
         programEnvironment.merge(
             SessionEnvironment.variables(sessionIdentifier: identifier, socketPath: socketPath),
             uniquingKeysWith: { _, ours in ours }

@@ -16,7 +16,9 @@ actor SessionServer {
     /// Starts listening. Throws when another session process already does.
     init(location: SocketLocation) throws {
         listener = try SocketListener(location: location)
-        registry = SessionRegistry(socketPath: location.path)
+        // The path of the program is read at the start, because a new build
+        // can replace the bundle while the process runs.
+        registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess())
     }
 
     func start() {
