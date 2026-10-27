@@ -35,6 +35,7 @@ public final class TerminalView: NSView {
     private let host: MetalLayerHost
     private var fontSize = FontSizeControl()
     private var schedule: DisplaySchedule?
+    private var autoscrollTimer: SelectionAutoscrollTimer?
     private let parser = OutputParser()
     private var isParseScheduled = false
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
@@ -46,7 +47,7 @@ public final class TerminalView: NSView {
         try self.init(initialGrid: initialGrid, clock: SystemInputClock())
     }
 
-    init(initialGrid: TerminalSize, clock: any InputClock) throws {
+    init(initialGrid: TerminalSize = TerminalSize(columns: 80, rows: 24), clock: any InputClock) throws {
         guard let device = MTLCreateSystemDefaultDevice() else { throw RenderingError.deviceUnavailable }
         terminal = try Terminal(size: initialGrid, scrollbackLimit: 10_000)
         state = try RenderState()
@@ -68,6 +69,7 @@ public final class TerminalView: NSView {
             self?.requestFrame()
         }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
+        autoscrollTimer = SelectionAutoscrollTimer(clock: clock) { [weak self] in self?.autoscrollSelection() }
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
         appearanceObserver = observer
@@ -166,11 +168,20 @@ public final class TerminalView: NSView {
     public override func mouseUp(with event: NSEvent) {
         guard !report(.release, .left, event) else { return }
         selection.release(at: point(of: event), in: pointerLocation)
+        autoscrollTimer?.update(for: .none)
     }
 
     public override func mouseDragged(with event: NSEvent) {
         guard !report(.motion, .left, event) else { return }
         selection.drag(to: point(of: event), in: pointerLocation)
+        autoscrollTimer?.update(for: selection.autoscroll)
+        requestFrame()
+    }
+
+    private func autoscrollSelection() {
+        selection.autoscrollTick()
+        autoscrollTimer?.update(for: selection.autoscroll)
+        scrollBar.reveal()
         requestFrame()
     }
 
