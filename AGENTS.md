@@ -41,6 +41,7 @@ The owner makes each decision. Record a new decision in its decision log.
 - `scripts/build-ghostty-library.sh` builds libghostty-vt from the Ghostty commit pinned in the script. Run it once before you build.
 - `swift build` builds every module. `swift test` runs every test.
 - `scripts/build-application.sh FOLDER` builds OpenRun.app in FOLDER and signs it. It needs one Apple Development identity, or `OPENRUN_SIGNING_IDENTITY=-` for an ad hoc test build. Build test bundles only in a scratch folder.
+- `scripts/check-launch-agent.sh` is the manual check of the launch agent before a milestone review. Only the owner runs it, because it registers a trial launch agent.
 - `scripts/check-specifications.sh` runs the TLA+ models. It runs the quick set by default and every configuration with `--all`, the long run before a milestone review. It needs Java.
 
 ## Comments and documents
