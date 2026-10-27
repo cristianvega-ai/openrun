@@ -18,8 +18,9 @@ public final class TerminalView: NSView {
     let terminal: Terminal
     let state: RenderState
     private(set) var renderer: TerminalRenderer
-    /// The colors of the screen. The light version stays until the view follows the appearance.
+    /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
+    private var appearanceObserver: AppearanceObserver?
     public weak var delegate: TerminalViewDelegate?
     /// How many frames reached the graphics processor.
     private(set) var framesDrawn = 0
@@ -42,7 +43,9 @@ public final class TerminalView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
-        try theme.apply(to: terminal)
+        let observer = AppearanceObserver(appearance: effectiveAppearance)
+        appearanceObserver = observer
+        try applyTheme(for: observer.scheme)
     }
 
     public required init?(coder: NSCoder) {
@@ -82,6 +85,16 @@ public final class TerminalView: NSView {
     public var gridSize: TerminalSize { terminal.size }
 
     public override var isOpaque: Bool { true }
+
+    public override func viewDidChangeEffectiveAppearance() {
+        super.viewDidChangeEffectiveAppearance()
+        guard appearanceObserver?.observe(effectiveAppearance) == true, let scheme = appearanceObserver?.scheme else { return }
+        do {
+            try applyTheme(for: scheme)
+        } catch {
+            logger.error("The theme failed: \(String(describing: error), privacy: .private)")
+        }
+    }
 
     public override func makeBackingLayer() -> CALayer { host.layer }
 
@@ -124,6 +137,14 @@ public final class TerminalView: NSView {
         state.markClean()
         framesDrawn += 1
         return true
+    }
+
+    /// A program can still set its own colors, and they stay when the theme changes.
+    private func applyTheme(for scheme: TerminalColorScheme) throws {
+        theme = .graphite(for: scheme)
+        try theme.apply(to: terminal)
+        renderer.selectionColor = theme.selection
+        schedule?.requestFrame()
     }
 
     private func drawNextFrame() {
