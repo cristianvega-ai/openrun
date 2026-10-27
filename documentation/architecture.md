@@ -112,6 +112,17 @@ The rest of `TerminalEmulation` gives a view what it needs to draw the screen an
 A program can still set its own colors with `OSC 4`, `OSC 10`, `OSC 11` and `OSC 12`. They stay when the theme changes.
 The module has no AppKit code, so the session process can use it later to answer color queries.
 
+### TerminalRendering
+
+`TerminalRenderer` draws a `RenderState` with Metal. A caller calls `prepare(from:)` after each `RenderState.update`, then `draw(into:)` with a `RenderTarget`, then `markClean()` on the state. `OffscreenTarget` is a texture in memory that tests read and save as PNG files. `DrawableTarget` holds the drawable of a `CAMetalLayer`.
+`FontSet` holds SF Mono (regular, bold, italic and bold italic) for one point size and one backing scale. `CellMetrics` gives the cell, the baseline and the lines in whole pixels. At 13 points and scale 2, a cell is 16 by 31 pixels. The space around the grid is 8 points.
+`GlyphAtlas` keeps glyphs in two textures. `GlyphRasterizer` draws each cluster once with CoreText, which also picks a fallback font for the characters that SF Mono does not have. Text goes into a texture of coverage, and the shader gives it the color of the cell. An emoji goes into a texture of colors and keeps the colors of its font. An emoji gets smaller to fit inside its cells and never gets larger (decision of 2026-10-27). Box drawing and Powerline come from the font in milestone 2. When a texture is full, the atlas starts again and `generation` changes.
+The shaders are Swift text (`ShaderSource`). `ShaderLibrary` compiles them when the renderer starts, because `swift build` does not compile `.metal` files. The first compile on a Mac takes about 66 ms.
+`RowQuads` turns the cells of one row into quads (`CellQuad`), and `RowCache` keeps them by `RowIdentifier`. `prepare(from:)` makes new quads only for rows that are dirty or new. It makes all rows again when libghostty-vt marks all of the screen dirty (scrolling output, a new selection and new colors do this), when the grid changes, when the colors change, and when the atlas starts again.
+`FrameBuilder` moves the quads of each row to its place and adds the cursor and the text of an input method. `draw(into:)` writes all quads into one of 3 buffers and draws them in 3 groups: the backgrounds, the glyphs, and the lines with the cursor shapes. It draws every quad in each frame, because the work of the graphics processor is small. The saving is in the reading of the rows.
+The renderer draws text, bold, italic, five underline styles, a line through the text, a line above it, inverse, faint and hidden text, wide characters, emoji, the four cursor shapes, the selection and the text of an input method. A view that does not have the keyboard focus shows a hollow block (`isFocused`). The cursor does not blink yet.
+On a grid of 160 columns and 48 rows at scale 2, a release build takes about 0.6 ms of processor time to read and draw a full screen, and about 0.05 ms for a change in one row. A debug build takes about 12 ms and 1.7 ms. `FrameTimeTests` measures this.
+
 ### PseudoTerminal
 
 `PseudoTerminal(launching:)` starts a program as a session leader with the pseudo terminal as its controlling terminal.
