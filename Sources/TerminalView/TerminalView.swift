@@ -94,6 +94,21 @@ public final class TerminalView: NSView {
     @objc public func decreaseFontSize(_ sender: Any?) { changeFontSize { $0.smaller() } }
     @objc public func resetFontSize(_ sender: Any?) { changeFontSize { $0.reset() } }
 
+    /// Command-plus and Command-equals make the text larger, Command-minus
+    /// smaller, and Command-0 goes back to 13 points. The view handles them
+    /// itself until the menu has items with these keys.
+    public override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
+        guard modifiers == .command || modifiers == [.command, .shift] else { return super.performKeyEquivalent(with: event) }
+        switch event.charactersIgnoringModifiers {
+        case "+", "=": increaseFontSize(nil)
+        case "-": decreaseFontSize(nil)
+        case "0": resetFontSize(nil)
+        default: return super.performKeyEquivalent(with: event)
+        }
+        return true
+    }
+
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
         // A screen with another scale needs new cells, so the text stays sharp.

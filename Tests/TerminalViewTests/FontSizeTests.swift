@@ -63,4 +63,29 @@ import TerminalEmulation
         view.decreaseFontSize(nil)
         #expect(view.renderer.fonts.pointSize == 12 && view.gridSize.columns > first.columns)
     }
+
+    private func key(_ characters: String, _ modifiers: NSEvent.ModifierFlags) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(
+            with: .keyDown, location: .zero, modifierFlags: modifiers, timestamp: 0, windowNumber: 0, context: nil,
+            characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 0))
+    }
+
+    @Test func theKeysOfCommandChangeTheFont() throws {
+        let (view, _) = try makeView()
+        #expect(view.performKeyEquivalent(with: try key("=", .command)))
+        #expect(view.performKeyEquivalent(with: try key("+", [.command, .shift])))
+        #expect(view.renderer.fonts.pointSize == 15)
+        #expect(view.performKeyEquivalent(with: try key("-", .command)))
+        #expect(view.renderer.fonts.pointSize == 14)
+        #expect(view.performKeyEquivalent(with: try key("0", .command)))
+        #expect(view.renderer.fonts.pointSize == 13)
+    }
+
+    @Test func otherKeysAreNotForTheFont() throws {
+        let (view, _) = try makeView()
+        #expect(!view.performKeyEquivalent(with: try key("=", [.command, .option])))
+        #expect(!view.performKeyEquivalent(with: try key("=", [])))
+        #expect(!view.performKeyEquivalent(with: try key("c", .command)))
+        #expect(view.renderer.fonts.pointSize == 13)
+    }
 }
