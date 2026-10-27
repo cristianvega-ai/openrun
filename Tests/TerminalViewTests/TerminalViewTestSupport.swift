@@ -6,9 +6,17 @@ import TerminalEmulation
 @MainActor final class RecordingDelegate: TerminalViewDelegate {
     var sizes: [TerminalSize] = []
     var sent: [UInt8] = []
+    /// The texts of the pastes that asked, and the answer that the user gives.
+    var questions: [String] = []
+    var pasteAnswer = false
 
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) { sizes.append(size) }
     func terminalView(_ view: TerminalView, send bytes: [UInt8]) { sent += bytes }
+
+    func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
+        questions.append(text)
+        return pasteAnswer
+    }
 
     /// The bytes that the view sent since the last call, as text.
     func takeSent() -> String {
@@ -79,6 +87,13 @@ final class ManualClock: InputClock {
         now = end
         timers.removeAll { $0.isCanceled }
     }
+}
+
+/// Lets other work of the main actor run, such as a `Task` of the view, until `condition` is true or `seconds` have passed.
+@MainActor
+func settle(seconds: Double = 1, until condition: () -> Bool) async {
+    let end = Date().addingTimeInterval(seconds)
+    while !condition(), Date() < end { try? await Task.sleep(for: .milliseconds(5)) }
 }
 
 /// Runs the main run loop until `condition` is true or `seconds` have passed.

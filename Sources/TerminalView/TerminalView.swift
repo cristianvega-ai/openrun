@@ -260,6 +260,21 @@ public final class TerminalView: NSView {
         pasteboard.write(plainText: text)
     }
 
+    /// Command-V: sends the plain text of the pasteboard to the program. Text that could run
+    /// commands waits for a yes from the delegate. A view with no delegate cannot ask, so it sends nothing.
+    @objc public func paste(_ sender: Any?) {
+        guard let text = pasteboard.plainText(), !text.isEmpty else { return }
+        guard UnsafePasteRule.needsQuestion(for: text, bracketedPaste: terminal.isModeEnabled(.bracketedPaste)) else {
+            sendTyped(PasteInput.bytes(for: text, terminal: terminal))
+            return
+        }
+        guard let delegate else { return }
+        Task { [weak self] in
+            guard let self, await delegate.terminalView(self, shouldPasteUnsafeText: text) else { return }
+            sendTyped(PasteInput.bytes(for: text, terminal: terminal))
+        }
+    }
+
     // The menu of a later unit sends these actions through the responder chain.
     @objc public func increaseFontSize(_ sender: Any?) { changeFontSize { $0.larger() } }
     @objc public func decreaseFontSize(_ sender: Any?) { changeFontSize { $0.smaller() } }

@@ -31,6 +31,7 @@ enum KeyEquivalentRoute: Equatable {
         case ("-", .command): #selector(TerminalView.decreaseFontSize(_:))
         case ("0", .command): #selector(TerminalView.resetFontSize(_:))
         case ("c", .command): #selector(TerminalView.copy(_:))
+        case ("v", .command): #selector(TerminalView.paste(_:))
         default: nil
         }
     }
