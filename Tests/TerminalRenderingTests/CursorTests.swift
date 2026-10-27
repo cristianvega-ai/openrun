@@ -47,4 +47,31 @@ import TerminalEmulation
         let screen = try renderScreen("A\u{1B}[?25l")
         #expect(inkCount(of: screen, columns: 1..<10, rows: 0..<3) == 0)
     }
+
+    @Test func aBarIsALineAtTheLeftOfItsCell() throws {
+        let screen = try renderScreen("A\u{1B}[6 q")
+        #expect(pixel(of: screen.target, column: 1, x: 0, y: metrics.height / 2) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, x: metrics.width - 1, y: metrics.height / 2) == screen.theme.background)
+    }
+
+    @Test func anUnderlineIsALineAtTheBottomOfItsCell() throws {
+        let screen = try renderScreen("A\u{1B}[4 q")
+        #expect(pixel(of: screen.target, column: 1, x: metrics.width / 2, y: metrics.height - 1) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, x: metrics.width / 2, y: 0) == screen.theme.background)
+    }
+
+    @Test func aViewWithoutFocusShowsAHollowBlock() throws {
+        let screen = try renderScreen("A\u{1B}[2 q", isFocused: false)
+        #expect(pixel(of: screen.target, column: 1, x: 0, y: metrics.height / 2) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, x: metrics.width / 2, y: 0) == screen.theme.cursor)
+        #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
+    }
+
+    @Test(arguments: ["\u{1B}[1;1H", "\u{1B}[1;2H"])
+    func aCursorOnAWideCharacterCoversBothOfItsCells(move: String) throws {
+        let screen = try renderScreen("日\(move)\u{1B}[2 q", columns: 4)
+        #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, x: metrics.width - 1, y: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 2, x: 0, y: 0) == screen.theme.background)
+    }
 }
