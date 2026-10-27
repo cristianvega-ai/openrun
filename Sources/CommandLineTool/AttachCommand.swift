@@ -79,11 +79,9 @@ struct AttachCommand {
         let mode = try RawTerminalMode(descriptor: STDIN_FILENO)
         let keys = KeySender(connection: connection)
         keys.start { writer.requestEnd(Self.detached, afterOutput: false) }
-        let receiver = Thread {
-            Self.receiveOutput(from: connection, into: writer, keys: keys)
+        attachment.startReceiving { event in
+            Self.hand(event, to: writer, keys: keys)
         }
-        receiver.name = "attach.receiver"
-        receiver.start()
         // The window may have changed between the attach request and the
         // signal handler, and that change would be lost.
         writer.requestResize()
@@ -345,34 +343,28 @@ struct AttachCommand {
         }
     }
 
-    /// Receives output and the end of the session, and hands both to the
-    /// writer in order.
-    private static func receiveOutput(from connection: MessageConnection, into writer: TerminalWriter, keys: KeySender) {
-        while true {
-            let message: ServerMessage?
-            do {
-                message = try connection.receive(ServerMessage.self)
-            } catch {
-                // Detaching shuts the socket down while this loop may be in the
-                // middle of reading a frame. That read then fails, and the failure
-                // is the detach itself, not a lost connection.
-                let ending = keys.isDetaching ? detached : TerminalWriter.Ending(exitCode: 1, message: "connection lost: \(error)")
-                writer.requestEnd(ending, afterOutput: true)
-                return
-            }
-            switch message {
-            case .output(let bytes):
-                guard writer.enqueue(output: Array(bytes)) else { return }
-            case .exited(let exit):
-                writer.requestEnd(TerminalWriter.Ending(exitCode: exitCode(for: exit), message: "program \(exit)"), afterOutput: true)
-                return
-            case nil:
-                let ending = keys.isDetaching ? detached : TerminalWriter.Ending(exitCode: 1, message: "the session process closed the connection")
-                writer.requestEnd(ending, afterOutput: true)
-                return
-            default:
-                continue
-            }
+    /// Hands the output and the end of the session to the writer, in the
+    /// order of the session process. It runs on the receiving thread.
+    private static func hand(_ event: SessionAttachmentEvent, to writer: TerminalWriter, keys: KeySender) {
+        switch event {
+        case .failed(let error):
+            // Detaching shuts the socket down while the receiving thread may be
+            // in the middle of reading a frame. That read then fails, and the
+            // failure is the detach itself, not a lost connection.
+            let ending = keys.isDetaching ? detached : TerminalWriter.Ending(exitCode: 1, message: "connection lost: \(error)")
+            writer.requestEnd(ending, afterOutput: true)
+        case .output(let bytes):
+            // Once attaching ends, the writer takes no more output.
+            _ = writer.enqueue(output: Array(bytes))
+        case .exited(let exit):
+            writer.requestEnd(TerminalWriter.Ending(exitCode: exitCode(for: exit), message: "program \(exit)"), afterOutput: true)
+        case .closed:
+            let ending = keys.isDetaching ? detached : TerminalWriter.Ending(exitCode: 1, message: "the session process closed the connection")
+            writer.requestEnd(ending, afterOutput: true)
+        case .sizeChanged:
+            // The attach does not ask for size changes: the window of this
+            // terminal lays out the output at its own size.
+            break
         }
     }
 
