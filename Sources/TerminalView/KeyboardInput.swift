@@ -77,11 +77,20 @@ final class KeyboardInput {
         return encode(event, action: isDown ? .press : .release, text: nil)
     }
 
+    /// The bytes for an arrow key that a scroll makes, with the cursor mode of the program.
+    func bytes(forArrowUp isUp: Bool) -> [UInt8] {
+        encode(KeyEvent(action: .press, key: isUp ? .arrowUp : .arrowDown))
+    }
+
     private func encode(_ event: NSEvent, action: KeyEvent.Action, text: String?) -> [UInt8] {
+        encode(KeyboardEventReader.keyEvent(from: event, action: action, text: text))
+    }
+
+    private func encode(_ key: KeyEvent) -> [UInt8] {
         // The program can change its modes at any time, and the left Option key is Alt.
         encoder.update(from: terminal, optionAsAlternate: .leftOnly)
         do {
-            return try encoder.encode(KeyboardEventReader.keyEvent(from: event, action: action, text: text))
+            return try encoder.encode(key)
         } catch {
             logger.error("A key failed: \(String(describing: error), privacy: .private)")
             return []

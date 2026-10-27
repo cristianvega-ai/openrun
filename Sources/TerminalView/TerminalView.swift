@@ -17,6 +17,7 @@ public final class TerminalView: NSView {
     let state: RenderState
     let keyboard: KeyboardInput
     let pointer: PointerInput
+    let scroll = ScrollInput()
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
@@ -175,6 +176,26 @@ public final class TerminalView: NSView {
         guard let bytes = pointer.bytes(action, button: button, modifiers: event.modifierFlags, at: point, in: pointerLocation) else { return false }
         send(bytes)
         return true
+    }
+
+    public override func scrollWheel(with event: NSEvent) {
+        // The momentum of a trackpad belongs to the gesture that made it, so only a touch starts a new one.
+        let startsGesture = !event.phase.isDisjoint(with: [.began, .mayBegin])
+        let action = scroll.action(
+            delta: event.scrollingDeltaY, isPrecise: event.hasPreciseScrollingDeltas, startsGesture: startsGesture,
+            cellHeight: cellSize.height, terminal: terminal)
+        switch action {
+        case .viewport(let rows)?:
+            terminal.scrollViewport(.byRows(rows))
+            requestFrame()
+        case .wheelReports(let button, let count)?:
+            let point = convert(event.locationInWindow, from: nil), modifiers = ModifierReader.modifiers(of: event.modifierFlags)
+            send((0..<count).flatMap { _ in pointer.reporter.bytes(.press, button: button, modifiers: modifiers, at: point, in: pointerLocation) })
+        case .arrowKeys(let isUp, let count)?:
+            send((0..<count).flatMap { _ in keyboard.bytes(forArrowUp: isUp) })
+        case nil:
+            break
+        }
     }
 
     public override func keyUp(with event: NSEvent) {
