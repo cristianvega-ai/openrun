@@ -70,6 +70,14 @@ import TerminalEmulation
             characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 0))
     }
 
+    @Test func aNewScaleMakesNewCellsForTheSameView() throws {
+        let (view, _) = try makeView()
+        let cellWidth = view.renderer.fonts.cellWidth
+        view.rebuildRenderer(scale: 1)
+        #expect(view.renderer.fonts.scale == 1 && view.layer?.contentsScale == 1)
+        #expect(view.renderer.fonts.cellWidth == cellWidth / 2 && view.renderer.padding == 8)
+    }
+
     @Test func theKeysOfCommandChangeTheFont() throws {
         let (view, _) = try makeView()
         #expect(view.performKeyEquivalent(with: try key("=", .command)))

@@ -111,9 +111,7 @@ public final class TerminalView: NSView {
 
     public override func viewDidChangeBackingProperties() {
         super.viewDidChangeBackingProperties()
-        // A screen with another scale needs new cells, so the text stays sharp.
-        guard let scale = window?.backingScaleFactor, scale != renderer.fonts.scale else { return }
-        rebuildRenderer(scale: scale)
+        adoptWindowScale()
     }
 
     public override func viewDidChangeEffectiveAppearance() {
@@ -130,7 +128,12 @@ public final class TerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
-        if window == nil { schedule?.stop() } else { schedule?.attach() }
+        if window == nil {
+            schedule?.stop()
+        } else {
+            adoptWindowScale()
+            schedule?.attach()
+        }
     }
 
     public override func layout() {
@@ -169,12 +172,18 @@ public final class TerminalView: NSView {
         return true
     }
 
+    /// A window on a screen with another scale needs new cells, so the text stays sharp.
+    private func adoptWindowScale() {
+        guard let scale = window?.backingScaleFactor, scale != renderer.fonts.scale else { return }
+        rebuildRenderer(scale: scale)
+    }
+
     private func changeFontSize(_ change: (inout FontSizeControl) -> Bool) {
         if change(&fontSize) { rebuildRenderer(scale: renderer.fonts.scale) }
     }
 
     /// New cells need a new renderer with its atlas, and a new grid.
-    private func rebuildRenderer(scale: CGFloat) {
+    func rebuildRenderer(scale: CGFloat) {
         do {
             let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
