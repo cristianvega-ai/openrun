@@ -13,7 +13,7 @@ import Testing
     }
 
     @Test func theKnobShowsTheVisibleRowsAmongAllRowsAndTheBarIsHiddenWithoutScrollback() throws {
-        let bar = OverlayScrollBar()
+        let bar = OverlayScrollBar(clock: ManualClock())
         let middle = try scrollbar(lines: 80, scrolledTo: .toRow(40))
         bar.update(from: middle)
         #expect(!bar.isHidden && bar.scroller.scrollerStyle == .overlay)
@@ -37,5 +37,27 @@ import Testing
         view.terminal.scrollViewport(.toTop)
         view.updateScrollBar()
         #expect(view.scrollBar.scroller.doubleValue == 0 && abs(view.scrollBar.scroller.knobProportion - 0.1) < 0.01)
+    }
+
+    @Test func theBarIsRevealedWhenTheUserScrollsAndTakesNoEventAfterOneSecond() throws {
+        let clock = ManualClock()
+        let view = try TerminalView(initialGrid: TerminalSize(columns: 20, rows: 10), clock: clock)
+        view.terminal.write(String(repeating: "line\r\n", count: 90))
+        view.updateScrollBar()
+        let point = NSPoint(x: 1, y: 1)
+        #expect(!view.scrollBar.isRevealed && view.scrollBar.hitTest(point) == nil)
+        view.scrollWheel(with: try scrollEvent())
+        #expect(view.scrollBar.isRevealed && view.scrollBar.hitTest(point) != nil)
+        clock.advance(by: .milliseconds(800))
+        view.scrollWheel(with: try scrollEvent())
+        clock.advance(by: .milliseconds(800))
+        #expect(view.scrollBar.isRevealed)
+        clock.advance(by: .milliseconds(300))
+        #expect(!view.scrollBar.isRevealed && view.scrollBar.hitTest(point) == nil)
+    }
+
+    private func scrollEvent() throws -> NSEvent {
+        let cgEvent = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
+        return try #require(NSEvent(cgEvent: cgEvent))
     }
 }

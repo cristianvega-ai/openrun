@@ -6,18 +6,30 @@ import TerminalEmulation
 /// only for an `NSScrollView`, so the bar is one with a document of fake size: the height of all rows.
 @MainActor
 final class OverlayScrollBar: NSView {
+    /// A scroll view gives wheel events to its clip view. The bar gives them to the terminal.
+    final class PassiveScrollView: NSScrollView {
+        override func scrollWheel(with event: NSEvent) { nextResponder?.scrollWheel(with: event) }
+    }
+
     /// A document view that counts from the top, as the rows do.
     private final class TopDownView: NSView {
         override var isFlipped: Bool { true }
     }
 
-    let scrollView = NSScrollView()
+    static let visibleTime: Duration = .seconds(1)
+
+    let scrollView = PassiveScrollView()
+    /// Whether the user can see and use the bar.
+    private(set) var isRevealed = false
+    private let clock: any InputClock
+    private var fadeTimer: (any InputTimer)?
     /// What the knob shows now. Each frame calls `update`, and most of the time nothing changes.
     private var last: (scrollbar: Scrollbar, height: CGFloat)?
 
     var scroller: NSScroller { scrollView.verticalScroller! }
 
-    init() {
+    init(clock: any InputClock) {
+        self.clock = clock
         super.init(frame: NSRect(x: 0, y: 0, width: NSScroller.scrollerWidth(for: .regular, scrollerStyle: .overlay), height: 100))
         scrollView.frame = bounds
         scrollView.autoresizingMask = [.width, .height]
@@ -29,7 +41,7 @@ final class OverlayScrollBar: NSView {
     }
 
     /// A bar that is not shown must not take the clicks and the wheel of the grid below it.
-    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+    override func hitTest(_ point: NSPoint) -> NSView? { isRevealed ? super.hitTest(point) : nil }
 
     required init?(coder: NSCoder) {
         fatalError("OverlayScrollBar does not come from a storyboard.")
@@ -45,5 +57,13 @@ final class OverlayScrollBar: NSView {
         document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: rowHeight * CGFloat(scrollbar.totalRows))
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: rowHeight * CGFloat(scrollbar.firstVisibleRow)))
         scrollView.reflectScrolledClipView(scrollView.contentView)
+    }
+
+    /// Shows the bar while the user scrolls. AppKit fades the knob, and the bar takes no event after one second.
+    func reveal() {
+        fadeTimer?.cancel()
+        isRevealed = true
+        scrollView.flashScrollers()
+        fadeTimer = clock.schedule(after: Self.visibleTime) { [weak self] in self?.isRevealed = false }
     }
 }

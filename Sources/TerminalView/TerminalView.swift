@@ -18,7 +18,9 @@ public final class TerminalView: NSView {
     let keyboard: KeyboardInput
     let pointer: PointerInput
     let scroll = ScrollInput()
-    let scrollBar = OverlayScrollBar()
+    let scrollBar: OverlayScrollBar
+    /// The time and the timers of the input. A test gives a clock that it moves.
+    let clock: any InputClock
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
@@ -37,12 +39,18 @@ public final class TerminalView: NSView {
     /// - Parameter initialGrid: The size of the grid until the view has a size of its own.
     /// - Throws: `RenderingError` when the Mac has no Metal device, or
     ///   `TerminalEmulationError` when the terminal cannot start.
-    public init(initialGrid: TerminalSize = TerminalSize(columns: 80, rows: 24)) throws {
+    public convenience init(initialGrid: TerminalSize = TerminalSize(columns: 80, rows: 24)) throws {
+        try self.init(initialGrid: initialGrid, clock: SystemInputClock())
+    }
+
+    init(initialGrid: TerminalSize, clock: any InputClock) throws {
         guard let device = MTLCreateSystemDefaultDevice() else { throw RenderingError.deviceUnavailable }
         terminal = try Terminal(size: initialGrid, scrollbackLimit: 10_000)
         state = try RenderState()
         keyboard = try KeyboardInput(terminal: terminal)
         pointer = try PointerInput(terminal: terminal)
+        scrollBar = OverlayScrollBar(clock: clock)
+        self.clock = clock
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
         renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
         self.device = device
@@ -189,6 +197,7 @@ public final class TerminalView: NSView {
         switch action {
         case .viewport(let rows)?:
             terminal.scrollViewport(.byRows(rows))
+            scrollBar.reveal()
             requestFrame()
         case .wheelReports(let button, let count)?:
             let point = convert(event.locationInWindow, from: nil), modifiers = ModifierReader.modifiers(of: event.modifierFlags)

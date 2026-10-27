@@ -38,6 +38,41 @@ func showFocused(_ view: NSView) -> NSWindow {
     return window
 }
 
+/// A clock that moves only when a test calls `advance`.
+@MainActor
+final class ManualClock: InputClock {
+    private final class ManualTimer: InputTimer {
+        var due: ContinuousClock.Instant
+        let interval: Duration?
+        let action: @MainActor () -> Void
+        var isCanceled = false
+        init(due: ContinuousClock.Instant, interval: Duration?, action: @escaping @MainActor () -> Void) {
+            (self.due, self.interval, self.action) = (due, interval, action)
+        }
+        func cancel() { isCanceled = true }
+    }
+
+    private(set) var now = ContinuousClock.now
+    private var timers: [ManualTimer] = []
+
+    func schedule(after delay: Duration, repeating interval: Duration?, _ action: @escaping @MainActor () -> Void) -> any InputTimer {
+        let timer = ManualTimer(due: now + delay, interval: interval, action: action)
+        timers.append(timer)
+        return timer
+    }
+
+    func advance(by duration: Duration) {
+        let end = now + duration
+        while let next = timers.filter({ !$0.isCanceled && $0.due <= end }).min(by: { $0.due < $1.due }) {
+            now = max(now, next.due)
+            if let interval = next.interval { next.due += interval } else { next.isCanceled = true }
+            next.action()
+        }
+        now = end
+        timers.removeAll { $0.isCanceled }
+    }
+}
+
 /// Runs the main run loop until `condition` is true or `seconds` have passed.
 @MainActor
 func wait(seconds: Double, until condition: () -> Bool) {
