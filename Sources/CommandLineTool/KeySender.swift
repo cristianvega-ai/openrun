@@ -1,7 +1,7 @@
 import Darwin
 import Dispatch
 import Foundation
-import SessionProtocol
+import SessionConnection
 
 /// Reads keys from the terminal and sends them to the session in order.
 ///
@@ -34,7 +34,7 @@ final class KeySender: @unchecked Sendable {
         case endOfInput
     }
 
-    private let connection: MessageConnection
+    private let attachment: SessionAttachment
     private let inputDescriptor: Int32
     private let queue = DispatchQueue(label: "attach.keys")
     // Guarded by `condition`, which also wakes the keyboard thread when the
@@ -46,8 +46,8 @@ final class KeySender: @unchecked Sendable {
     private var detaching = false
 
     /// `inputDescriptor` is the terminal to read keys from.
-    init(connection: MessageConnection, inputDescriptor: Int32 = STDIN_FILENO) {
-        self.connection = connection
+    init(attachment: SessionAttachment, inputDescriptor: Int32 = STDIN_FILENO) {
+        self.attachment = attachment
         self.inputDescriptor = inputDescriptor
     }
 
@@ -201,7 +201,7 @@ final class KeySender: @unchecked Sendable {
         condition.unlock()
         guard accepted else { return false }
         queue.async { [self] in
-            try? connection.send(ClientMessage.input(Data(keys)))
+            try? attachment.send(input: Data(keys))
             condition.lock()
             queuedBytes -= keys.count
             condition.broadcast()
@@ -218,14 +218,14 @@ final class KeySender: @unchecked Sendable {
         // time, the session process finds the connection closed, and that
         // detaches this client as well.
         let sent = DispatchSemaphore(value: 0)
-        queue.async { [connection] in
-            try? connection.send(ClientMessage.detach)
+        queue.async { [attachment] in
+            try? attachment.detach()
             sent.signal()
         }
         _ = sent.wait(timeout: .now() + .milliseconds(200))
         onDetach()
         // The thread that receives output is blocked in a read. Shutting the
         // connection down wakes it.
-        connection.shutdown()
+        attachment.shutdown()
     }
 }

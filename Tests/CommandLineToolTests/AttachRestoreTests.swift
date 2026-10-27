@@ -5,6 +5,7 @@ import SessionProtocol
 import Testing
 
 @testable import CommandLineTool
+@testable import SessionConnection
 
 /// A shell script that attaches to a session and reports how attaching
 /// ended: `status=` and `mode-restored` or `mode-changed`, on the terminal
@@ -657,7 +658,7 @@ extension CommandLineToolIntegration {
                 }
             }
             receiver.start()
-            let sender = KeySender(connection: clientSide, inputDescriptor: descriptor)
+            let sender = KeySender(attachment: SessionAttachment(connection: clientSide, snapshot: Data()), inputDescriptor: descriptor)
             sender.start(onDetach: {})
             try await Task.sleep(for: .milliseconds(150))
 
@@ -703,7 +704,7 @@ extension CommandLineToolIntegration {
                 }
             }
             receiver.start()
-            let sender = KeySender(connection: clientSide, inputDescriptor: descriptor)
+            let sender = KeySender(attachment: SessionAttachment(connection: clientSide, snapshot: Data()), inputDescriptor: descriptor)
             sender.start(onDetach: {})
 
             // Keys typed while the thread runs reach the session.

@@ -53,7 +53,6 @@ struct AttachCommand {
         // restored ends attaching with an error, not with a blank picture.
         let screen = try LocalScreen(snapshot: TerminalSnapshot(bytes: Array(attachment.snapshot)))
 
-        let connection = attachment.connection
         let writer = try TerminalWriter()
         defer { writer.stopWriting() }
         let resizes = DispatchQueue(label: "attach.resize")
@@ -77,7 +76,7 @@ struct AttachCommand {
         }
 
         let mode = try RawTerminalMode(descriptor: STDIN_FILENO)
-        let keys = KeySender(connection: connection)
+        let keys = KeySender(attachment: attachment)
         keys.start { writer.requestEnd(Self.detached, afterOutput: false) }
         attachment.startReceiving { event in
             Self.hand(event, to: writer, keys: keys)
@@ -86,7 +85,7 @@ struct AttachCommand {
         // signal handler, and that change would be lost.
         writer.requestResize()
 
-        let ending = relay(writer: writer, screen: screen, mode: mode, keys: keys, resizes: resizes, connection: connection)
+        let ending = relay(writer: writer, screen: screen, mode: mode, keys: keys, resizes: resizes, attachment: attachment)
 
         writer.close()
         keys.stop()
@@ -268,7 +267,7 @@ struct AttachCommand {
         mode: RawTerminalMode,
         keys: KeySender,
         resizes: DispatchQueue,
-        connection: MessageConnection
+        attachment: SessionAttachment
     ) -> TerminalWriter.Ending {
         // The picture goes through the writer too, so a signal can end the
         // attach while the picture waits for the terminal.
@@ -308,7 +307,7 @@ struct AttachCommand {
                             }
                             pictureToDraw = picture
                         }
-                        resizes.async { Self.send(size, on: connection) }
+                        resizes.async { try? attachment.send(size: size) }
                     }
                 case .resume:
                     // The window can change size while the tool is stopped,
@@ -321,7 +320,7 @@ struct AttachCommand {
                     keys.resume()
                     pictureToDraw = picture
                     isSuspended = false
-                    if let size { resizes.async { Self.send(size, on: connection) } }
+                    if let size { resizes.async { try? attachment.send(size: size) } }
                 }
                 continue
             }
@@ -378,9 +377,5 @@ struct AttachCommand {
         case .signaled(let signal): 128 + Int64(signal)
         }
         return Int32(Swift.min(Swift.max(code, 0), 255))
-    }
-
-    private static func send(_ size: SessionSize, on connection: MessageConnection) {
-        try? connection.send(ClientMessage.resize(size))
     }
 }
