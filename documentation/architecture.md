@@ -123,6 +123,15 @@ The shaders are Swift text (`ShaderSource`). `ShaderLibrary` compiles them when 
 The renderer draws text, bold, italic, five underline styles, a line through the text, a line above it, inverse, faint and hidden text, wide characters, emoji, the four cursor shapes, the selection and the text of an input method. A view that does not have the keyboard focus shows a hollow block (`isFocused`). The cursor does not blink yet.
 On a grid of 160 columns and 48 rows at scale 2, a release build takes about 0.6 ms of processor time to read and draw a full screen, and about 0.05 ms for a change in one row. A debug build takes about 12 ms and 1.7 ms. `FrameTimeTests` measures this.
 
+### TerminalView
+
+`TerminalView` is an `NSView` for one session. It has its own `Terminal`, `RenderState` and `TerminalRenderer`, and a `CAMetalLayer` (`MetalLayerHost`). It does not use the socket or `SessionConnection`. The owner of the view gives it output bytes with `write`, and the view tells its `TerminalViewDelegate` about a new grid size (`didChangeGridSize`). The view does not handle keys, the mouse, scrolling, selection, paste or input methods yet.
+The view and its terminal run on the main thread. `write` keeps the bytes in an `OutputParser`. A call of `parseTurn` parses pieces of 64 KiB for 4 ms at most (`ParseBudget`). When output is left, the next turn comes from a run loop source, so events and frames run between the turns.
+`DisplaySchedule` holds a display link. A request for a frame starts it, one frame follows, and the link pauses until the next request. A view that is not in a window waits for a window.
+At each layout, `GridFit` gives the number of whole cells that fit inside the space around the grid. When the grid changes, the view resizes its terminal and tells the delegate.
+`AppearanceObserver` tells when the macOS appearance changes between light and dark. The view then gives the other version of the Graphite theme to its terminal and its renderer.
+`increaseFontSize`, `decreaseFontSize` and `resetFontSize` change the text by 1 point, between 6 and 72 points (`FontSizeControl`), or go back to 13 points. Each one makes a new renderer and fits the grid again. The view handles Command-plus, Command-equals, Command-minus and Command-0 itself, until the menu has items for them. A screen with a new backing scale also makes a new renderer.
+
 ### PseudoTerminal
 
 `PseudoTerminal(launching:)` starts a program as a session leader with the pseudo terminal as its controlling terminal.
