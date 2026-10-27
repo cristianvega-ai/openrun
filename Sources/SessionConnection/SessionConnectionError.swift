@@ -11,6 +11,12 @@ public enum SessionConnectionError: Error, Equatable, Sendable, CustomStringConv
     /// The socket or the protocol failed, such as a system call, a frame or
     /// the version.
     case protocolFailure(SessionProtocolError)
+    /// The session process closed the connection before it answered.
+    case connectionClosed
+    /// The session process could not do the request. The failure says why.
+    case requestFailed(SessionFailure)
+    /// The answer does not fit the request that the text names.
+    case unexpectedAnswer(request: String)
     /// The typed identifier is empty.
     case emptyIdentifier
     /// No session has an identifier that starts with the typed text.
@@ -25,6 +31,12 @@ public enum SessionConnectionError: Error, Equatable, Sendable, CustomStringConv
             "No session process answers on \(socketPath)."
         case .protocolFailure(let error):
             error.description
+        case .connectionClosed:
+            "The session process closed the connection."
+        case .requestFailed(let failure):
+            failure.message
+        case .unexpectedAnswer(let request):
+            "The session process gave an unexpected answer to the \(request) request."
         case .emptyIdentifier:
             "The identifier is empty."
         case .noMatchingSession(let typed):

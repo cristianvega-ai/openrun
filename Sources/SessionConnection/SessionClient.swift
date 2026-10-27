@@ -28,4 +28,29 @@ public struct SessionClient: Sendable {
             throw SessionConnectionError.protocolFailure(error)
         }
     }
+
+    /// Sends one request and returns the answer. A failure answer becomes an
+    /// error.
+    public func request(_ message: ClientMessage) throws -> ServerMessage {
+        let answer = try SessionConnectionError.wrapping {
+            try connection.send(message)
+            return try connection.receive(ServerMessage.self)
+        }
+        guard let answer else { throw SessionConnectionError.connectionClosed }
+        if case .failure(let failure) = answer { throw SessionConnectionError.requestFailed(failure) }
+        return answer
+    }
+
+    /// Every session that the session process holds.
+    public func summaries() throws -> [SessionSummary] {
+        guard case .sessionList(let summaries) = try request(.listSessions) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "list")
+        }
+        return summaries
+    }
+
+    /// The session that a typed identifier or identifier start means.
+    public func session(matching typed: String) throws -> SessionSummary {
+        try SessionIdentifierMatch.find(typed, in: summaries())
+    }
 }

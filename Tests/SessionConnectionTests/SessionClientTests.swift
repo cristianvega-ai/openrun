@@ -42,4 +42,57 @@ import Testing
         #expect(error == .protocolFailure(protocolError))
         #expect(error?.description == protocolError.description)
     }
+
+    @Test func aTypedIdentifierFindsItsSessionInTheList() throws {
+        let summary = SessionSummary(identifier: UUID(), folder: "/work", command: ["sh"], size: SessionSize(columns: 80, rows: 24), createdAt: Date(timeIntervalSince1970: 0))
+        let client = try SessionClient.standIn { session in
+            guard try session.receive(ClientMessage.self) == .listSessions else { return }
+            try session.send(ServerMessage.sessionList([summary]))
+        }
+        #expect(try client.session(matching: String(summary.identifierText.prefix(4)).uppercased()) == summary)
+    }
+
+    @Test func aFailureAnswerIsRequestFailed() throws {
+        let failure = SessionFailure(reason: .unknownSession, message: "No session has this identifier.")
+        let client = try SessionClient.standIn { session in
+            _ = try session.receive(ClientMessage.self)
+            try session.send(ServerMessage.failure(failure))
+        }
+        let error = #expect(throws: SessionConnectionError.self) { try client.request(.killSession(identifier: UUID())) }
+        #expect(error == .requestFailed(failure))
+        #expect(error?.description == failure.message)
+    }
+
+    @Test func aConnectionThatClosesBeforeTheAnswerIsConnectionClosed() throws {
+        let client = try SessionClient.standIn { session in
+            _ = try session.receive(ClientMessage.self)
+        }
+        let error = #expect(throws: SessionConnectionError.self) { try client.summaries() }
+        #expect(error == .connectionClosed)
+        #expect(error?.description == "The session process closed the connection.")
+    }
+
+    @Test func anAnswerThatDoesNotFitTheRequestIsUnexpected() throws {
+        let client = try SessionClient.standIn { session in
+            _ = try session.receive(ClientMessage.self)
+            try session.send(ServerMessage.acknowledged)
+        }
+        let error = #expect(throws: SessionConnectionError.self) { try client.summaries() }
+        #expect(error == .unexpectedAnswer(request: "list"))
+        #expect(error?.description == "The session process gave an unexpected answer to the list request.")
+    }
+}
+
+extension SessionClient {
+    /// A client of a stand-in session process on a socket pair. The stand-in
+    /// greets the client, runs `answer` on a thread of its own, and closes.
+    static func standIn(answering answer: @escaping @Sendable (MessageConnection) throws -> Void) throws -> SessionClient {
+        let (clientSide, sessionSide) = try MessageConnection.makePair()
+        Thread {
+            defer { sessionSide.shutdown() }
+            guard (try? sessionSide.greetClient()) != nil else { return }
+            try? answer(sessionSide)
+        }.start()
+        return try SessionClient(greeting: clientSide)
+    }
 }
