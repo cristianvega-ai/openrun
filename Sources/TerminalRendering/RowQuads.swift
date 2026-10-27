@@ -18,15 +18,17 @@ struct RowQuads {
             }
             let foreground = cell.foreground ?? colors.foreground
             decorations += DecorationQuads.lines(for: cell, x: x, color: foreground, metrics: metrics)
+            if cell.width == .wide { wideColumns.append(cell.column) }
+            // The second cell of a wide character has nothing to draw.
+            if let base = cell.base, base != " ", cell.width != .wideTail, cell.width != .wideHead {
+                let key = GlyphKey(text: cell.text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
+                let entry = atlas.entry(for: key)
+                if !entry.isEmpty { glyphs.append(.glyph(entry, column: Int(cell.column), x: x, y: 0, color: foreground)) }
+            }
+            // The wave goes after the text, so the first glyph of a column is its text.
             if cell.style.underline == .curly {
                 glyphs.append(.glyph(atlas.entry(for: .curlyUnderline), column: Int(cell.column), x: x, y: 0, color: cell.underlineColor ?? foreground))
             }
-            if cell.width == .wide { wideColumns.append(cell.column) }
-            // The second cell of a wide character has nothing to draw.
-            guard let base = cell.base, base != " ", cell.width != .wideTail, cell.width != .wideHead else { return }
-            let key = GlyphKey(text: cell.text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
-            let entry = atlas.entry(for: key)
-            if !entry.isEmpty { glyphs.append(.glyph(entry, column: Int(cell.column), x: x, y: 0, color: foreground)) }
         }
     }
 }

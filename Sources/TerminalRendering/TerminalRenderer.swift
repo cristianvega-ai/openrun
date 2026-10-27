@@ -10,12 +10,15 @@ public final class TerminalRenderer {
     public let fonts: FontSet
     /// The space around the grid in pixels: 8 points.
     public let padding: Int
+    /// Whether the view has the keyboard focus. Without it, the cursor is a hollow block.
+    public var isFocused = true
     private let device: MTLDevice
     private let queue: MTLCommandQueue
     private let shaders: ShaderLibrary
     private let atlas: GlyphAtlas
     private var cache = RowCache()
-    private var background = TerminalColor(red: 0, green: 0, blue: 0)
+    private var colors: RenderColors?
+    private var cursor: RenderCursor?
     // The graphics processor reads one buffer while the processor fills the next.
     private var buffers: [MTLBuffer?] = [nil, nil, nil]
     private var bufferIndex = 0
@@ -40,7 +43,8 @@ public final class TerminalRenderer {
     /// after `RenderState.update`, and `markClean` when the frame is drawn.
     @discardableResult
     public func prepare(from state: RenderState) throws -> FrameStatistics {
-        background = state.colors.background
+        colors = state.colors
+        cursor = state.cursor
         func update() throws -> FrameStatistics {
             try cache.update(from: state, atlasGeneration: atlas.generation) {
                 try RowQuads(row: $0, colors: state.colors, atlas: atlas, metrics: fonts.metrics)
@@ -70,12 +74,12 @@ public final class TerminalRenderer {
     }
 
     private func encode(into target: some RenderTarget) -> Bool {
-        let frame = FrameBuilder(cache: cache, metrics: fonts.metrics, padding: padding)
+        let frame = FrameBuilder(cache: cache, metrics: fonts.metrics, padding: padding, cursor: cursorToDraw())
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = target.texture
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
-        let clear = CellQuad.vector(background)
+        let clear = CellQuad.vector(colors?.background ?? TerminalColor(red: 0, green: 0, blue: 0))
         pass.colorAttachments[0].clearColor = MTLClearColor(red: Double(clear.x), green: Double(clear.y), blue: Double(clear.z), alpha: 1)
         guard let (buffer, offsets) = copy([frame.backgrounds, frame.glyphs, frame.overlays]), let commands = queue.makeCommandBuffer(),
             let encoder = commands.makeRenderCommandEncoder(descriptor: pass)
@@ -93,6 +97,14 @@ public final class TerminalRenderer {
         target.present(with: commands)
         commands.commit()
         return true
+    }
+
+    private func cursorToDraw() -> FrameBuilder.Cursor? {
+        guard let colors, let cursor, cursor.isVisible, let position = cursor.position else { return nil }
+        return FrameBuilder.Cursor(
+            column: Int(position.column), row: Int(position.row), style: isFocused ? cursor.style : .hollowBlock,
+            isOnWideCharacterTail: cursor.isOnWideCharacterTail, color: colors.cursor ?? colors.foreground,
+            textColor: colors.background, stroke: max(1, Int(fonts.scale.rounded())))
     }
 
     private func draw(

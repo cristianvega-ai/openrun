@@ -40,7 +40,7 @@ func update(_ cache: inout RowCache, from state: RenderState, atlas: GlyphAtlas)
 
 /// Draws a screen with the Graphite theme into an offscreen target.
 func renderScreen(
-    _ output: String, columns: UInt16 = 10, rows: UInt16 = 3, scheme: TerminalColorScheme = .dark
+    _ output: String, columns: UInt16 = 10, rows: UInt16 = 3, scheme: TerminalColorScheme = .dark, isFocused: Bool = true
 ) throws -> (target: OffscreenTarget, theme: TerminalTheme) {
     let device = try #require(MTLCreateSystemDefaultDevice())
     let theme = TerminalTheme.graphite(for: scheme)
@@ -50,6 +50,7 @@ func renderScreen(
     let state = try RenderState()
     try state.update(from: terminal)
     let renderer = try TerminalRenderer(device: device, fonts: testFonts)
+    renderer.isFocused = isFocused
     try renderer.prepare(from: state)
     let size = renderer.pixelSize(for: terminal.size)
     let target = try OffscreenTarget(device: device, width: size.width, height: size.height)

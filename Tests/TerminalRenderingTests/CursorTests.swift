@@ -27,3 +27,24 @@ import TerminalEmulation
         #expect(edges == [[100, 50, 32, 2], [100, 79, 32, 2], [100, 50, 2, 31], [130, 50, 2, 31]])
     }
 }
+
+@Suite struct CursorTests {
+    private let metrics = testFonts.metrics
+
+    @Test func aBlockCursorFillsItsCellWithTheCursorColor() throws {
+        let screen = try renderScreen("A\u{1B}[2 q")
+        #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, x: metrics.width - 1, y: metrics.height - 1) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 2, x: 3, y: 3) == screen.theme.background)
+    }
+
+    @Test func theTextInABlockCursorTakesTheBackgroundColor() throws {
+        let screen = try renderScreen("█\u{1B}[D\u{1B}[2 q")
+        #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.background)
+    }
+
+    @Test func aHiddenCursorDrawsNothing() throws {
+        let screen = try renderScreen("A\u{1B}[?25l")
+        #expect(inkCount(of: screen, columns: 1..<10, rows: 0..<3) == 0)
+    }
+}

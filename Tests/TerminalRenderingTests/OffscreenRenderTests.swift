@@ -24,7 +24,7 @@ import TerminalTheme
     }
 
     @Test func aCellBackgroundHasItsColorOfThePalette() throws {
-        let screen = try renderScreen("\u{1B}[41m ")
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[41m ")
         #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.firstSixteenColors[1])
         #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
     }
