@@ -1,0 +1,29 @@
+import Metal
+import Testing
+import TerminalEmulation
+@testable import TerminalRendering
+
+/// SF Mono at 13 points on a Retina screen, as the app draws it.
+var testFonts: FontSet { FontSet(pointSize: 13, scale: 2) }
+
+/// A terminal that already ran `output`, with a render state that read it.
+func makeScreen(_ output: String, columns: UInt16 = 20, rows: UInt16 = 3) throws -> (terminal: Terminal, state: RenderState) {
+    let terminal = try Terminal(size: TerminalSize(columns: columns, rows: rows), scrollbackLimit: 0)
+    terminal.write(output)
+    let state = try RenderState()
+    try state.update(from: terminal)
+    return (terminal, state)
+}
+
+func makeAtlas() throws -> GlyphAtlas {
+    try GlyphAtlas(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts)
+}
+
+/// The quads of every row of the screen, from the top.
+func quads(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuads] {
+    var rows: [RowQuads] = []
+    try state.forEachRow(onlyChanged: false) {
+        rows.append(try RowQuads(row: $0, colors: state.colors, atlas: atlas, metrics: testFonts.metrics))
+    }
+    return rows
+}
