@@ -97,3 +97,26 @@ import TerminalEmulation
         #expect(size.height == 2 * 16 + 3 * testFonts.cellHeight)
     }
 }
+
+@Suite struct MarkedTextQuadsTests {
+    private func quads(_ text: String, column: Int = 2, columnCount: Int = 10) throws -> MarkedTextQuads {
+        let colors = try makeScreen("").state.colors
+        return try MarkedTextQuads(
+            text: text, column: column, row: 1, columnCount: columnCount, colors: colors, atlas: makeAtlas(), metrics: testFonts.metrics,
+            padding: testPadding)
+    }
+
+    @Test func eachCharacterHasABackgroundAndAnUnderlineAndWideCharactersTakeTwoCells() throws {
+        let marked = try quads("a日é")
+        #expect(marked.columns == 2..<6)
+        #expect(marked.backgrounds.map(\.size.x) == [16, 32, 16])
+        #expect(marked.overlays.count == 3)
+        #expect(marked.glyphs.map(\.column) == [2, 3, 5])
+        #expect(marked.backgrounds[0].origin.y == Float(testPadding + testFonts.cellHeight))
+    }
+
+    @Test func theTextStopsAtTheRightEdgeOfTheGrid() throws {
+        #expect(try quads("abcdef", column: 8).columns == 8..<10)
+        #expect(try quads("日", column: 9).columns == 9..<9)
+    }
+}

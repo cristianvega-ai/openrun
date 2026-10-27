@@ -35,6 +35,10 @@ final class GlyphAtlas {
         colorPacker = AtlasPacker(side: side / 2)
     }
 
+    func columns(of text: String) -> Int {
+        rasterizer.columns(of: text)
+    }
+
     func entry(for key: GlyphKey) -> Entry {
         if let entry = entries[key] { return entry }
         let entry = rasterizer.bitmap(for: key).map(store) ?? .empty

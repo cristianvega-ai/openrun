@@ -90,6 +90,14 @@ struct GlyphRasterizer {
         return drawn ? Bitmap(pixels: pixels, width: width, height: height, offsetX: 0, offsetY: top, isColor: false) : nil
     }
 
+    /// The number of cells that a cluster covers: 2 for a character that is
+    /// about as wide as 2 cells, such as a Japanese character, and 1 otherwise.
+    func columns(of text: String) -> Int {
+        let attributes = [NSAttributedString.Key(kCTFontAttributeName as String): fonts.font(for: .regular)]
+        let line = CTLineCreateWithAttributedString(NSAttributedString(string: text, attributes: attributes))
+        return CTLineGetTypographicBounds(line, nil, nil, nil) / CGFloat(fonts.cellWidth) > 1.5 ? 2 : 1
+    }
+
     private static func usesColorFont(_ line: CTLine) -> Bool {
         let runs = CTLineGetGlyphRuns(line) as? [CTRun] ?? []
         return runs.contains { run in
