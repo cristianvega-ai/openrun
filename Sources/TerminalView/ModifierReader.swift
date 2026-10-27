@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import TerminalEmulation
 
 /// Reads the modifier keys of an event, with the side of each key. AppKit
@@ -46,4 +47,23 @@ enum ModifierReader {
         guard isLeftOption(flags) else { return flags }
         return flags.subtracting([.option, NSEvent.ModifierFlags(rawValue: DeviceBit.leftOption)])
     }
+
+    /// Whether the modifier key with this key code is down, or `nil` for a key that is no modifier.
+    /// A flag stays set while the other key of the same modifier is down, so the device bit tells.
+    static func isKeyDown(keyCode: UInt16, flags: NSEvent.ModifierFlags) -> Bool? {
+        guard let (flag, bit) = modifierKeys[Int(keyCode)] else { return nil }
+        let hasDeviceBits = flags.rawValue & allDeviceBits != 0
+        return bit != 0 && hasDeviceBits ? flags.rawValue & bit != 0 : flags.contains(flag)
+    }
+
+    private static let allDeviceBits: UInt = DeviceBit.leftControl | DeviceBit.leftShift | DeviceBit.rightShift
+        | DeviceBit.leftCommand | DeviceBit.rightCommand | DeviceBit.leftOption | DeviceBit.rightOption | DeviceBit.rightControl
+
+    private static let modifierKeys: [Int: (NSEvent.ModifierFlags, UInt)] = [
+        kVK_Shift: (.shift, DeviceBit.leftShift), kVK_RightShift: (.shift, DeviceBit.rightShift),
+        kVK_Control: (.control, DeviceBit.leftControl), kVK_RightControl: (.control, DeviceBit.rightControl),
+        kVK_Option: (.option, DeviceBit.leftOption), kVK_RightOption: (.option, DeviceBit.rightOption),
+        kVK_Command: (.command, DeviceBit.leftCommand), kVK_RightCommand: (.command, DeviceBit.rightCommand),
+        kVK_CapsLock: (.capsLock, 0),
+    ]
 }

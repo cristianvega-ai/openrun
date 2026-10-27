@@ -20,6 +20,18 @@ final class KeyboardInput {
         encode(event, action: event.isARepeat ? .repeated : .press, text: KeyboardEventReader.layoutText(of: event))
     }
 
+    /// The bytes for a key that went up. Only a program that asked for key events reads them.
+    func bytes(forKeyUp event: NSEvent) -> [UInt8] {
+        encode(event, action: .release, text: nil)
+    }
+
+    /// The bytes for a modifier key that went down or up. Only a program that
+    /// asked for all keys as escape codes reads them.
+    func bytes(forFlagsChanged event: NSEvent) -> [UInt8] {
+        guard let isDown = ModifierReader.isKeyDown(keyCode: event.keyCode, flags: event.modifierFlags) else { return [] }
+        return encode(event, action: isDown ? .press : .release, text: nil)
+    }
+
     private func encode(_ event: NSEvent, action: KeyEvent.Action, text: String?) -> [UInt8] {
         // The program can change its modes at any time, and the left Option key is Alt.
         encoder.update(from: terminal, optionAsAlternate: .leftOnly)

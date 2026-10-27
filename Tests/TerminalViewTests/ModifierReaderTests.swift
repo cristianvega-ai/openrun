@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import TerminalEmulation
 import Testing
 @testable import TerminalView
@@ -37,5 +38,16 @@ import Testing
         #expect(ModifierReader.translationFlags(left) == [.shift])
         let right = flags(.option, bits: Bit.rightOption)
         #expect(ModifierReader.translationFlags(right) == right)
+    }
+
+    @Test func aModifierKeyIsDownByItsOwnDeviceBit() {
+        let bothShifts = flags(.shift, bits: Bit.leftShift | Bit.rightShift)
+        #expect(ModifierReader.isKeyDown(keyCode: UInt16(kVK_Shift), flags: bothShifts) == true)
+        let rightOnly = flags(.shift, bits: Bit.rightShift)
+        #expect(ModifierReader.isKeyDown(keyCode: UInt16(kVK_Shift), flags: rightOnly) == false)
+        #expect(ModifierReader.isKeyDown(keyCode: UInt16(kVK_RightShift), flags: rightOnly) == true)
+        #expect(ModifierReader.isKeyDown(keyCode: UInt16(kVK_Command), flags: .command) == true)
+        #expect(ModifierReader.isKeyDown(keyCode: UInt16(kVK_CapsLock), flags: []) == false)
+        #expect(ModifierReader.isKeyDown(keyCode: UInt16(kVK_ANSI_A), flags: []) == nil)
     }
 }

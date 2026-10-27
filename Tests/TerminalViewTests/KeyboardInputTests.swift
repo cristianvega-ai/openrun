@@ -105,4 +105,21 @@ import Testing
         view.keyDown(with: keyEvent(kVK_ANSI_A))
         #expect(view.terminal.isViewportAtBottom && delegate.takeSent() == "a")
     }
+
+    @Test func releasesAndModifierKeysGoOnlyToAProgramThatAsksForThem() throws {
+        let (view, delegate) = try makeView()
+        let release = keyEvent(kVK_ANSI_A, type: .keyUp)
+        let shiftDown = keyEvent(kVK_Shift, .shift, deviceBits: ModifierReader.DeviceBit.leftShift, type: .flagsChanged)
+        let shiftUp = keyEvent(kVK_Shift, type: .flagsChanged)
+        view.keyUp(with: release)
+        view.flagsChanged(with: shiftDown)
+        view.flagsChanged(with: shiftUp)
+        #expect(delegate.takeSent() == "")
+        view.terminal.write("\u{1B}[>11u")
+        view.keyDown(with: keyEvent(kVK_ANSI_A))
+        view.keyUp(with: release)
+        view.flagsChanged(with: shiftDown)
+        view.flagsChanged(with: shiftUp)
+        #expect(delegate.takeSent() == "\u{1B}[97u\u{1B}[97;1:3u\u{1B}[57441;2u\u{1B}[57441;1:3u")
+    }
 }

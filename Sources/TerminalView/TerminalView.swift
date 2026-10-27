@@ -115,6 +115,14 @@ public final class TerminalView: NSView {
         sendTyped(keyboard.bytes(forKeyDown: event))
     }
 
+    public override func keyUp(with event: NSEvent) {
+        sendTyped(keyboard.bytes(forKeyUp: event))
+    }
+
+    public override func flagsChanged(with event: NSEvent) {
+        sendTyped(keyboard.bytes(forFlagsChanged: event))
+    }
+
     // The menu of a later unit sends these actions through the responder chain.
     @objc public func increaseFontSize(_ sender: Any?) { changeFontSize { $0.larger() } }
     @objc public func decreaseFontSize(_ sender: Any?) { changeFontSize { $0.smaller() } }
