@@ -98,6 +98,12 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
         let screen = try renderScreen("cursor\u{1B}[2 q", columns: 12, rows: 1, isFocused: false)
         try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-hollow-block.png"))
     }
+
+    @Test(.enabled(if: screenshotFolder != nil))
+    func theFlashOfTheBell() throws {
+        let screen = try renderScreen("$ make\r\nBuild complete!\u{07}\r\n$ ", columns: 30, rows: 4, isFlashing: true)
+        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/bell-flash.png"))
+    }
 }
 
 @Suite struct FrameTimeTests {

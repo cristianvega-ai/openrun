@@ -89,4 +89,26 @@ import Testing
         dragKnob(of: view.scrollBar, toRow: Int(all.totalRows - all.visibleRows), of: all)
         #expect(view.terminal.isViewportAtBottom)
     }
+
+    /// Run with `OPENRUN_RENDER_OUTPUT=<folder>` to save a screenshot of a window with the scroll bar for a review.
+    /// `screencapture` takes the window from the screen, because the knob of the overlay style is not in a bitmap of the view.
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil && NSScreen.main != nil))
+    func theScreenshotOfAWindowWithTheScrollBar() throws {
+        let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] ?? ""
+        let view = try TerminalView(initialGrid: TerminalSize(columns: 50, rows: 10))
+        let window = show(view)
+        defer { window.close() }
+        window.setContentSize(NSSize(width: 420, height: 170))
+        window.makeKeyAndOrderFront(nil)
+        view.write(Array((1...100).map { "line \($0) of the scrollback\r\n" }.joined().utf8))
+        wait(seconds: 3) { view.framesDrawn > 0 }
+        view.scrollWheel(with: try scrollEvent())
+        wait(seconds: 0.4) { false }
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", "\(window.windowNumber)", "\(folder)/scroll-bar.png"]
+        try capture.run()
+        capture.waitUntilExit()
+        #expect(capture.terminationStatus == 0)
+    }
 }
