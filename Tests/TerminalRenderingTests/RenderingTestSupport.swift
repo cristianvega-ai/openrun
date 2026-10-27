@@ -84,17 +84,17 @@ func pixel(of target: OffscreenTarget, column: Int = 0, row: Int = 0, x: Int, y:
 
 /// A screen that uses every style that the renderer draws.
 let showcaseScreen: String = {
-    let e = "\u{1B}["
-    var text = "\(e)1mOpenRun\(e)0m terminal view, SF Mono 13 points, Graphite theme, Metal and CoreText\r\n"
-    text += "plain \(e)1mbold\(e)0m \(e)3mitalic\(e)0m \(e)1;3mbold italic\(e)0m \(e)2mfaint\(e)0m \(e)7minverse\(e)0m "
-    text += "\(e)9mstruck\(e)0m \(e)53moverline\(e)0m \(e)8minvisible\(e)0m<-invisible\r\n"
-    text += "\(e)4msingle\(e)0m \(e)4:2mdouble\(e)0m \(e)4:3mcurly\(e)0m \(e)4:4mdotted\(e)0m \(e)4:5mdashed\(e)0m "
-    text += "\(e)4:3m\(e)58;2;232;115;130mred curly\(e)0m \(e)1;4mbold under\(e)0m\r\n"
-    for color in 0..<16 { text += "\(e)38;5;\(color)mcolor\(color)\(e)0m " }
-    text += "\r\n" + (0..<16).map { "\(e)48;5;\($0)m  \(e)0m" }.joined() + " \(e)38;2;255;128;0mtruecolor\(e)0m\r\n"
+    let escape = "\u{1B}["
+    var text = "\(escape)1mOpenRun\(escape)0m terminal view, SF Mono 13 points, Graphite theme, Metal and CoreText\r\n"
+    text += "plain \(escape)1mbold\(escape)0m \(escape)3mitalic\(escape)0m \(escape)1;3mbold italic\(escape)0m \(escape)2mfaint\(escape)0m \(escape)7minverse\(escape)0m "
+    text += "\(escape)9mstruck\(escape)0m \(escape)53moverline\(escape)0m \(escape)8minvisible\(escape)0m<-invisible\r\n"
+    text += "\(escape)4msingle\(escape)0m \(escape)4:2mdouble\(escape)0m \(escape)4:3mcurly\(escape)0m \(escape)4:4mdotted\(escape)0m \(escape)4:5mdashed\(escape)0m "
+    text += "\(escape)4:3m\(escape)58;2;232;115;130mred curly\(escape)0m \(escape)1;4mbold under\(escape)0m\r\n"
+    for color in 0..<16 { text += "\(escape)38;5;\(color)mcolor\(color)\(escape)0m " }
+    text += "\r\n" + (0..<16).map { "\(escape)48;5;\($0)m  \(escape)0m" }.joined() + " \(escape)38;2;255;128;0mtruecolor\(escape)0m\r\n"
     text += "Wide: 日本語のテキスト 한국어 中文字符  Emoji: 🙂 👍 🚀 ✅\r\n"
     text += "Combining: e\u{301} n\u{303}  Devanagari: नमस्ते  Thai: สวัสดี  Greek: αβγ  Cyrillic: жизнь\r\n"
     text += "╭────────────────────╮  ⏺ ⎿ ❯ ✓ ✗ → • … ▌ █ ▓ ▒ ░\r\n│ box drawing joins  │  ⣿⣿ braille ▁▂▃▄▅▆▇█\r\n"
-    text += "╰────────────────────╯\r\n\(e)48;5;4m\(e)38;5;15m reversed status line \(e)K\(e)0m\r\n$ ls -la ~/Projects/openrun\r\n$ "
+    text += "╰────────────────────╯\r\n\(escape)48;5;4m\(escape)38;5;15m reversed status line \(escape)K\(escape)0m\r\n$ ls -la ~/Projects/openrun\r\n$ "
     return text
 }()
