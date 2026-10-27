@@ -6,6 +6,8 @@ import os
 /// the key encoder of libghostty-vt.
 @MainActor
 final class KeyboardInput {
+    /// The marked text and the texts of the key now handled.
+    var textInput = TextInputState()
     private let terminal: Terminal
     private let encoder: KeyEncoder
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "KeyboardInput")
@@ -18,6 +20,12 @@ final class KeyboardInput {
     /// The bytes for a key that went down. They are empty for a key that sends nothing.
     func bytes(forKeyDown event: NSEvent) -> [UInt8] {
         encode(event, action: event.isARepeat ? .repeated : .press, text: KeyboardEventReader.layoutText(of: event))
+    }
+
+    /// The bytes for a text that the text input system commits. There are none
+    /// while a key waits for its end, because the key sends the text then.
+    func bytes(forInsertedText text: String) -> [UInt8] {
+        textInput.insert(text) ? [] : Array(text.utf8)
     }
 
     /// The bytes for a key that went up. Only a program that asked for key events reads them.

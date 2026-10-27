@@ -87,6 +87,10 @@ public final class TerminalView: NSView {
     /// The size of the grid, which fits the size of the view.
     public var gridSize: TerminalSize { terminal.size }
 
+    func requestFrame() {
+        schedule?.requestFrame()
+    }
+
     /// Gives bytes for the program to the delegate. A call with no bytes does nothing.
     func send(_ bytes: [UInt8]) {
         guard !bytes.isEmpty else { return }
