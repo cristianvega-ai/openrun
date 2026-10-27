@@ -18,6 +18,7 @@ public final class TerminalView: NSView {
     let keyboard: KeyboardInput
     let pointer: PointerInput
     let scroll = ScrollInput()
+    let scrollBar = OverlayScrollBar()
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
@@ -49,6 +50,7 @@ public final class TerminalView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         // A mouse motion with no button comes only through a tracking area.
+        addSubview(scrollBar)
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
@@ -261,8 +263,15 @@ public final class TerminalView: NSView {
         }
     }
 
+    /// Moves the knob of the scroll bar to the place of the viewport.
+    func updateScrollBar() {
+        scrollBar.update(from: terminal.scrollbar)
+    }
+
     public override func layout() {
         super.layout()
+        let width = NSScroller.scrollerWidth(for: .regular, scrollerStyle: .overlay)
+        scrollBar.frame = NSRect(x: bounds.width - width, y: 0, width: width, height: bounds.height)
         host.resize(to: bounds.size, scale: renderer.fonts.scale)
         fitGrid()
         schedule?.requestFrame()
@@ -290,6 +299,7 @@ public final class TerminalView: NSView {
     @discardableResult
     func drawFrame(into target: some RenderTarget) throws -> Bool {
         try state.update(from: terminal)
+        updateScrollBar()
         try renderer.prepare(from: state)
         guard renderer.draw(into: target) else { return false }
         state.markClean()
