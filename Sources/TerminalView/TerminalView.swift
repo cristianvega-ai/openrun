@@ -41,6 +41,7 @@ public final class TerminalView: NSView {
     private var blink: CursorBlink?
     private var hold: SynchronizedOutputHold?
     private var bellFlash: BellFlash?
+    private var pointerShape = PointerShape.text
     private let parser = OutputParser()
     private var isParseScheduled = false
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
@@ -118,6 +119,10 @@ public final class TerminalView: NSView {
     func parseTurn() -> Bool {
         isParseScheduled = false
         let hasMore = parser.parse(into: terminal, budget: ParseBudget(limit: .milliseconds(4)))
+        if terminal.pointerShape != pointerShape {
+            pointerShape = terminal.pointerShape
+            window?.invalidateCursorRects(for: self)
+        }
         schedule?.requestFrame()
         if hasMore { scheduleParseTurn() }
         return hasMore
@@ -177,6 +182,13 @@ public final class TerminalView: NSView {
 
     public override var isOpaque: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
+
+    /// The mouse cursor is the shape that the program asked for. It starts as the text cursor.
+    var pointerCursor: NSCursor { PointerShapeCursor.cursor(for: pointerShape) }
+
+    public override func resetCursorRects() {
+        addCursorRect(bounds, cursor: pointerCursor)
+    }
 
     public override func keyDown(with event: NSEvent) {
         sendTyped(keyboard.bytes(forKeyDown: event) { interpretKeyEvents([$0]) })

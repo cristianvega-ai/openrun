@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import TerminalEmulation
 import Testing
@@ -20,5 +21,26 @@ import Testing
         #expect(location.cell(of: CGPoint(x: 5000, y: -50)) == ViewportCell(column: 79, row: 23))
         let corner = location.pixel(of: CGPoint(x: 5000, y: -50))
         #expect(corner.x == 1279 && corner.y == 743)
+    }
+}
+
+@MainActor @Suite struct PointerShapeCursorTests {
+    @Test func everyShapeHasACursorOfMacOS() {
+        let expected: [(PointerShape, NSCursor)] = [
+            (.text, .iBeam), (.arrow, .arrow), (.pointingHand, .pointingHand), (.crosshair, .crosshair), (.notAllowed, .operationNotAllowed),
+            (.openHand, .openHand), (.closedHand, .closedHand), (.resizeLeftRight, .resizeLeftRight), (.resizeUpDown, .resizeUpDown), (.other, .iBeam),
+        ]
+        for (shape, cursor) in expected { #expect(PointerShapeCursor.cursor(for: shape) === cursor, "\(shape)") }
+    }
+
+    @Test func theViewFollowsTheShapeThatTheProgramAsksFor() throws {
+        let view = try TerminalView()
+        #expect(view.pointerCursor === NSCursor.iBeam)
+        view.write(Array("\u{1B}]22;pointer\u{07}".utf8))
+        view.parseTurn()
+        #expect(view.pointerCursor === NSCursor.pointingHand)
+        view.write(Array("\u{1B}]22;default\u{07}".utf8))
+        view.parseTurn()
+        #expect(view.pointerCursor === NSCursor.arrow)
     }
 }
