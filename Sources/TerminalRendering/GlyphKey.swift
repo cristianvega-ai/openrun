@@ -4,4 +4,7 @@ struct GlyphKey: Hashable {
     let text: String
     let face: FontFace
     let columns: Int
+
+    /// The wave of the `curly` underline. It has no character, so its text is empty.
+    static let curlyUnderline = GlyphKey(text: "", face: .regular, columns: 1)
 }

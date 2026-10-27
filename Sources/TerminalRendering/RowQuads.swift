@@ -16,6 +16,9 @@ struct RowQuads {
             }
             let foreground = cell.foreground ?? colors.foreground
             decorations += DecorationQuads.lines(for: cell, x: x, color: foreground, metrics: metrics)
+            if cell.style.underline == .curly {
+                glyphs.append(.glyph(atlas.entry(for: .curlyUnderline), x: x, y: 0, color: cell.underlineColor ?? foreground))
+            }
             // The second cell of a wide character has nothing to draw.
             guard let base = cell.base, base != " ", cell.width != .wideTail, cell.width != .wideHead else { return }
             let key = GlyphKey(text: cell.text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)

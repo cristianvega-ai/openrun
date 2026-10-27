@@ -43,4 +43,12 @@ import TerminalEmulation
         let line = try row("4;58;2;255;0;0", top: metrics.underlinePosition)
         #expect(line.colors.allSatisfy { $0 == TerminalColor(red: 255, green: 0, blue: 0) })
     }
+
+    @Test func aCurlyUnderlineWavesAroundTheUnderlinePosition() throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[4:3m  ")
+        let band = metrics.underlinePosition - 2 * metrics.underlineThickness...metrics.underlinePosition + 3 * metrics.underlineThickness
+        let inked = (0..<2 * metrics.width).flatMap { x in band.map { pixel(of: screen.target, x: x, y: $0) } }
+        #expect(inked.filter { $0 != screen.theme.background }.count > metrics.width)
+        #expect((0..<metrics.underlinePosition - 3 * metrics.underlineThickness).allSatisfy { pixel(of: screen.target, x: 3, y: $0) == screen.theme.background })
+    }
 }

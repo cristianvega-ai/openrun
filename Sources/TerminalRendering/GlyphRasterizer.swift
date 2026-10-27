@@ -25,6 +25,7 @@ struct GlyphRasterizer {
 
     /// The bitmap of a glyph, or `nil` for one that draws nothing, such as a space.
     func bitmap(for key: GlyphKey) -> Bitmap? {
+        if key == .curlyUnderline { return curlyUnderline() }
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): fonts.font(for: key.face),
             NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
@@ -63,6 +64,30 @@ struct GlyphRasterizer {
         return Bitmap(
             pixels: pixels, width: width, height: height, offsetX: center - originX,
             offsetY: Int(baseline) - (height - originY), isColor: isColor)
+    }
+
+    /// A wave as wide as one cell. It starts and ends in its middle, so the
+    /// waves of two cells next to each other join.
+    private func curlyUnderline() -> Bitmap? {
+        let metrics = fonts.metrics
+        let thickness = CGFloat(metrics.underlineThickness)
+        let (width, height) = (metrics.width, metrics.underlineThickness * 4 + 2)
+        var pixels = [UInt8](repeating: 0, count: width * height)
+        let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
+            guard let context = Self.context(for: buffer, width: width, height: height, isColor: false) else { return false }
+            let middle = CGFloat(height) / 2
+            context.setStrokeColor(gray: 1, alpha: 1)
+            context.setLineWidth(thickness)
+            context.move(to: CGPoint(x: 0, y: middle))
+            for step in 1...width * 4 {
+                let x = CGFloat(step) / 4
+                context.addLine(to: CGPoint(x: x, y: middle + (middle - thickness) * sin(x / CGFloat(width) * 2 * .pi)))
+            }
+            context.strokePath()
+            return true
+        }
+        let top = metrics.underlinePosition + metrics.underlineThickness / 2 - height / 2
+        return drawn ? Bitmap(pixels: pixels, width: width, height: height, offsetX: 0, offsetY: top, isColor: false) : nil
     }
 
     private static func usesColorFont(_ line: CTLine) -> Bool {
