@@ -70,8 +70,11 @@ import TerminalEmulation
         #expect(view.renderer.fonts.cellWidth == cellWidth / 2 && view.renderer.padding == 8)
     }
 
-    @Test func theKeysOfCommandChangeTheFont() throws {
+    @Test(.enabled(if: NSScreen.main != nil))
+    func theKeysOfCommandChangeTheFont() throws {
         let (view, _) = try makeView()
+        let window = showFocused(view)
+        defer { window.close() }
         #expect(view.performKeyEquivalent(with: try key("=", .command)))
         #expect(view.performKeyEquivalent(with: try key("+", [.command, .shift])))
         #expect(view.renderer.fonts.pointSize == 15)
@@ -81,11 +84,15 @@ import TerminalEmulation
         #expect(view.renderer.fonts.pointSize == 13)
     }
 
-    @Test func otherKeysAreNotForTheFont() throws {
+    @Test(.enabled(if: NSScreen.main != nil))
+    func otherKeysAreNotForTheFont() throws {
         let (view, _) = try makeView()
-        #expect(!view.performKeyEquivalent(with: try key("=", [.command, .option])))
+        let window = showFocused(view)
+        defer { window.close() }
+        // A key with Command and no font action goes to the program, and the view takes it.
+        #expect(view.performKeyEquivalent(with: try key("=", [.command, .option])))
         #expect(!view.performKeyEquivalent(with: try key("=", [])))
-        #expect(!view.performKeyEquivalent(with: try key("c", .command)))
+        #expect(view.performKeyEquivalent(with: try key("c", .command)))
         #expect(view.renderer.fonts.pointSize == 13)
     }
 }

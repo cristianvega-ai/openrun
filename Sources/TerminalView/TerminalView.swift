@@ -141,17 +141,25 @@ public final class TerminalView: NSView {
     @objc public func decreaseFontSize(_ sender: Any?) { changeFontSize { $0.smaller() } }
     @objc public func resetFontSize(_ sender: Any?) { changeFontSize { $0.reset() } }
 
-    /// Command-plus and Command-equals make the text larger, Command-minus
-    /// smaller, and Command-0 goes back to 13 points. The view handles them
-    /// itself until the menu has items with these keys.
+    /// The menu that gets a key with Command first. It is the main menu until a test gives another one.
+    var commandMenu: NSMenu?
+
+    /// Takes the keys that a program wants before the menu and the other views
+    /// have them. `KeyEquivalentRoute` tells which keys. A key with Command goes
+    /// to the menu first. Then the view runs the font actions: Command-plus and
+    /// Command-equals make the text larger, Command-minus smaller, and Command-0
+    /// goes back to the standard size.
     public override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        let modifiers = event.modifierFlags.intersection([.command, .shift, .option, .control])
-        guard modifiers == .command || modifiers == [.command, .shift] else { return super.performKeyEquivalent(with: event) }
-        switch event.charactersIgnoringModifiers {
-        case "+", "=": increaseFontSize(nil)
-        case "-": decreaseFontSize(nil)
-        case "0": resetFontSize(nil)
-        default: return super.performKeyEquivalent(with: event)
+        // A window can hold more than one view, and only the view with the keyboard focus takes keys.
+        guard window?.firstResponder === self else { return false }
+        switch KeyEquivalentRoute.route(for: event, hasMarkedText: keyboard.textInput.hasMarkedText) {
+        case .appKit:
+            return super.performKeyEquivalent(with: event)
+        case .keyDown:
+            keyDown(with: event)
+        case .menuFirst(let fallback):
+            if (commandMenu ?? NSApplication.shared.mainMenu)?.performKeyEquivalent(with: event) == true { return true }
+            if let fallback { perform(fallback, with: nil) } else { keyDown(with: event) }
         }
         return true
     }

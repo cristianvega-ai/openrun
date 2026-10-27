@@ -30,6 +30,14 @@ func show(_ view: NSView) -> NSWindow {
     return window
 }
 
+/// A window whose first responder is `view`, so that key equivalents reach it.
+@MainActor
+func showFocused(_ view: NSView) -> NSWindow {
+    let window = show(view)
+    window.makeFirstResponder(view)
+    return window
+}
+
 /// Runs the main run loop until `condition` is true or `seconds` have passed.
 @MainActor
 func wait(seconds: Double, until condition: () -> Bool) {
