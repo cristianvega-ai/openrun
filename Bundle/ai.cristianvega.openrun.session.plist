@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>ai.cristianvega.openrun.session</string>
+	<key>BundleProgram</key>
+	<string>Contents/MacOS/openrun-session</string>
+	<key>ProgramArguments</key>
+	<array>
+		<string>openrun-session</string>
+		<string>--launch-agent</string>
+	</array>
+	<key>MachServices</key>
+	<dict>
+		<key>ai.cristianvega.openrun.session</key>
+		<true/>
+	</dict>
+	<key>KeepAlive</key>
+	<dict>
+		<key>Crashed</key>
+		<true/>
+	</dict>
+	<key>ProcessType</key>
+	<string>Interactive</string>
+	<key>AssociatedBundleIdentifiers</key>
+	<array>
+		<string>ai.cristianvega.openrun</string>
+	</array>
+</dict>
+</plist>
