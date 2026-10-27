@@ -49,6 +49,20 @@ import Testing
         #expect(wide.offsetX + wide.width - GlyphRasterizer.padding <= 2 * fonts.cellWidth)
     }
 
+    @Test func anEmojiFitsInItsCellsAndIsNeverEnlarged() throws {
+        let padding = GlyphRasterizer.padding
+        for columns in [1, 2] {
+            let emoji = try #require(bitmap("🙂", columns: columns))
+            #expect(emoji.isColor)
+            #expect(emoji.offsetX + padding >= 0)
+            #expect(emoji.offsetX + emoji.width - padding <= columns * fonts.cellWidth)
+            // The bitmap rounds its edges outward, by less than one pixel each.
+            #expect(emoji.offsetY + padding >= -1)
+            #expect(emoji.offsetY + emoji.height - padding <= fonts.cellHeight + 1)
+        }
+        #expect(try #require(bitmap("🙂", columns: 4)).width == #require(bitmap("🙂", columns: 2)).width)
+    }
+
     @Test func theBoldFaceCoversMorePixels() throws {
         let regular = try #require(bitmap("M")).pixels.reduce(0) { $0 + Int($1) }
         let bold = try #require(bitmap("M", .bold)).pixels.reduce(0) { $0 + Int($1) }
