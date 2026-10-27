@@ -4,4 +4,6 @@ public enum RenderingError: Error, Equatable, Sendable {
     case textureUnavailable
     /// Metal could not compile the shaders. The text is the message of Metal.
     case shaderCompilationFailed(String)
+    /// A picture could not become a PNG file.
+    case imageFileFailed
 }
