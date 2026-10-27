@@ -38,6 +38,7 @@ public final class TerminalView: NSView {
     private var schedule: DisplaySchedule?
     private var autoscrollTimer: SelectionAutoscrollTimer?
     private var blink: CursorBlink?
+    private var hold: SynchronizedOutputHold?
     private let parser = OutputParser()
     private var isParseScheduled = false
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
@@ -76,6 +77,12 @@ public final class TerminalView: NSView {
             self?.renderer.isCursorShown = isShown
             self?.requestFrame()
         }
+        hold = SynchronizedOutputHold(clock: clock) { [weak self] in
+            try? self?.terminal.setMode(.synchronizedOutput, enabled: false)
+            self?.requestFrame()
+        }
+        try terminal.setEventHandler(TerminalEventHandler(
+            bell: {}, titleChanged: {}, renderHold: { [weak self] isHeld in MainActor.assumeIsolated { self?.renderHold(isHeld) } }))
         autoscrollTimer = SelectionAutoscrollTimer(clock: clock) { [weak self] in self?.autoscrollSelection() }
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
@@ -340,6 +347,18 @@ public final class TerminalView: NSView {
         }
     }
 
+    /// A program holds the screen (mode 2026) or lets it go. libghostty-vt wants the frame
+    /// that the program leaves on the screen at the start of the hold, so it is taken here.
+    private func renderHold(_ isHeld: Bool) {
+        if isHeld {
+            try? state.update(from: terminal)
+            hold?.begin()
+        } else {
+            hold?.end()
+            requestFrame()
+        }
+    }
+
     /// The window became the key window or stopped. The cursor is hollow without it, and the program may want to know.
     private func windowKeyChanged(_ isKey: Bool) {
         renderer.isFocused = isKey
@@ -382,7 +401,8 @@ public final class TerminalView: NSView {
     /// - Returns: `false` when the graphics processor is behind. The caller tries again.
     @discardableResult
     func drawFrame(into target: some RenderTarget) throws -> Bool {
-        try state.update(from: terminal)
+        // While a program holds the screen, the view draws the frame that it took when the hold began.
+        if hold?.isHeld != true { try state.update(from: terminal) }
         blink?.update(programBlinks: state.cursor.isBlinking, windowIsKey: renderer.isFocused)
         updateScrollBar()
         try renderer.prepare(from: state)
