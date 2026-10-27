@@ -1,7 +1,9 @@
-/// The quads of one frame, in the order of drawing: the backgrounds, then the glyphs.
+/// The quads of one frame, in the order of drawing: the backgrounds, the glyphs,
+/// and then the lines on top of the glyphs.
 struct FrameBuilder {
     private(set) var backgrounds: [CellQuad] = []
     private(set) var glyphs: [CellQuad] = []
+    private(set) var overlays: [CellQuad] = []
 
     /// Moves the quads of each row to its place on the screen: down by the
     /// rows above it, and in by the padding.
@@ -11,6 +13,7 @@ struct FrameBuilder {
             let top = padding + index * metrics.height
             backgrounds += row.backgrounds.map { $0.moved(x: padding, y: top) }
             glyphs += row.glyphs.map { $0.moved(x: padding, y: top) }
+            overlays += row.decorations.map { $0.moved(x: padding, y: top) }
         }
     }
 }

@@ -70,3 +70,8 @@ func inkCount(of screen: (target: OffscreenTarget, theme: TerminalTheme), column
     let ys = testPadding + rows.lowerBound * testFonts.cellHeight..<testPadding + rows.upperBound * testFonts.cellHeight
     return ys.flatMap { y in xs.map { screen.target.pixel(x: $0, y: y) } }.filter { $0 != screen.theme.background }.count
 }
+
+/// The pixel at a place in a cell, counted in pixels from the top left of the cell.
+func pixel(of target: OffscreenTarget, column: Int = 0, row: Int = 0, x: Int, y: Int) -> TerminalColor {
+    target.pixel(x: testPadding + column * testFonts.cellWidth + x, y: testPadding + row * testFonts.cellHeight + y)
+}

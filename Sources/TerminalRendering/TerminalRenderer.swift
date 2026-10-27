@@ -77,7 +77,7 @@ public final class TerminalRenderer {
         pass.colorAttachments[0].storeAction = .store
         let clear = CellQuad.vector(background)
         pass.colorAttachments[0].clearColor = MTLClearColor(red: Double(clear.x), green: Double(clear.y), blue: Double(clear.z), alpha: 1)
-        guard let (buffer, offsets) = copy([frame.backgrounds, frame.glyphs]), let commands = queue.makeCommandBuffer(),
+        guard let (buffer, offsets) = copy([frame.backgrounds, frame.glyphs, frame.overlays]), let commands = queue.makeCommandBuffer(),
             let encoder = commands.makeRenderCommandEncoder(descriptor: pass)
         else { return false }
         var viewport = SIMD2<Float>(Float(target.texture.width), Float(target.texture.height))
@@ -86,6 +86,7 @@ public final class TerminalRenderer {
         encoder.setFragmentTexture(atlas.coverage, index: 0)
         encoder.setFragmentTexture(atlas.color, index: 1)
         draw(frame.glyphs, with: shaders.glyphs, buffer: buffer, offset: offsets[1], encoder: encoder)
+        draw(frame.overlays, with: shaders.rectangles, buffer: buffer, offset: offsets[2], encoder: encoder)
         encoder.endEncoding()
         let finished = framesInFlight
         commands.addCompletedHandler { _ in finished.signal() }
