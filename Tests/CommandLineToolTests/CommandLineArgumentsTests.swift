@@ -1,4 +1,5 @@
 import Foundation
+import SessionConnection
 import SessionProtocol
 import Testing
 @testable import CommandLineTool
@@ -119,6 +120,15 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(CommandLineTool.run(arguments: ["attach", ""], environment: environment) == 2)
     }
 
+    /// The tool names its own commands in the errors of the connection, and
+    /// an empty identifier stays a usage error.
+    @Test func theToolGivesTheErrorsOfTheConnectionItsOwnWords() {
+        #expect(CommandLineToolError(.emptyIdentifier).exitCode == 2)
+        #expect(CommandLineToolError(.noMatchingSession(typed: "zz")).exitCode == 1)
+        #expect(CommandLineToolError(.noMatchingSession(typed: "zz")).description
+            == "No session has an identifier that starts with zz. Run 'openrun list' to see the sessions.")
+    }
+
     /// openrun's own line breaks stay, so each candidate is on its own line.
     /// The folder is text that a client chose, so no control character in it
     /// reaches the terminal, not even a line break.
@@ -142,7 +152,9 @@ private func usageMessage(_ words: String...) -> String? {
         do {
             _ = try SessionIdentifierMatch.find("1a2b", in: hostile)
             Issue.record("The prefix should be ambiguous.")
-        } catch let error as CommandLineToolError {
+        } catch let connectionError as SessionConnectionError {
+            let error = CommandLineToolError(connectionError)
+            #expect(error.exitCode == 1)
             let lines = error.printableDescription.split(separator: "\n", omittingEmptySubsequences: false)
             // Without this, a defect would crash the test process at the index below.
             try #require(lines.count == 3, "lines: \(lines)")

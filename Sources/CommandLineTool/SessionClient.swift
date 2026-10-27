@@ -1,4 +1,5 @@
 import Darwin
+import SessionConnection
 import SessionProtocol
 
 /// A connection to the session process, after the handshake.

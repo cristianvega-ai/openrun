@@ -51,7 +51,7 @@ let package = Package(
         ),
         .target(
             name: "CommandLineTool",
-            dependencies: ["TerminalEmulation", "SessionProtocol"]
+            dependencies: ["SessionConnection", "TerminalEmulation", "SessionProtocol"]
         ),
         .executableTarget(
             name: "openrun",
@@ -74,7 +74,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CommandLineToolTests",
-            dependencies: ["SessionProcessHarness", "CommandLineTool", "PseudoTerminal"]
+            dependencies: ["SessionProcessHarness", "CommandLineTool", "SessionConnection", "PseudoTerminal"]
         ),
     ],
     swiftLanguageModes: [.v6]

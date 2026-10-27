@@ -1,3 +1,4 @@
+import SessionConnection
 import TerminalEmulation
 
 /// Why a command did not finish. The error decides the exit code.
@@ -10,6 +11,23 @@ enum CommandLineToolError: Error, CustomStringConvertible {
     /// list. The tool's own line breaks between them are kept when the error
     /// is printed, while the text of each line is escaped.
     case failureWithList(heading: String, lines: [String])
+
+    /// The words of the tool for an error of the connection. They name the
+    /// commands that help, and put each candidate of an unclear identifier
+    /// on a line of its own.
+    init(_ error: SessionConnectionError) {
+        switch error {
+        case .emptyIdentifier:
+            self = .usage(error.description)
+        case .noMatchingSession(let typed):
+            self = .failure("No session has an identifier that starts with \(typed). Run 'openrun list' to see the sessions.")
+        case .ambiguousIdentifier(let typed, let candidates):
+            self = .failureWithList(
+                heading: "More than one session starts with \(typed). Type more characters.",
+                lines: candidates.map { "  \($0.identifierText)  \($0.folder)" }
+            )
+        }
+    }
 
     var exitCode: Int32 {
         switch self {

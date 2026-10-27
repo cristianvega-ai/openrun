@@ -1,4 +1,5 @@
 import Foundation
+import SessionConnection
 import SessionProtocol
 import TerminalEmulation
 
@@ -19,13 +20,19 @@ public enum CommandLineTool {
             let location = try resolveLocation(flag: parsed.socketPath, environment: environment)
             return try execute(parsed.command, location: location, environment: environment)
         } catch let error as CommandLineToolError {
-            writeError(error)
-            if case .usage = error { write(UsageText.hint + "\n", to: .standardError) }
-            return error.exitCode
+            return report(error)
+        } catch let error as SessionConnectionError {
+            return report(CommandLineToolError(error))
         } catch {
             writeError(error)
             return 1
         }
+    }
+
+    private static func report(_ error: CommandLineToolError) -> Int32 {
+        writeError(error)
+        if case .usage = error { write(UsageText.hint + "\n", to: .standardError) }
+        return error.exitCode
     }
 
     private static func execute(_ command: ToolCommand, location: SocketLocation, environment: [String: String]) throws -> Int32 {
