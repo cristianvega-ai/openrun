@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import TerminalEmulation
 import Testing
@@ -70,5 +71,45 @@ import Testing
     @Test func appKitNumbersTheButtonsFromTheLeftOne() {
         let buttons = (0...5).map(PointerInput.button(forNumber:))
         #expect(buttons == [.left, .right, .middle, .back, .forward, nil])
+    }
+}
+
+@MainActor @Suite struct MouseOfViewTests {
+    private func makeView(_ output: String) throws -> (view: TerminalView, delegate: RecordingDelegate) {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        view.layoutSubtreeIfNeeded()
+        view.terminal.write(output)
+        return (view, delegate)
+    }
+
+    /// A mouse event in the middle of the cell in column 5 and row 3.
+    private func event(_ type: NSEvent.EventType, in view: TerminalView, _ flags: NSEvent.ModifierFlags = []) throws -> NSEvent {
+        let cell = view.cellSize, padding = view.gridPadding
+        let point = NSPoint(x: padding + 5.5 * cell.width, y: view.bounds.height - padding - 3.5 * cell.height)
+        return try #require(NSEvent.mouseEvent(
+            with: type, location: point, modifierFlags: flags, timestamp: 1, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    }
+
+    @Test func aProgramThatAsksForReportsGetsTheButtonsAndTheMotion() throws {
+        let (view, delegate) = try makeView("\u{1B}[?1003h\u{1B}[?1006h")
+        view.mouseMoved(with: try event(.mouseMoved, in: view))
+        view.mouseDown(with: try event(.leftMouseDown, in: view))
+        view.mouseUp(with: try event(.leftMouseUp, in: view))
+        view.rightMouseDown(with: try event(.rightMouseDown, in: view))
+        view.rightMouseUp(with: try event(.rightMouseUp, in: view))
+        #expect(delegate.takeSent() == "\u{1B}[<35;6;4M\u{1B}[<0;6;4M\u{1B}[<0;6;4m\u{1B}[<2;6;4M\u{1B}[<2;6;4m")
+    }
+
+    @Test func aProgramWithoutReportsAndAShiftPressGetNothing() throws {
+        let (plain, plainDelegate) = try makeView("")
+        plain.mouseDown(with: try event(.leftMouseDown, in: plain))
+        let (shifted, shiftedDelegate) = try makeView("\u{1B}[?1002h\u{1B}[?1006h")
+        shifted.mouseDown(with: try event(.leftMouseDown, in: shifted, .shift))
+        shifted.mouseDragged(with: try event(.leftMouseDragged, in: shifted, .shift))
+        shifted.mouseUp(with: try event(.leftMouseUp, in: shifted, .shift))
+        #expect(plainDelegate.takeSent() == "" && shiftedDelegate.takeSent() == "")
     }
 }

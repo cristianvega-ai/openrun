@@ -16,6 +16,7 @@ public final class TerminalView: NSView {
     let terminal: Terminal
     let state: RenderState
     let keyboard: KeyboardInput
+    let pointer: PointerInput
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
@@ -39,12 +40,15 @@ public final class TerminalView: NSView {
         terminal = try Terminal(size: initialGrid, scrollbackLimit: 10_000)
         state = try RenderState()
         keyboard = try KeyboardInput(terminal: terminal)
+        pointer = try PointerInput(terminal: terminal)
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
         renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
         self.device = device
         host = MetalLayerHost(device: device)
         super.init(frame: .zero)
         wantsLayer = true
+        // A mouse motion with no button comes only through a tracking area.
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
         appearanceObserver = observer
@@ -131,6 +135,46 @@ public final class TerminalView: NSView {
 
     public override func keyDown(with event: NSEvent) {
         sendTyped(keyboard.bytes(forKeyDown: event) { interpretKeyEvents([$0]) })
+    }
+
+    public override func mouseDown(with event: NSEvent) { report(.press, .left, event) }
+    public override func mouseUp(with event: NSEvent) { report(.release, .left, event) }
+    public override func mouseDragged(with event: NSEvent) { report(.motion, .left, event) }
+    public override func mouseMoved(with event: NSEvent) { report(.motion, nil, event) }
+
+    public override func rightMouseDown(with event: NSEvent) {
+        if !report(.press, .right, event) { super.rightMouseDown(with: event) }
+    }
+
+    public override func rightMouseUp(with event: NSEvent) {
+        if !report(.release, .right, event) { super.rightMouseUp(with: event) }
+    }
+
+    public override func rightMouseDragged(with event: NSEvent) {
+        if !report(.motion, .right, event) { super.rightMouseDragged(with: event) }
+    }
+
+    public override func otherMouseDown(with event: NSEvent) {
+        if !report(.press, PointerInput.button(forNumber: event.buttonNumber), event) { super.otherMouseDown(with: event) }
+    }
+
+    public override func otherMouseUp(with event: NSEvent) {
+        if !report(.release, PointerInput.button(forNumber: event.buttonNumber), event) { super.otherMouseUp(with: event) }
+    }
+
+    public override func otherMouseDragged(with event: NSEvent) {
+        if !report(.motion, PointerInput.button(forNumber: event.buttonNumber), event) { super.otherMouseDragged(with: event) }
+    }
+
+    /// Gives a mouse event to the program when the event is for the program.
+    ///
+    /// - Returns: `false` when the event is not for the program.
+    @discardableResult
+    private func report(_ action: MouseEvent.Action, _ button: MouseEvent.Button?, _ event: NSEvent) -> Bool {
+        let point = convert(event.locationInWindow, from: nil)
+        guard let bytes = pointer.bytes(action, button: button, modifiers: event.modifierFlags, at: point, in: pointerLocation) else { return false }
+        send(bytes)
+        return true
     }
 
     public override func keyUp(with event: NSEvent) {
