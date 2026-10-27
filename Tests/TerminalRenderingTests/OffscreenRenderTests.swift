@@ -66,4 +66,12 @@ import TerminalTheme
         let screen = try renderScreen("\u{1B}[?25l\u{1B}[8mAB")
         #expect(inkCount(of: screen, columns: 0..<10, rows: 0..<3) == 0)
     }
+
+    @Test(arguments: [TerminalColorScheme.dark, .light])
+    func selectedCellsHaveTheGraphiteSelectionColor(scheme: TerminalColorScheme) throws {
+        let screen = try renderScreen("\u{1B}[?25lab cd", scheme: scheme, selecting: ViewportCell(column: 0, row: 0))
+        #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 3, x: 0, y: 0) == screen.theme.background)
+    }
 }

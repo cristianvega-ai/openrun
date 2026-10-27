@@ -10,12 +10,14 @@ struct RowQuads {
     /// The columns of the wide characters. A cursor on one of them covers 2 cells.
     private(set) var wideColumns: [UInt16] = []
 
-    init(row: RenderRow, colors: RenderColors, atlas: GlyphAtlas, metrics: CellMetrics) throws {
+    init(row: RenderRow, colors: RenderColors, selection: TerminalColor, atlas: GlyphAtlas, metrics: CellMetrics) throws {
+        let selected = row.selectedColumns
         try row.forEachCell(palette: colors.palette) { cell in
             let x = Int(cell.column) * metrics.width
             var foreground = cell.foreground ?? colors.foreground
             var background = cell.background
             if cell.style.isInverse { (foreground, background) = (background ?? colors.background, foreground) }
+            if selected?.contains(cell.column) == true { background = selection }
             if let background, background != colors.background {
                 backgrounds.append(.rectangle(x: x, y: 0, width: metrics.width, height: metrics.height, color: background))
             }

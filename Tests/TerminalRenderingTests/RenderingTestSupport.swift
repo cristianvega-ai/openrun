@@ -6,6 +6,8 @@ import TerminalTheme
 
 /// SF Mono at 13 points on a Retina screen, as the app draws it.
 var testFonts: FontSet { FontSet(pointSize: 13, scale: 2) }
+/// The selection color of the Graphite theme in dark mode.
+var selectionColor: TerminalColor { TerminalTheme.graphite(for: .dark).selection }
 /// The space around the grid: 8 points.
 var testPadding: Int { Int((8 * testFonts.scale).rounded()) }
 
@@ -26,7 +28,7 @@ func makeAtlas() throws -> GlyphAtlas {
 func quads(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuads] {
     var rows: [RowQuads] = []
     try state.forEachRow(onlyChanged: false) {
-        rows.append(try RowQuads(row: $0, colors: state.colors, atlas: atlas, metrics: testFonts.metrics))
+        rows.append(try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics))
     }
     return rows
 }
@@ -34,22 +36,24 @@ func quads(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuads] {
 /// Brings the cache up to date with the screen, as the renderer does.
 func update(_ cache: inout RowCache, from state: RenderState, atlas: GlyphAtlas) throws -> FrameStatistics {
     try cache.update(from: state, atlasGeneration: atlas.generation) {
-        try RowQuads(row: $0, colors: state.colors, atlas: atlas, metrics: testFonts.metrics)
+        try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics)
     }
 }
 
 /// Draws a screen with the Graphite theme into an offscreen target.
 func renderScreen(
-    _ output: String, columns: UInt16 = 10, rows: UInt16 = 3, scheme: TerminalColorScheme = .dark, isFocused: Bool = true
+    _ output: String, columns: UInt16 = 10, rows: UInt16 = 3, scheme: TerminalColorScheme = .dark, isFocused: Bool = true,
+    selecting cell: ViewportCell? = nil
 ) throws -> (target: OffscreenTarget, theme: TerminalTheme) {
     let device = try #require(MTLCreateSystemDefaultDevice())
     let theme = TerminalTheme.graphite(for: scheme)
     let terminal = try Terminal(size: TerminalSize(columns: columns, rows: rows), scrollbackLimit: 0)
     try theme.apply(to: terminal)
     terminal.write(output)
+    if let cell { try terminal.selectWord(at: cell) }
     let state = try RenderState()
     try state.update(from: terminal)
-    let renderer = try TerminalRenderer(device: device, fonts: testFonts)
+    let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection)
     renderer.isFocused = isFocused
     try renderer.prepare(from: state)
     let size = renderer.pixelSize(for: terminal.size)

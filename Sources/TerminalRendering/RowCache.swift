@@ -14,6 +14,12 @@ struct RowCache {
         rows[order[index]]
     }
 
+    /// Makes the next update read every row, as when something besides the
+    /// screen changes the quads.
+    mutating func forget() {
+        size = nil
+    }
+
     /// Makes new quads for the rows that changed. Every row changes when the
     /// whole screen is dirty, when the grid has a new size, or when the colors
     /// or the glyph positions changed, because the quads hold them.

@@ -73,7 +73,7 @@ import TerminalEmulation
 @Suite struct RendererPrepareTests {
     @Test func aChangeInOneRowReadsOneRow() throws {
         let screen = try makeScreen("a\r\nb", rows: 5)
-        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts)
+        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts, selectionColor: selectionColor)
         #expect(try renderer.prepare(from: screen.state).rowsPrepared == 5)
         screen.state.markClean()
         screen.terminal.write("x")
@@ -81,8 +81,17 @@ import TerminalEmulation
         #expect(try renderer.prepare(from: screen.state) == FrameStatistics(rowsPrepared: 1, rowsReused: 4))
     }
 
+    @Test func aNewSelectionColorReadsEveryRow() throws {
+        let screen = try makeScreen("a\r\nb", rows: 5)
+        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts, selectionColor: selectionColor)
+        try renderer.prepare(from: screen.state)
+        screen.state.markClean()
+        renderer.selectionColor = TerminalColor(red: 9, green: 9, blue: 9)
+        #expect(try renderer.prepare(from: screen.state).rowsPrepared == 5)
+    }
+
     @Test func aGridAndItsPaddingMakeThePixelSize() throws {
-        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts)
+        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts, selectionColor: selectionColor)
         let size = renderer.pixelSize(for: TerminalSize(columns: 10, rows: 3))
         #expect(size.width == 2 * 16 + 10 * testFonts.cellWidth)
         #expect(size.height == 2 * 16 + 3 * testFonts.cellHeight)

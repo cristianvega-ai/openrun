@@ -10,6 +10,10 @@ public final class TerminalRenderer {
     public let fonts: FontSet
     /// The space around the grid in pixels: 8 points.
     public let padding: Int
+    /// The background of the selected cells. A new color changes every row.
+    public var selectionColor: TerminalColor {
+        didSet { if selectionColor != oldValue { cache.forget() } }
+    }
     /// Whether the view has the keyboard focus. Without it, the cursor is a hollow block.
     public var isFocused = true
     private let device: MTLDevice
@@ -24,10 +28,11 @@ public final class TerminalRenderer {
     private var bufferIndex = 0
     private let framesInFlight = DispatchSemaphore(value: 3)
 
-    public init(device: MTLDevice, fonts: FontSet, pixelFormat: MTLPixelFormat = .bgra8Unorm) throws {
+    public init(device: MTLDevice, fonts: FontSet, selectionColor: TerminalColor, pixelFormat: MTLPixelFormat = .bgra8Unorm) throws {
         guard let queue = device.makeCommandQueue() else { throw RenderingError.commandQueueUnavailable }
         self.device = device
         self.fonts = fonts
+        self.selectionColor = selectionColor
         self.queue = queue
         shaders = try ShaderLibrary(device: device, pixelFormat: pixelFormat)
         padding = Int((8 * fonts.scale).rounded())
@@ -47,7 +52,7 @@ public final class TerminalRenderer {
         cursor = state.cursor
         func update() throws -> FrameStatistics {
             try cache.update(from: state, atlasGeneration: atlas.generation) {
-                try RowQuads(row: $0, colors: state.colors, atlas: atlas, metrics: fonts.metrics)
+                try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
             }
         }
         let generation = atlas.generation
