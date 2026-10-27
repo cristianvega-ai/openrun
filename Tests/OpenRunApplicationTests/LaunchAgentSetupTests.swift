@@ -76,4 +76,28 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
         #expect(result.outcome == .failed && result.questions == [.failed(detail: SessionWakeFailure.notRegistered.description)])
         #expect(registration.calls.isEmpty)
     }
+
+    /// Owner decision D3 of 2026-10-27: the user decides, because a new
+    /// registration ends the sessions of the old build.
+    @Test func aWakeThatTimesOutWhileEnabledRegistersAgainOnlyWhenTheUserAgrees() {
+        let timeout = SessionWakeFailure.timedOut(limit: .seconds(15))
+        let declined = StandInRegistration(.enabled)
+        let refusal = runSetup(declined, failures: [timeout], answers: [false])
+        #expect(refusal.outcome == .declined && refusal.questions == [.registerAgain] && refusal.connections == 1)
+        #expect(declined.calls.isEmpty)
+
+        let agreed = StandInRegistration(.enabled)
+        let renewal = runSetup(agreed, failures: [timeout, nil], answers: [true])
+        #expect(renewal.outcome == .ready && renewal.questions == [.registerAgain] && renewal.connections == 2)
+        #expect(agreed.calls == ["unregister", "register"])
+    }
+
+    @Test func aSecondTimeoutAfterTheNewRegistrationStopsTheSetup() {
+        let timeout = SessionWakeFailure.timedOut(limit: .seconds(15))
+        let registration = StandInRegistration(.enabled)
+        let result = runSetup(registration, failures: [timeout, timeout], answers: [true])
+        #expect(result.outcome == .failed && result.connections == 2)
+        #expect(result.questions == [.registerAgain, .failed(detail: timeout.description)])
+        #expect(registration.calls == ["unregister", "register"])
+    }
 }
