@@ -32,6 +32,15 @@ public struct RenderRow {
         return dirty
     }
 
+    /// The selected columns of this row, both ends included.
+    public var selectedColumns: ClosedRange<UInt16>? {
+        var selection = GhosttyRenderStateRowSelection()
+        selection.size = MemoryLayout<GhosttyRenderStateRowSelection>.size
+        guard ghostty_render_state_row_get(iterator, GHOSTTY_RENDER_STATE_ROW_DATA_SELECTION, &selection) == GHOSTTY_SUCCESS
+        else { return nil }
+        return selection.start_x...selection.end_x
+    }
+
     /// Calls `body` for each cell from the left. Colors are resolved through
     /// `palette`, the palette of the same update.
     public func forEachCell(palette: [TerminalColor], _ body: (RenderCell) throws -> Void) throws {

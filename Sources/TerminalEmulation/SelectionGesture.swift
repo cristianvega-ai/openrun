@@ -10,26 +10,31 @@ public final class SelectionGesture {
     private let terminal: Terminal
     private let gesture: GhosttySelectionGesture
     private let pressEvent: GhosttySelectionGestureEvent
+    private let dragEvent: GhosttySelectionGestureEvent
     private let releaseEvent: GhosttySelectionGestureEvent
 
     public init(for terminal: Terminal) throws {
         var gesture: GhosttySelectionGesture?
         var press: GhosttySelectionGestureEvent?
+        var drag: GhosttySelectionGestureEvent?
         var release: GhosttySelectionGestureEvent?
         guard ghostty_selection_gesture_new(nil, &gesture) == GHOSTTY_SUCCESS,
               ghostty_selection_gesture_event_new(nil, &press, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS) == GHOSTTY_SUCCESS,
+              ghostty_selection_gesture_event_new(nil, &drag, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG) == GHOSTTY_SUCCESS,
               ghostty_selection_gesture_event_new(nil, &release, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_RELEASE) == GHOSTTY_SUCCESS,
-              let gesture, let press, let release
+              let gesture, let press, let drag, let release
         else {
             ghostty_selection_gesture_event_free(press)
+            ghostty_selection_gesture_event_free(drag)
             ghostty_selection_gesture_free(gesture, nil)
             throw TerminalEmulationError.invalidValue(in: "SelectionGesture.init")
         }
-        (self.terminal, self.gesture, pressEvent, releaseEvent) = (terminal, gesture, press, release)
+        (self.terminal, self.gesture, pressEvent, dragEvent, releaseEvent) = (terminal, gesture, press, drag, release)
     }
 
     deinit {
         ghostty_selection_gesture_event_free(pressEvent)
+        ghostty_selection_gesture_event_free(dragEvent)
         ghostty_selection_gesture_event_free(releaseEvent)
         ghostty_selection_gesture_free(gesture, terminal.handle)
     }
@@ -49,6 +54,20 @@ public final class SelectionGesture {
         _ = ghostty_selection_gesture_event_set(pressEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REPEAT_INTERVAL_NS, &interval)
         _ = ghostty_selection_gesture_event_set(pressEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REPEAT_DISTANCE, &distance)
         try apply(pressEvent)
+    }
+
+    /// The pointer moves with the button down. The selection grows from the
+    /// press to `cell`. The geometry lets libghostty-vt choose the side of
+    /// the cell where the selection ends.
+    public func drag(to cell: ViewportCell, pixel: (x: Double, y: Double), cellWidth: UInt32, screenHeight: UInt32) throws {
+        var reference = try terminal.gridReference(at: cell)
+        var position = GhosttySurfacePosition(x: pixel.x, y: pixel.y)
+        var geometry = GhosttySelectionGestureGeometry(
+            columns: UInt32(terminal.size.columns), cell_width: cellWidth, padding_left: 0, screen_height: screenHeight)
+        _ = ghostty_selection_gesture_event_set(dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF, &reference)
+        _ = ghostty_selection_gesture_event_set(dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &position)
+        _ = ghostty_selection_gesture_event_set(dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY, &geometry)
+        try apply(dragEvent)
     }
 
     public func release(at cell: ViewportCell) throws {
