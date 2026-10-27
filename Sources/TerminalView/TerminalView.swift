@@ -17,6 +17,7 @@ public final class TerminalView: NSView {
     let state: RenderState
     let keyboard: KeyboardInput
     let pointer: PointerInput
+    let focus = FocusInput()
     let selection: SelectionInput
     let scroll = ScrollInput()
     let scrollBar: OverlayScrollBar
@@ -63,6 +64,7 @@ public final class TerminalView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         // A mouse motion with no button comes only through a tracking area.
+        focus.onChange = { [weak self] isKey in self?.windowKeyChanged(isKey) }
         addSubview(scrollBar)
         scrollBar.onScroll = { [weak self] scroll in
             self?.terminal.scrollViewport(scroll)
@@ -322,12 +324,21 @@ public final class TerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        focus.follow(window)
+        renderer.isFocused = window?.isKeyWindow ?? true
         if window == nil {
             schedule?.stop()
         } else {
             adoptWindowScale()
             schedule?.attach()
         }
+    }
+
+    /// The window became the key window or stopped. The cursor is hollow without it, and the program may want to know.
+    private func windowKeyChanged(_ isKey: Bool) {
+        renderer.isFocused = isKey
+        send(FocusInput.report(gained: isKey, terminal: terminal))
+        requestFrame()
     }
 
     /// Moves the knob of the scroll bar to the place of the viewport.
