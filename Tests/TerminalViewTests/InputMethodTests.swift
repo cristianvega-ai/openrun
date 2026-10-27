@@ -139,3 +139,59 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         _ = press(plain, in: view, delegate: delegate) { _, event in #expect(event === plain) }
     }
 }
+
+/// Japanese, Chinese and Korean input methods, played call by call as they use `NSTextInputClient`.
+/// The owner checks a real input method by hand at the review of the milestone.
+@MainActor @Suite struct InputMethodStringTests {
+    private enum Answer { case mark(String), insert(String) }
+
+    /// Presses each key while a fake input method gives its answer. Gives the bytes that each key sent
+    /// and the marked text that the renderer draws after it.
+    private func play(_ steps: [(Int, Answer)]) throws -> (bytes: [String], marked: [String?]) {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        var result: (bytes: [String], marked: [String?]) = ([], [])
+        for (keyCode, answer) in steps {
+            view.sendTyped(view.keyboard.bytes(forKeyDown: keyEvent(keyCode)) { _ in
+                switch answer {
+                case .mark(let text): view.setMarkedText(text, selectedRange: NSRange(location: text.utf16.count, length: 0), replacementRange: nowhere)
+                case .insert(let text): view.insertText(text, replacementRange: nowhere)
+                }
+            })
+            result.bytes.append(delegate.takeSent())
+            result.marked.append(view.renderer.markedText)
+        }
+        return result
+    }
+
+    @Test func japaneseKanaAreMarkedAndTheKanjiAreCommitted() throws {
+        let marks = ["ん", "に", "にh", "にほ", "にほn", "にほん", "日本"]
+        let keys = [kVK_ANSI_N, kVK_ANSI_I, kVK_ANSI_H, kVK_ANSI_O, kVK_ANSI_N, kVK_ANSI_N, kVK_Space]
+        let result = try play(zip(keys, marks).map { ($0, .mark($1)) } + [(kVK_Return, .insert("日本"))])
+        #expect(result.marked == marks + [nil])
+        #expect(result.bytes == Array(repeating: "", count: marks.count) + ["日本"])
+    }
+
+    @Test func chinesePinyinIsMarkedAndTheCharacterIsCommitted() throws {
+        let marks = ["z", "zh", "zho", "zhon", "zhong"]
+        let result = try play(zip([kVK_ANSI_Z, kVK_ANSI_H, kVK_ANSI_O, kVK_ANSI_N, kVK_ANSI_G], marks).map { ($0, .mark($1)) } + [(kVK_Space, .insert("中"))])
+        #expect(result.marked == marks + [nil] && result.bytes == ["", "", "", "", "", "中"])
+    }
+
+    @Test func koreanJamoJoinIntoOneSyllable() throws {
+        let result = try play([(kVK_ANSI_G, .mark("ㅎ")), (kVK_ANSI_K, .mark("하")), (kVK_ANSI_S, .mark("한")), (kVK_Space, .insert("한"))])
+        #expect(result.marked == ["ㅎ", "하", "한", nil] && result.bytes == ["", "", "", "한"])
+    }
+
+    @Test(.enabled(if: NSScreen.main != nil))
+    func theListOfCandidatesStaysAtTheCursorWhileTheTextIsMarked() throws {
+        let view = try TerminalView()
+        let window = show(view)
+        defer { window.close() }
+        view.terminal.write("$ ")
+        let before = view.firstRect(forCharacterRange: nowhere, actualRange: nil)
+        view.setMarkedText("にほん", selectedRange: nowhere, replacementRange: nowhere)
+        #expect(view.firstRect(forCharacterRange: nowhere, actualRange: nil) == before && before.minX > window.frame.minX)
+    }
+}
