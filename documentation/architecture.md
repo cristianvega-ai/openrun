@@ -43,6 +43,7 @@ A module uses another module only through its public types.
 | `TerminalView` | The AppKit view that shows one terminal: output, grid size, appearance and font size | `TerminalView`, `TerminalViewDelegate` |
 | `PseudoTerminal` | Runs one program on a new pseudo terminal | `PseudoTerminal`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
 | `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
+| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, and the attach conversation | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionIdentifierMatch`, `SessionConnectionError` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
 
@@ -53,7 +54,8 @@ The programs in `Sources/openrun` and `Sources/openrun-session` read their start
 Dependencies point one way, from the programs down to the features.
 
 ```
-openrun           -> CommandLineTool -> SessionProtocol
+openrun           -> CommandLineTool -> SessionConnection -> SessionProtocol
+                                     -> SessionProtocol
                                      -> TerminalEmulation -> libghostty-vt
 openrun-session   -> SessionProcess  -> SessionProtocol
                                      -> PseudoTerminal
@@ -65,7 +67,7 @@ TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
 No program uses `TerminalView` yet. The app of milestone 2 will. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
-`PseudoTerminal` and `SessionProtocol` depend on no other OpenRun module.
+`PseudoTerminal` and `SessionProtocol` depend on no other OpenRun module. `SessionConnection` depends only on `SessionProtocol`.
 So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionSize`) belongs to one module. `SessionProcess` converts between them at its edge.
 
 The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables and plays the part of a terminal window.
@@ -184,6 +186,18 @@ The controlling descriptor is closed once, when the program has ended and the la
 
 This module holds the messages, the frame format, the connection, and the socket location with the check of its folder. `FolderAccessControlList`, an internal type, reads the access control list of the folder for that check. The next sections describe them.
 
+### SessionConnection
+
+The client side of the socket, for the command-line tool and the window of the app. It imports no AppKit and knows nothing of standard input or output. A caller can use it from any thread.
+
+- `SessionClient(location:)` connects and greets the session process. `request` sends one request and returns its answer. `summaries` lists the sessions, and `session(matching:)` finds the session that a typed identifier means (`SessionIdentifierMatch`).
+- `SessionClient.attach` sends `attach`, waits for `attached` and the snapshot, and returns a `SessionAttachment`. A failure before the snapshot is an error of this call, so the caller knows before it changes anything. The client takes no more requests after it.
+- The snapshot stays `Data`, the type of the protocol, so the module does not use `TerminalEmulation`. The caller restores it with `TerminalSnapshot(bytes:)`.
+- `SessionAttachment.startReceiving` starts a thread that receives the rest. It hands each `SessionAttachmentEvent` to its handler in order, on that thread: `output` and `sizeChanged`, and last `exited`, `closed` or `failed`. A message that does not belong after the snapshot is ignored. The events are `Sendable`, so a window can hand each one on to the main queue. While the handler runs, the socket holds the later frames.
+- `send(input:)`, `send(size:)` and `detach()` work from any thread. `shutdown()` ends the connection and wakes the receiving thread.
+- `SessionConnectionError` names each failure. Its text names no command or option of a client, so `CommandLineToolError(_:)` gives each error the words of the tool, such as "choose a socket with --socket".
+- A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. `SessionClient.connect(to:)` is the one place that learns this, so the wake of the launch agent will go there.
+
 ### SessionProcess
 
 `SessionProcess.run()` listens until SIGTERM, SIGINT or SIGHUP arrives. Internally:
@@ -204,9 +218,9 @@ The log of the session process (`SessionServer.log`) escapes every line with `Pr
 
 ### CommandLineTool
 
-`CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects (`SessionClient`), finds the session from a typed identifier (`SessionIdentifierMatch`), and runs one command.
+`CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects with `SessionClient` of `SessionConnection`, and runs one command. It turns a `SessionConnectionError` into a `CommandLineToolError` with the words of the tool.
 `NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand` and `KillCommand` hold the commands. `RawTerminalMode` switches the terminal to raw mode and back.
-`openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them to the session. `AttachSignals` turns signals into requests for the writer.
+`openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them through `SessionAttachment`. `AttachSignals` turns signals into requests for the writer.
 
 ## Process model
 
@@ -431,7 +445,7 @@ The screens alone can also be too large. An example is an attach at 10,000 rows,
 
    The tool resets only modes that are off in a plain terminal. It does not touch modes that many terminals turn on by default, such as alternate scroll (1007), grapheme clusters (2027) and the meta key modes (1035, 1036). Those modes would then differ from the user's own setting.
 
-Threads. Only the main thread writes to the terminal, through `TerminalWriter`. One thread receives frames from the session process and hands the output to the writer, at most 1 MiB ahead. The keyboard thread (`KeySender`) and the signal handlers (`AttachSignals`) never write to the terminal. They ask the writer to end, to suspend, to go on, or (the signal handlers) to follow a change of the window size. The local screen of the tool is only touched by the main thread, also when the window changes size. When two requests to end arrive, an urgent ending wins over an ending that waits for output, also when the urgent one came second. A detach (Control-]) and a signal are urgent: they end the attach at once, and output that still waits is dropped. The exit of the program and a lost connection wait for the output that came before them. Among urgent endings, the first one decides the exit code, so a second signal does not change it. Among endings that wait for output, the first one decides as well. No output follows the closing sequences.
+Threads. Only the main thread writes to the terminal, through `TerminalWriter`. The receiving thread of `SessionAttachment` hands the output to the writer, at most 1 MiB ahead. The keyboard thread (`KeySender`) and the signal handlers (`AttachSignals`) never write to the terminal. They ask the writer to end, to suspend, to go on, or (the signal handlers) to follow a change of the window size. The local screen of the tool is only touched by the main thread, also when the window changes size. When two requests to end arrive, an urgent ending wins over an ending that waits for output, also when the urgent one came second. A detach (Control-]) and a signal are urgent: they end the attach at once, and output that still waits is dropped. The exit of the program and a lost connection wait for the output that came before them. Among urgent endings, the first one decides the exit code, so a second signal does not change it. Among endings that wait for output, the first one decides as well. No output follows the closing sequences.
 
 The last message of `openrun attach` (such as `[detached]` or the reason of a lost connection) can include text from the session process, so it is escaped with `PrintableText.escaping`.
 
