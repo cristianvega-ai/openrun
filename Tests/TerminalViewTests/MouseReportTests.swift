@@ -37,3 +37,38 @@ import Testing
         #expect(bytes(reporter, .motion, nil, 5, 3) == "\u{1B}[MC&$")
     }
 }
+
+@MainActor @Suite struct PointerInputTests {
+    private let location = PointerLocation(cellSize: CGSize(width: 8, height: 15.5), padding: 8, scale: 2, gridSize: TerminalSize(columns: 80, rows: 24), viewHeight: 388)
+    private let point = CGPoint(x: 51, y: 329.5)
+
+    private func makePointer(_ output: String) throws -> PointerInput {
+        let terminal = try Terminal(size: TerminalSize(columns: 80, rows: 24), scrollbackLimit: 0)
+        terminal.write(output)
+        return try PointerInput(terminal: terminal)
+    }
+
+    private func text(_ bytes: [UInt8]?) -> String? { bytes.map { String(decoding: $0, as: UTF8.self) } }
+
+    @Test func aButtonThatWentDownForTheProgramStaysWithTheProgram() throws {
+        let input = try makePointer("\u{1B}[?1002h\u{1B}[?1006h")
+        #expect(text(input.bytes(.press, button: .left, modifiers: [], at: point, in: location)) == "\u{1B}[<0;6;4M")
+        #expect(text(input.bytes(.motion, button: .left, modifiers: .shift, at: point, in: location)) == "")
+        #expect(text(input.bytes(.release, button: .left, modifiers: .shift, at: point, in: location)) == "\u{1B}[<4;6;4m")
+        #expect(input.bytes(.release, button: .left, modifiers: [], at: point, in: location) == nil)
+    }
+
+    @Test func shiftAndAProgramWithoutReportsKeepTheMouseForTheView() throws {
+        let input = try makePointer("\u{1B}[?1003h\u{1B}[?1006h")
+        #expect(input.bytes(.press, button: .left, modifiers: .shift, at: point, in: location) == nil)
+        #expect(input.bytes(.motion, button: .left, modifiers: .shift, at: point, in: location) == nil)
+        #expect(input.bytes(.motion, button: nil, modifiers: .shift, at: point, in: location) == nil)
+        #expect(text(input.bytes(.motion, button: nil, modifiers: [], at: point, in: location)) == "\u{1B}[<35;6;4M")
+        #expect(try makePointer("").bytes(.press, button: .left, modifiers: [], at: point, in: location) == nil)
+    }
+
+    @Test func appKitNumbersTheButtonsFromTheLeftOne() {
+        let buttons = (0...5).map(PointerInput.button(forNumber:))
+        #expect(buttons == [.left, .right, .middle, .back, .forward, nil])
+    }
+}
