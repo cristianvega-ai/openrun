@@ -17,6 +17,10 @@ enum CommandLineToolError: Error, CustomStringConvertible {
     /// on a line of its own.
     init(_ error: SessionConnectionError) {
         switch error {
+        case .noSessionProcess(let socketPath):
+            self = .failure("No session process answers on \(socketPath). Start one with openrun-session, or choose a socket with --socket.")
+        case .protocolFailure:
+            self = .failure(error.description)
         case .emptyIdentifier:
             self = .usage(error.description)
         case .noMatchingSession(let typed):
