@@ -9,6 +9,9 @@ actor SessionServer {
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
+    /// The last moment with a client or a session, for the idle exit.
+    private var lastBusy = ContinuousClock.now
+    private var isClosed = false
 
     /// Starts listening. Throws when another session process already does.
     init(location: SocketLocation) throws {
@@ -29,7 +32,7 @@ actor SessionServer {
     /// socket file goes first, so no client can connect to a process that is
     /// about to leave.
     func shutDown() async {
-        listener.close()
+        close()
         await acceptTask?.value
         await registry.terminateAll()
         // Each client gets a short time to take what still waits for it, such
@@ -38,9 +41,36 @@ actor SessionServer {
         for handler in handlers.values { await handler.value }
     }
 
+    /// Closes the socket when no client and no session was there for
+    /// `limit`, and returns whether it did. `beforeClosing` runs first.
+    func closeWhenIdle(for limit: Duration, beforeClosing: @Sendable () -> Void) async -> Bool {
+        // Clients can arrive while the registry answers, so they are checked
+        // again after it. No wait comes between that check and the close.
+        guard !isClosed, clients.isEmpty, await registry.isEmpty, clients.isEmpty else {
+            lastBusy = .now
+            return false
+        }
+        guard ContinuousClock.now - lastBusy >= limit else { return false }
+        beforeClosing()
+        close()
+        return true
+    }
+
+    private func close() {
+        guard !isClosed else { return }
+        isClosed = true
+        listener.close()
+    }
+
     // MARK: - Clients
 
     private func accept(_ connection: MessageConnection) {
+        // The listener can take a connection just before the socket closes.
+        // It closes before hello, so its client wakes the next process.
+        guard !isClosed else {
+            connection.shutdown()
+            return
+        }
         guard clients.count < ConnectionLimits.maximumClientCount else {
             // The client reads this in place of hello. The reason is an
             // existing one, so protocol version 1 does not change.
@@ -72,6 +102,7 @@ actor SessionServer {
     private func finish(_ key: ObjectIdentifier) {
         clients[key] = nil
         handlers[key] = nil
+        lastBusy = .now
     }
 
     /// Reads messages from one client until it leaves. A connection does one

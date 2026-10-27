@@ -55,6 +55,8 @@ actor SessionRegistry {
         return summary
     }
 
+    var isEmpty: Bool { sessions.isEmpty }
+
     func session(for identifier: UUID) -> Session? {
         sessions[identifier]
     }
