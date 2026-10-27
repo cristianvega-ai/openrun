@@ -75,3 +75,19 @@ import TerminalEmulation
         #expect(pixel(of: screen.target, column: 2, x: 0, y: 0) == screen.theme.background)
     }
 }
+
+@Suite struct MarkedTextTests {
+    private let metrics = testFonts.metrics
+
+    @Test func markedTextHasAnUnderlineAndTakesTheCursorsPlace() throws {
+        let screen = try renderScreen("█\u{1B}[D\u{1B}[2 q", markedText: "´")
+        #expect(pixel(of: screen.target, x: 3, y: metrics.underlinePosition) == screen.theme.foreground)
+        #expect(pixel(of: screen.target, x: 0, y: 0) == screen.theme.background)
+        #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.background)
+    }
+
+    @Test func markedTextThatCoversAWideCharacterHidesIt() throws {
+        let screen = try renderScreen("日\u{1B}[?25l\u{1B}[1G", markedText: "a")
+        #expect(inkCount(of: screen, columns: 1..<2, rows: 0..<1) < 20)
+    }
+}

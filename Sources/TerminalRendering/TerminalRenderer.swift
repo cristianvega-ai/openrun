@@ -14,6 +14,9 @@ public final class TerminalRenderer {
     public var selectionColor: TerminalColor {
         didSet { if selectionColor != oldValue { cache.forget() } }
     }
+    /// The text of an input method, before the user ends it. The renderer draws it
+    /// at the cursor with an underline, and it is not in the terminal.
+    public var markedText: String?
     /// Whether the view has the keyboard focus. Without it, the cursor is a hollow block.
     public var isFocused = true
     private let device: MTLDevice
@@ -23,6 +26,7 @@ public final class TerminalRenderer {
     private var cache = RowCache()
     private var colors: RenderColors?
     private var cursor: RenderCursor?
+    private var columnCount = 0
     // The graphics processor reads one buffer while the processor fills the next.
     private var buffers: [MTLBuffer?] = [nil, nil, nil]
     private var bufferIndex = 0
@@ -50,6 +54,7 @@ public final class TerminalRenderer {
     public func prepare(from state: RenderState) throws -> FrameStatistics {
         colors = state.colors
         cursor = state.cursor
+        columnCount = Int(state.size.columns)
         func update() throws -> FrameStatistics {
             try cache.update(from: state, atlasGeneration: atlas.generation) {
                 try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
@@ -79,7 +84,9 @@ public final class TerminalRenderer {
     }
 
     private func encode(into target: some RenderTarget) -> Bool {
-        let frame = FrameBuilder(cache: cache, metrics: fonts.metrics, padding: padding, cursor: cursorToDraw())
+        let marked = markedTextToDraw()
+        let frame = FrameBuilder(
+            cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked)
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = target.texture
         pass.colorAttachments[0].loadAction = .clear
@@ -102,6 +109,13 @@ public final class TerminalRenderer {
         target.present(with: commands)
         commands.commit()
         return true
+    }
+
+    private func markedTextToDraw() -> MarkedTextQuads? {
+        guard let markedText, !markedText.isEmpty, let colors, let position = cursor?.position else { return nil }
+        return MarkedTextQuads(
+            text: markedText, column: Int(position.column), row: Int(position.row), columnCount: columnCount, colors: colors,
+            atlas: atlas, metrics: fonts.metrics, padding: padding)
     }
 
     private func cursorToDraw() -> FrameBuilder.Cursor? {
