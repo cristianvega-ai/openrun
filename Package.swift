@@ -41,6 +41,10 @@ let package = Package(
         .target(name: "SessionConnection", dependencies: ["SessionProtocol"]),
         .testTarget(name: "SessionConnectionTests", dependencies: ["SessionConnection", "SessionProtocol"]),
         .target(name: "PseudoTerminal"),
+        // How launchd starts the session process when a client needs it:
+        // the names of the launch agent, its wake service, and the wake.
+        .target(name: "SessionLaunch"),
+        .testTarget(name: "SessionLaunchTests", dependencies: ["SessionLaunch"]),
         .target(
             name: "SessionProcess",
             dependencies: ["TerminalEmulation", "PseudoTerminal", "SessionProtocol"]
