@@ -6,12 +6,14 @@ import TerminalEmulation
 @MainActor final class RecordingDelegate: TerminalViewDelegate {
     var sizes: [TerminalSize] = []
     var sent: [UInt8] = []
+    var titles: [String] = []
     /// The texts of the pastes that asked, and the answer that the user gives.
     var questions: [String] = []
     var pasteAnswer = false
 
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) { sizes.append(size) }
     func terminalView(_ view: TerminalView, send bytes: [UInt8]) { sent += bytes }
+    func terminalView(_ view: TerminalView, didChangeTitle title: String) { titles.append(title) }
 
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
         questions.append(text)

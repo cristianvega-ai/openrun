@@ -87,7 +87,8 @@ public final class TerminalView: NSView {
             self?.requestFrame()
         }
         try terminal.setEventHandler(TerminalEventHandler(
-            bell: { [weak self] in MainActor.assumeIsolated { self?.bellFlash?.ring() } }, titleChanged: {},
+            bell: { [weak self] in MainActor.assumeIsolated { self?.bellFlash?.ring() } },
+            titleChanged: { [weak self] in MainActor.assumeIsolated { self?.titleChanged() } },
             renderHold: { [weak self] isHeld in MainActor.assumeIsolated { self?.renderHold(isHeld) } }))
         autoscrollTimer = SelectionAutoscrollTimer(clock: clock) { [weak self] in self?.autoscrollSelection() }
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
@@ -351,6 +352,10 @@ public final class TerminalView: NSView {
             adoptWindowScale()
             schedule?.attach()
         }
+    }
+
+    private func titleChanged() {
+        delegate?.terminalView(self, didChangeTitle: terminal.title)
     }
 
     /// A program holds the screen (mode 2026) or lets it go. libghostty-vt wants the frame

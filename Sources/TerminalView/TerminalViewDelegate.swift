@@ -7,6 +7,9 @@ public protocol TerminalViewDelegate: AnyObject {
     /// size. The owner passes the size on to the session of the view.
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize)
 
+    /// The program set a new title with OSC 0 or OSC 2. The owner shows it, or the folder of the session when the title is empty.
+    func terminalView(_ view: TerminalView, didChangeTitle title: String)
+
     /// The user typed, pasted or moved the mouse, and the program must read
     /// these bytes. The owner writes them to the session.
     func terminalView(_ view: TerminalView, send bytes: [UInt8])

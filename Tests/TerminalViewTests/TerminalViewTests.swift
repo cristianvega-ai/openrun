@@ -121,6 +121,17 @@ import Testing
     }
 }
 
+@MainActor @Suite struct TitleOfViewTests {
+    @Test func theDelegateGetsTheTitleOfTheProgramAndTheEndOfTheTitleMakesNoBell() throws {
+        let view = try TerminalView()
+        view.terminal.write("\u{1B}]2;before\u{07}")
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.terminal.write("\u{1B}]2;My title\u{07}\u{1B}]0;Next\u{1B}\\")
+        #expect(delegate.titles == ["My title", "Next"] && !view.renderer.isFlashing)
+    }
+}
+
 @MainActor @Suite struct GridOfViewTests {
     private func layout(_ view: TerminalView, width: CGFloat, height: CGFloat) {
         view.frame = NSRect(x: 0, y: 0, width: width, height: height)
