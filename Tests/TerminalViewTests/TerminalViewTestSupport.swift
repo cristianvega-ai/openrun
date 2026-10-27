@@ -43,12 +43,15 @@ func keyEvent(
     _ keyCode: Int, _ flags: NSEvent.ModifierFlags = [], deviceBits: UInt = 0, type: NSEvent.EventType = .keyDown, timestamp: TimeInterval = 1
 ) -> NSEvent {
     let all = NSEvent.ModifierFlags(rawValue: flags.rawValue | deviceBits)
-    func make(_ characters: String) -> NSEvent {
+    func make(_ characters: String, ignoring: String) -> NSEvent {
         NSEvent.keyEvent(
             with: type, location: .zero, modifierFlags: all, timestamp: timestamp, windowNumber: 0, context: nil,
-            characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode))!
+            characters: characters, charactersIgnoringModifiers: ignoring, isARepeat: false, keyCode: UInt16(keyCode))!
     }
-    return type == .flagsChanged ? make("") : make(make("").characters(byApplyingModifiers: all) ?? "")
+    guard type != .flagsChanged else { return make("", ignoring: "") }
+    let blank = make("", ignoring: "")
+    // Like the system, the second text leaves out all modifiers but Shift.
+    return make(blank.characters(byApplyingModifiers: all) ?? "", ignoring: blank.characters(byApplyingModifiers: all.intersection(.shift)) ?? "")
 }
 
 /// The tests of keys assume the US layout of the keyboard, as the Macs of the owner have.
