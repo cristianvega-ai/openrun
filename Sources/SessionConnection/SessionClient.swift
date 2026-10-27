@@ -1,14 +1,52 @@
 import Darwin
 import Foundation
+import SessionLaunch
 import SessionProtocol
 
 /// A connection to the session process, after the greeting.
 public struct SessionClient: Sendable {
     let connection: MessageConnection
 
-    /// Connects to the session process on the socket, and greets it.
+    /// Starts the session process when nothing listens on the socket.
+    typealias Wake = () throws(SessionWakeFailure) -> Void
+
+    /// Connects to the session process on the socket, and greets it. On
+    /// the default socket, launchd starts the session process when needed.
     public init(location: SocketLocation) throws {
-        try self.init(greeting: Self.connect(to: location))
+        try self.init(location: location, wake: Self.launchAgentWake(for: location))
+    }
+
+    /// Sends one wake when no session process listens, or when the
+    /// connection closes before hello, and then connects once more. A
+    /// launch agent that ends because it is idle closes such a connection.
+    ///
+    /// - Parameter wake: Nil for a socket without a launch agent. Tests pass
+    ///   their own, because a test cannot register a launch agent.
+    init(location: SocketLocation, wake: Wake?) throws {
+        do {
+            try self.init(greeting: Self.connect(to: location))
+        } catch let error as SessionConnectionError where wake != nil && Self.meansNoSessionProcess(error) {
+            do {
+                try wake?()
+            } catch {
+                throw SessionConnectionError.wakeFailed(error)
+            }
+            try self.init(greeting: Self.connect(to: location))
+        }
+    }
+
+    /// Only the default socket belongs to the launch agent.
+    static func launchAgentWake(for location: SocketLocation) -> Wake? {
+        guard location.isDefault else { return nil }
+        return { () throws(SessionWakeFailure) in _ = try SessionWake.wake() }
+    }
+
+    private static func meansNoSessionProcess(_ error: SessionConnectionError) -> Bool {
+        switch error {
+        case .noSessionProcess, .protocolFailure(.connectionClosed): true
+        case .protocolFailure(.systemCallFailed(_, let code)): code == ECONNRESET || code == EPIPE
+        default: false
+        }
     }
 
     /// Greets the session process on an open connection, such as a test's.
@@ -18,8 +56,7 @@ public struct SessionClient: Sendable {
     }
 
     /// This is the one place that learns that no program listens on the
-    /// socket. A client that can start the session process does it here,
-    /// and then connects again.
+    /// socket.
     private static func connect(to location: SocketLocation) throws -> MessageConnection {
         do {
             return try MessageConnection.connect(to: location)

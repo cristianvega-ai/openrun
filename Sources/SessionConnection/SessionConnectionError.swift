@@ -1,3 +1,4 @@
+import SessionLaunch
 import SessionProtocol
 
 /// Why a step of the conversation with the session process failed.
@@ -8,6 +9,9 @@ public enum SessionConnectionError: Error, Equatable, Sendable, CustomStringConv
     /// No program listens on the socket: it does not exist, or nothing
     /// accepts connections on it.
     case noSessionProcess(socketPath: String)
+    /// No program listened on the default socket, and launchd did not start
+    /// the session process. The failure says why.
+    case wakeFailed(SessionWakeFailure)
     /// The socket or the protocol failed, such as a system call, a frame or
     /// the version.
     case protocolFailure(SessionProtocolError)
@@ -33,6 +37,8 @@ public enum SessionConnectionError: Error, Equatable, Sendable, CustomStringConv
         switch self {
         case .noSessionProcess(let socketPath):
             "No session process answers on \(socketPath)."
+        case .wakeFailed(let failure):
+            failure.description
         case .protocolFailure(let error):
             error.description
         case .connectionClosed:
