@@ -95,4 +95,14 @@ import Testing
         view.keyDown(with: keys[4].1)
         #expect(delegate.takeSent() == "\u{1B}[98;3u©")
     }
+
+    @Test func aKeyThatSendsBytesMovesTheViewportToTheBottom() throws {
+        let (view, delegate) = try makeView()
+        view.terminal.write(String(repeating: "line\r\n", count: 100))
+        view.terminal.scrollViewport(.byRows(-10))
+        view.keyDown(with: keyEvent(kVK_ANSI_C, .command))
+        #expect(!view.terminal.isViewportAtBottom)
+        view.keyDown(with: keyEvent(kVK_ANSI_A))
+        #expect(view.terminal.isViewportAtBottom && delegate.takeSent() == "a")
+    }
 }

@@ -93,11 +93,26 @@ public final class TerminalView: NSView {
         delegate?.terminalView(self, send: bytes)
     }
 
+    /// Sends bytes that the user typed or pasted. The newest rows come into
+    /// view first, so the user sees what the program does with the bytes.
+    func sendTyped(_ bytes: [UInt8]) {
+        guard !bytes.isEmpty else { return }
+        scrollToBottom()
+        send(bytes)
+    }
+
+    func scrollToBottom() {
+        // A scroll marks every row as changed, so a view at the bottom skips it.
+        guard !terminal.isViewportAtBottom else { return }
+        terminal.scrollViewport(.toBottom)
+        schedule?.requestFrame()
+    }
+
     public override var isOpaque: Bool { true }
     public override var acceptsFirstResponder: Bool { true }
 
     public override func keyDown(with event: NSEvent) {
-        send(keyboard.bytes(forKeyDown: event))
+        sendTyped(keyboard.bytes(forKeyDown: event))
     }
 
     // The menu of a later unit sends these actions through the responder chain.
