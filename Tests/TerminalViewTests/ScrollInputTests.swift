@@ -96,6 +96,15 @@ import Testing
         #expect(row() == bottom - 1)
     }
 
+    @Test func newOutputKeepsAViewportThatTheUserScrolledUp() throws {
+        let (view, _) = try makeView()
+        view.scrollWheel(with: try scroll(1))
+        let row = view.terminal.scrollbar.firstVisibleRow
+        view.write(Array(String(repeating: "more\r\n", count: 30).utf8))
+        while view.parseTurn() {}
+        #expect(view.terminal.scrollbar.firstVisibleRow == row && !view.terminal.isViewportAtBottom)
+    }
+
     @Test func aProgramGetsWheelReportsOrArrowKeys() throws {
         let (reporting, reports) = try makeView("\u{1B}[?1000h\u{1B}[?1006h")
         reporting.scrollWheel(with: try scroll(2))
