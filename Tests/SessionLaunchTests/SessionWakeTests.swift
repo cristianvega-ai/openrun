@@ -9,6 +9,19 @@ import Testing
         "ai.cristianvega.openrun.test.\(UUID().uuidString)"
     }
 
+    @Test func aWakeForAnUnknownMachServiceFailsAtOnceWithNotRegistered() {
+        let start = ContinuousClock.now
+        #expect(throws: SessionWakeFailure.notRegistered) {
+            _ = try SessionWake.wake(machServiceName: Self.unknownMachServiceName())
+        }
+        #expect(ContinuousClock.now - start < .seconds(2))
+    }
+
+    @Test func eachFailureTellsTheUserWhatToDo() {
+        #expect(SessionWakeFailure.notRegistered.description.contains("Open OpenRun once to register it."))
+        #expect(SessionWakeFailure.timedOut(limit: .seconds(15)).description.contains("within 15 seconds. Open OpenRun to register it again."))
+    }
+
     /// A session process that was started by hand gets no Mach service.
     @Test func theWakeServiceDoesNotStartInAProcessThatLaunchdDidNotStart() {
         #expect(throws: (any Error).self) {
