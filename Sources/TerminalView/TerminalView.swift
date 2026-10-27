@@ -15,6 +15,7 @@ import os
 public final class TerminalView: NSView {
     let terminal: Terminal
     let state: RenderState
+    let keyboard: KeyboardInput
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
@@ -37,6 +38,7 @@ public final class TerminalView: NSView {
         guard let device = MTLCreateSystemDefaultDevice() else { throw RenderingError.deviceUnavailable }
         terminal = try Terminal(size: initialGrid, scrollbackLimit: 10_000)
         state = try RenderState()
+        keyboard = try KeyboardInput(terminal: terminal)
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
         renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
         self.device = device
@@ -92,6 +94,11 @@ public final class TerminalView: NSView {
     }
 
     public override var isOpaque: Bool { true }
+    public override var acceptsFirstResponder: Bool { true }
+
+    public override func keyDown(with event: NSEvent) {
+        send(keyboard.bytes(forKeyDown: event))
+    }
 
     // The menu of a later unit sends these actions through the responder chain.
     @objc public func increaseFontSize(_ sender: Any?) { changeFontSize { $0.larger() } }
