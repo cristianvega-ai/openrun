@@ -30,4 +30,11 @@ import Testing
         #expect(terminal.isModeEnabled(.normalMouseReports) && terminal.isModeEnabled(.anyMouseReports))
         #expect(!terminal.isModeEnabled(.buttonMouseReports))
     }
+
+    @Test func readsMouseTrackingKittyFlagsAndThePointerShape() throws {
+        let terminal = try makeTerminal()
+        #expect(!terminal.isMouseTrackingActive && terminal.kittyKeyboardFlags == 0 && terminal.pointerShape == .text)
+        terminal.write("\u{1B}[?1000h\u{1B}[>5u\u{1B}]22;pointer\u{07}")
+        #expect(terminal.isMouseTrackingActive && terminal.kittyKeyboardFlags == 5 && terminal.pointerShape == .pointingHand)
+    }
 }

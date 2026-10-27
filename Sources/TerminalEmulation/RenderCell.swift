@@ -9,6 +9,8 @@ public struct RenderCell: Sendable {
     public var width: CellWidth
     public var style: CellStyle
     public var foreground, background, underlineColor: TerminalColor?
+    /// Whether the cell is part of a link. `Terminal.hyperlink(at:)` gives it.
+    public var hasHyperlink: Bool
 
     /// The whole cluster as text.
     public var text: String {

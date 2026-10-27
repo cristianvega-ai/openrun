@@ -44,4 +44,18 @@ extension Terminal {
         configuration.value = enabled
         try TerminalEmulationError.check(ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_MODE, &configuration), from: "ghostty_terminal_set")
     }
+
+    /// Whether the program asked for mouse reports of any kind.
+    public var isMouseTrackingActive: Bool {
+        var active = false
+        _ = ghostty_terminal_get(handle, GHOSTTY_TERMINAL_DATA_MOUSE_TRACKING, &active)
+        return active
+    }
+
+    /// The flags of the kitty keyboard protocol that the program turned on.
+    public var kittyKeyboardFlags: UInt8 {
+        var flags: UInt8 = 0
+        _ = ghostty_terminal_get(handle, GHOSTTY_TERMINAL_DATA_KITTY_KEYBOARD_FLAGS, &flags)
+        return flags
+    }
 }

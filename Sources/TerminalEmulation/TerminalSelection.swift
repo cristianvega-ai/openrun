@@ -23,6 +23,17 @@ extension Terminal {
         try select(&selection)
     }
 
+    /// The hyperlink (OSC 8) of a cell, or `nil`.
+    public func hyperlink(at cell: ViewportCell) -> String? {
+        guard var reference = try? gridReference(at: cell) else { return nil }
+        var length = 0
+        // The first call only measures the address.
+        guard ghostty_grid_ref_hyperlink_uri(&reference, nil, 0, &length) == GHOSTTY_OUT_OF_SPACE, length > 0 else { return nil }
+        var bytes = [UInt8](repeating: 0, count: length)
+        guard ghostty_grid_ref_hyperlink_uri(&reference, &bytes, length, &length) == GHOSTTY_SUCCESS else { return nil }
+        return String(decoding: bytes.prefix(length), as: UTF8.self)
+    }
+
     public func clearSelection() {
         _ = ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SELECTION, nil)
     }

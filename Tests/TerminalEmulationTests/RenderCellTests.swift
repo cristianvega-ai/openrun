@@ -24,4 +24,9 @@ import Testing
         let cell = try cells(of: "e\u{0301}")[0]
         #expect(cell.base == "e" && cell.extraScalars == ["\u{0301}"])
     }
+
+    @Test func cellsOfALinkSaySo() throws {
+        let row = try cells(of: "\u{1B}]8;;https://example.com\u{07}a\u{1B}]8;;\u{07}b")
+        #expect(row.prefix(2).map(\.hasHyperlink) == [true, false])
+    }
 }

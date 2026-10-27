@@ -66,12 +66,15 @@ public struct RenderRow {
             var style = GhosttyStyle()
             style.size = MemoryLayout<GhosttyStyle>.size
             _ = ghostty_render_state_row_cells_get(cells, GHOSTTY_RENDER_STATE_ROW_CELLS_DATA_STYLE, &style)
+            var hasHyperlink = false
+            _ = ghostty_cell_get(raw, GHOSTTY_CELL_DATA_HAS_HYPERLINK, &hasHyperlink)
             var cell = RenderCell(
                 column: column, base: scalars.first, extraScalars: Array(scalars.dropFirst()),
                 width: CellWidth(wide), style: CellStyle(style),
                 foreground: TerminalColor(style.fg_color, palette: palette),
                 background: TerminalColor(style.bg_color, palette: palette),
-                underlineColor: TerminalColor(style.underline_color, palette: palette)
+                underlineColor: TerminalColor(style.underline_color, palette: palette),
+                hasHyperlink: hasHyperlink
             )
             // A cell can hold only a background color, with no text and no style.
             var color = GhosttyColorRgb()
