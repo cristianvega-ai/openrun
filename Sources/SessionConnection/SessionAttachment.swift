@@ -3,7 +3,8 @@ import SessionProtocol
 import Synchronization
 
 /// A connection that is attached to one session. It starts with the
-/// snapshot of the terminal of the session.
+/// snapshot of the terminal of the session. Any thread may send, also while
+/// another thread sends: each message goes out whole.
 public final class SessionAttachment: Sendable {
     /// The terminal of the session at the moment of the attach, as the protocol
     /// carries it. `TerminalSnapshot(bytes:)` restores it. Output comes after it.
@@ -36,6 +37,30 @@ public final class SessionAttachment: Sendable {
             }
         }
         throw SessionConnectionError.missingSnapshot
+    }
+
+    /// Sends keys to the session in one input frame. It waits while the
+    /// session process holds as much input as it may, because the program
+    /// reads none.
+    public func send(input: Data) throws {
+        try SessionConnectionError.wrapping { try connection.send(ClientMessage.input(input)) }
+    }
+
+    /// Sends the size of this client. The client that sends a size last sets
+    /// the size of the session.
+    public func send(size: SessionSize) throws {
+        try SessionConnectionError.wrapping { try connection.send(ClientMessage.resize(size)) }
+    }
+
+    /// Asks the session process to detach this client. The session goes on.
+    public func detach() throws {
+        try SessionConnectionError.wrapping { try connection.send(ClientMessage.detach) }
+    }
+
+    /// Ends both directions of the connection at once. The receiving thread
+    /// then ends with `closed` or `failed`, and a send that waits returns.
+    public func shutdown() {
+        connection.shutdown()
     }
 
     /// Starts the thread that receives the events of the session. It hands
