@@ -7,7 +7,7 @@ import QuartzCore
 /// uses no processor time.
 @MainActor
 final class DisplaySchedule: NSObject {
-    private let view: NSView
+    private weak var view: NSView?
     private let drawFrame: @MainActor () -> Void
     private var link: CADisplayLink?
     private var isRequested = false
@@ -25,7 +25,7 @@ final class DisplaySchedule: NSObject {
     }
 
     func attach() {
-        guard isRequested, view.window != nil else { return }
+        guard isRequested, let view, view.window != nil else { return }
         if link == nil {
             let newLink = view.displayLink(target: self, selector: #selector(step))
             newLink.add(to: .main, forMode: .common)

@@ -1,5 +1,6 @@
 import AppKit
 import Metal
+import QuartzCore
 import TerminalRendering
 import Testing
 @testable import TerminalView
@@ -51,5 +52,20 @@ import Testing
         try view.drawFrame(into: target)
         #expect(target.pixel(x: view.renderer.padding + fonts.cellWidth / 2, y: view.renderer.padding + fonts.cellHeight / 2) == view.theme.foreground)
         #expect(target.pixel(x: size.width - 1, y: size.height - 1) == view.theme.background)
+    }
+
+    @Test(.enabled(if: NSScreen.main != nil))
+    func aViewInAWindowDrawsItsOutputAndThenWaits() throws {
+        let view = try TerminalView()
+        let window = show(view)
+        defer { window.close() }
+        view.write(Array("hello".utf8))
+        wait(seconds: 3) { view.framesDrawn > 0 }
+        #expect(view.framesDrawn > 0)
+        wait(seconds: 0.2) { false }
+        let frames = view.framesDrawn
+        wait(seconds: 0.3) { false }
+        #expect(view.framesDrawn == frames)
+        #expect(view.layer is CAMetalLayer)
     }
 }
