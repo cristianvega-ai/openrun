@@ -100,6 +100,11 @@ public final class TerminalView: NSView {
     /// The space around the grid in points.
     var gridPadding: CGFloat { CGFloat(renderer.padding) / renderer.fonts.scale }
 
+    /// Where the grid is in the view now. The cell size, the grid and the view change often.
+    var pointerLocation: PointerLocation {
+        PointerLocation(cellSize: cellSize, padding: gridPadding, scale: renderer.fonts.scale, gridSize: terminal.size, viewHeight: bounds.height)
+    }
+
     /// Gives bytes for the program to the delegate. A call with no bytes does nothing.
     func send(_ bytes: [UInt8]) {
         guard !bytes.isEmpty else { return }
