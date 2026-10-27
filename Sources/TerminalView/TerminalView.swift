@@ -17,6 +17,7 @@ public final class TerminalView: NSView {
     let state: RenderState
     let keyboard: KeyboardInput
     let pointer: PointerInput
+    let selection: SelectionInput
     let scroll = ScrollInput()
     let scrollBar: OverlayScrollBar
     /// The time and the timers of the input. A test gives a clock that it moves.
@@ -49,6 +50,7 @@ public final class TerminalView: NSView {
         state = try RenderState()
         keyboard = try KeyboardInput(terminal: terminal)
         pointer = try PointerInput(terminal: terminal)
+        selection = try SelectionInput(terminal: terminal)
         scrollBar = OverlayScrollBar(clock: clock)
         self.clock = clock
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
@@ -152,9 +154,24 @@ public final class TerminalView: NSView {
         sendTyped(keyboard.bytes(forKeyDown: event) { interpretKeyEvents([$0]) })
     }
 
-    public override func mouseDown(with event: NSEvent) { report(.press, .left, event) }
-    public override func mouseUp(with event: NSEvent) { report(.release, .left, event) }
-    public override func mouseDragged(with event: NSEvent) { report(.motion, .left, event) }
+    /// A mouse event that the program does not want selects text.
+    public override func mouseDown(with event: NSEvent) {
+        guard !report(.press, .left, event) else { return }
+        selection.press(at: point(of: event), in: pointerLocation, timestamp: event.timestamp)
+        requestFrame()
+    }
+
+    public override func mouseUp(with event: NSEvent) {
+        guard !report(.release, .left, event) else { return }
+        selection.release(at: point(of: event), in: pointerLocation)
+    }
+
+    public override func mouseDragged(with event: NSEvent) {
+        guard !report(.motion, .left, event) else { return }
+        selection.drag(to: point(of: event), in: pointerLocation)
+        requestFrame()
+    }
+
     public override func mouseMoved(with event: NSEvent) { report(.motion, nil, event) }
 
     public override func rightMouseDown(with event: NSEvent) {
@@ -181,13 +198,16 @@ public final class TerminalView: NSView {
         if !report(.motion, PointerInput.button(forNumber: event.buttonNumber), event) { super.otherMouseDragged(with: event) }
     }
 
+    private func point(of event: NSEvent) -> CGPoint {
+        convert(event.locationInWindow, from: nil)
+    }
+
     /// Gives a mouse event to the program when the event is for the program.
     ///
     /// - Returns: `false` when the event is not for the program.
     @discardableResult
     private func report(_ action: MouseEvent.Action, _ button: MouseEvent.Button?, _ event: NSEvent) -> Bool {
-        let point = convert(event.locationInWindow, from: nil)
-        guard let bytes = pointer.bytes(action, button: button, modifiers: event.modifierFlags, at: point, in: pointerLocation) else { return false }
+        guard let bytes = pointer.bytes(action, button: button, modifiers: event.modifierFlags, at: point(of: event), in: pointerLocation) else { return false }
         send(bytes)
         return true
     }

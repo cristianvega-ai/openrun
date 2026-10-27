@@ -1,3 +1,4 @@
+import AppKit
 import CoreGraphics
 import Foundation
 import TerminalEmulation
@@ -43,5 +44,45 @@ import Testing
         #expect(terminal.selectedText() == "one two three")
         click(10)
         #expect(!terminal.hasSelection)
+    }
+}
+
+@MainActor @Suite struct SelectionOfViewTests {
+    private func makeView(_ output: String = "") throws -> TerminalView {
+        let view = try TerminalView()
+        view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
+        view.layoutSubtreeIfNeeded()
+        view.terminal.write("one two three\r\n" + output)
+        return view
+    }
+
+    /// A mouse event in a column of row 0. A selection starts at the left half of a cell and ends at the right half.
+    private func event(_ type: NSEvent.EventType, column: Int, in view: TerminalView, _ flags: NSEvent.ModifierFlags = [], at time: TimeInterval = 1) throws -> NSEvent {
+        let cell = view.cellSize, padding = view.gridPadding
+        let fraction: CGFloat = type == .leftMouseDown ? 0.25 : 0.75
+        let point = NSPoint(x: padding + (CGFloat(column) + fraction) * cell.width, y: view.bounds.height - padding - 0.5 * cell.height)
+        return try #require(NSEvent.mouseEvent(
+            with: type, location: point, modifierFlags: flags, timestamp: time, windowNumber: 0, context: nil, eventNumber: 0, clickCount: 1, pressure: 1))
+    }
+
+    @Test func aDragWithTheMouseSelectsTextAndTheViewDrawsIt() throws {
+        let view = try makeView()
+        view.mouseDown(with: try event(.leftMouseDown, column: 4, in: view))
+        view.mouseDragged(with: try event(.leftMouseDragged, column: 6, in: view))
+        view.mouseUp(with: try event(.leftMouseUp, column: 6, in: view))
+        #expect(view.terminal.selectedText() == "two")
+        view.mouseDown(with: try event(.leftMouseDown, column: 1, in: view, [], at: 20))
+        #expect(!view.terminal.hasSelection)
+    }
+
+    @Test func shiftSelectsEvenWhenTheProgramReadsTheMouse() throws {
+        let view = try makeView("\u{1B}[?1002h\u{1B}[?1006h")
+        view.mouseDown(with: try event(.leftMouseDown, column: 4, in: view, .shift))
+        view.mouseDragged(with: try event(.leftMouseDragged, column: 6, in: view, .shift))
+        #expect(view.terminal.selectedText() == "two")
+        view.mouseUp(with: try event(.leftMouseUp, column: 6, in: view, .shift))
+        view.mouseDown(with: try event(.leftMouseDown, column: 4, in: view, [], at: 20))
+        view.mouseDragged(with: try event(.leftMouseDragged, column: 8, in: view, [], at: 20))
+        #expect(view.terminal.selectedText() == "two")
     }
 }
