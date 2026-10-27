@@ -12,30 +12,36 @@ public final class SelectionGesture {
     private let pressEvent: GhosttySelectionGestureEvent
     private let dragEvent: GhosttySelectionGestureEvent
     private let releaseEvent: GhosttySelectionGestureEvent
+    private let tickEvent: GhosttySelectionGestureEvent
 
     public init(for terminal: Terminal) throws {
         var gesture: GhosttySelectionGesture?
         var press: GhosttySelectionGestureEvent?
         var drag: GhosttySelectionGestureEvent?
         var release: GhosttySelectionGestureEvent?
+        var tick: GhosttySelectionGestureEvent?
         guard ghostty_selection_gesture_new(nil, &gesture) == GHOSTTY_SUCCESS,
               ghostty_selection_gesture_event_new(nil, &press, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_PRESS) == GHOSTTY_SUCCESS,
               ghostty_selection_gesture_event_new(nil, &drag, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_DRAG) == GHOSTTY_SUCCESS,
               ghostty_selection_gesture_event_new(nil, &release, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_RELEASE) == GHOSTTY_SUCCESS,
-              let gesture, let press, let drag, let release
+              ghostty_selection_gesture_event_new(nil, &tick, GHOSTTY_SELECTION_GESTURE_EVENT_TYPE_AUTOSCROLL_TICK) == GHOSTTY_SUCCESS,
+              let gesture, let press, let drag, let release, let tick
         else {
             ghostty_selection_gesture_event_free(press)
             ghostty_selection_gesture_event_free(drag)
+            ghostty_selection_gesture_event_free(release)
+            ghostty_selection_gesture_event_free(tick)
             ghostty_selection_gesture_free(gesture, nil)
             throw TerminalEmulationError.invalidValue(in: "SelectionGesture.init")
         }
-        (self.terminal, self.gesture, pressEvent, dragEvent, releaseEvent) = (terminal, gesture, press, drag, release)
+        (self.terminal, self.gesture, pressEvent, dragEvent, releaseEvent, tickEvent) = (terminal, gesture, press, drag, release, tick)
     }
 
     deinit {
         ghostty_selection_gesture_event_free(pressEvent)
         ghostty_selection_gesture_event_free(dragEvent)
         ghostty_selection_gesture_event_free(releaseEvent)
+        ghostty_selection_gesture_event_free(tickEvent)
         ghostty_selection_gesture_free(gesture, terminal.handle)
     }
 
@@ -68,6 +74,28 @@ public final class SelectionGesture {
         _ = ghostty_selection_gesture_event_set(dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &position)
         _ = ghostty_selection_gesture_event_set(dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY, &geometry)
         try apply(dragEvent)
+    }
+
+    /// A step of the autoscroll. The viewport scrolls one row in the direction of
+    /// `autoscroll`, and the selection grows to the cell now under the pointer.
+    /// Call it from a timer while `autoscroll` is not `.none`.
+    public func autoscrollTick(at cell: ViewportCell, pixel: (x: Double, y: Double), cellWidth: UInt32, screenHeight: UInt32) throws {
+        var viewport = GhosttyPointCoordinate(x: cell.column, y: cell.row)
+        var position = GhosttySurfacePosition(x: pixel.x, y: pixel.y)
+        var geometry = GhosttySelectionGestureGeometry(
+            columns: UInt32(terminal.size.columns), cell_width: cellWidth, padding_left: 0, screen_height: screenHeight)
+        _ = ghostty_selection_gesture_event_set(tickEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_VIEWPORT, &viewport)
+        _ = ghostty_selection_gesture_event_set(tickEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_POSITION, &position)
+        _ = ghostty_selection_gesture_event_set(tickEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_GEOMETRY, &geometry)
+        try apply(tickEvent)
+    }
+
+    /// Which way a drag asks the viewport to scroll. A drag at the top edge of the grid or above it
+    /// asks for up, and a drag at the bottom edge or below it asks for down.
+    public var autoscroll: SelectionAutoscroll {
+        var direction = GHOSTTY_SELECTION_GESTURE_AUTOSCROLL_NONE
+        _ = ghostty_selection_gesture_get(gesture, terminal.handle, GHOSTTY_SELECTION_GESTURE_DATA_AUTOSCROLL, &direction)
+        return SelectionAutoscroll(direction)
     }
 
     public func release(at cell: ViewportCell) throws {

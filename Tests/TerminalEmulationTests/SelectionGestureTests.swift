@@ -36,4 +36,23 @@ import Testing
         try state.forEachRow(onlyChanged: false) { selected.append($0.selectedColumns) }
         #expect(selected == [4...6, nil, nil])
     }
+
+    @Test func aDragAtTheEdgeAsksForAutoscrollAndATickScrollsAndGrowsTheSelection() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 3)
+        terminal.write((1...10).map { "line \($0)\r\n" }.joined())
+        let gesture = try SelectionGesture(for: terminal)
+        try gesture.press(at: ViewportCell(column: 2, row: 1), pixel: (x: 20, y: 24), timeInNanoseconds: 0, repeatIntervalInNanoseconds: 0)
+        try gesture.drag(to: ViewportCell(column: 2, row: 1), pixel: (x: 20, y: 24), cellWidth: 8, screenHeight: 48)
+        #expect(gesture.autoscroll == .none)
+        try gesture.drag(to: ViewportCell(column: 5, row: 0), pixel: (x: 44, y: -6), cellWidth: 8, screenHeight: 48)
+        #expect(gesture.autoscroll == .up)
+        let before = terminal.scrollbar.firstVisibleRow
+        try gesture.autoscrollTick(at: ViewportCell(column: 5, row: 0), pixel: (x: 44, y: -6), cellWidth: 8, screenHeight: 48)
+        #expect(terminal.scrollbar.firstVisibleRow == before - 1)
+        #expect(terminal.selectedText()?.contains("line") == true)
+        try gesture.drag(to: ViewportCell(column: 5, row: 2), pixel: (x: 44, y: 60), cellWidth: 8, screenHeight: 48)
+        #expect(gesture.autoscroll == .down)
+        try gesture.release(at: ViewportCell(column: 5, row: 2))
+        #expect(gesture.autoscroll == .none)
+    }
 }
