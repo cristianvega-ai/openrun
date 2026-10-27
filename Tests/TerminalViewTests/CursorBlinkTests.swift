@@ -1,3 +1,7 @@
+import AppKit
+import Carbon.HIToolbox
+import Metal
+import TerminalRendering
 import Testing
 @testable import TerminalView
 
@@ -44,5 +48,52 @@ import Testing
         #expect(!blink.isShown)
         clock.advance(by: .milliseconds(500))
         #expect(blink.isShown)
+    }
+}
+
+@MainActor @Suite struct CursorBlinkOfViewTests {
+    private func makeView(_ output: String) throws -> (view: TerminalView, clock: ManualClock, target: OffscreenTarget) {
+        let clock = ManualClock()
+        let view = try TerminalView(clock: clock)
+        view.terminal.write(output)
+        let size = view.renderer.pixelSize(for: view.gridSize)
+        let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: size.width, height: size.height)
+        try view.drawFrame(into: target)
+        return (view, clock, target)
+    }
+
+    @Test func theViewDrawsTheCursorInItsShownPhaseOnly() throws {
+        let (view, clock, target) = try makeView("\u{1B}[1 q")
+        let fonts = view.renderer.fonts, padding = view.renderer.padding
+        func isCursorDrawn() throws -> Bool {
+            try view.drawFrame(into: target)
+            return target.pixel(x: padding + fonts.cellWidth / 2, y: padding + fonts.cellHeight / 2) == view.theme.cursor
+        }
+        #expect(try isCursorDrawn())
+        clock.advance(by: .milliseconds(500))
+        #expect(try !isCursorDrawn())
+        clock.advance(by: .milliseconds(500))
+        #expect(try isCursorDrawn())
+    }
+
+    @Test func aSteadyCursorAndAWindowThatIsNotKeyDoNotBlinkInTheView() throws {
+        let (steady, steadyClock, _) = try makeView("\u{1B}[2 q")
+        steadyClock.advance(by: .seconds(5))
+        let (view, clock, target) = try makeView("\u{1B}[1 q")
+        view.renderer.isFocused = false
+        try view.drawFrame(into: target)
+        clock.advance(by: .seconds(5))
+        #expect(steady.renderer.isCursorShown && view.renderer.isCursorShown)
+    }
+
+    @Test(.enabled(if: usLayoutIsCurrent))
+    func aKeyShowsTheCursorAgainInTheView() throws {
+        let (view, clock, _) = try makeView("\u{1B}[1 q")
+        clock.advance(by: .milliseconds(500))
+        #expect(!view.renderer.isCursorShown)
+        view.keyDown(with: keyEvent(kVK_ANSI_A))
+        #expect(view.renderer.isCursorShown)
+        clock.advance(by: .milliseconds(1000))
+        #expect(!view.renderer.isCursorShown)
     }
 }

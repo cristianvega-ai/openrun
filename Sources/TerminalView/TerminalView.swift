@@ -37,6 +37,7 @@ public final class TerminalView: NSView {
     private var fontSize = FontSizeControl()
     private var schedule: DisplaySchedule?
     private var autoscrollTimer: SelectionAutoscrollTimer?
+    private var blink: CursorBlink?
     private let parser = OutputParser()
     private var isParseScheduled = false
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
@@ -71,6 +72,10 @@ public final class TerminalView: NSView {
             self?.requestFrame()
         }
         addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
+        blink = CursorBlink(clock: clock) { [weak self] isShown in
+            self?.renderer.isCursorShown = isShown
+            self?.requestFrame()
+        }
         autoscrollTimer = SelectionAutoscrollTimer(clock: clock) { [weak self] in self?.autoscrollSelection() }
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)
@@ -142,6 +147,7 @@ public final class TerminalView: NSView {
     /// view first, so the user sees what the program does with the bytes.
     func sendTyped(_ bytes: [UInt8]) {
         guard !bytes.isEmpty else { return }
+        blink?.keyPressed()
         scrollToBottom()
         send(bytes)
     }
@@ -377,6 +383,7 @@ public final class TerminalView: NSView {
     @discardableResult
     func drawFrame(into target: some RenderTarget) throws -> Bool {
         try state.update(from: terminal)
+        blink?.update(programBlinks: state.cursor.isBlinking, windowIsKey: renderer.isFocused)
         updateScrollBar()
         try renderer.prepare(from: state)
         guard renderer.draw(into: target) else { return false }
@@ -400,7 +407,7 @@ public final class TerminalView: NSView {
         do {
             let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
-            (new.isFocused, new.markedText) = (renderer.isFocused, renderer.markedText)
+            (new.isFocused, new.markedText, new.isCursorShown) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown)
             renderer = new
         } catch {
             logger.error("The renderer failed: \(String(describing: error), privacy: .private)")

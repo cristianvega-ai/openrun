@@ -19,6 +19,8 @@ public final class TerminalRenderer {
     public var markedText: String?
     /// Whether the view has the keyboard focus. Without it, the cursor is a hollow block.
     public var isFocused = true
+    /// Whether the cursor is in the shown phase of its blink. Without it, the renderer draws no cursor.
+    public var isCursorShown = true
     private let device: MTLDevice
     private let queue: MTLCommandQueue
     private let shaders: ShaderLibrary
@@ -120,7 +122,7 @@ public final class TerminalRenderer {
     }
 
     private func cursorToDraw() -> FrameBuilder.Cursor? {
-        guard let colors, let cursor, cursor.isVisible, let position = cursor.position else { return nil }
+        guard isCursorShown, let colors, let cursor, cursor.isVisible, let position = cursor.position else { return nil }
         return FrameBuilder.Cursor(
             column: Int(position.column), row: Int(position.row), style: isFocused ? cursor.style : .hollowBlock,
             isOnWideCharacterTail: cursor.isOnWideCharacterTail, color: colors.cursor ?? colors.foreground,
