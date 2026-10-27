@@ -1,4 +1,5 @@
 import AppKit
+import Carbon.HIToolbox
 import Testing
 @testable import TerminalView
 
@@ -64,5 +65,63 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         view.doCommand(by: #selector(NSResponder.insertNewline(_:)))
         #expect(!view.hasMarkedText() && view.renderer.markedText == nil && delegate.takeSent() == "")
         #expect(view.selectedRange() == nowhere && view.attributedSubstring(forProposedRange: nowhere, actualRange: nil) == nil)
+    }
+}
+
+@MainActor @Suite(.enabled(if: usLayoutIsCurrent)) struct KeyThroughInputMethodTests {
+    private let rightOption = ModifierReader.DeviceBit.rightOption
+    private let leftOption = ModifierReader.DeviceBit.leftOption
+
+    /// Gives a key to the view while a fake input method answers as the text input system does.
+    private func press(_ event: NSEvent, in view: TerminalView, delegate: RecordingDelegate, answer: (TerminalView, NSEvent) -> Void = { _, _ in }) -> String {
+        view.sendTyped(view.keyboard.bytes(forKeyDown: event) { answer(view, $0) })
+        return delegate.takeSent()
+    }
+
+    private func makeView() throws -> (TerminalView, RecordingDelegate) {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        return (view, delegate)
+    }
+
+    @Test func aDeadKeyMakesMarkedTextAndTheNextKeySendsTheCharacter() throws {
+        let (view, delegate) = try makeView()
+        let first = press(keyEvent(kVK_ANSI_E, .option, deviceBits: rightOption), in: view, delegate: delegate) { view, _ in
+            view.setMarkedText("´", selectedRange: nowhere, replacementRange: nowhere)
+        }
+        #expect(first == "" && view.renderer.markedText == "´")
+        let second = press(keyEvent(kVK_ANSI_E), in: view, delegate: delegate) { view, _ in view.insertText("é", replacementRange: nowhere) }
+        #expect(second == "é" && view.renderer.markedText == nil)
+    }
+
+    @Test func aCommandAfterCommittedTextSendsTheKeyToo() throws {
+        let (view, delegate) = try makeView()
+        view.setMarkedText("˜", selectedRange: nowhere, replacementRange: nowhere)
+        let bytes = press(keyEvent(kVK_Delete), in: view, delegate: delegate) { view, _ in
+            view.insertText("˜", replacementRange: nowhere)
+            view.doCommand(by: #selector(NSResponder.deleteBackward(_:)))
+        }
+        #expect(bytes == "˜\u{7F}")
+    }
+
+    @Test func aKeyThatTheInputMethodLeavesGoesThroughTheEncoder() throws {
+        let (view, delegate) = try makeView()
+        let a = press(keyEvent(kVK_ANSI_A), in: view, delegate: delegate) { view, _ in view.insertText("a", replacementRange: nowhere) }
+        let control = press(keyEvent(kVK_ANSI_C, .control), in: view, delegate: delegate) { view, _ in view.doCommand(by: NSSelectorFromString("noop:")) }
+        let up = press(keyEvent(kVK_UpArrow), in: view, delegate: delegate) { view, _ in view.doCommand(by: #selector(NSResponder.moveUp(_:))) }
+        #expect([a, control, up] == ["a", "\u{03}", "\u{1B}[A"])
+    }
+
+    @Test func theInputMethodSeesTheLeftOptionKeyAsNoOptionKey() throws {
+        let (view, delegate) = try makeView()
+        var seen: NSEvent.ModifierFlags = []
+        let bytes = press(keyEvent(kVK_ANSI_E, .option, deviceBits: leftOption), in: view, delegate: delegate) { view, event in
+            seen = event.modifierFlags
+            view.insertText(event.characters ?? "", replacementRange: nowhere)
+        }
+        #expect(!seen.contains(.option) && bytes == "\u{1B}e")
+        let plain = keyEvent(kVK_ANSI_A)
+        _ = press(plain, in: view, delegate: delegate) { _, event in #expect(event === plain) }
     }
 }

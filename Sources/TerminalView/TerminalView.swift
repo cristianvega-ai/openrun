@@ -116,7 +116,7 @@ public final class TerminalView: NSView {
     public override var acceptsFirstResponder: Bool { true }
 
     public override func keyDown(with event: NSEvent) {
-        sendTyped(keyboard.bytes(forKeyDown: event))
+        sendTyped(keyboard.bytes(forKeyDown: event) { interpretKeyEvents([$0]) })
     }
 
     public override func keyUp(with event: NSEvent) {

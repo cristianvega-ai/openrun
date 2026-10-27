@@ -18,8 +18,38 @@ final class KeyboardInput {
     }
 
     /// The bytes for a key that went down. They are empty for a key that sends nothing.
-    func bytes(forKeyDown event: NSEvent) -> [UInt8] {
-        encode(event, action: event.isARepeat ? .repeated : .press, text: KeyboardEventReader.layoutText(of: event))
+    ///
+    /// - Parameter interpret: Gives the key to the text input system, which
+    ///   answers through `NSTextInputClient`. An input method needs it for
+    ///   every key.
+    func bytes(forKeyDown event: NSEvent, interpret: (NSEvent) -> Void) -> [UInt8] {
+        let hadMarkedText = textInput.hasMarkedText
+        textInput.beginKey()
+        interpret(translationEvent(for: event))
+        let key = textInput.endKey()
+        let action: KeyEvent.Action = event.isARepeat ? .repeated : .press
+        if hadMarkedText || textInput.hasMarkedText {
+            // The input method owns the key. The text that it committed goes
+            // to the program as it is. A command that it ran, such as
+            // `deleteBackward:`, means that the key still has its own effect.
+            let keyFollows = !textInput.hasMarkedText && !key.texts.isEmpty && !key.commands.isEmpty
+            return key.texts.flatMap { Array($0.utf8) } + (keyFollows ? encode(event, action: action, text: nil) : [])
+        }
+        if key.texts.isEmpty { return encode(event, action: action, text: KeyboardEventReader.layoutText(of: event)) }
+        return key.texts.flatMap { encode(event, action: action, text: $0) }
+    }
+
+    /// The text input system sees the key without the left Option key, so
+    /// that Alt does not make a dead key. A copy is made only when the flags
+    /// differ, because some input methods need the original event.
+    private func translationEvent(for event: NSEvent) -> NSEvent {
+        let flags = ModifierReader.translationFlags(event.modifierFlags)
+        guard flags != event.modifierFlags else { return event }
+        return NSEvent.keyEvent(
+            with: event.type, location: event.locationInWindow, modifierFlags: flags, timestamp: event.timestamp,
+            windowNumber: event.windowNumber, context: nil, characters: event.characters(byApplyingModifiers: flags) ?? "",
+            charactersIgnoringModifiers: event.charactersIgnoringModifiers ?? "", isARepeat: event.isARepeat, keyCode: event.keyCode)
+            ?? event
     }
 
     /// The bytes for a text that the text input system commits. There are none
