@@ -1,6 +1,7 @@
 import AppKit
 import Metal
 import QuartzCore
+import TerminalEmulation
 import TerminalRendering
 import Testing
 @testable import TerminalView
@@ -80,5 +81,44 @@ import Testing
         while view.parseTurn() { turns += 1 }
         #expect(turns > 2)
         #expect(String(decoding: try view.terminal.formatted(.plainText), as: UTF8.self).contains("flood end"))
+    }
+}
+
+@MainActor private final class RecordingDelegate: TerminalViewDelegate {
+    var sizes: [TerminalSize] = []
+
+    func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
+        sizes.append(size)
+    }
+}
+
+@MainActor @Suite struct GridOfViewTests {
+    private func layout(_ view: TerminalView, width: CGFloat, height: CGFloat) {
+        view.frame = NSRect(x: 0, y: 0, width: width, height: height)
+        view.needsLayout = true
+        view.layoutSubtreeIfNeeded()
+    }
+
+    @Test func theGridFitsTheViewAndTheDelegateGetsEachNewSize() throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        let fonts = view.renderer.fonts
+        func fit(_ width: CGFloat) -> TerminalSize {
+            GridFit.grid(for: CGSize(width: width, height: 400), scale: fonts.scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: view.renderer.padding)
+        }
+        layout(view, width: 800, height: 400)
+        #expect(view.gridSize == fit(800))
+        layout(view, width: 800, height: 400)
+        layout(view, width: 600, height: 400)
+        #expect(delegate.sizes == [fit(800), fit(600)])
+        #expect(view.terminal.size == fit(600))
+        #expect(view.gridSize.columns < fit(800).columns)
+    }
+
+    @Test func aViewWithoutSizeKeepsItsGrid() throws {
+        let view = try TerminalView(initialGrid: TerminalSize(columns: 30, rows: 5))
+        layout(view, width: 0, height: 0)
+        #expect(view.gridSize == TerminalSize(columns: 30, rows: 5))
     }
 }

@@ -20,6 +20,7 @@ public final class TerminalView: NSView {
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen. The light version stays until the view follows the appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
+    public weak var delegate: TerminalViewDelegate?
     /// How many frames reached the graphics processor.
     private(set) var framesDrawn = 0
     private let host: MetalLayerHost
@@ -77,6 +78,9 @@ public final class TerminalView: NSView {
         }
     }
 
+    /// The size of the grid, which fits the size of the view.
+    public var gridSize: TerminalSize { terminal.size }
+
     public override var isOpaque: Bool { true }
 
     public override func makeBackingLayer() -> CALayer { host.layer }
@@ -89,7 +93,24 @@ public final class TerminalView: NSView {
     public override func layout() {
         super.layout()
         host.resize(to: bounds.size, scale: renderer.fonts.scale)
+        fitGrid()
         schedule?.requestFrame()
+    }
+
+    /// Gives the terminal as many whole cells as fit in the view, and tells
+    /// the delegate when that is a new size.
+    private func fitGrid() {
+        guard bounds.width > 0, bounds.height > 0 else { return }
+        let fonts = renderer.fonts
+        let grid = GridFit.grid(for: bounds.size, scale: fonts.scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: renderer.padding)
+        guard grid != terminal.size else { return }
+        do {
+            try terminal.resize(to: grid)
+        } catch {
+            logger.error("The grid change failed: \(String(describing: error), privacy: .private)")
+            return
+        }
+        delegate?.terminalView(self, didChangeGridSize: grid)
     }
 
     /// Brings the render state up to date and draws one frame into `target`.
