@@ -46,6 +46,7 @@ import Testing
     @Test func outputAppearsInTheColorsOfTheTheme() throws {
         let view = try TerminalView()
         view.write(Array("\u{1B}[?25l█".utf8))
+        view.parseTurn()
         let fonts = view.renderer.fonts
         let size = view.renderer.pixelSize(for: view.terminal.size)
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: size.width, height: size.height)
@@ -67,5 +68,17 @@ import Testing
         wait(seconds: 0.3) { false }
         #expect(view.framesDrawn == frames)
         #expect(view.layer is CAMetalLayer)
+    }
+
+    @Test func aFloodOfOutputIsParsedInShortTurns() throws {
+        let view = try TerminalView()
+        view.write([UInt8](repeating: 0x78, count: 32 << 20) + Array("\r\nflood end".utf8))
+        let start = ContinuousClock.now
+        #expect(view.parseTurn())
+        #expect(start.duration(to: .now) < .milliseconds(100))
+        var turns = 1
+        while view.parseTurn() { turns += 1 }
+        #expect(turns > 2)
+        #expect(String(decoding: try view.terminal.formatted(.plainText), as: UTF8.self).contains("flood end"))
     }
 }

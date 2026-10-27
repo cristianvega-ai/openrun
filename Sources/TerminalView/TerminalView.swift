@@ -1,4 +1,5 @@
 import AppKit
+import Foundation
 import Metal
 import TerminalEmulation
 import TerminalRendering
@@ -23,6 +24,8 @@ public final class TerminalView: NSView {
     private(set) var framesDrawn = 0
     private let host: MetalLayerHost
     private var schedule: DisplaySchedule?
+    private let parser = OutputParser()
+    private var isParseScheduled = false
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
 
     /// - Parameter initialGrid: The size of the grid until the view has a size of its own.
@@ -45,10 +48,33 @@ public final class TerminalView: NSView {
         fatalError("TerminalView does not come from a storyboard.")
     }
 
-    /// Gives the terminal the bytes that a program wrote. The next frame shows them.
+    /// Keeps the bytes that a program wrote. The view parses them in turns
+    /// with a time limit, and the next frame shows them.
     public func write(_ bytes: some ContiguousBytes) {
-        terminal.write(bytes)
+        parser.append(bytes)
+        scheduleParseTurn()
+    }
+
+    /// Parses output for at most 4 ms, so a flood of output does not hold the
+    /// main thread from drawing and input.
+    ///
+    /// - Returns: `true` when output is left for another turn.
+    @discardableResult
+    func parseTurn() -> Bool {
+        isParseScheduled = false
+        let hasMore = parser.parse(into: terminal, budget: ParseBudget(limit: .milliseconds(4)))
         schedule?.requestFrame()
+        if hasMore { scheduleParseTurn() }
+        return hasMore
+    }
+
+    private func scheduleParseTurn() {
+        guard !isParseScheduled else { return }
+        isParseScheduled = true
+        // A run loop source, not a dispatch block, so events run between two turns.
+        RunLoop.main.perform(inModes: [.common]) { [weak self] in
+            MainActor.assumeIsolated { _ = self?.parseTurn() }
+        }
     }
 
     public override var isOpaque: Bool { true }
