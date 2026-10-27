@@ -9,7 +9,9 @@ public final class SessionAttachment: Sendable {
     /// The terminal of the session at the moment of the attach, as the protocol
     /// carries it. `TerminalSnapshot(bytes:)` restores it. Output comes after it.
     public let snapshot: Data
-    private let connection: MessageConnection
+    /// The attach command of the tool receives and sends on the connection
+    /// itself until it uses the calls below.
+    package let connection: MessageConnection
     private let isReceiving = Atomic<Bool>(false)
 
     init(connection: MessageConnection, snapshot: Data) {

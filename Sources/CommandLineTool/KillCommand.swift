@@ -1,3 +1,4 @@
+import SessionConnection
 import SessionProtocol
 
 /// `openrun kill`: ends a session and its program.

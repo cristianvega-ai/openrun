@@ -1,6 +1,7 @@
 import Darwin
 import Dispatch
 import Foundation
+import SessionConnection
 import SessionProtocol
 import TerminalEmulation
 
@@ -47,13 +48,12 @@ struct AttachCommand {
         let session = try client.session(matching: identifier)
         let size = RawTerminalMode.windowSize(of: STDOUT_FILENO) ?? session.size
 
-        try client.connection.send(ClientMessage.attach(identifier: session.identifier, size: size, relaysRawOutput: true))
-        let snapshot = try receiveSnapshot(from: client)
+        let attachment = try client.attach(to: session.identifier, size: size, relaysRawOutput: true, receivesSizeChanges: false)
         // Made before the terminal changes, so a snapshot that cannot be
         // restored ends attaching with an error, not with a blank picture.
-        let screen = try LocalScreen(snapshot: snapshot)
+        let screen = try LocalScreen(snapshot: TerminalSnapshot(bytes: Array(attachment.snapshot)))
 
-        let connection = client.connection
+        let connection = attachment.connection
         let writer = try TerminalWriter()
         defer { writer.stopWriting() }
         let resizes = DispatchQueue(label: "attach.resize")
@@ -103,26 +103,6 @@ struct AttachCommand {
     }
 
     // MARK: - Attaching
-
-    private func receiveSnapshot(from client: SessionClient) throws -> TerminalSnapshot {
-        for _ in 0..<2 {
-            do {
-                switch try client.connection.receive(ServerMessage.self) {
-                case .attached:
-                    continue
-                case .snapshot(let bytes):
-                    return TerminalSnapshot(bytes: Array(bytes))
-                case .failure(let failure):
-                    throw CommandLineToolError.failure(failure.message)
-                default:
-                    throw CommandLineToolError.failure("The session process answered the attach request in an unexpected way.")
-                }
-            } catch let error as SessionProtocolError {
-                throw CommandLineToolError.failure("\(error)")
-            }
-        }
-        throw CommandLineToolError.failure("The session process sent no snapshot.")
-    }
 
     /// The screen of the session, kept in this process. It draws the
     /// picture, at the start and after a suspension. Then it follows the

@@ -127,6 +127,9 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(CommandLineToolError(.noMatchingSession(typed: "zz")).exitCode == 1)
         #expect(CommandLineToolError(.noMatchingSession(typed: "zz")).description
             == "No session has an identifier that starts with zz. Run 'openrun list' to see the sessions.")
+        #expect(CommandLineToolError(.noSessionProcess(socketPath: "/a/session.socket")).description
+            == "No session process answers on /a/session.socket. Start one with openrun-session, or choose a socket with --socket.")
+        #expect(CommandLineToolError(.connectionClosed).description == "The session process closed the connection.")
     }
 
     /// openrun's own line breaks stay, so each candidate is on its own line.

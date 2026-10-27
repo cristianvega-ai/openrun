@@ -1,3 +1,4 @@
+import SessionConnection
 import SessionProtocol
 
 /// `openrun send`: types text into a session without attaching.

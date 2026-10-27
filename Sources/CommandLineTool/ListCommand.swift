@@ -1,3 +1,4 @@
+import SessionConnection
 import SessionProtocol
 import TerminalEmulation
 

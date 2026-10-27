@@ -1,4 +1,5 @@
 import Foundation
+import SessionConnection
 import SessionProtocol
 
 /// `openrun new`: starts a session and prints its identifier.

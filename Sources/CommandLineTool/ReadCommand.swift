@@ -1,3 +1,4 @@
+import SessionConnection
 import SessionProtocol
 
 /// `openrun read`: the screen of a session as plain text.
