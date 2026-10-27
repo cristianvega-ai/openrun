@@ -19,6 +19,7 @@ public final class TerminalView: NSView {
     let pointer: PointerInput
     let focus = FocusInput()
     let selection: SelectionInput
+    let links: LinkClick
     let scroll = ScrollInput()
     let scrollBar: OverlayScrollBar
     /// The time and the timers of the input. A test gives a clock that it moves.
@@ -58,6 +59,7 @@ public final class TerminalView: NSView {
         keyboard = try KeyboardInput(terminal: terminal)
         pointer = try PointerInput(terminal: terminal)
         selection = try SelectionInput(terminal: terminal)
+        links = LinkClick(terminal: terminal)
         scrollBar = OverlayScrollBar(clock: clock)
         self.clock = clock
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
@@ -182,19 +184,22 @@ public final class TerminalView: NSView {
 
     /// A mouse event that the program does not want selects text.
     public override func mouseDown(with event: NSEvent) {
+        // A Command-click on a link is for the link only, also when the program reads the mouse.
+        guard !links.press(modifiers: event.modifierFlags, at: pointerLocation.cell(of: point(of: event))) else { return }
         guard !report(.press, .left, event) else { return }
         selection.press(at: point(of: event), in: pointerLocation, timestamp: event.timestamp)
         requestFrame()
     }
 
     public override func mouseUp(with event: NSEvent) {
+        if links.isActive { return links.release(at: pointerLocation.cell(of: point(of: event))) }
         guard !report(.release, .left, event) else { return }
         selection.release(at: point(of: event), in: pointerLocation)
         autoscrollTimer?.update(for: .none)
     }
 
     public override func mouseDragged(with event: NSEvent) {
-        guard !report(.motion, .left, event) else { return }
+        guard !links.isActive, !report(.motion, .left, event) else { return }
         selection.drag(to: point(of: event), in: pointerLocation)
         autoscrollTimer?.update(for: selection.autoscroll)
         requestFrame()
