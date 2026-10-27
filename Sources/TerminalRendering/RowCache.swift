@@ -1,0 +1,45 @@
+import TerminalEmulation
+
+/// Keeps the `RowQuads` of the rows on the screen by their `RowIdentifier`,
+/// so a row that did not change is not read again.
+struct RowCache {
+    /// The identifiers of the rows, from the top row down.
+    private(set) var order: [RowIdentifier] = []
+    private var rows: [RowIdentifier: RowQuads] = [:]
+    private var size: TerminalSize?
+    private var colors: RenderColors?
+    private var atlasGeneration = 0
+
+    func quads(at index: Int) -> RowQuads? {
+        rows[order[index]]
+    }
+
+    /// Makes new quads for the rows that changed. Every row changes when the
+    /// whole screen is dirty, when the grid has a new size, or when the colors
+    /// or the glyph positions changed, because the quads hold them.
+    ///
+    /// - Parameter make: Makes the quads of a row that the cache must read.
+    mutating func update(
+        from state: RenderState, atlasGeneration: Int, make: (RenderRow) throws -> RowQuads
+    ) throws -> FrameStatistics {
+        let rebuildAll = state.dirtiness == .everything || state.size != size
+            || state.colors != colors || atlasGeneration != self.atlasGeneration
+        (size, colors, self.atlasGeneration) = (state.size, state.colors, atlasGeneration)
+        var statistics = FrameStatistics()
+        var kept: [RowIdentifier: RowQuads] = [:]
+        var order: [RowIdentifier] = []
+        try state.forEachRow(onlyChanged: false) { row in
+            let identifier = row.identifier
+            order.append(identifier)
+            if !rebuildAll, !row.isDirty, let known = rows[identifier] {
+                kept[identifier] = known
+                statistics.rowsReused += 1
+            } else {
+                kept[identifier] = try make(row)
+                statistics.rowsPrepared += 1
+            }
+        }
+        (rows, self.order) = (kept, order)
+        return statistics
+    }
+}

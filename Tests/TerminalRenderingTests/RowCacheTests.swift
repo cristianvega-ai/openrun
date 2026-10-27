@@ -25,3 +25,39 @@ import TerminalEmulation
         #expect(glyphs.map(\.isColor) == [0, 1])
     }
 }
+
+@Suite struct RowCacheTests {
+    private func firstUpdate(rows: UInt16 = 5) throws -> (terminal: Terminal, state: RenderState, atlas: GlyphAtlas, cache: RowCache) {
+        let screen = try makeScreen("a\r\nb", rows: rows)
+        let atlas = try makeAtlas()
+        var cache = RowCache()
+        #expect(try update(&cache, from: screen.state, atlas: atlas).rowsPrepared == Int(rows))
+        screen.state.markClean()
+        return (screen.terminal, screen.state, atlas, cache)
+    }
+
+    @Test func aChangeInOneRowPreparesOneRow() throws {
+        var (terminal, state, atlas, cache) = try firstUpdate()
+        terminal.write("x")
+        try state.update(from: terminal)
+        let statistics = try update(&cache, from: state, atlas: atlas)
+        #expect(statistics == FrameStatistics(rowsPrepared: 1, rowsReused: 4))
+    }
+
+    @Test func noChangePreparesNoRow() throws {
+        var (terminal, state, atlas, cache) = try firstUpdate()
+        try state.update(from: terminal)
+        #expect(try update(&cache, from: state, atlas: atlas).rowsPrepared == 0)
+    }
+
+    @Test func aNewGridSizeOrNewColorsPrepareEveryRow() throws {
+        var (terminal, state, atlas, cache) = try firstUpdate()
+        try terminal.resize(to: TerminalSize(columns: 30, rows: 5))
+        try state.update(from: terminal)
+        #expect(try update(&cache, from: state, atlas: atlas).rowsPrepared == 5)
+        state.markClean()
+        try terminal.setDefaultBackgroundColor(TerminalColor(red: 1, green: 2, blue: 3))
+        try state.update(from: terminal)
+        #expect(try update(&cache, from: state, atlas: atlas).rowsPrepared == 5)
+    }
+}
