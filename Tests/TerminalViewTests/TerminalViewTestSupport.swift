@@ -19,3 +19,20 @@ func wait(seconds: Double, until condition: () -> Bool) {
     let end = Date().addingTimeInterval(seconds)
     while !condition(), Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.01)) }
 }
+
+/// A key event with the characters that the current keyboard layout makes for
+/// the key, as the system sends it. `deviceBits` tell the side of a modifier.
+func keyEvent(
+    _ keyCode: Int, _ flags: NSEvent.ModifierFlags = [], deviceBits: UInt = 0, type: NSEvent.EventType = .keyDown, timestamp: TimeInterval = 1
+) -> NSEvent {
+    let all = NSEvent.ModifierFlags(rawValue: flags.rawValue | deviceBits)
+    func make(_ characters: String) -> NSEvent {
+        NSEvent.keyEvent(
+            with: type, location: .zero, modifierFlags: all, timestamp: timestamp, windowNumber: 0, context: nil,
+            characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: UInt16(keyCode))!
+    }
+    return type == .flagsChanged ? make("") : make(make("").characters(byApplyingModifiers: all) ?? "")
+}
+
+/// The tests of keys assume the US layout of the keyboard, as the Macs of the owner have.
+let usLayoutIsCurrent = keyEvent(5, .option).characters(byApplyingModifiers: .option) == "©"
