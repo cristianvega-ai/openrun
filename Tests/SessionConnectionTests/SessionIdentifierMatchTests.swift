@@ -1,7 +1,7 @@
 import Foundation
 import SessionProtocol
 import Testing
-@testable import CommandLineTool
+import SessionConnection
 
 @Suite struct SessionIdentifierMatchTests {
     private func summary(_ identifier: String) -> SessionSummary {
@@ -10,7 +10,7 @@ import Testing
             folder: "/work/\(identifier.prefix(4))",
             command: ["sh"],
             size: SessionSize(columns: 80, rows: 24),
-            createdAt: .now
+            createdAt: Date(timeIntervalSince1970: 0)
         )
     }
 
@@ -35,8 +35,8 @@ import Testing
         do {
             _ = try SessionIdentifierMatch.find("1a2b", in: summaries)
             Issue.record("The prefix should be ambiguous.")
-        } catch let error as CommandLineToolError {
-            #expect(error.exitCode == 1)
+        } catch let error as SessionConnectionError {
+            #expect(error == .ambiguousIdentifier(typed: "1a2b", candidates: Array(summaries.prefix(2))))
             #expect(error.description.contains("1a2b3c4d"))
             #expect(error.description.contains("1a2b9999"))
         } catch {
@@ -50,8 +50,8 @@ import Testing
     }
 
     @Test func noMatchAndAnEmptyIdentifierFail() {
-        #expect(throws: CommandLineToolError.self) { try SessionIdentifierMatch.find("zzzz", in: summaries) }
-        #expect(throws: CommandLineToolError.self) { try SessionIdentifierMatch.find("", in: summaries) }
-        #expect(throws: CommandLineToolError.self) { try SessionIdentifierMatch.find("1a", in: []) }
+        #expect(throws: SessionConnectionError.noMatchingSession(typed: "zzzz")) { try SessionIdentifierMatch.find("zzzz", in: summaries) }
+        #expect(throws: SessionConnectionError.emptyIdentifier) { try SessionIdentifierMatch.find("", in: summaries) }
+        #expect(throws: SessionConnectionError.noMatchingSession(typed: "1a")) { try SessionIdentifierMatch.find("1a", in: []) }
     }
 }

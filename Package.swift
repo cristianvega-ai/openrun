@@ -38,6 +38,8 @@ let package = Package(
             name: "SessionProtocolTests",
             dependencies: ["SessionProtocol"]
         ),
+        .target(name: "SessionConnection", dependencies: ["SessionProtocol"]),
+        .testTarget(name: "SessionConnectionTests", dependencies: ["SessionConnection", "SessionProtocol"]),
         .target(name: "PseudoTerminal"),
         .target(
             name: "SessionProcess",
