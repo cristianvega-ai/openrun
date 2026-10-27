@@ -22,4 +22,10 @@ import TerminalTheme
         #expect(middle(of: screen.target, column: 3, row: 1) == screen.theme.background)
         #expect(screen.target.pixel(x: 0, y: 0) == screen.theme.background)
     }
+
+    @Test func aCellBackgroundHasItsColorOfThePalette() throws {
+        let screen = try renderScreen("\u{1B}[41m ")
+        #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.firstSixteenColors[1])
+        #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
+    }
 }
