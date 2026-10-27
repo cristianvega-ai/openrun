@@ -6,4 +6,8 @@ public protocol TerminalViewDelegate: AnyObject {
     /// The grid has a new size, because the view changed its size or its text
     /// size. The owner passes the size on to the session of the view.
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize)
+
+    /// The user typed, pasted or moved the mouse, and the program must read
+    /// these bytes. The owner writes them to the session.
+    func terminalView(_ view: TerminalView, send bytes: [UInt8])
 }

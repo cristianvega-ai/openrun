@@ -84,11 +84,15 @@ import Testing
     }
 }
 
-@MainActor private final class RecordingDelegate: TerminalViewDelegate {
-    var sizes: [TerminalSize] = []
-
-    func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
-        sizes.append(size)
+@MainActor @Suite struct SendOfViewTests {
+    @Test func theViewGivesBytesToItsDelegateAndSkipsEmptyOnes() throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.send([0x61])
+        view.delegate = delegate
+        view.send([])
+        view.send([0x62, 0x63])
+        #expect(delegate.takeSent() == "bc")
     }
 }
 

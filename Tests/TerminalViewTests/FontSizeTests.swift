@@ -33,18 +33,10 @@ import TerminalEmulation
     }
 }
 
-@MainActor private final class SizeDelegate: TerminalViewDelegate {
-    var sizes: [TerminalSize] = []
-
-    func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
-        sizes.append(size)
-    }
-}
-
 @MainActor @Suite struct FontSizeOfViewTests {
-    private func makeView() throws -> (view: TerminalView, delegate: SizeDelegate) {
+    private func makeView() throws -> (view: TerminalView, delegate: RecordingDelegate) {
         let view = try TerminalView()
-        let delegate = SizeDelegate()
+        let delegate = RecordingDelegate()
         view.delegate = delegate
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
         view.needsLayout = true

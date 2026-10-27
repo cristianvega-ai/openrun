@@ -1,4 +1,21 @@
 import AppKit
+import TerminalEmulation
+@testable import TerminalView
+
+/// Keeps what a view tells its owner.
+@MainActor final class RecordingDelegate: TerminalViewDelegate {
+    var sizes: [TerminalSize] = []
+    var sent: [UInt8] = []
+
+    func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) { sizes.append(size) }
+    func terminalView(_ view: TerminalView, send bytes: [UInt8]) { sent += bytes }
+
+    /// The bytes that the view sent since the last call, as text.
+    func takeSent() -> String {
+        defer { sent = [] }
+        return String(decoding: sent, as: UTF8.self)
+    }
+}
 
 /// A window on the screen that holds `view`, as the display link needs one.
 @MainActor
