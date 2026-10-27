@@ -26,7 +26,9 @@ struct RowQuads {
             if cell.width == .wide { wideColumns.append(cell.column) }
             // The second cell of a wide character has nothing to draw.
             if let base = cell.base, base != " ", !cell.style.isInvisible, cell.width != .wideTail, cell.width != .wideHead {
-                let key = GlyphKey(text: cell.text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
+                // Most cells hold one scalar, and a short string needs no memory from the heap.
+                let text = cell.extraScalars.isEmpty ? String(Character(base)) : cell.text
+                let key = GlyphKey(text: text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
                 let entry = atlas.entry(for: key)
                 if !entry.isEmpty { glyphs.append(.glyph(entry, column: Int(cell.column), x: x, y: 0, color: foreground)) }
             }
