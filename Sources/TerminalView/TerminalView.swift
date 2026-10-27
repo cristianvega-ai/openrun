@@ -22,6 +22,8 @@ public final class TerminalView: NSView {
     let scrollBar: OverlayScrollBar
     /// The time and the timers of the input. A test gives a clock that it moves.
     let clock: any InputClock
+    /// The pasteboard for copy and paste. A test gives another one.
+    var pasteboard: any PasteboardAccess = GeneralPasteboard()
     private(set) var renderer: TerminalRenderer
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
@@ -239,6 +241,12 @@ public final class TerminalView: NSView {
 
     public override func flagsChanged(with event: NSEvent) {
         sendTyped(keyboard.bytes(forFlagsChanged: event))
+    }
+
+    /// Command-C: puts the selected text on the pasteboard, as plain text only.
+    @objc public func copy(_ sender: Any?) {
+        guard let text = terminal.selectedText(), !text.isEmpty else { return }
+        pasteboard.write(plainText: text)
     }
 
     // The menu of a later unit sends these actions through the responder chain.

@@ -85,4 +85,31 @@ import Testing
         view.mouseDragged(with: try event(.leftMouseDragged, column: 8, in: view, [], at: 20))
         #expect(view.terminal.selectedText() == "two")
     }
+
+    @Test func copyPutsTheSelectedTextOnThePasteboardAndNothingWithoutASelection() throws {
+        let view = try makeView()
+        let pasteboard = FakePasteboard()
+        view.pasteboard = pasteboard
+        view.copy(nil)
+        #expect(pasteboard.text == nil)
+        view.mouseDown(with: try event(.leftMouseDown, column: 4, in: view))
+        view.mouseDragged(with: try event(.leftMouseDragged, column: 6, in: view))
+        view.copy(nil)
+        #expect(pasteboard.text == "two")
+        view.mouseDown(with: try event(.leftMouseDown, column: 1, in: view, [], at: 20))
+        view.copy(nil)
+        #expect(pasteboard.text == "two")
+    }
+
+    @Test func aLineThatWrapsIsOneLineOnTheGeneralPasteboardAsPlainText() throws {
+        let view = try makeView("\u{1B}[2J\u{1B}[H" + String(repeating: "x", count: 200))
+        let general = NSPasteboard(name: NSPasteboard.Name("ai.cristianvega.openrun.test.\(UUID().uuidString)"))
+        defer { general.releaseGlobally() }
+        view.pasteboard = GeneralPasteboard(pasteboard: general)
+        for time in [1.0, 1.1, 1.2] { view.mouseDown(with: try event(.leftMouseDown, column: 3, in: view, [], at: time)) }
+        view.copy(nil)
+        let types = general.types ?? []
+        #expect(general.string(forType: .string) == String(repeating: "x", count: 200))
+        #expect(types.contains(.string) && !types.contains(.html) && !types.contains(.rtf))
+    }
 }

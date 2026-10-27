@@ -30,6 +30,14 @@ func show(_ view: NSView) -> NSWindow {
     return window
 }
 
+/// A pasteboard in memory.
+@MainActor
+final class FakePasteboard: PasteboardAccess {
+    var text: String?
+    func plainText() -> String? { text }
+    func write(plainText: String) { text = plainText }
+}
+
 /// A window whose first responder is `view`, so that key equivalents reach it.
 @MainActor
 func showFocused(_ view: NSView) -> NSWindow {
