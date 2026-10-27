@@ -12,17 +12,22 @@ public struct SessionProcess: Sendable {
     /// The Mach service of the launch agent when launchd started the
     /// process, and nil for a process that was started by hand.
     let machServiceName: String?
+    /// Set for the launch agent only. A process that was started by hand
+    /// runs until it gets a signal.
+    let idleExit: IdleExit?
 
     public init(socketLocation: SocketLocation) {
-        self.init(socketLocation: socketLocation, machServiceName: nil)
+        self.init(socketLocation: socketLocation, machServiceName: nil, idleExit: nil)
     }
 
-    init(socketLocation: SocketLocation, machServiceName: String?) {
+    init(socketLocation: SocketLocation, machServiceName: String?, idleExit: IdleExit?) {
         self.socketLocation = socketLocation
         self.machServiceName = machServiceName
+        self.idleExit = idleExit
     }
 
-    /// Serves clients until SIGTERM, SIGINT or SIGHUP arrives. Then it ends
+    /// Serves clients until SIGTERM, SIGINT or SIGHUP arrives, or until the
+    /// idle exit of the launch agent. Then it ends
     /// every program, closes every client, removes the socket file, and
     /// returns.
     public func run() async throws {
@@ -34,8 +39,21 @@ public struct SessionProcess: Sendable {
         SessionLog.write("Listening on ", detail: socketLocation.path)
         let wakeService = machServiceName.flatMap(startWakeService)
 
-        let signal = await signals.wait()
-        SessionLog.write("Received signal \(signal). Ending all sessions.")
+        let reason = await withTaskGroup(of: String.self) { group in
+            group.addTask { "Received signal \(await signals.wait())." }
+            if let idleExit {
+                group.addTask {
+                    // The wake service stops before the socket closes, so a
+                    // later wake waits for the next process.
+                    await idleExit.wait(for: server) { wakeService?.cancel() }
+                    return "No session and no client for \(idleExit.timeLimit)."
+                }
+            }
+            let first = await group.next() ?? "Stopped."
+            group.cancelAll()
+            return first
+        }
+        SessionLog.write("\(reason) Ending all sessions.")
         wakeService?.cancel()
         await server.shutDown()
         SessionLog.write("Stopped.")
@@ -81,7 +99,8 @@ public struct SessionProcess: Sendable {
             // it does not take OPENRUN_SOCKET from the environment.
             let location = try SocketLocation.resolve(flag: socketFlag, environment: isLaunchAgent ? [:] : environment)
             let machServiceName = isLaunchAgent ? LaunchAgentNames.machServiceName(in: environment) : nil
-            try await SessionProcess(socketLocation: location, machServiceName: machServiceName).run()
+            let idleExit = isLaunchAgent ? IdleExit(environment: environment) : nil
+            try await SessionProcess(socketLocation: location, machServiceName: machServiceName, idleExit: idleExit).run()
             return 0
         } catch {
             SessionLog.write("", detail: "\(error)")
@@ -96,7 +115,8 @@ public struct SessionProcess: Sendable {
         The socket is PATH, or OPENRUN_SOCKET, or ~/Library/Application Support/OpenRun/session.socket.
         A relative path starts at the current folder. The folder of the socket must belong to you,
         and other users must not be able to write to it.
-        launchd gives --launch-agent: the process then answers wake requests.
+        launchd gives --launch-agent: the process then answers wake requests, and it
+        ends after 30 seconds with no session and no client.
         """
 
     private static func usageError(_ message: String) -> Int32 {
