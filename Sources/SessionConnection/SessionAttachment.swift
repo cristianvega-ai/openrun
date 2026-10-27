@@ -1,5 +1,6 @@
 import Foundation
 import SessionProtocol
+import Synchronization
 
 /// A connection that is attached to one session. It starts with the
 /// snapshot of the terminal of the session.
@@ -8,6 +9,7 @@ public final class SessionAttachment: Sendable {
     /// carries it. `TerminalSnapshot(bytes:)` restores it. Output comes after it.
     public let snapshot: Data
     private let connection: MessageConnection
+    private let isReceiving = Atomic<Bool>(false)
 
     init(connection: MessageConnection, snapshot: Data) {
         self.connection = connection
@@ -34,5 +36,47 @@ public final class SessionAttachment: Sendable {
             }
         }
         throw SessionConnectionError.missingSnapshot
+    }
+
+    /// Starts the thread that receives the events of the session. It hands
+    /// each one to `handler` in order, and ends after `exited`, `closed` or
+    /// `failed`. While `handler` runs, the socket holds the later events, so
+    /// a caller on the main thread hands each event on to the main queue.
+    /// Only the first call starts a thread.
+    public func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
+        guard !isReceiving.exchange(true, ordering: .acquiringAndReleasing) else { return }
+        let receiver = Thread { [connection] in
+            Self.receiveEvents(on: connection, into: handler)
+        }
+        receiver.name = "attach.receiver"
+        receiver.start()
+    }
+
+    private static func receiveEvents(on connection: MessageConnection, into handler: (SessionAttachmentEvent) -> Void) {
+        while true {
+            let message: ServerMessage?
+            do {
+                message = try connection.receive(ServerMessage.self)
+            } catch {
+                // Only the decoding of a frame can throw another type of error.
+                handler(.failed(.protocolFailure(error as? SessionProtocolError ?? .malformedFrame(reason: "\(error)"))))
+                return
+            }
+            switch message {
+            case .output(let bytes):
+                handler(.output(bytes))
+            case .sizeChanged(let size):
+                handler(.sizeChanged(size))
+            case .exited(let exit):
+                handler(.exited(exit))
+                return
+            case nil:
+                handler(.closed)
+                return
+            default:
+                // No other message belongs after the snapshot.
+                continue
+            }
+        }
     }
 }

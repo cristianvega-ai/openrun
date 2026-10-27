@@ -18,6 +18,38 @@ import Testing
         return try client.attach(to: summary.identifier, size: size, relaysRawOutput: true, receivesSizeChanges: false)
     }
 
+    /// Every event, up to the last one.
+    private static func events(of attachment: SessionAttachment) async -> [SessionAttachmentEvent] {
+        let (stream, continuation) = AsyncStream.makeStream(of: SessionAttachmentEvent.self)
+        attachment.startReceiving { event in
+            continuation.yield(event)
+            switch event {
+            case .exited, .closed, .failed: continuation.finish()
+            case .output, .sizeChanged: break
+            }
+        }
+        return await stream.reduce(into: []) { $0.append($1) }
+    }
+
+    @Test func theEventsComeInTheOrderOfTheSessionProcessAndNothingFollowsTheExit() async throws {
+        let attachment = try Self.attach(answering: [
+            .attached(Self.summary), .snapshot(Data()), .output(Data("a".utf8)), .sizeChanged(SessionSize(columns: 100, rows: 30)),
+            .output(Data("b".utf8)), .exited(.exited(status: 3)), .output(Data("after the exit".utf8)),
+        ])
+        #expect(await Self.events(of: attachment) == [
+            .output(Data("a".utf8)), .sizeChanged(SessionSize(columns: 100, rows: 30)), .output(Data("b".utf8)), .exited(.exited(status: 3)),
+        ])
+    }
+
+    /// The output goes on after a message that has no place there, and a
+    /// connection that closes ends the events.
+    @Test func aMessageThatDoesNotBelongAfterTheSnapshotIsIgnored() async throws {
+        let attachment = try Self.attach(answering: [
+            .attached(Self.summary), .snapshot(Data()), .output(Data("a".utf8)), .attached(Self.summary), .acknowledged, .output(Data("b".utf8)),
+        ])
+        #expect(await Self.events(of: attachment) == [.output(Data("a".utf8)), .output(Data("b".utf8)), .closed])
+    }
+
     @Test func theSnapshotFollowsAttached() throws {
         let snapshot = Data("snapshot".utf8)
         #expect(try Self.attach(answering: [.attached(Self.summary), .snapshot(snapshot)]).snapshot == snapshot)
