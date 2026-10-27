@@ -1,4 +1,5 @@
 import Darwin
+import Foundation
 import SessionProtocol
 
 /// A connection to the session process, after the greeting.
@@ -52,5 +53,12 @@ public struct SessionClient: Sendable {
     /// The session that a typed identifier or identifier start means.
     public func session(matching typed: String) throws -> SessionSummary {
         try SessionIdentifierMatch.find(typed, in: summaries())
+    }
+
+    /// Attaches the connection to a session, and returns once the snapshot
+    /// is there. The connection then belongs to the attachment, so the
+    /// client takes no more requests.
+    public func attach(to identifier: UUID, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> SessionAttachment {
+        try SessionAttachment.attach(on: connection, to: identifier, size: size, relaysRawOutput: relaysRawOutput, receivesSizeChanges: receivesSizeChanges)
     }
 }

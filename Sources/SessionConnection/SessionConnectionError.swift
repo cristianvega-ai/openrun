@@ -17,6 +17,10 @@ public enum SessionConnectionError: Error, Equatable, Sendable, CustomStringConv
     case requestFailed(SessionFailure)
     /// The answer does not fit the request that the text names.
     case unexpectedAnswer(request: String)
+    /// The answer to `attach` was neither `attached` nor the snapshot.
+    case unexpectedAttachAnswer
+    /// `attached` came twice, and no snapshot.
+    case missingSnapshot
     /// The typed identifier is empty.
     case emptyIdentifier
     /// No session has an identifier that starts with the typed text.
@@ -37,6 +41,10 @@ public enum SessionConnectionError: Error, Equatable, Sendable, CustomStringConv
             failure.message
         case .unexpectedAnswer(let request):
             "The session process gave an unexpected answer to the \(request) request."
+        case .unexpectedAttachAnswer:
+            "The session process answered the attach request in an unexpected way."
+        case .missingSnapshot:
+            "The session process sent no snapshot."
         case .emptyIdentifier:
             "The identifier is empty."
         case .noMatchingSession(let typed):
