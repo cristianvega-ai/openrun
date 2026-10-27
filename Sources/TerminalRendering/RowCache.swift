@@ -24,13 +24,15 @@ struct RowCache {
     /// whole screen is dirty, when the grid has a new size, or when the colors
     /// or the glyph positions changed, because the quads hold them.
     ///
-    /// - Parameter make: Makes the quads of a row that the cache must read.
+    /// - Parameters:
+    ///   - colors: The colors of `state`. The caller reads them once for the frame, and the rows use them too.
+    ///   - make: Makes the quads of a row that the cache must read.
     mutating func update(
-        from state: RenderState, atlasGeneration: Int, make: (RenderRow) throws -> RowQuads
+        from state: RenderState, colors: RenderColors, atlasGeneration: Int, make: (RenderRow) throws -> RowQuads
     ) throws -> FrameStatistics {
         let rebuildAll = state.dirtiness == .everything || state.size != size
-            || state.colors != colors || atlasGeneration != self.atlasGeneration
-        (size, colors, self.atlasGeneration) = (state.size, state.colors, atlasGeneration)
+            || colors != self.colors || atlasGeneration != self.atlasGeneration
+        (size, self.colors, self.atlasGeneration) = (state.size, colors, atlasGeneration)
         var statistics = FrameStatistics()
         var kept: [RowIdentifier: RowQuads] = [:]
         var order: [RowIdentifier] = []

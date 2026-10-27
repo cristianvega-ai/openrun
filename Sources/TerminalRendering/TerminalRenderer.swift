@@ -52,12 +52,13 @@ public final class TerminalRenderer {
     /// after `RenderState.update`, and `markClean` when the frame is drawn.
     @discardableResult
     public func prepare(from state: RenderState) throws -> FrameStatistics {
-        colors = state.colors
+        let screenColors = state.colors
+        colors = screenColors
         cursor = state.cursor
         columnCount = Int(state.size.columns)
         func update() throws -> FrameStatistics {
-            try cache.update(from: state, atlasGeneration: atlas.generation) {
-                try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
+            try cache.update(from: state, colors: screenColors, atlasGeneration: atlas.generation) {
+                try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
             }
         }
         let generation = atlas.generation

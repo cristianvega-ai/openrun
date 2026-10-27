@@ -35,7 +35,7 @@ func quads(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuads] {
 
 /// Brings the cache up to date with the screen, as the renderer does.
 func update(_ cache: inout RowCache, from state: RenderState, atlas: GlyphAtlas) throws -> FrameStatistics {
-    try cache.update(from: state, atlasGeneration: atlas.generation) {
+    try cache.update(from: state, colors: state.colors, atlasGeneration: atlas.generation) {
         try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics)
     }
 }

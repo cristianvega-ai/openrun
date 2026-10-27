@@ -29,7 +29,8 @@ struct FrameBuilder {
             backgrounds += row.backgrounds.map { $0.moved(x: padding, y: top) }
             // The background of marked text hides the glyphs under it.
             let covered = markedText?.row == index ? markedText?.columns : nil
-            glyphs += row.glyphs.filter { covered?.contains(Int($0.column)) != true }.map { $0.moved(x: padding, y: top) }
+            let visible = covered.map { columns in row.glyphs.filter { !columns.contains(Int($0.column)) } } ?? row.glyphs
+            glyphs += visible.map { $0.moved(x: padding, y: top) }
             overlays += row.decorations.map { $0.moved(x: padding, y: top) }
             guard let cursor, cursor.row == index else { continue }
             // On the second cell of a wide character, the cursor starts one column to the left.
