@@ -13,14 +13,17 @@ struct RowQuads {
     init(row: RenderRow, colors: RenderColors, atlas: GlyphAtlas, metrics: CellMetrics) throws {
         try row.forEachCell(palette: colors.palette) { cell in
             let x = Int(cell.column) * metrics.width
-            if let background = cell.background, background != colors.background {
+            var foreground = cell.foreground ?? colors.foreground
+            var background = cell.background
+            if cell.style.isInverse { (foreground, background) = (background ?? colors.background, foreground) }
+            if let background, background != colors.background {
                 backgrounds.append(.rectangle(x: x, y: 0, width: metrics.width, height: metrics.height, color: background))
             }
-            let foreground = cell.foreground ?? colors.foreground
+            if cell.style.isFaint { foreground = Self.halfway(foreground, background ?? colors.background) }
             decorations += DecorationQuads.lines(for: cell, x: x, color: foreground, metrics: metrics)
             if cell.width == .wide { wideColumns.append(cell.column) }
             // The second cell of a wide character has nothing to draw.
-            if let base = cell.base, base != " ", cell.width != .wideTail, cell.width != .wideHead {
+            if let base = cell.base, base != " ", !cell.style.isInvisible, cell.width != .wideTail, cell.width != .wideHead {
                 let key = GlyphKey(text: cell.text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
                 let entry = atlas.entry(for: key)
                 if !entry.isEmpty { glyphs.append(.glyph(entry, column: Int(cell.column), x: x, y: 0, color: foreground)) }
@@ -30,5 +33,12 @@ struct RowQuads {
                 glyphs.append(.glyph(atlas.entry(for: .curlyUnderline), column: Int(cell.column), x: x, y: 0, color: cell.underlineColor ?? foreground))
             }
         }
+    }
+
+    /// Faint text has half of the strength of its color against the background.
+    private static func halfway(_ first: TerminalColor, _ second: TerminalColor) -> TerminalColor {
+        TerminalColor(
+            red: UInt8((Int(first.red) + Int(second.red)) / 2), green: UInt8((Int(first.green) + Int(second.green)) / 2),
+            blue: UInt8((Int(first.blue) + Int(second.blue)) / 2))
     }
 }

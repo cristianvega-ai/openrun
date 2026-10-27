@@ -50,4 +50,20 @@ import TerminalTheme
         #expect(inkCount(of: screen, columns: 2..<6, rows: 0..<3) == 0)
         #expect(inkCount(of: screen, columns: 0..<2, rows: 1..<3) == 0)
     }
+
+    @Test func inverseSwapsTheColorsOfTheCellAndItsText() throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[7m █")
+        #expect(pixel(of: screen.target, x: 0, y: 0) == screen.theme.foreground)
+        #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
+    }
+
+    @Test func faintTextHasHalfOfTheStrengthOfItsColor() throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[2m█")
+        #expect(middle(of: screen.target, column: 0, row: 0) == TerminalColor(red: 130, green: 135, blue: 139))
+    }
+
+    @Test func hiddenTextDrawsNothing() throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[8mAB")
+        #expect(inkCount(of: screen, columns: 0..<10, rows: 0..<3) == 0)
+    }
 }
