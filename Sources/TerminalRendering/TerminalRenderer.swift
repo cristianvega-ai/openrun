@@ -21,6 +21,8 @@ public final class TerminalRenderer {
     public var isFocused = true
     /// Whether the cursor is in the shown phase of its blink. Without it, the renderer draws no cursor.
     public var isCursorShown = true
+    /// Whether the picture has the flash of the visual bell over it.
+    public var isFlashing = false
     private let device: MTLDevice
     private let queue: MTLCommandQueue
     private let shaders: ShaderLibrary
@@ -88,8 +90,9 @@ public final class TerminalRenderer {
 
     private func encode(into target: some RenderTarget) -> Bool {
         let marked = markedTextToDraw()
+        let flash = isFlashing ? colors.map { OverlayQuads.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
         let frame = FrameBuilder(
-            cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked)
+            cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash)
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = target.texture
         pass.colorAttachments[0].loadAction = .clear
