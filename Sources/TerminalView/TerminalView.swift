@@ -91,6 +91,15 @@ public final class TerminalView: NSView {
         schedule?.requestFrame()
     }
 
+    /// The size of a cell in points.
+    var cellSize: CGSize {
+        let fonts = renderer.fonts
+        return CGSize(width: CGFloat(fonts.cellWidth) / fonts.scale, height: CGFloat(fonts.cellHeight) / fonts.scale)
+    }
+
+    /// The space around the grid in points.
+    var gridPadding: CGFloat { CGFloat(renderer.padding) / renderer.fonts.scale }
+
     /// Gives bytes for the program to the delegate. A call with no bytes does nothing.
     func send(_ bytes: [UInt8]) {
         guard !bytes.isEmpty else { return }

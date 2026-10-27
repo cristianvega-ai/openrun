@@ -68,6 +68,20 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
     }
 }
 
+@MainActor @Suite struct CandidateWindowPlaceTests {
+    @Test(.enabled(if: NSScreen.main != nil))
+    func theInputMethodGetsTheCellOfTheCursorInScreenCoordinates() throws {
+        let view = try TerminalView()
+        let window = show(view)
+        defer { window.close() }
+        view.terminal.write("ab\r\ncd")
+        let rect = view.firstRect(forCharacterRange: nowhere, actualRange: nil)
+        let content = window.contentRect(forFrameRect: window.frame), cell = view.cellSize
+        // The cursor is in column 2 of row 1. The bottom of the row is 2 rows under the padding.
+        #expect(rect == NSRect(x: content.minX + view.gridPadding + 2 * cell.width, y: content.maxY - view.gridPadding - 2 * cell.height, width: cell.width, height: cell.height))
+    }
+}
+
 @MainActor @Suite(.enabled(if: usLayoutIsCurrent)) struct KeyThroughInputMethodTests {
     private let rightOption = ModifierReader.DeviceBit.rightOption
     private let leftOption = ModifierReader.DeviceBit.leftOption

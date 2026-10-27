@@ -34,9 +34,16 @@ extension TerminalView: @MainActor NSTextInputClient {
     public func validAttributesForMarkedText() -> [NSAttributedString.Key] { [] }
     public func characterIndex(for point: NSPoint) -> Int { NSNotFound }
 
-    /// An input method puts its list of candidates here, in the coordinates of the screen.
+    /// An input method puts its list of candidates at the cursor. The answer is
+    /// the cell of the cursor in the coordinates of the screen.
     public func firstRect(forCharacterRange range: NSRange, actualRange: NSRangePointer?) -> NSRect {
-        window?.convertToScreen(convert(bounds, to: nil)) ?? bounds
+        let cursor = terminal.cursorPosition
+        let cell = cellSize
+        // The row counts from the top of the view, and AppKit counts from the bottom.
+        let rect = NSRect(
+            x: gridPadding + CGFloat(cursor.column) * cell.width, y: bounds.height - gridPadding - CGFloat(cursor.row + 1) * cell.height,
+            width: cell.width, height: cell.height)
+        return window?.convertToScreen(convert(rect, to: nil)) ?? rect
     }
 
     /// The system gives a command, such as `deleteBackward:`, for keys that
