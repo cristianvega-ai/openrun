@@ -22,6 +22,13 @@ import Testing
         #expect(pixels.contains { $0 > 200 })
     }
 
+    @Test func anEmojiGoesIntoTheTextureOfColors() throws {
+        let atlas = try makeAtlas()
+        let emoji = atlas.entry(for: GlyphKey(text: "🙂", face: .regular, columns: 2))
+        #expect(emoji.isColor && !emoji.isEmpty)
+        #expect(!atlas.entry(for: key("A")).isColor)
+    }
+
     @Test func aSpaceHasAnEmptyEntry() throws {
         let atlas = try makeAtlas()
         #expect(atlas.entry(for: key(" ")).isEmpty)
