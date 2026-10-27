@@ -1,5 +1,7 @@
 /// A step of the renderer did not work.
 public enum RenderingError: Error, Equatable, Sendable {
+    /// This Mac has no Metal device.
+    case deviceUnavailable
     /// Metal gave no texture, for example because the device has no memory left.
     case textureUnavailable
     /// Metal gave no queue for the commands of the graphics processor.

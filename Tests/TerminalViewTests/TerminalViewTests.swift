@@ -1,5 +1,6 @@
 import AppKit
 import Metal
+import TerminalRendering
 import Testing
 @testable import TerminalView
 
@@ -37,5 +38,18 @@ import Testing
         schedule.requestFrame()
         wait(seconds: 0.2) { frames > 0 }
         #expect(frames == 0)
+    }
+}
+
+@MainActor @Suite struct TerminalViewTests {
+    @Test func outputAppearsInTheColorsOfTheTheme() throws {
+        let view = try TerminalView()
+        view.write(Array("\u{1B}[?25l█".utf8))
+        let fonts = view.renderer.fonts
+        let size = view.renderer.pixelSize(for: view.terminal.size)
+        let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: size.width, height: size.height)
+        try view.drawFrame(into: target)
+        #expect(target.pixel(x: view.renderer.padding + fonts.cellWidth / 2, y: view.renderer.padding + fonts.cellHeight / 2) == view.theme.foreground)
+        #expect(target.pixel(x: size.width - 1, y: size.height - 1) == view.theme.background)
     }
 }
