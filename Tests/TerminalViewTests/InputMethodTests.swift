@@ -1,6 +1,7 @@
 import AppKit
 import Carbon.HIToolbox
 import Testing
+import TerminalEmulation
 @testable import TerminalView
 
 @Suite struct TextInputStateTests {
@@ -69,6 +70,23 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         #expect(delegate.takeSent() == "日本")
     }
 
+    @Test func theViewKeepsTheSelectedRangeAndExposesMarkedCharacters() throws {
+        let (view, _) = try makeView()
+        view.setMarkedText("あ😀e\u{301}", selectedRange: NSRange(location: 1, length: 2), replacementRange: nowhere)
+        #expect(view.markedRange() == NSRange(location: 0, length: 5) && view.selectedRange() == NSRange(location: 1, length: 2))
+        #expect(view.renderer.markedTextSelection == NSRange(location: 1, length: 2))
+        var actual = nowhere
+        let result = view.attributedSubstring(forProposedRange: NSRange(location: 2, length: 1), actualRange: &actual)
+        #expect(result?.string == "😀" && actual == NSRange(location: 1, length: 2))
+        view.setMarkedText("あ😀", selectedRange: NSRange(location: 2, length: 99), replacementRange: nowhere)
+        #expect(view.selectedRange() == NSRange(location: 2, length: 1))
+        view.setMarkedText("あ😀e\u{301}", selectedRange: NSRange(location: 1, length: 2), replacementRange: nowhere)
+        view.rebuildRenderer(scale: 1)
+        #expect(view.renderer.markedTextSelection == NSRange(location: 1, length: 2))
+        view.insertText("日本", replacementRange: nowhere)
+        #expect(view.selectedRange() == nowhere && view.renderer.markedTextSelection == nil)
+    }
+
     @Test func unmarkingDropsTheTextAndACommandOutsideAKeyDoesNothing() throws {
         let (view, delegate) = try makeView()
         view.setMarkedText("ㅎ", selectedRange: nowhere, replacementRange: nowhere)
@@ -80,6 +98,25 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
 }
 
 @MainActor @Suite struct CandidateWindowPlaceTests {
+    @Test(.enabled(if: NSScreen.main != nil))
+    func aCandidateFollowsTheSelectedCharacterAcrossARow() throws {
+        let view = try TerminalView()
+        let window = show(view)
+        defer { window.close() }
+        try view.terminal.resize(to: TerminalSize(columns: 6, rows: 3))
+        view.terminal.write("abcde")
+        view.setMarkedText("日本😀", selectedRange: NSRange(location: 2, length: 0), replacementRange: nowhere)
+        let cell = view.cellSize
+        let rowStart = window.convertToScreen(view.convert(NSRect(x: view.gridPadding, y: view.bounds.height - view.gridPadding - 2 * cell.height, width: cell.width, height: cell.height), to: nil))
+        var actual = nowhere
+        let selected = view.firstRect(forCharacterRange: nowhere, actualRange: &actual)
+        #expect(selected == rowStart.offsetBy(dx: 4 * cell.width, dy: 0) && actual == NSRange(location: 2, length: 2))
+        let earlier = view.firstRect(forCharacterRange: NSRange(location: 1, length: 0), actualRange: &actual)
+        #expect(earlier == rowStart.offsetBy(dx: 2 * cell.width, dy: 0) && actual == NSRange(location: 1, length: 1))
+        let end = view.firstRect(forCharacterRange: NSRange(location: 4, length: 0), actualRange: &actual)
+        #expect(end == rowStart.offsetBy(dx: 6 * cell.width, dy: 0) && actual == NSRange(location: 4, length: 0))
+    }
+
     @Test(.enabled(if: NSScreen.main != nil))
     func theInputMethodGetsTheCellOfTheCursorInScreenCoordinates() throws {
         let view = try TerminalView()
@@ -239,6 +276,7 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         view.terminal.write("$ ")
         let before = view.firstRect(forCharacterRange: nowhere, actualRange: nil)
         view.setMarkedText("にほん", selectedRange: nowhere, replacementRange: nowhere)
-        #expect(view.firstRect(forCharacterRange: nowhere, actualRange: nil) == before && before.minX > window.frame.minX)
+        let after = view.firstRect(forCharacterRange: nowhere, actualRange: nil)
+        #expect(after.minX == before.minX + 6 * view.cellSize.width && before.minX > window.frame.minX)
     }
 }

@@ -520,6 +520,7 @@ public final class TerminalView: NSView {
             let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
             (new.isFocused, new.markedText, new.isCursorShown, new.isFlashing) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown, renderer.isFlashing)
+            new.markedTextSelection = renderer.markedTextSelection
             renderer = new
         } catch {
             logger.error("The renderer failed: \(String(describing: error), privacy: .private)")

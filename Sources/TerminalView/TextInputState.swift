@@ -6,19 +6,28 @@ import Foundation
 /// and the commands that it ran, such as `deleteBackward:`.
 struct TextInputState {
     private(set) var markedText = ""
+    /// The selected UTF-16 range of the marked text, or nil for its end.
+    private(set) var markedSelection: NSRange?
     /// The texts that the key now handled committed, or `nil` between keys.
     private var committedTexts: [String]?
     private var commands: [Selector] = []
 
     var hasMarkedText: Bool { !markedText.isEmpty }
 
-    mutating func mark(_ text: String) {
+    mutating func mark(_ text: String, selection: NSRange? = nil) {
         markedText = text
+        guard !text.isEmpty, let selection, selection.location != NSNotFound else {
+            markedSelection = nil
+            return
+        }
+        let location = min(max(0, selection.location), text.utf16.count)
+        markedSelection = NSRange(location: location, length: min(max(0, selection.length), text.utf16.count - location))
     }
 
     /// Ends the marked text without a commit.
     mutating func unmark() {
         markedText = ""
+        markedSelection = nil
     }
 
     mutating func beginKey() {
@@ -34,7 +43,7 @@ struct TextInputState {
         // A control key such as Control-c can give its control character as text
         // while an input method holds marked text. The program must not read it.
         if hasMarkedText, !text.isEmpty, text.unicodeScalars.allSatisfy({ $0.value < 0x20 }) { return nil }
-        markedText = ""
+        unmark()
         guard committedTexts != nil else { return text }
         committedTexts?.append(text)
         return nil
