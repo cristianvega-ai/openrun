@@ -65,4 +65,26 @@ import Testing
         let grid = try #require(controller.view?.gridSize)
         #expect(attachment.record.withLock { $0.sizes } == (differs ? [SessionSize(columns: grid.columns, rows: grid.rows)] : []))
     }
+
+    @Test func theWindowShowsTheProgramTitleAndTheFolderWhenItIsEmpty() async throws {
+        let attachment = try FakeAttachment(screen: "\u{1B}]2;Initial title\u{07}")
+        let controller = try makeWindowController(attachment, folder: "/tmp/project")
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view != nil }
+        #expect(controller.window.title == "Initial title")
+        attachment.deliver(.output(Data("\u{1B}]2;Later title\u{07}".utf8)))
+        await waitOnMainThread { controller.window.title == "Later title" }
+        #expect(controller.window.title == "Later title")
+        attachment.deliver(.output(Data("\u{1B}]2;\u{07}".utf8)))
+        await waitOnMainThread { controller.window.title == "/tmp/project" }
+        #expect(controller.window.title == "/tmp/project")
+    }
+
+    @Test func aSnapshotWithoutATitleStartsWithTheFolder() async throws {
+        let controller = try makeWindowController(FakeAttachment(), folder: "/tmp/project")
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view != nil }
+        #expect(controller.window.title == "/tmp/project")
+    }
+
 }

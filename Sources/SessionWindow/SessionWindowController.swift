@@ -22,6 +22,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private(set) var view: TerminalView?
     let hiddenGridLabel = HiddenGridLabel()
     private var isClosed = false
+    private var folder = ""
 
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
     public init(start: SessionStart, socket: SocketLocation) {
@@ -53,7 +54,8 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
             detach(started.attachment)
             return window.close()
         }
-        (attachment, self.view) = (started.attachment, view)
+        (attachment, self.view, folder) = (started.attachment, view, started.summary.folder)
+        terminalView(view, didChangeTitle: view.title)
         // The first layout fits the grid to the window. When that grid differs
         // from the snapshot, the view reports it, and the window sends it
         // (decision of 2026-10-25).
@@ -125,7 +127,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         showHiddenPart()
     }
 
-    public func terminalView(_ view: TerminalView, didChangeTitle title: String) {}
+    public func terminalView(_ view: TerminalView, didChangeTitle title: String) {
+        window.title = title.isEmpty ? folder : title
+    }
 
     /// The question comes with a later change. Until then, nothing unsafe is pasted.
     public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool { false }
