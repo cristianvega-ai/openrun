@@ -1,5 +1,29 @@
 import GhosttyVt
 
+/// The colors that a terminal gives as its defaults. A terminal with a reply
+/// handler answers `OSC 4`, `OSC 10`, `OSC 11` and `OSC 12` from them, so the
+/// caller chooses them for each color scheme, such as from a theme.
+public struct TerminalDefaultColors: Equatable, Sendable {
+    public var foreground: TerminalColor
+    public var background: TerminalColor
+    public var cursor: TerminalColor
+    /// Colors 0 to 15 of the palette. The other colors stay standard, and an
+    /// empty list leaves the palette as it is.
+    public var firstSixteenColors: [TerminalColor]
+
+    public init(foreground: TerminalColor, background: TerminalColor, cursor: TerminalColor, firstSixteenColors: [TerminalColor]) {
+        (self.foreground, self.background, self.cursor, self.firstSixteenColors) = (foreground, background, cursor, firstSixteenColors)
+    }
+
+    /// Black text on white for light, and white on black for dark, with the
+    /// standard palette: the colors of a terminal without a theme.
+    public static func plain(for scheme: TerminalColorScheme) -> TerminalDefaultColors {
+        let black = TerminalColor(red: 0, green: 0, blue: 0), white = TerminalColor(red: 255, green: 255, blue: 255)
+        let text = scheme == .dark ? white : black
+        return TerminalDefaultColors(foreground: text, background: scheme == .dark ? black : white, cursor: text, firstSixteenColors: [])
+    }
+}
+
 /// The default colors of a terminal.
 ///
 /// A default is the color that the embedder chose. A program can replace it
@@ -12,10 +36,22 @@ import GhosttyVt
 /// keeps the defaults of the session process. A client that restores a
 /// snapshot calls these to give the terminal its own colors.
 ///
-/// While a reply handler is installed, `write` sets the foreground and the
-/// background from the appearance each time the appearance changes. A color
-/// set here then lasts only until the next change of the appearance.
+/// While a reply handler is installed, `write` sets the default colors of
+/// the appearance each time the appearance changes. A color set here then
+/// lasts only until the next change of the appearance.
 extension Terminal {
+    /// Sets all default colors at once. Palette entries that a program
+    /// changed with `OSC 4` keep that color.
+    public func setDefaultColors(_ colors: TerminalDefaultColors) throws {
+        try setDefaultForegroundColor(colors.foreground)
+        try setDefaultBackgroundColor(colors.background)
+        try setDefaultCursorColor(colors.cursor)
+        var palette = defaultPalette
+        let count = min(16, colors.firstSixteenColors.count, palette.count)
+        palette.replaceSubrange(0..<count, with: colors.firstSixteenColors.prefix(count))
+        try setDefaultPalette(palette)
+    }
+
     /// The default foreground, or `nil` when none is set.
     public var defaultForegroundColor: TerminalColor? {
         defaultColor(GHOSTTY_TERMINAL_DATA_COLOR_FOREGROUND_DEFAULT)

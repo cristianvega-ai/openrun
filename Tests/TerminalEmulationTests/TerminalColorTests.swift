@@ -14,6 +14,25 @@ import Testing
         return try TerminalSnapshot(capturing: original).restoreTerminal(scrollbackLimit: 1000)
     }
 
+    @Test func allDefaultColorsChangeAtOnceAndAColorOfTheProgramStays() throws {
+        let terminal = try makeTerminal()
+        let standard = terminal.defaultPalette
+        terminal.write("\u{1B}]4;2;rgb:12/34/56\u{1B}\\")
+        let sixteen = (0..<16).map { TerminalColor(red: UInt8($0), green: 1, blue: 2) }
+        try terminal.setDefaultColors(TerminalDefaultColors(foreground: red, background: blue, cursor: red, firstSixteenColors: sixteen))
+        #expect(terminal.defaultForegroundColor == red && terminal.defaultBackgroundColor == blue && terminal.defaultCursorColor == red)
+        #expect(Array(terminal.defaultPalette.prefix(16)) == sixteen && terminal.defaultPalette.dropFirst(16) == standard.dropFirst(16))
+        let state = try RenderState()
+        try state.update(from: terminal)
+        #expect(state.colors.palette[2] == TerminalColor(red: 0x12, green: 0x34, blue: 0x56) && state.colors.palette[3] == sixteen[3])
+    }
+
+    @Test func thePlainColorsAreBlackOnWhiteAndWhiteOnBlack() {
+        let black = TerminalColor(red: 0, green: 0, blue: 0), white = TerminalColor(red: 255, green: 255, blue: 255)
+        #expect(TerminalDefaultColors.plain(for: .light) == TerminalDefaultColors(foreground: black, background: white, cursor: black, firstSixteenColors: []))
+        #expect(TerminalDefaultColors.plain(for: .dark) == TerminalDefaultColors(foreground: white, background: black, cursor: white, firstSixteenColors: []))
+    }
+
     @Test func aNewTerminalHasNoDefaultColors() throws {
         let terminal = try makeTerminal()
         #expect(terminal.defaultForegroundColor == nil)
