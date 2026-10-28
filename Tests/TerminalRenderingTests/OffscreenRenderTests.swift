@@ -340,6 +340,35 @@ extension OffscreenRenderTests {
         #expect(actual == reference)
     }
 
+    @Test func aWiderDrawableShowsAGlyphInAnUnchangedRow() throws {
+        let screen = try makeScreen("\u{1B}[?25l\u{1B}[1;8HA", columns: 12, rows: 2)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let referenceRenderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+
+        func pixels(_ renderer: TerminalRenderer, columns: UInt16) throws -> [UInt8] {
+            let size = renderer.pixelSize(for: TerminalSize(columns: columns, rows: 2))
+            let target = try OffscreenTarget(device: device, width: size.width, height: size.height)
+            try renderer.prepare(from: screen.state, viewportSize: size)
+            #expect(renderer.draw(into: target))
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
+            var result = [UInt8](repeating: 0, count: size.width * size.height * 4)
+            target.texture.getBytes(&result, bytesPerRow: size.width * 4,
+                                    from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+            return result
+        }
+
+        _ = try pixels(renderer, columns: 4)
+        screen.state.markClean()
+        let expanded = try pixels(renderer, columns: 10)
+        let reference = try pixels(referenceRenderer, columns: 10)
+        let background = screen.state.colors.background
+        #expect(stride(from: 0, to: reference.count, by: 4).contains {
+            reference[$0] != background.blue || reference[$0 + 1] != background.green || reference[$0 + 2] != background.red
+        })
+        #expect(expanded == reference)
+    }
+
     @Test func colorGlyphsReclaimHistoricalEntries() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)
