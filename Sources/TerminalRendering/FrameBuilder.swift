@@ -28,10 +28,22 @@ struct FrameBuilder {
             let glyphStart = glyphs.count
             backgrounds += row.backgrounds.map { $0.moved(x: padding, y: top) }
             // The background of marked text hides the glyphs under it.
-            let covered = markedText?.row == index ? markedText?.columns : nil
-            let visible = covered.map { columns in row.glyphs.filter { !columns.contains(Int($0.column)) } } ?? row.glyphs
+            let covered = markedText?.coveredColumns[index]
+            let visible = covered.map { columns in
+                row.glyphs.filter { glyph in
+                    let start = Int(glyph.column)
+                    let width = row.wideColumns.contains(UInt16(glyph.column)) ? 2 : 1
+                    return !columns.overlaps(start..<start + width)
+                }
+            } ?? row.glyphs
             glyphs += visible.map { $0.moved(x: padding, y: top) }
-            overlays += row.decorations.map { $0.moved(x: padding, y: top) }
+            let decorations = covered.map { columns in
+                row.decorations.filter { line in
+                    line.origin.x + line.size.x <= Float(columns.lowerBound * metrics.width)
+                        || line.origin.x >= Float(columns.upperBound * metrics.width)
+                }
+            } ?? row.decorations
+            overlays += decorations.map { $0.moved(x: padding, y: top) }
             guard let cursor, cursor.row == index else { continue }
             // On the second cell of a wide character, the cursor starts one column to the left.
             let column = cursor.column - (cursor.isOnWideCharacterTail ? 1 : 0)

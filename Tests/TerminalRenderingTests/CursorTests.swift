@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 import TerminalEmulation
 @testable import TerminalRendering
@@ -89,5 +90,38 @@ import TerminalEmulation
     @Test func markedTextThatCoversAWideCharacterHidesIt() throws {
         let screen = try renderScreen("日\u{1B}[?25l\u{1B}[1G", markedText: "a")
         #expect(inkCount(of: screen, columns: 1..<2, rows: 0..<1) < 20)
+    }
+
+    @Test func markedTextOnTheTailOfAWideCharacterHidesTheWholeGlyph() throws {
+        let screen = try renderScreen("日\u{1B}[?25l\u{1B}[2G", markedText: "a")
+        #expect(inkCount(of: screen, columns: 0..<1, rows: 0..<1) == 0)
+        #expect(inkCount(of: screen, columns: 1..<2, rows: 0..<1) > 20)
+    }
+
+    @Test func markedTextHidesTheDecorationOfTheCellBelow() throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[31;53m█\u{1B}[1G", markedText: " ")
+        for x in 0..<metrics.width {
+            #expect(pixel(of: screen.target, x: x, y: 0) == screen.theme.background)
+        }
+    }
+
+    @Test func theMarkedCaretUsesTheWrappedTextAndTheUTF16Selection() throws {
+        let atlas = try makeAtlas()
+        func layout(_ location: Int) -> MarkedTextQuads.Layout {
+            MarkedTextQuads.Layout(text: "🙂ab", column: 9, row: 2, columnCount: 10, rowCount: 3,
+                                   selection: NSRange(location: location, length: 0), atlas: atlas)
+        }
+        #expect(layout(2).caret.column == 2 && layout(2).caret.row == 2)
+        #expect(layout(0).caret.column == 0 && layout(0).caret.row == 2)
+    }
+
+    @Test func theCaretDoesNotSplitACombiningCharacter() throws {
+        let atlas = try makeAtlas()
+        func layout(_ location: Int) -> MarkedTextQuads.Layout {
+            MarkedTextQuads.Layout(text: "e\u{301}日", column: 8, row: 0, columnCount: 10, rowCount: 3,
+                                   selection: NSRange(location: location, length: 0), atlas: atlas)
+        }
+        #expect(layout(1).caret.column == 8 && layout(1).caret.row == 0)
+        #expect(layout(2).caret.column == 0 && layout(2).caret.row == 1)
     }
 }
