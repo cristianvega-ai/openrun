@@ -19,7 +19,7 @@ struct ShaderLibrary {
         compileTime = start.duration(to: .now)
         func pipeline(fragment: String) throws -> MTLRenderPipelineState {
             let descriptor = MTLRenderPipelineDescriptor()
-            descriptor.vertexFunction = library.makeFunction(name: "quadVertex")
+            descriptor.vertexFunction = library.makeFunction(name: "quadrilateralVertex")
             descriptor.fragmentFunction = library.makeFunction(name: fragment)
             descriptor.colorAttachments[0].pixelFormat = pixelFormat
             // The fragment functions give colors that are multiplied by their alpha.

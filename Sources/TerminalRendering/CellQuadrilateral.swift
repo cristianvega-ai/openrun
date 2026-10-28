@@ -1,9 +1,9 @@
 import TerminalEmulation
 import simd
 
-/// One rectangle that the renderer draws, as the shaders read it. A glyph quad
+/// One rectangle that the renderer draws, as the shaders read it. A glyph quadrilateral
 /// also names the part of a texture that it shows, and its column, which the
-/// cursor needs. The fields have the layout of `Quad` in `ShaderSource`, and
+/// cursor needs. The fields have the layout of `Quadrilateral` in `ShaderSource`, and
 /// positions are pixels of the drawable.
 struct CellQuadrilateral: Equatable {
     var origin: SIMD2<Float>
