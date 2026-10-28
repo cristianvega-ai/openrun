@@ -44,7 +44,9 @@ func show(_ view: NSView) -> NSWindow {
 @MainActor
 final class FakePasteboard: PasteboardAccess {
     var text: String?
-    func plainText() -> String? { text }
+    var plainTextReads = 0
+    var hasPlainText: Bool { text != nil }
+    func plainText() -> String? { plainTextReads += 1; return text }
     func write(plainText: String) { text = plainText }
 }
 

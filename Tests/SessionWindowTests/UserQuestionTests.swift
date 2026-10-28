@@ -6,6 +6,7 @@ import Testing
 @MainActor @Suite struct UserQuestionTests {
     private final class Pasteboard: PasteboardAccess {
         var text: String? = "one\ntwo"
+        var hasPlainText: Bool { text != nil }
         func plainText() -> String? { text }
         func write(plainText: String) { text = plainText }
     }

@@ -4,6 +4,8 @@ import AppKit
 /// one, so it needs no real pasteboard.
 @MainActor
 protocol PasteboardAccess: AnyObject {
+    /// Checks the available type without reading the text or prompting for a paste.
+    var hasPlainText: Bool { get }
     /// The plain text on the pasteboard, or `nil` when it has none.
     func plainText() -> String?
     /// Replaces the contents with plain text. Plain text only, because a program reads text.
@@ -18,6 +20,8 @@ final class GeneralPasteboard: PasteboardAccess {
     init(pasteboard: NSPasteboard = .general) {
         self.pasteboard = pasteboard
     }
+
+    var hasPlainText: Bool { pasteboard.availableType(from: [.string]) != nil }
 
     func plainText() -> String? {
         pasteboard.string(forType: .string)
