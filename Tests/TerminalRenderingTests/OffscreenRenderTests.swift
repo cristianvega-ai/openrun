@@ -436,6 +436,40 @@ extension OffscreenRenderTests {
         #expect(clipped == reference)
     }
 
+    @Test func hiddenMarkedTextDoesNotPreventAVisibleGlyph() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let fonts = FontSet(pointSize: 36, scale: 2)
+        let visibleSize = TerminalSize(columns: 4, rows: 2)
+        let hidden = String(String.UnicodeScalarView((0..<55).compactMap { UnicodeScalar(0x4e00 + $0) }))
+
+        func pixels(columns: UInt16, cursor: String, markedText: String) throws -> [UInt8] {
+            let terminal = try Terminal(size: TerminalSize(columns: columns, rows: 2), scrollbackLimit: 0)
+            try theme.apply(to: terminal)
+            terminal.write("\u{1B}[?25l" + cursor)
+            let state = try RenderState()
+            try state.update(from: terminal)
+            let renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection,
+                                                atlasSide: 128, atlasMaximumSide: 128)
+            renderer.markedText = markedText
+            let size = renderer.pixelSize(for: visibleSize)
+            let target = try OffscreenTarget(device: device, width: size.width, height: size.height)
+            try renderer.prepare(from: state, viewportSize: size)
+            #expect(renderer.draw(into: target))
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
+            var result = [UInt8](repeating: 0, count: size.width * size.height * 4)
+            target.texture.getBytes(&result, bytesPerRow: size.width * 4,
+                                    from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+            return result
+        }
+
+        let actual = try pixels(columns: 120, cursor: "\u{1B}[1;11H", markedText: hidden + "A")
+        let reference = try pixels(columns: 4, cursor: "\u{1B}[2;1H", markedText: "A")
+        let blank = try pixels(columns: 4, cursor: "\u{1B}[2;1H", markedText: " ")
+        #expect(reference != blank)
+        #expect(actual == reference)
+    }
+
     @Test func colorGlyphsReclaimHistoricalEntries() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)
