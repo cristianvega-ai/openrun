@@ -53,9 +53,22 @@ public final class TerminalView: NSView {
         try self.init(initialGrid: initialGrid, clock: SystemInputClock())
     }
 
-    init(initialGrid: TerminalSize = TerminalSize(columns: 80, rows: 24), clock: any InputClock) throws {
+    /// A view that shows the screen, the scrollback and the modes of a session
+    /// at the moment of its snapshot. The output that follows goes to `write`.
+    public convenience init(restoring snapshot: TerminalSnapshot) throws {
+        try self.init(terminal: snapshot.restoreTerminal(scrollbackLimit: Self.scrollbackLimit), clock: SystemInputClock())
+    }
+
+    convenience init(initialGrid: TerminalSize = TerminalSize(columns: 80, rows: 24), clock: any InputClock) throws {
+        try self.init(terminal: Terminal(size: initialGrid, scrollbackLimit: Self.scrollbackLimit), clock: clock)
+    }
+
+    /// The lines of scrollback that the view keeps (behavior defaults of 2026-10-26).
+    static let scrollbackLimit = 10_000
+
+    init(terminal: Terminal, clock: any InputClock) throws {
         guard let device = MTLCreateSystemDefaultDevice() else { throw RenderingError.deviceUnavailable }
-        terminal = try Terminal(size: initialGrid, scrollbackLimit: 10_000)
+        self.terminal = terminal
         state = try RenderState()
         keyboard = try KeyboardInput(terminal: terminal)
         pointer = try PointerInput(terminal: terminal)
@@ -139,6 +152,18 @@ public final class TerminalView: NSView {
 
     /// The size of the grid, which fits the size of the view.
     public var gridSize: TerminalSize { terminal.size }
+
+    /// The grid that a view of `size` has at the standard text size. A window
+    /// attaches with it before its view exists, because the view comes from
+    /// the snapshot that the attach brings.
+    public static func estimatedGrid(for size: CGSize, scale: CGFloat) -> TerminalSize {
+        let fonts = FontSet(pointSize: FontSizeControl.standard, scale: scale)
+        // The renderer puts 8 points of padding around the grid.
+        return GridFit.grid(for: size, scale: scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: Int((8 * scale).rounded()))
+    }
+
+    /// The title that the program set with OSC 0 or OSC 2, or an empty text.
+    public var title: String { terminal.title }
 
     func requestFrame() {
         schedule?.requestFrame()
