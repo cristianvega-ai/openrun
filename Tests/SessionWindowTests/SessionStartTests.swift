@@ -1,15 +1,42 @@
 import AppKit
-import SessionConnection
+@testable import SessionConnection
 import SessionProcessHarness
 import SessionProtocol
 import TerminalEmulation
 import TerminalView
 import Testing
+import Synchronization
 @testable import SessionWindow
 
 @Suite(.isolatedThread) struct SessionStartTests {
     private func screen(of started: StartedSession) throws -> Terminal {
         try TerminalSnapshot(bytes: Array(started.attachment.snapshot)).restoreTerminal(scrollbackLimit: 10)
+    }
+
+    @Test func anOldProcessIsRejectedBeforeAWindowCreatesOrAttachesASession() throws {
+        for start in [SessionStart.newSession(folder: "/tmp", environment: [:]), .runningSession(UUID())] {
+            let (clientSide, serverSide) = try MessageConnection.makePair()
+            let requests = Mutex<[ClientMessage]>([])
+            let finished = DispatchSemaphore(value: 0)
+            Thread {
+                defer { serverSide.shutdown(); finished.signal() }
+                do {
+                    try serverSide.greetClient()
+                    if let request = try serverSide.receive(ClientMessage.self) {
+                        requests.withLock { $0.append(request) }
+                        try serverSide.send(ServerMessage.failure(SessionFailure(reason: .invalidRequest, message: "Unexpected request")))
+                    }
+                } catch {}
+            }.start()
+            let client = try SessionClient(greeting: clientSide)
+            let error = #expect(throws: SessionWindowError.self) {
+                try start.attach(using: client, size: SessionSize(columns: 80, rows: 24))
+            }
+            clientSide.shutdown()
+            #expect(finished.wait(timeout: .now() + .seconds(2)) == .success)
+            #expect(error == .orderedResizeUnsupported && requests.withLock { $0.isEmpty })
+            #expect(String(describing: SessionWindowError.orderedResizeUnsupported).contains("same build"))
+        }
     }
 
     @Test func aNewSessionRunsTheLoginShellInTheFolderAtTheSizeOfTheWindow() async throws {

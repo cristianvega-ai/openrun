@@ -25,7 +25,11 @@ public enum SessionStart: Equatable, Sendable {
     /// changes. It relays no raw output, so the session process answers the
     /// queries of the program.
     func attach(at location: SocketLocation, size: SessionSize) throws -> StartedSession {
-        let client = try SessionClient(location: location)
+        try attach(using: SessionClient(location: location), size: size)
+    }
+
+    func attach(using client: SessionClient, size: SessionSize) throws -> StartedSession {
+        guard client.capabilities.orderedResizeConfirmation else { throw SessionWindowError.orderedResizeUnsupported }
         let summary: SessionSummary
         switch self {
         case .newSession(let folder, let environment):

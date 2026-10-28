@@ -12,13 +12,18 @@ final class FakeAttachment: AttachedSession {
     struct Record {
         var inputs: [Data] = [], sizes: [SessionSize] = [], detached = false, shutDown = false, sentOnMainThread = false
         var attachSize: SessionSize?
-        var failsInput = false, failsSize = false
+        var confirmationRequests: [SessionSize] = []
+        var failsInput = false, failsSize = false, confirmsSizes = true
     }
 
     let snapshot: Data
     private let earlyEvent: SessionAttachmentEvent?
     let record = Mutex(Record())
-    private let handler = Mutex<(@Sendable (SessionAttachmentEvent) -> Void)?>(nil)
+    private struct Delivery {
+        var handler: (@Sendable (SessionAttachmentEvent) -> Void)?
+        var pending: [SessionAttachmentEvent] = []
+    }
+    private let delivery = Mutex(Delivery())
     private let receiver = DispatchQueue(label: "fake-attachment.receiver")
 
     /// - Parameter screen: The output that the snapshot of the session holds.
@@ -51,17 +56,39 @@ final class FakeAttachment: AttachedSession {
         }
         if failed { throw SessionConnectionError.connectionClosed }
     }
+    func send(size: SessionSize, requestsConfirmation: Bool) throws {
+        try send(size: size)
+        if requestsConfirmation {
+            let confirms = record.withLock { state in
+                state.confirmationRequests.append(size)
+                return state.confirmsSizes
+            }
+            if confirms { deliver(.sizeChanged(size)) }
+        }
+    }
     func detach() { record.withLock { $0.detached = true } }
     func shutdown() { record.withLock { $0.shutDown = true } }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
-        self.handler.withLock { $0 = handler }
-        if let earlyEvent { handler(earlyEvent) }
+        receiver.async { [self] in
+            let pending = delivery.withLock { state in
+                state.handler = handler
+                defer { state.pending = [] }
+                return state.pending
+            }
+            if let earlyEvent { handler(earlyEvent) }
+            for event in pending { handler(event) }
+        }
     }
 
-    /// Gives an event from another thread, in order, as the receiving thread of a real attachment does.
+    /// Gives an event on the serial receiver, as a real attachment does.
     func deliver(_ event: SessionAttachmentEvent) {
-        let handler = handler.withLock { $0 }
-        receiver.async { handler?(event) }
+        receiver.async { [self] in
+            let handler = delivery.withLock { state in
+                if state.handler == nil { state.pending.append(event) }
+                return state.handler
+            }
+            handler?(event)
+        }
     }
 }
 

@@ -3,10 +3,23 @@ import SessionConnection
 import SessionProtocol
 import TerminalEmulation
 import Testing
+import Synchronization
 @testable import SessionWindow
 @testable import TerminalView
 
 @MainActor @Suite struct SessionWindowControllerTests {
+    @Test func aConfirmationWaitsForTheReceiverAndKeepsTheOrderOfEvents() async throws {
+        let attachment = try FakeAttachment()
+        let size = SessionSize(columns: 40, rows: 10)
+        try attachment.send(size: size, requestsConfirmation: true)
+        attachment.deliver(.output(Data("after".utf8)))
+        let received = Mutex<[SessionAttachmentEvent]>([])
+        attachment.startReceiving { event in received.withLock { $0.append(event) } }
+        await waitOnMainThread { received.withLock { $0.count == 2 } }
+        #expect(received.withLock { $0 } == [.sizeChanged(size), .output(Data("after".utf8))])
+        #expect(attachment.record.withLock { $0.confirmationRequests } == [size])
+    }
+
     @Test func theWindowAttachesWithTheGridOfItsViewAndDetachesWhenItCloses() async throws {
         let attachment = try FakeAttachment()
         let controller = try makeWindowController(attachment)
