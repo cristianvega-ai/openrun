@@ -320,7 +320,7 @@ extension MessageConnection {
     /// reason `invalidRequest` that names the problem, before the error.
     ///
     /// - Parameter limit: The time that the hello may take to arrive.
-    public func greetClient(within limit: Duration? = nil) throws {
+    public func greetClient(within limit: Duration? = nil, capabilities: ServerCapabilities? = nil) throws {
         let timeLimit = limit.map { TimeLimit.wholeFrame(by: .now + $0) } ?? .unlimited
         guard let frame = try receive(MessageFrame.self, timeLimit: timeLimit) else {
             throw SessionProtocolError.connectionClosed
@@ -334,7 +334,7 @@ extension MessageConnection {
         }
         switch message {
         case .hello(let version) where version == MessageFrame.protocolVersion:
-            try send(ServerMessage.hello(protocolVersion: MessageFrame.protocolVersion), stallLimit: limit)
+            try send(ServerMessage.hello(protocolVersion: MessageFrame.protocolVersion, capabilities: capabilities), stallLimit: limit)
         case .hello(let version):
             try send(ServerMessage.failure(SessionFailure(
                 reason: .incompatibleProtocol,

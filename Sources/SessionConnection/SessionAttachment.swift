@@ -11,6 +11,7 @@ public final class SessionAttachment: Sendable {
     public let snapshot: Data
     private let connection: MessageConnection
     private let isReceiving = Atomic<Bool>(false)
+    private let confirmationRequested = Atomic<Bool>(false)
 
     init(connection: MessageConnection, snapshot: Data) {
         self.connection = connection
@@ -54,6 +55,7 @@ public final class SessionAttachment: Sendable {
 
     /// Requests an ordered `sizeChanged` after the session applies this size.
     public func send(size: SessionSize, requestsConfirmation: Bool) throws {
+        if requestsConfirmation { confirmationRequested.store(true, ordering: .releasing) }
         try SessionConnectionError.wrapping {
             try connection.send(ClientMessage.resize(size, requestsConfirmation: requestsConfirmation ? true : nil))
         }
@@ -77,14 +79,14 @@ public final class SessionAttachment: Sendable {
     /// Only the first call starts a thread.
     public func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
         guard !isReceiving.exchange(true, ordering: .acquiringAndReleasing) else { return }
-        let receiver = Thread { [connection] in
-            Self.receiveEvents(on: connection, into: handler)
+        let receiver = Thread { [self] in
+            receiveEvents(into: handler)
         }
         receiver.name = "attach.receiver"
         receiver.start()
     }
 
-    private static func receiveEvents(on connection: MessageConnection, into handler: (SessionAttachmentEvent) -> Void) {
+    private func receiveEvents(into handler: (SessionAttachmentEvent) -> Void) {
         while true {
             let message: ServerMessage?
             do {
@@ -101,6 +103,9 @@ public final class SessionAttachment: Sendable {
                 handler(.sizeChanged(size))
             case .exited(let exit):
                 handler(.exited(exit))
+                return
+            case .failure(let failure) where confirmationRequested.load(ordering: .acquiring):
+                handler(.failed(.requestFailed(failure)))
                 return
             case nil:
                 handler(.closed)

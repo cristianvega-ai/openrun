@@ -198,9 +198,10 @@ actor Session {
 
     /// Resizes the program's terminal and the session's copy of it. The last
     /// client to resize wins, and the other clients that asked hear of it.
-    func resize(to size: SessionSize, from requester: ClientConnection) throws {
+    func resize(to size: SessionSize, from requester: ClientConnection, confirmsResize: Bool = false) throws {
         let reportsItself = relayingClients.contains(ObjectIdentifier(requester))
         if try apply(size, requesterReportsSize: reportsItself) { announceSize(changedBy: requester) }
+        if confirmsResize { requester.send(.sizeChanged(summary.size)) }
     }
 
     /// The text on the screen, or on the screen and above it.

@@ -43,7 +43,8 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Keys for the attached session. Sent as a raw `input` frame.
     case input(Data)
     /// The size of the attached client. The last client to resize wins, and
-    /// the other clients that asked receive `sizeChanged`.
+    /// the other clients that asked receive `sizeChanged`. A client may ask
+    /// for its own ordered `sizeChanged` with `requestsConfirmation`.
     case resize(SessionSize, requestsConfirmation: Bool? = nil)
     /// Leaves the session running and closes this connection.
     case detach

@@ -14,8 +14,8 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// Bytes the program wrote. Sent as a raw `output` frame.
     case output(Data)
     /// Another client changed the size of the attached session with its
-    /// `resize` or `attach`. Only a client that asked in `attach` receives
-    /// this. The `output` after it is for the new size.
+    /// `resize` or `attach`, or the session confirms the client's own resize.
+    /// The `output` after it is for the new size.
     case sizeChanged(SessionSize)
     /// The text of a session's screen.
     case screen(text: String)

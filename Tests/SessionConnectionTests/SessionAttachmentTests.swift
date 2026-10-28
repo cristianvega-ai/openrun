@@ -49,9 +49,19 @@ import Testing
     /// connection that closes ends the events.
     @Test func aMessageThatDoesNotBelongAfterTheSnapshotIsIgnored() async throws {
         let attachment = try Self.attach(answering: [
-            .attached(Self.summary), .snapshot(Data()), .output(Data("a".utf8)), .attached(Self.summary), .acknowledged, .output(Data("b".utf8)),
+            .attached(Self.summary), .snapshot(Data()), .output(Data("a".utf8)), .attached(Self.summary), .acknowledged, .failure(SessionFailure(reason: .invalidRequest, message: "ignored")), .output(Data("b".utf8)),
         ])
         #expect(await Self.events(of: attachment) == [.output(Data("a".utf8)), .output(Data("b".utf8)), .closed])
+    }
+
+    @Test func aFailureAfterAConfirmedResizeEndsTheEvents() async throws {
+        let failure = SessionFailure(reason: .invalidRequest, message: "The size is invalid.")
+        let attachment = try Self.attach(answering: [.attached(Self.summary), .snapshot(Data())]) { session in
+            _ = try session.receive(ClientMessage.self)
+            try session.send(ServerMessage.failure(failure))
+        }
+        try attachment.send(size: Self.size, requestsConfirmation: true)
+        #expect(await Self.events(of: attachment) == [.failed(.requestFailed(failure))])
     }
 
     @Test func keysSizesAndTheDetachReachTheSessionProcessInOrder() async throws {

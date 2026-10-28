@@ -212,8 +212,21 @@ actor SessionServer {
                 // program reads nothing.
                 session.type(Array(bytes), from: owner) { client.markHandled(received) }
                 continue
-            case .resize(let size, _):
-                try? await attachedSession?.resize(to: size, from: client)
+            case .resize(let size, let confirmation):
+                if confirmation == true && (attachedSession == nil || size.columns == 0 || size.rows == 0) {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "A resize needs an attached session and a nonzero size.")))
+                    client.markHandled(received)
+                    break messages
+                }
+                do {
+                    try await attachedSession?.resize(to: size, from: client, confirmsResize: confirmation == true)
+                } catch {
+                    if confirmation == true {
+                        client.send(.failure(SessionFailure(reason: .invalidRequest, message: "The session could not change size: \(error)")))
+                        client.markHandled(received)
+                        break messages
+                    }
+                }
             case .detach:
                 client.markHandled(received)
                 break messages

@@ -6,9 +6,8 @@ import SessionProtocol
 public enum SessionAttachmentEvent: Equatable, Sendable {
     /// Bytes that the program wrote, as the protocol carries them.
     case output(Data)
-    /// Another client changed the size of the session. Only an attachment
-    /// that asked for size changes gets this. The output after it is for the
-    /// new size.
+    /// Another client changed the size, or the session confirms a requested
+    /// resize. The output after it is for the new size.
     case sizeChanged(SessionSize)
     /// The program ended.
     case exited(SessionExit)
