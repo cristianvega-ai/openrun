@@ -6,7 +6,7 @@ import SessionWindow
 
 /// The application delegate starts the session process and its windows.
 @MainActor
-public final class OpenRunApplication: NSObject, NSApplicationDelegate {
+public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let socket: SocketLocation
     let windows: WindowList
     var makeNewSession: () -> SessionStart = { .newSessionInHomeFolder() }
@@ -27,6 +27,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate {
             let arguments = try ApplicationArguments(arguments: Array(CommandLine.arguments.dropFirst()), environment: ProcessInfo.processInfo.environment)
             let delegate = OpenRunApplication(socket: arguments.socket)
             application.delegate = delegate
+            application.mainMenu = MainMenu.make(target: delegate)
             withExtendedLifetime(delegate) { application.run() }
         } catch {
             application.activate()
@@ -65,6 +66,13 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate {
         Task { [weak self] in
             guard let self, let identifier = await chooseSession(socket, NSApp.keyWindow) else { return }
             windows.open(.runningSession(identifier))
+        }
+    }
+
+    public func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        switch item.action {
+        case #selector(newSession(_:)), #selector(attachToSession(_:)): setupIsReady
+        default: true
         }
     }
 

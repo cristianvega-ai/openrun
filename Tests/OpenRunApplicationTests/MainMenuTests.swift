@@ -51,6 +51,8 @@ import Testing
         application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer { application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        let action = NSMenuItem(title: "New Window", action: #selector(OpenRunApplication.newSession(_:)), keyEquivalent: "n")
+        #expect(application.validateMenuItem(action))
         await wait { application.windows.controllers.first?.view != nil }
         let first = try #require(try process.listedIdentifiers().first)
         let identifier = try #require(UUID(uuidString: first))
@@ -70,6 +72,27 @@ import Testing
         application.attachToSession(nil)
         try? await Task.sleep(for: .milliseconds(100))
         #expect(application.windows.controllers.count == 3)
+    }
+
+    @Test func theMenuHasTheWindowAndTextActions() throws {
+        _ = NSApplication.shared
+        let oldWindowsMenu = NSApp.windowsMenu
+        defer { NSApp.windowsMenu = oldWindowsMenu }
+        let application = OpenRunApplication(socket: try SocketLocation(path: "/tmp/openrun-menu-test.socket"))
+        let menu = MainMenu.make(target: application)
+        #expect(menu.items.map(\.title) == ["OpenRun", "File", "Edit", "View", "Window"])
+        let file = try #require(menu.item(withTitle: "File")?.submenu)
+        let edit = try #require(menu.item(withTitle: "Edit")?.submenu)
+        let view = try #require(menu.item(withTitle: "View")?.submenu)
+        #expect(file.item(withTitle: "New Window")?.keyEquivalent == "n")
+        #expect(file.item(withTitle: "Attach to Session…")?.target === application)
+        #expect(file.item(withTitle: "Close Window")?.keyEquivalent == "w")
+        #expect(edit.item(withTitle: "Copy")?.action == Selector(("copy:")))
+        #expect(edit.item(withTitle: "Paste")?.action == Selector(("paste:")))
+        #expect(view.item(withTitle: "Make Text Bigger")?.keyEquivalent == "=")
+        #expect(view.item(withTitle: "Make Text Smaller")?.keyEquivalent == "-")
+        #expect(view.item(withTitle: "Reset Text Size")?.keyEquivalent == "0")
+        #expect(!application.validateMenuItem(try #require(file.item(withTitle: "New Window"))))
     }
 
     @Test func theStandardNewSessionUsesTheHomeFolder() {
