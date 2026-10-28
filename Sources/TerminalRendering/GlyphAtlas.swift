@@ -13,13 +13,11 @@ final class GlyphAtlas {
         static let empty = Entry(x: 0, y: 0, width: 0, height: 0, offsetX: 0, offsetY: 0, isColor: false)
     }
 
-    let coverage: MTLTexture
-    let color: MTLTexture
+    private(set) var coverage: MTLTexture
+    private(set) var color: MTLTexture
     /// How many times a glyph was drawn. A glyph in the texture is not drawn again.
     private(set) var drawnCount = 0
-    /// Changes when a full texture starts again. The earlier entries are then
-    /// wrong, and whoever kept one must ask again.
-    private(set) var generation = 0
+    private let device: MTLDevice
     private let rasterizer: GlyphRasterizer
     private var coveragePacker: AtlasPacker
     private var colorPacker: AtlasPacker
@@ -28,6 +26,7 @@ final class GlyphAtlas {
     /// - Parameter side: The width of the texture of coverage in pixels. The
     ///   texture of colors has half of it, because it has 4 bytes for a pixel.
     init(device: MTLDevice, fonts: FontSet, side: Int = 2048) throws {
+        self.device = device
         coverage = try Self.makeTexture(device, format: .r8Unorm, side: side)
         color = try Self.makeTexture(device, format: .bgra8Unorm, side: side / 2)
         rasterizer = GlyphRasterizer(fonts: fonts)
@@ -49,12 +48,8 @@ final class GlyphAtlas {
     private func store(_ bitmap: GlyphRasterizer.Bitmap) -> Entry {
         drawnCount += 1
         var place = place(bitmap)
-        if place == nil {
-            // A full texture is rare. Starting again is simpler than a choice of glyphs to drop.
-            coveragePacker.reset()
-            colorPacker.reset()
-            entries.removeAll()
-            generation += 1
+        while place == nil {
+            guard grow(isColor: bitmap.isColor) else { return .empty }
             place = self.place(bitmap)
         }
         guard let place else { return .empty }
@@ -70,6 +65,26 @@ final class GlyphAtlas {
         bitmap.isColor
             ? colorPacker.place(width: bitmap.width, height: bitmap.height)
             : coveragePacker.place(width: bitmap.width, height: bitmap.height)
+    }
+
+    private func grow(isColor: Bool) -> Bool {
+        let old = isColor ? color : coverage
+        guard old.width < 16384,
+            let next = try? Self.makeTexture(device, format: old.pixelFormat, side: old.width * 2)
+        else { return false }
+        let bytesPerRow = old.width * (isColor ? 4 : 1)
+        var pixels = [UInt8](repeating: 0, count: bytesPerRow * old.height)
+        let region = MTLRegionMake2D(0, 0, old.width, old.height)
+        old.getBytes(&pixels, bytesPerRow: bytesPerRow, from: region, mipmapLevel: 0)
+        next.replace(region: region, mipmapLevel: 0, withBytes: pixels, bytesPerRow: bytesPerRow)
+        if isColor {
+            color = next
+            colorPacker.grow(to: next.width)
+        } else {
+            coverage = next
+            coveragePacker.grow(to: next.width)
+        }
+        return true
     }
 
     private static func makeTexture(_ device: MTLDevice, format: MTLPixelFormat, side: Int) throws -> MTLTexture {

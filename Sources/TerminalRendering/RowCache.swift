@@ -8,7 +8,6 @@ struct RowCache {
     private var rows: [RowIdentifier: RowQuads] = [:]
     private var size: TerminalSize?
     private var colors: RenderColors?
-    private var atlasGeneration = 0
 
     func quads(at index: Int) -> RowQuads? {
         rows[order[index]]
@@ -22,17 +21,16 @@ struct RowCache {
 
     /// Makes new quads for the rows that changed. Every row changes when the
     /// whole screen is dirty, when the grid has a new size, or when the colors
-    /// or the glyph positions changed, because the quads hold them.
+    /// change.
     ///
     /// - Parameters:
     ///   - colors: The colors of `state`. The caller reads them once for the frame, and the rows use them too.
     ///   - make: Makes the quads of a row that the cache must read.
     mutating func update(
-        from state: RenderState, colors: RenderColors, atlasGeneration: Int, make: (RenderRow) throws -> RowQuads
+        from state: RenderState, colors: RenderColors, make: (RenderRow) throws -> RowQuads
     ) throws -> FrameStatistics {
-        let rebuildAll = state.dirtiness == .everything || state.size != size
-            || colors != self.colors || atlasGeneration != self.atlasGeneration
-        (size, self.colors, self.atlasGeneration) = (state.size, colors, atlasGeneration)
+        let rebuildAll = state.dirtiness == .everything || state.size != size || colors != self.colors
+        (size, self.colors) = (state.size, colors)
         var statistics = FrameStatistics()
         var kept: [RowIdentifier: RowQuads] = [:]
         var order: [RowIdentifier] = []

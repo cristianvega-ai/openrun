@@ -35,10 +35,37 @@ import Testing
         #expect(atlas.drawnCount == 0)
     }
 
-    @Test func aFullTextureStartsAgain() throws {
+    @Test func aFullTextureKeepsTheEarlierGlyphs() throws {
         let atlas = try makeAtlas(side: 64)
+        let first = atlas.entry(for: key("A"))
+        func pixels() -> [UInt8] {
+            var result = [UInt8](repeating: 0, count: first.width * first.height)
+            atlas.coverage.getBytes(
+                &result, bytesPerRow: first.width, from: MTLRegionMake2D(first.x, first.y, first.width, first.height), mipmapLevel: 0)
+            return result
+        }
+        let original = pixels()
         for letter in "ABCDEFGHIJKLMNOPQRSTUVWXYZ" { _ = atlas.entry(for: key(String(letter))) }
-        #expect(atlas.generation > 0)
+        #expect(atlas.coverage.width > 64)
+        #expect(atlas.entry(for: key("A")) == first)
+        #expect(pixels() == original)
         #expect(!atlas.entry(for: key("Z")).isEmpty)
+    }
+
+    @Test func aFullColorTextureKeepsTheEarlierEmoji() throws {
+        let atlas = try makeAtlas(side: 128)
+        func emoji(_ text: String) -> GlyphKey { GlyphKey(text: text, face: .regular, columns: 2) }
+        let first = atlas.entry(for: emoji("🙂"))
+        func pixels() -> [UInt8] {
+            var result = [UInt8](repeating: 0, count: first.width * first.height * 4)
+            atlas.color.getBytes(
+                &result, bytesPerRow: first.width * 4, from: MTLRegionMake2D(first.x, first.y, first.width, first.height), mipmapLevel: 0)
+            return result
+        }
+        let original = pixels()
+        for character in "😀😃😄😁😆😅😂🤣😊😇" { _ = atlas.entry(for: emoji(String(character))) }
+        #expect(atlas.color.width > 64)
+        #expect(atlas.entry(for: emoji("🙂")) == first)
+        #expect(pixels() == original)
     }
 }

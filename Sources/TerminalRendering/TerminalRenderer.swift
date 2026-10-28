@@ -60,16 +60,9 @@ public final class TerminalRenderer {
         colors = screenColors
         cursor = state.cursor
         columnCount = Int(state.size.columns)
-        func update() throws -> FrameStatistics {
-            try cache.update(from: state, colors: screenColors, atlasGeneration: atlas.generation) {
-                try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
-            }
+        return try cache.update(from: state, colors: screenColors) {
+            try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
         }
-        let generation = atlas.generation
-        let statistics = try update()
-        // A full atlas starts again, and the rows that were made before that
-        // point to glyphs that are gone. Another update makes them all again.
-        return atlas.generation == generation ? statistics : try update()
     }
 
     /// Draws the prepared rows into the target. The space around the grid and

@@ -1,7 +1,7 @@
 /// Finds room for rectangles in a square texture. It fills one row of the
 /// texture from left to right, then starts the next row below it.
 struct AtlasPacker {
-    let side: Int
+    private(set) var side: Int
     private var x = 0
     private var y = 0
     private var rowHeight = 0
@@ -29,5 +29,10 @@ struct AtlasPacker {
     /// Forgets every place, so a full texture can take new bitmaps.
     mutating func reset() {
         self = AtlasPacker(side: side)
+    }
+
+    /// Keeps all places when the texture grows.
+    mutating func grow(to side: Int) {
+        self.side = side
     }
 }
