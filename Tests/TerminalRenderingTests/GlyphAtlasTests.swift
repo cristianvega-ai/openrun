@@ -3,8 +3,8 @@ import Testing
 @testable import TerminalRendering
 
 @Suite struct GlyphAtlasTests {
-    private func makeAtlas(side: Int = 2048) throws -> GlyphAtlas {
-        try GlyphAtlas(device: #require(MTLCreateSystemDefaultDevice()), fonts: FontSet(pointSize: 13, scale: 2), side: side)
+    private func makeAtlas(side: Int = 2048, maximumSide: Int = 8192) throws -> GlyphAtlas {
+        try GlyphAtlas(device: #require(MTLCreateSystemDefaultDevice()), fonts: FontSet(pointSize: 13, scale: 2), side: side, maximumSide: maximumSide)
     }
 
     private func key(_ text: String) -> GlyphKey {
@@ -67,5 +67,19 @@ import Testing
         #expect(atlas.color.width > 64)
         #expect(atlas.entry(for: emoji("🙂")) == first)
         #expect(pixels() == original)
+    }
+
+    @Test func theSizeLimitDoesNotOverwriteEarlierGlyphs() throws {
+        let atlas = try makeAtlas(side: 64, maximumSide: 64)
+        let first = atlas.entry(for: key("A"))
+        var original = [UInt8](repeating: 0, count: first.width * first.height)
+        let region = MTLRegionMake2D(first.x, first.y, first.width, first.height)
+        atlas.coverage.getBytes(&original, bytesPerRow: first.width, from: region, mipmapLevel: 0)
+        let entries = "BCDEFGHIJKLMNOPQRSTUVWXYZ".map { atlas.entry(for: key(String($0))) }
+        var after = [UInt8](repeating: 0, count: original.count)
+        atlas.coverage.getBytes(&after, bytesPerRow: first.width, from: region, mipmapLevel: 0)
+        #expect(entries.contains { $0.isEmpty })
+        #expect(atlas.coverage.width == 64)
+        #expect(atlas.entry(for: key("A")) == first && after == original)
     }
 }

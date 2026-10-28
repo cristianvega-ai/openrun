@@ -40,7 +40,11 @@ public final class TerminalRenderer {
     private var bufferIndex = 0
     private let framesInFlight = DispatchSemaphore(value: 3)
 
-    public init(device: MTLDevice, fonts: FontSet, selectionColor: TerminalColor, pixelFormat: MTLPixelFormat = .bgra8Unorm) throws {
+    public convenience init(device: MTLDevice, fonts: FontSet, selectionColor: TerminalColor, pixelFormat: MTLPixelFormat = .bgra8Unorm) throws {
+        try self.init(device: device, fonts: fonts, selectionColor: selectionColor, pixelFormat: pixelFormat, atlasSide: 2048)
+    }
+
+    init(device: MTLDevice, fonts: FontSet, selectionColor: TerminalColor, pixelFormat: MTLPixelFormat = .bgra8Unorm, atlasSide: Int) throws {
         guard let queue = device.makeCommandQueue() else { throw RenderingError.commandQueueUnavailable }
         self.device = device
         self.fonts = fonts
@@ -48,7 +52,7 @@ public final class TerminalRenderer {
         self.queue = queue
         shaders = try ShaderLibrary(device: device, pixelFormat: pixelFormat)
         padding = Int((8 * fonts.scale).rounded())
-        atlas = try GlyphAtlas(device: device, fonts: fonts)
+        atlas = try GlyphAtlas(device: device, fonts: fonts, side: atlasSide)
     }
 
     /// The size of a target that holds a grid and the space around it.

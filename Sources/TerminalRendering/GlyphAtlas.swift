@@ -18,6 +18,7 @@ final class GlyphAtlas {
     /// How many times a glyph was drawn. A glyph in the texture is not drawn again.
     private(set) var drawnCount = 0
     private let device: MTLDevice
+    private let maximumSide: Int
     private let rasterizer: GlyphRasterizer
     private var coveragePacker: AtlasPacker
     private var colorPacker: AtlasPacker
@@ -25,8 +26,9 @@ final class GlyphAtlas {
 
     /// - Parameter side: The width of the texture of coverage in pixels. The
     ///   texture of colors has half of it, because it has 4 bytes for a pixel.
-    init(device: MTLDevice, fonts: FontSet, side: Int = 2048) throws {
+    init(device: MTLDevice, fonts: FontSet, side: Int = 2048, maximumSide: Int = 8192) throws {
         self.device = device
+        self.maximumSide = maximumSide
         coverage = try Self.makeTexture(device, format: .r8Unorm, side: side)
         color = try Self.makeTexture(device, format: .bgra8Unorm, side: side / 2)
         rasterizer = GlyphRasterizer(fonts: fonts)
@@ -69,8 +71,10 @@ final class GlyphAtlas {
 
     private func grow(isColor: Bool) -> Bool {
         let old = isColor ? color : coverage
-        guard old.width < 16384,
-            let next = try? Self.makeTexture(device, format: old.pixelFormat, side: old.width * 2)
+        // A bounded copy avoids a large allocation when a font has many glyphs.
+        let limit = isColor ? maximumSide / 2 : maximumSide
+        guard old.width < limit,
+            let next = try? Self.makeTexture(device, format: old.pixelFormat, side: min(old.width * 2, limit))
         else { return false }
         let bytesPerRow = old.width * (isColor ? 4 : 1)
         var pixels = [UInt8](repeating: 0, count: bytesPerRow * old.height)

@@ -149,3 +149,44 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
         #expect(row.rows == 48 && page.rows == 48)
     }
 }
+@Suite struct AtlasFrameTests {
+    private func image(_ output: String, markedText: String?, side: Int, name: String) throws -> [UInt8] {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 3), scrollbackLimit: 0)
+        try theme.apply(to: terminal)
+        terminal.write(output)
+        let state = try RenderState()
+        try state.update(from: terminal)
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection, atlasSide: side)
+        try renderer.prepare(from: state)
+        renderer.markedText = markedText
+        let size = renderer.pixelSize(for: terminal.size)
+        let target = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: target))
+        _ = target.pixel(x: 0, y: 0)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try target.savePNG(to: URL(fileURLWithPath: "\(folder)/\(name)-\(side).png"))
+        }
+        var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
+        target.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
+            from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+        return pixels
+    }
+
+    @Test func aFrameWithMoreGlyphsThanTheInitialAtlas() throws {
+        let output = "\u{1B}[?25lABCDEFGHIJKLMNOPQRSTUVWXYZ\r\n0123456789abcdefghijklmnopqrstuvwxyz"
+        let small = try image(output, markedText: nil, side: 64, name: "atlas-screen")
+        let reference = try image(output, markedText: nil, side: 2048, name: "atlas-screen")
+        let matches = small.elementsEqual(reference)
+        #expect(matches)
+    }
+
+    @Test func markedTextCanFillTheAtlasAfterFramePreparation() throws {
+        let output = "\u{1B}[?25lAB\u{1B}[2;1H"
+        let small = try image(output, markedText: "abcdefghijklmnopqrstuvwxyz", side: 64, name: "atlas-marked")
+        let reference = try image(output, markedText: "abcdefghijklmnopqrstuvwxyz", side: 2048, name: "atlas-marked")
+        let matches = small.elementsEqual(reference)
+        #expect(matches)
+    }
+}
