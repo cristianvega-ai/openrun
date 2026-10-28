@@ -196,11 +196,11 @@ This module holds the messages, the frame format, the connection, and the socket
 
 The client side of the socket, for the command-line tool and the window of the app. It imports no AppKit and knows nothing of standard input or output. A caller can use it from any thread.
 
-- `SessionClient(location:)` connects and greets the session process. `request` sends one request and returns its answer. `summaries` lists the sessions, and `session(matching:)` finds the session that a typed identifier means (`SessionIdentifierMatch`).
+- `SessionClient(location:)` connects and greets the session process. Its `capabilities` tell whether the process offers ordered resize confirmations. `request` sends one request and returns its answer. `summaries` lists the sessions, and `session(matching:)` finds the session that a typed identifier means (`SessionIdentifierMatch`).
 - `SessionClient.attach` sends `attach`, waits for `attached` and the snapshot, and returns a `SessionAttachment`. A failure before the snapshot is an error of this call, so the caller knows before it changes anything. The client takes no more requests after it.
 - The snapshot stays `Data`, the type of the protocol, so the module does not use `TerminalEmulation`. The caller restores it with `TerminalSnapshot(bytes:)`.
 - `SessionAttachment.startReceiving` starts a thread that receives the rest. It hands each `SessionAttachmentEvent` to its handler in order, on that thread: `output` and `sizeChanged`, and last `exited`, `closed` or `failed`. A message that does not belong after the snapshot is ignored. The events are `Sendable`, so a window can hand each one on to the main queue. While the handler runs, the socket holds the later frames.
-- `send(input:)`, `send(size:)` and `detach()` work from any thread. `shutdown()` ends the connection and wakes the receiving thread.
+- `send(input:)`, `send(size:)` and `detach()` work from any thread. A size send can request an ordered confirmation. A failure of such a request reaches the attachment handler as an error. `shutdown()` ends the connection and wakes the receiving thread.
 - `SessionConnectionError` names each failure. Its text names no command or option of a client, so `CommandLineToolError(_:)` gives each error the words of the tool, such as "choose a socket with --socket".
 - A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. On the default socket, `SessionClient(location:)` first sends one wake to the launch agent and connects again. A connection that closes before `hello` leads to the same wake, because a launch agent that ends at its idle exit closes such a connection. A wake that fails gives `wakeFailed` with the `SessionWakeFailure`. Tests pass their own wake to `SessionClient(location:wake:)`.
 
@@ -350,20 +350,20 @@ Client to server:
 | `killSession` | `identifier` | `acknowledged`, after the session is gone and every process of its terminal session has ended (see `terminate`). On a connection that is attached to that session: `acknowledged`, then `exited`, and the connection closes |
 | `attach` | `identifier`, `size`, `relaysRawOutput` (optional), `receivesSizeChanges` (optional) | `attached`, then a snapshot frame, then output frames, and `sizeChanged` when the client asked for it. A size with 0 columns or 0 rows, or one that the terminal refuses, gets a `failure` with reason `invalidRequest`, and the session keeps its size. So does a size at which the screens alone do not fit in one frame (see "A snapshot that fits in one frame"). The `failure` comes in place of `attached`, and the connection stays open and not attached |
 | `input` | the bytes, as an input frame | none |
-| `resize` | `_0` is the size | none. A size that the terminal refuses (more than 10,000 columns or rows) changes nothing. A new size goes to the other attached clients that asked for it, as `sizeChanged` |
+| `resize` | `_0` is the size, `requestsConfirmation` is optional | A new size goes to the other attached clients that asked for it, as `sizeChanged`. When the client requests confirmation, it also gets its own `sizeChanged`, even when the size did not change. A refused confirmation request gets a `failure`, and the connection closes. Without confirmation, there is no answer; a refused size changes nothing |
 | `detach` | none | the connection closes |
 
 Server to client:
 
 | Message | Fields |
 |---|---|
-| `hello` | `protocolVersion` |
+| `hello` | `protocolVersion`, `capabilities` (optional) |
 | `sessionCreated` | `_0` is a session summary |
 | `sessionList` | `_0` is a list of session summaries |
 | `attached` | `_0` is a session summary |
 | `snapshot` | the bytes, as a snapshot frame |
 | `output` | the bytes, as an output frame |
-| `sizeChanged` | `_0` is the new size. Only a client that set `receivesSizeChanges` in its `attach` receives it, when another client changes the size with `resize` or with `attach`. It comes before the output that is laid out for the new size |
+| `sizeChanged` | `_0` is the size. A client that set `receivesSizeChanges` receives it when another client changes the size with `resize` or `attach`. A client that requests confirmation also receives it for its own `resize`. It comes before the output that is laid out for that size |
 | `screen` | `text` |
 | `exited` | `_0` is `{"exited":{"status":N}}` or `{"signaled":{"signal":N}}` |
 | `acknowledged` | none |
@@ -380,17 +380,25 @@ Examples of control payloads:
 
 ```json
 {"hello":{"protocolVersion":1}}
+{"hello":{"capabilities":{"orderedResizeConfirmation":true},"protocolVersion":1}}
 {"createSession":{"environment":{"PATH":"/usr/bin"},"folder":"/work","size":{"columns":80,"rows":24}}}
 {"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","relaysRawOutput":true,"size":{"columns":80,"rows":24}}}
 {"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}
 {"resize":{"_0":{"columns":100,"rows":30}}}
+{"resize":{"_0":{"columns":100,"rows":30},"requestsConfirmation":true}}
 {"sizeChanged":{"_0":{"columns":100,"rows":30}}}
 {"exited":{"_0":{"exited":{"status":3}}}}
 {"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e-…","reason":"unknownSession"}}}
 ```
 
 `relaysRawOutput` is a new optional field of `attach`. It stays inside protocol version 1: a client that leaves it out, or sends `false`, does not relay raw output, and an older session process ignores the field.
-`receivesSizeChanges` is another optional field of `attach`, and it stays inside protocol version 1 too. A client that leaves it out, or sends `false`, never receives `sizeChanged`, so an older client never meets a message that it does not know. An older session process ignores the field and never sends the message. The client whose own `resize` or `attach` changed the size does not get the message, because it knows its size. `openrun attach` does not ask: it sends the size of its own window, and its real terminal lays out the output. A client that draws the screen itself, as the app will, asks for the message and resizes its own `Terminal` when it comes.
+`receivesSizeChanges` is another optional field of `attach`, and it stays inside protocol version 1 too. A client that leaves it out, or sends `false`, receives no changes from other clients. An older session process ignores the field and never sends those changes. By default the client whose own `resize` or `attach` changed the size gets no `sizeChanged`. `openrun attach` keeps that behavior: its real terminal lays out the output at its own size.
+
+The server's `hello` can also hold `capabilities.orderedResizeConfirmation`. A missing field means `false`. A client that needs the confirmation must check the capability before it asks, because an older session process ignores the new request field. The app requires it and rejects an unsupported session process; a snapshot still requires the same build (decision of 2026-10-24).
+
+When an attached client sends `resize` with `requestsConfirmation` true, the session applies the size and enqueues `sizeChanged` for that client in the same actor step. It does so even when the size was already in effect. The confirmation follows earlier output and earlier foreign size changes and precedes later output. A zero size, a request before attach, or a refused size gets `failure` and closes that connection. The app waits for each ordered size message before changing its local terminal. It follows a foreign size without sending a resize in reply. A key window can request its own size even when its local grid already has it, so a queued foreign size cannot leave the grid stale after the confirmation.
+
+`specifications/AttachSequence.tla` models this order. One control applies the local size before its confirmation and fails `SizeOrder`. A second removes the confirmation and fails `ConfirmedSizeAgreement` after a queued foreign size. These controls check different protections.
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
 
 ### A conversation
