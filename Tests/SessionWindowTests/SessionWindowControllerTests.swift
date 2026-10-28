@@ -28,7 +28,7 @@ import Testing
         let controller = try makeWindowController(attachment)
         defer { controller.window.close() }
         await waitOnMainThread { controller.view != nil }
-        #expect(controller.window.contentView === controller.view && controller.window.firstResponder === controller.view)
+        #expect(controller.view?.superview === controller.window.contentView && controller.window.firstResponder === controller.view)
         attachment.deliver(.output(Data("after".utf8)))
         await waitOnMainThread { controller.view?.screenText.contains("after") == true }
         #expect(controller.view?.screenText == "before\nafter")

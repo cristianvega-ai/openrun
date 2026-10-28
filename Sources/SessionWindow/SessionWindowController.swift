@@ -20,6 +20,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private let work = ConnectionWork()
     private(set) var attachment: (any AttachedSession)?
     private(set) var view: TerminalView?
+    let hiddenGridLabel = HiddenGridLabel()
     private var isClosed = false
 
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
@@ -57,7 +58,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         // from the snapshot, the view reports it, and the window sends it
         // (decision of 2026-10-25).
         view.delegate = self
-        window.contentView = view
+        window.contentView = container(holding: view)
         window.makeFirstResponder(view)
         started.attachment.startReceiving(AttachmentRelay.handler { [weak self] in self?.handle($0) })
     }
@@ -66,9 +67,29 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         guard !isClosed else { return }
         switch event {
         case .output(let bytes): view?.write(bytes)
-        case .sizeChanged(let size): view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
+        case .sizeChanged(let size):
+            view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
+            showHiddenPart()
         case .exited, .closed, .failed: break
         }
+    }
+
+    /// The view fills the window, and the label of the hidden part lies over its bottom right corner.
+    private func container(holding view: TerminalView) -> NSView {
+        let container = NSView(frame: NSRect(origin: .zero, size: window.contentLayoutRect.size))
+        view.frame = container.bounds
+        view.autoresizingMask = [.width, .height]
+        hiddenGridLabel.translatesAutoresizingMaskIntoConstraints = false
+        container.addSubview(view)
+        container.addSubview(hiddenGridLabel)
+        hiddenGridLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16).isActive = true
+        hiddenGridLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8).isActive = true
+        return container
+    }
+
+    private func showHiddenPart() {
+        guard let view, let visible = view.visibleGridSize else { return }
+        hiddenGridLabel.show(grid: view.gridSize, visible: visible)
     }
 
     /// The user uses this window now, so its size applies (decision of 2026-10-27).
@@ -93,6 +114,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
+        showHiddenPart()
         guard let attachment else { return }
         work.run { try? attachment.send(size: SessionSize(columns: size.columns, rows: size.rows)) }
     }
