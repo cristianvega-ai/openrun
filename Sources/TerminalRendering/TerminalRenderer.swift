@@ -103,8 +103,8 @@ public final class TerminalRenderer {
         reclaimedForFrame = false
         if atlas.isFull { _ = reclaimAtlas() }
         func update() throws -> FrameStatistics {
-            try cache.update(from: state, colors: screenColors) {
-                try RowQuadrilaterals(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
+            try cache.update(from: state, colors: screenColors) { row, _ in
+                try RowQuadrilaterals(row: row, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
             }
         }
         let statistics = try update()

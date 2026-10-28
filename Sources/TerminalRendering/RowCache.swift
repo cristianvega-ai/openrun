@@ -27,7 +27,8 @@ struct RowCache {
     ///   - colors: The colors of `state`. The caller reads them once for the frame, and the rows use them too.
     ///   - make: Makes the quadrilaterals of a row that the cache must read.
     mutating func update(
-        from state: RenderState, colors: RenderColors, make: (RenderRow) throws -> RowQuadrilaterals
+        from state: RenderState, colors: RenderColors, positionsMatter: Bool = false,
+        make: (RenderRow, Int) throws -> RowQuadrilaterals
     ) throws -> FrameStatistics {
         let rebuildAll = state.dirtiness == .everything || state.size != size || colors != self.colors
         (size, self.colors) = (state.size, colors)
@@ -36,12 +37,14 @@ struct RowCache {
         var order: [RowIdentifier] = []
         try state.forEachRow(onlyChanged: false) { row in
             let identifier = row.identifier
+            let index = order.count
             order.append(identifier)
-            if !rebuildAll, !row.isDirty, let known = rows[identifier] {
+            let moved = positionsMatter && (index >= self.order.count || self.order[index] != identifier)
+            if !rebuildAll, !moved, !row.isDirty, let known = rows[identifier] {
                 kept[identifier] = known
                 statistics.rowsReused += 1
             } else {
-                kept[identifier] = try make(row)
+                kept[identifier] = try make(row, index)
                 statistics.rowsPrepared += 1
             }
         }
