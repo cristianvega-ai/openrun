@@ -1,11 +1,11 @@
 # OpenRun
 
 OpenRun is a native macOS terminal for work with coding agents.
-This repository holds the headless core of version 1: a session process that owns every shell and agent, and the `openrun` command-line tool that talks to it.
+This repository holds the session process, the `openrun` command-line tool, and an app with one terminal view per window.
 `documentation/product.md` holds the product decisions.
 `documentation/architecture.md` explains the code.
 
-OpenRun supports macOS 26 and later. The code is Swift only.
+OpenRun supports macOS 26 and later. The app is written in Swift and uses libghostty-vt.
 
 ## Build
 
@@ -25,17 +25,36 @@ OpenRun supports macOS 26 and later. The code is Swift only.
    swift build
    ```
 
-The two programs are in `.build/debug/`: `openrun-session` and `openrun`.
+The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-application`.
 
-3. Build OpenRun.app. The script builds the package in release mode, assembles the bundle in the folder that you name, and signs it.
+3. Create an Apple Development certificate in Xcode under Settings, Accounts. Add the identity to the keychain. Build OpenRun.app with the bundle script. It builds the package in release mode, assembles the bundle in the folder that you name, and signs it.
 
    ```sh
    scripts/build-application.sh /Applications
    ```
 
    The bundle holds the app as `Contents/MacOS/OpenRun`, the session process as `Contents/MacOS/openrun-session`, the tool as `Contents/Helpers/openrun`, and the property list of the launch agent in `Contents/Library/LaunchAgents`.
-   The script signs with the one Apple Development identity of the keychain, and stops when there is none or more than one. `OPENRUN_SIGNING_IDENTITY` names the identity to use, and `-` signs ad hoc for a test build. With an ad hoc signature, launchd ties the launch agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
+   The script signs with the one Apple Development identity of the keychain, and stops when there is none or more than one. Set `OPENRUN_SIGNING_IDENTITY` to the identity to use when the keychain has more than one. Set it to `-` for an ad hoc test build in a scratch folder. With an ad hoc signature, launchd ties the launch agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
    The script replaces each file of an existing bundle by a rename, so a session process that runs keeps its own file.
+
+4. Open `/Applications/OpenRun.app`. The app registers its launch agent and opens a window with a login shell in the home folder. Closing a window leaves its session running.
+
+For an isolated development run, use a nondefault socket and a scratch bundle. Start the session process yourself; the app does not register or wake the launch agent for this socket.
+
+```sh
+openrun_scratch_folder=$(mktemp -d /tmp/openrun.XXXXXX)
+OPENRUN_SIGNING_IDENTITY=- scripts/build-application.sh "$openrun_scratch_folder"
+"$openrun_scratch_folder/OpenRun.app/Contents/MacOS/openrun-session" --socket "$openrun_scratch_folder/session.socket" &
+openrun_session_process=$!
+```
+
+When the process says it is listening, open the app from the same terminal:
+
+```sh
+open -n "$openrun_scratch_folder/OpenRun.app" --args --socket "$openrun_scratch_folder/session.socket"
+```
+
+Close the scratch app and stop its session process with `kill "$openrun_session_process"` when you finish. This ends the sessions in that scratch process. Its socket folder is private to your user.
 
 ## Test
 
@@ -124,12 +143,17 @@ When `openrun new` is given a program name without a slash, the session process 
 | Folder | Feature |
 |---|---|
 | `Sources/TerminalEmulation` | The only code that uses libghostty-vt: screen, scrollback, snapshots, replies |
+| `Sources/TerminalTheme` | The Graphite colors for each appearance |
+| `Sources/TerminalRendering` | Draws the terminal with Metal and CoreText |
+| `Sources/TerminalView` | The AppKit terminal view, input, selection and scrollback |
 | `Sources/PseudoTerminal` | Runs a program on a pseudo terminal |
 | `Sources/SessionProtocol` | The socket protocol that the session process and its clients share |
+| `Sources/SessionConnection` | Connects clients to the session process and attaches them to sessions |
 | `Sources/SessionProcess` | The background process that owns the sessions |
 | `Sources/SessionLaunch` | How launchd starts the session process: the launch agent, its wake, and its registration |
 | `Sources/CommandLineTool` | The `openrun` commands |
-| `Sources/OpenRunApplication` | The app, which registers the launch agent at its start |
+| `Sources/SessionWindow` | Connects one terminal view to one session and owns its window |
+| `Sources/OpenRunApplication` | The app, its windows, and launch-agent setup |
 | `Sources/openrun`, `Sources/openrun-session`, `Sources/openrun-application` | Thin programs that call the features above |
 | `Bundle` | The property lists of OpenRun.app and of its launch agent |
 
