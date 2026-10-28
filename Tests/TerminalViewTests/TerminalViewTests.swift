@@ -156,6 +156,39 @@ import Testing
         #expect(view.gridSize.columns < fit(800).columns)
     }
 
+    @Test func aFirstFitThatMatchesTheSnapshotMakesNoSizeRequest() throws {
+        let expected = TerminalView.estimatedGrid(for: CGSize(width: 800, height: 400), scale: NSScreen.main?.backingScaleFactor ?? 2)
+        let view = try TerminalView(initialGrid: expected)
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.waitsForSizeConfirmation = true
+        layout(view, width: 800, height: 400)
+        #expect(view.visibleGridSize == expected && view.gridSize == expected && delegate.sizes.isEmpty)
+    }
+
+    @Test func aViewWaitsForOrderedSizesAndRequestsEveryNewFit() throws {
+        let initial = TerminalSize(columns: 80, rows: 24)
+        let view = try TerminalView(initialGrid: initial)
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.waitsForSizeConfirmation = true
+        layout(view, width: 800, height: 400)
+        let first = try #require(view.visibleGridSize)
+        #expect(first != initial && view.gridSize == initial && delegate.sizes == [first])
+        view.followSessionSize(first)
+        #expect(view.gridSize == first && delegate.sizes == [first])
+        layout(view, width: 600, height: 400)
+        let second = try #require(view.visibleGridSize)
+        layout(view, width: 800, height: 400)
+        #expect(second != first && view.gridSize == first && delegate.sizes == [first, second, first])
+        view.takeBackGridSize()
+        #expect(delegate.sizes == [first, second, first, first] && view.gridSize == first)
+        view.followSessionSize(second)
+        #expect(view.gridSize == second && delegate.sizes == [first, second, first, first])
+        view.followSessionSize(first)
+        #expect(view.gridSize == first && delegate.sizes == [first, second, first, first])
+    }
+
     @Test func aViewWithoutSizeKeepsItsGrid() throws {
         let view = try TerminalView(initialGrid: TerminalSize(columns: 30, rows: 5))
         layout(view, width: 0, height: 0)

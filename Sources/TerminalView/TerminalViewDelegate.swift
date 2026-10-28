@@ -3,8 +3,8 @@ import TerminalEmulation
 /// What a `TerminalView` tells its owner.
 @MainActor
 public protocol TerminalViewDelegate: AnyObject {
-    /// The grid has a new size, because the view changed its size or its text
-    /// size. The owner passes the size on to the session of the view.
+    /// The view requests a grid size after a change of window or text size.
+    /// The owner passes the size to the session of the view.
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize)
 
     /// The part of the grid that fits the view changed, even if the terminal size did not.

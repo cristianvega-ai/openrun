@@ -73,6 +73,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         // The first layout fits the grid to the window. When that grid differs
         // from the snapshot, the view reports it, and the window sends it
         // (decision of 2026-10-25).
+        view.waitsForSizeConfirmation = true
         view.delegate = self
         window.contentView = container(holding: view)
         window.makeFirstResponder(view)
@@ -148,7 +149,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
         showHiddenPart()
         guard !isClosed, !hasConnectionFailure, let attachment else { return }
-        send { try attachment.send(size: SessionSize(columns: size.columns, rows: size.rows)) }
+        send { try attachment.send(size: SessionSize(columns: size.columns, rows: size.rows), requestsConfirmation: true) }
     }
 
     private func send(_ operation: @escaping @Sendable () throws -> Void) {

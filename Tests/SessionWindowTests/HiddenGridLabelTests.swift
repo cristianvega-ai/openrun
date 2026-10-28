@@ -28,6 +28,7 @@ import Testing
         await waitOnMainThread { !controller.hiddenGridLabel.isHidden }
         #expect(controller.hiddenGridLabel.stringValue == "40 rows hidden")
         controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        await waitOnMainThread { controller.hiddenGridLabel.isHidden }
         #expect(controller.hiddenGridLabel.isHidden)
     }
 
@@ -44,7 +45,8 @@ import Testing
                                  height: CGFloat(larger.rows) * view.cellSize.height + 2 * view.gridPadding + 0.5)
         view.layout()
         #expect(view.visibleGridSize == larger && view.gridSize == larger && controller.hiddenGridLabel.isHidden)
-        #expect(attachment.record.withLock { $0.sizes }.isEmpty)
+        await waitOnMainThread { !attachment.record.withLock { $0.confirmationRequests }.isEmpty }
+        #expect(attachment.record.withLock { $0.confirmationRequests } == [SessionSize(columns: larger.columns, rows: larger.rows)])
     }
 
     @Test func aSizeThatArrivesAsReceivingStartsFollowsTheFirstLayout() async throws {

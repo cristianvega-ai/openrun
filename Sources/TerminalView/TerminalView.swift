@@ -436,29 +436,41 @@ public final class TerminalView: NSView {
     /// The grid that fits the view, or `nil` before the first layout. It differs from `gridSize` while the session has the size of another client.
     public private(set) var visibleGridSize: TerminalSize?
 
+    /// Waits for the session to confirm each requested size in output order.
+    public var waitsForSizeConfirmation = false
+
     /// Gives the terminal the size that another client set, and does not tell the delegate,
     /// so two clients never make each other change size again and again (decision of 2026-10-25).
     public func followSessionSize(_ size: TerminalSize) {
         resizeTerminal(to: size, tellsDelegate: false)
     }
 
-    /// Gives the terminal the grid that fits the view again, and tells the
-    /// delegate when that is a change. A window does this when it becomes
-    /// the key window, so it takes the size back when the user uses it.
+    /// Requests the grid that fits the view when its window becomes key.
+    /// A confirmed request is sent even when the local grid already fits,
+    /// because an earlier size from another client can still be in flight.
     public func takeBackGridSize() {
-        if let visibleGridSize { resizeTerminal(to: visibleGridSize, tellsDelegate: true) }
+        guard let visibleGridSize else { return }
+        if waitsForSizeConfirmation {
+            delegate?.terminalView(self, didChangeGridSize: visibleGridSize)
+        } else {
+            resizeTerminal(to: visibleGridSize, tellsDelegate: true)
+        }
     }
 
-    /// Gives the terminal as many whole cells as fit in the view, and tells
-    /// the delegate when that is a new size. A layout with the same fit keeps
-    /// a size that the session set.
+    /// Requests as many whole cells as fit in the view. A layout with the
+    /// same fit keeps a size that the session set.
     private func fitGrid() {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let fonts = renderer.fonts
         let grid = GridFit.grid(for: bounds.size, scale: fonts.scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: renderer.padding)
         guard grid != visibleGridSize else { return }
+        let isFirstLayout = visibleGridSize == nil
         visibleGridSize = grid
-        resizeTerminal(to: grid, tellsDelegate: true)
+        if waitsForSizeConfirmation {
+            if !isFirstLayout || grid != terminal.size { delegate?.terminalView(self, didChangeGridSize: grid) }
+        } else {
+            resizeTerminal(to: grid, tellsDelegate: true)
+        }
         delegate?.terminalView(self, didChangeVisibleGridSize: grid)
     }
 

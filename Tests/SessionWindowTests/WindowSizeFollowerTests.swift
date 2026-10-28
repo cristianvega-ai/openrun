@@ -35,13 +35,28 @@ import Testing
         let (controller, attachment, view) = try await makeAttachedWindow()
         defer { controller.window.close() }
         let own = try #require(view.visibleGridSize)
-        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
         attachment.deliver(.sizeChanged(SessionSize(columns: 30, rows: 8)))
         await waitOnMainThread { view.gridSize == TerminalSize(columns: 30, rows: 8) }
         #expect(attachment.record.withLock { $0.sizes }.isEmpty)
         controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
-        await waitOnMainThread { !attachment.record.withLock { $0.sizes }.isEmpty }
-        #expect(attachment.record.withLock { $0.sizes } == [sessionSize(own)] && view.gridSize == own)
+        await waitOnMainThread { view.gridSize == own }
+        #expect(attachment.record.withLock { $0.sizes } == [sessionSize(own)])
+        #expect(attachment.record.withLock { $0.confirmationRequests } == [sessionSize(own)])
+    }
+
+    @Test func aQueuedForeignSizeCannotUndoTheKeyWindowTakeover() async throws {
+        let (controller, attachment, view) = try await makeAttachedWindow()
+        defer { controller.window.close() }
+        let own = try #require(view.visibleGridSize), foreign = TerminalSize(columns: 30, rows: 8)
+        attachment.record.withLock { $0.confirmsSizes = false }
+        attachment.deliver(.sizeChanged(sessionSize(foreign)))
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        await waitOnMainThread { view.gridSize == foreign && attachment.record.withLock { !$0.confirmationRequests.isEmpty } }
+        #expect(view.gridSize == foreign && attachment.record.withLock { $0.sizes } == [sessionSize(own)])
+        attachment.deliver(.sizeChanged(sessionSize(own)))
+        await waitOnMainThread { view.gridSize == own }
+        #expect(view.gridSize == own && attachment.record.withLock { $0.sizes } == [sessionSize(own)])
+        #expect(attachment.record.withLock { $0.confirmationRequests } == [sessionSize(own)])
     }
 
     /// The alternate screen does not reflow, so a line shows the size it came for.
