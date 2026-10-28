@@ -10,6 +10,7 @@ final class OutputParser {
     let pieceSize: Int
     private let queue = TerminalOutputQueue()
     private var offset = 0
+    var onSize: ((TerminalSize, Bool) -> Void)?
 
     init(pieceSize: Int = 64 * 1024) {
         self.pieceSize = pieceSize
@@ -21,17 +22,29 @@ final class OutputParser {
         output.withUnsafeBytes { queue.append(.bytes(Array($0))) }
     }
 
+    /// Applies a size after all output that came before it.
+    func append(size: TerminalSize, tellsDelegate: Bool) {
+        queue.append(.size(size, tellsDelegate: tellsDelegate))
+    }
+
     /// Parses pieces until the budget is used. A turn always parses one piece,
     /// even with a budget of no time, so the output always moves on.
     ///
     /// - Returns: `true` when output is left for another turn.
     func parse(into terminal: Terminal, budget: ParseBudget) -> Bool {
         repeat {
-            guard case .bytes(let bytes)? = queue.first else { break }
-            let end = min(offset + pieceSize, bytes.count)
-            terminal.write(bytes[offset..<end])
-            offset = end
-            if offset == bytes.count { queue.removeFirst(); offset = 0 }
+            guard let event = queue.first else { break }
+            switch event {
+            case .bytes(let bytes):
+                let end = min(offset + pieceSize, bytes.count)
+                terminal.write(bytes[offset..<end])
+                offset = end
+                if offset == bytes.count { queue.removeFirst(); offset = 0 }
+            case .size(let size, let tellsDelegate):
+                queue.removeFirst()
+                guard let onSize else { preconditionFailure("The size has no handler.") }
+                onSize(size, tellsDelegate)
+            }
         } while hasPendingOutput && !budget.isUsed
         return hasPendingOutput
     }

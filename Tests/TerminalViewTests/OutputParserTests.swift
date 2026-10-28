@@ -34,4 +34,36 @@ import TerminalEmulation
         #expect(!parser.parse(into: terminal, budget: ParseBudget(limit: .seconds(60))))
         #expect(try screen(terminal) == "日本")
     }
+
+    @Test func aSizeWaitsForEarlierOutputAndPrecedesLaterOutput() throws {
+        let initial = TerminalSize(columns: 8, rows: 3)
+        let changed = TerminalSize(columns: 4, rows: 3)
+        let terminal = try Terminal(size: initial, scrollbackLimit: 10)
+        let parser = OutputParser(pieceSize: 4)
+        parser.append(Array("abcdefghi".utf8))
+        parser.append(size: changed, tellsDelegate: false)
+        parser.append(Array("jklm".utf8))
+        parser.append(size: initial, tellsDelegate: true)
+        var applied: [TerminalSize] = [], delegateFlags: [Bool] = []
+        parser.onSize = { size, tellsDelegate in
+            try? terminal.resize(to: size)
+            applied.append(size)
+            delegateFlags.append(tellsDelegate)
+        }
+        for _ in 0..<3 {
+            #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+            #expect(terminal.size == initial && applied.isEmpty)
+        }
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(terminal.size == changed && applied == [changed])
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(!parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(terminal.size == initial && applied == [changed, initial] && delegateFlags == [false, true])
+        let reference = try Terminal(size: initial, scrollbackLimit: 10)
+        reference.write("abcdefghi")
+        try reference.resize(to: changed)
+        reference.write("jklm")
+        try reference.resize(to: initial)
+        #expect(try terminal.formatted(.plainText) == reference.formatted(.plainText))
+    }
 }
