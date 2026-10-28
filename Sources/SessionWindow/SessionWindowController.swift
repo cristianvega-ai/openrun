@@ -25,6 +25,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     let hiddenGridLabel = HiddenGridLabel()
     var ask: @MainActor (UserQuestion, NSWindow) async -> Bool = { await $0.ask(in: $1) }
     private var isClosed = false
+    private var hasConnectionFailure = false
     private var folder = ""
 
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
@@ -49,13 +50,23 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     private func attached(_ result: Result<StartedSession, any Error>) {
-        guard let started = try? result.get() else { return window.close() }
         // The user can close the window while it attaches.
-        guard !isClosed else { return detach(started.attachment) }
+        guard !isClosed else {
+            if case .success(let started) = result { detach(started.attachment) }
+            return
+        }
+        let started: StartedSession
+        switch result {
+        case .success(let value): started = value
+        case .failure(let error): return connectionFailed("Could not connect to the session. \(error)")
+        }
         // Only the build that made a snapshot can restore it (decision of 2026-10-24).
-        guard let view = try? TerminalView(restoring: TerminalSnapshot(bytes: Array(started.attachment.snapshot))) else {
+        let view: TerminalView
+        do {
+            view = try TerminalView(restoring: TerminalSnapshot(bytes: Array(started.attachment.snapshot)))
+        } catch {
             detach(started.attachment)
-            return window.close()
+            return connectionFailed("The session screen could not be restored. \(error)")
         }
         (attachment, self.view, folder) = (started.attachment, view, started.summary.folder)
         terminalView(view, didChangeTitle: view.title)
@@ -79,6 +90,17 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
             showHiddenPart()
         case .exited: window.close()
         case .closed, .failed: break
+        }
+    }
+
+    private func connectionFailed(_ detail: String) {
+        guard !isClosed, !hasConnectionFailure else { return }
+        hasConnectionFailure = true
+        attachment?.shutdown()
+        Task { [weak self] in
+            guard let self, !isClosed else { return }
+            _ = await ask(.connectionFailure(detail), window)
+            if !isClosed { window.close() }
         }
     }
 

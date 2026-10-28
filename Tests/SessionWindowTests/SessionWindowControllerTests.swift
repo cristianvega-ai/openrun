@@ -23,6 +23,23 @@ import Testing
         #expect(!controller.window.isVisible)
     }
 
+    @Test func anAttachFailureIsShownBeforeTheWindowCloses() async throws {
+        let controller = try makeWindowController(nil)
+        var questions: [UserQuestion] = []
+        var answer: CheckedContinuation<Bool, Never>?
+        controller.ask = { question, _ in
+            questions.append(question)
+            return await withCheckedContinuation { answer = $0 }
+        }
+        await waitOnMainThread { answer != nil }
+        #expect(controller.window.isVisible)
+        #expect(questions == [.connectionFailure("Could not connect to the session. The session process closed the connection.")])
+        let acknowledgment = try #require(answer)
+        acknowledgment.resume(returning: true)
+        await waitOnMainThread { !controller.window.isVisible }
+        #expect(!controller.window.isVisible)
+    }
+
     @Test func theWindowShowsTheSnapshotAndThenTheOutputInItsView() async throws {
         let attachment = try FakeAttachment(screen: "before\r\n")
         let controller = try makeWindowController(attachment)
@@ -37,8 +54,13 @@ import Testing
     @Test func aSnapshotThatCannotBeRestoredDetachesAndClosesTheWindow() async throws {
         let attachment = FakeAttachment(snapshot: Data("not a snapshot".utf8))
         let controller = try makeWindowController(attachment)
-        await waitOnMainThread { attachment.record.withLock { $0.shutDown } }
-        #expect(!controller.window.isVisible && controller.view == nil && attachment.record.withLock { $0.detached })
+        var questions: [UserQuestion] = []
+        controller.ask = { question, _ in questions.append(question); return true }
+        await waitOnMainThread { !controller.window.isVisible && attachment.record.withLock { $0.shutDown } }
+        #expect(controller.view == nil && attachment.record.withLock { $0.detached })
+        let question = try #require(questions.first)
+        guard case .connectionFailure(let detail) = question else { Issue.record("Expected a connection failure"); return }
+        #expect(detail.contains("could not be restored"))
     }
 
     @Test func keysGoToTheSessionInOrderAndNotFromTheMainThread() async throws {

@@ -56,6 +56,7 @@ func makeWindowController(_ attachment: FakeAttachment?, folder: String = "/tmp/
     // AppKit needs an application object before it makes a window.
     _ = NSApplication.shared
     let controller = SessionWindowController(start: .runningSession(UUID()), socket: try SocketLocation(path: "/tmp/openrun-window-test.socket"))
+    controller.ask = { _, _ in true }
     controller.connect = { _, _, size in
         guard let attachment else { throw SessionConnectionError.connectionClosed }
         attachment.record.withLock { $0.attachSize = size }

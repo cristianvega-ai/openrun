@@ -3,11 +3,14 @@ import AppKit
 /// A question that belongs to one session window.
 enum UserQuestion: Equatable, Sendable {
     case unsafePaste
+    case connectionFailure(String)
 
     var words: (title: String, message: String, buttons: [String]) {
         switch self {
         case .unsafePaste:
             ("Paste multiple lines?", "This paste can run commands because the program does not protect pasted text.", ["Paste", "Cancel"])
+        case .connectionFailure(let detail):
+            ("The session is not available", detail, ["OK"])
         }
     }
 
