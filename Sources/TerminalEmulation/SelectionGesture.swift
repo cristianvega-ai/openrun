@@ -48,9 +48,9 @@ public final class SelectionGesture {
     /// A press of the primary button. The time is from a steady clock. The
     /// repeat interval is the longest time between the clicks of a double
     /// click, which the view takes from the system.
-    public func press(at cell: ViewportCell, pixel: (x: Double, y: Double), timeInNanoseconds: UInt64, repeatIntervalInNanoseconds: UInt64) throws {
+    public func press(at cell: ViewportCell, pixel: (horizontalPosition: Double, verticalPosition: Double), timeInNanoseconds: UInt64, repeatIntervalInNanoseconds: UInt64) throws {
         var reference = try terminal.gridReference(at: cell)
-        var position = GhosttySurfacePosition(x: pixel.x, y: pixel.y)
+        var position = GhosttySurfacePosition(x: pixel.horizontalPosition, y: pixel.verticalPosition)
         var time = timeInNanoseconds
         var interval = repeatIntervalInNanoseconds
         var distance = 8.0  // pixels that the pointer may move between clicks
@@ -65,9 +65,9 @@ public final class SelectionGesture {
     /// The pointer moves with the button down. The selection grows from the
     /// press to `cell`. The geometry lets libghostty-vt choose the side of
     /// the cell where the selection ends.
-    public func drag(to cell: ViewportCell, pixel: (x: Double, y: Double), cellWidth: UInt32, screenHeight: UInt32) throws {
+    public func drag(to cell: ViewportCell, pixel: (horizontalPosition: Double, verticalPosition: Double), cellWidth: UInt32, screenHeight: UInt32) throws {
         var reference = try terminal.gridReference(at: cell)
-        var position = GhosttySurfacePosition(x: pixel.x, y: pixel.y)
+        var position = GhosttySurfacePosition(x: pixel.horizontalPosition, y: pixel.verticalPosition)
         var geometry = GhosttySelectionGestureGeometry(
             columns: UInt32(terminal.size.columns), cell_width: cellWidth, padding_left: 0, screen_height: screenHeight)
         _ = ghostty_selection_gesture_event_set(dragEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_REF, &reference)
@@ -79,9 +79,9 @@ public final class SelectionGesture {
     /// A step of the autoscroll. The viewport scrolls one row in the direction of
     /// `autoscroll`, and the selection grows to the cell now under the pointer.
     /// Call it from a timer while `autoscroll` is not `.none`.
-    public func autoscrollTick(at cell: ViewportCell, pixel: (x: Double, y: Double), cellWidth: UInt32, screenHeight: UInt32) throws {
+    public func autoscrollTick(at cell: ViewportCell, pixel: (horizontalPosition: Double, verticalPosition: Double), cellWidth: UInt32, screenHeight: UInt32) throws {
         var viewport = GhosttyPointCoordinate(x: cell.column, y: cell.row)
-        var position = GhosttySurfacePosition(x: pixel.x, y: pixel.y)
+        var position = GhosttySurfacePosition(x: pixel.horizontalPosition, y: pixel.verticalPosition)
         var geometry = GhosttySelectionGestureGeometry(
             columns: UInt32(terminal.size.columns), cell_width: cellWidth, padding_left: 0, screen_height: screenHeight)
         _ = ghostty_selection_gesture_event_set(tickEvent, GHOSTTY_SELECTION_GESTURE_EVENT_OPT_VIEWPORT, &viewport)

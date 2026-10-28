@@ -39,7 +39,7 @@ final class MouseReporter {
         encoder.setAnyButtonPressed(!pressedButtons.isEmpty)
         let pixel = location.pixel(of: point)
         do {
-            return try encoder.encode(MouseEvent(action: action, button: button, modifiers: modifiers, horizontalPosition: pixel.x, verticalPosition: pixel.y))
+            return try encoder.encode(MouseEvent(action: action, button: button, modifiers: modifiers, horizontalPosition: pixel.horizontalPosition, verticalPosition: pixel.verticalPosition))
         } catch {
             logger.error("A mouse report failed: \(String(describing: error), privacy: .private)")
             return []

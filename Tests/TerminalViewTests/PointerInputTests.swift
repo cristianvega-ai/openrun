@@ -12,7 +12,7 @@ import Testing
     @Test func aPointOfTheViewGivesAPixelOfTheGridAndItsCell() {
         let point = CGPoint(x: 51, y: 329.5)
         let pixel = location.pixel(of: point)
-        #expect(pixel.x == 86 && pixel.y == 101)
+        #expect(pixel.horizontalPosition == 86 && pixel.verticalPosition == 101)
         #expect(location.cell(of: point) == ViewportCell(column: 5, row: 3))
     }
 
@@ -20,7 +20,7 @@ import Testing
         #expect(location.cell(of: CGPoint(x: -50, y: 1000)) == ViewportCell(column: 0, row: 0))
         #expect(location.cell(of: CGPoint(x: 5000, y: -50)) == ViewportCell(column: 79, row: 23))
         let corner = location.pixel(of: CGPoint(x: 5000, y: -50))
-        #expect(corner.x == 1279 && corner.y == 743)
+        #expect(corner.horizontalPosition == 1279 && corner.verticalPosition == 743)
     }
 }
 
