@@ -6,11 +6,14 @@ import Metal
 final class GlyphAtlas {
     /// The place of a glyph in the texture, and the place of its bitmap in the cell.
     struct Entry: Equatable {
-        let x, y, width, height, offsetX, offsetY: Int
+        let horizontalPosition, verticalPosition, width, height: Int
+        let horizontalOffset, verticalOffset: Int
         let isColor: Bool
         /// An entry with no pixels draws nothing, as the glyph of a space.
         var isEmpty: Bool { width == 0 }
-        static let empty = Entry(x: 0, y: 0, width: 0, height: 0, offsetX: 0, offsetY: 0, isColor: false)
+        static let empty = Entry(
+            horizontalPosition: 0, verticalPosition: 0, width: 0, height: 0,
+            horizontalOffset: 0, verticalOffset: 0, isColor: false)
     }
 
     private(set) var coverage: MTLTexture
@@ -61,8 +64,9 @@ final class GlyphAtlas {
             region: MTLRegionMake2D(place.horizontalPosition, place.verticalPosition, bitmap.width, bitmap.height), mipmapLevel: 0,
             withBytes: bitmap.pixels, bytesPerRow: bitmap.width * (bitmap.isColor ? 4 : 1))
         return Entry(
-            x: place.horizontalPosition, y: place.verticalPosition, width: bitmap.width, height: bitmap.height,
-            offsetX: bitmap.offsetX, offsetY: bitmap.offsetY, isColor: bitmap.isColor)
+            horizontalPosition: place.horizontalPosition, verticalPosition: place.verticalPosition,
+            width: bitmap.width, height: bitmap.height,
+            horizontalOffset: bitmap.horizontalOffset, verticalOffset: bitmap.verticalOffset, isColor: bitmap.isColor)
     }
 
     private func place(_ bitmap: GlyphRasterizer.Bitmap) -> (horizontalPosition: Int, verticalPosition: Int)? {

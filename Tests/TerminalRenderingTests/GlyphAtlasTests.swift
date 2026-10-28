@@ -18,7 +18,8 @@ import Testing
         #expect(atlas.drawnCount == 1)
         var pixels = [UInt8](repeating: 0, count: entry.width * entry.height)
         atlas.coverage.getBytes(
-            &pixels, bytesPerRow: entry.width, from: MTLRegionMake2D(entry.x, entry.y, entry.width, entry.height), mipmapLevel: 0)
+            &pixels, bytesPerRow: entry.width,
+            from: MTLRegionMake2D(entry.horizontalPosition, entry.verticalPosition, entry.width, entry.height), mipmapLevel: 0)
         #expect(pixels.contains { $0 > 200 })
     }
 
@@ -41,7 +42,8 @@ import Testing
         func pixels() -> [UInt8] {
             var result = [UInt8](repeating: 0, count: first.width * first.height)
             atlas.coverage.getBytes(
-                &result, bytesPerRow: first.width, from: MTLRegionMake2D(first.x, first.y, first.width, first.height), mipmapLevel: 0)
+                &result, bytesPerRow: first.width,
+                from: MTLRegionMake2D(first.horizontalPosition, first.verticalPosition, first.width, first.height), mipmapLevel: 0)
             return result
         }
         let original = pixels()
@@ -59,7 +61,8 @@ import Testing
         func pixels() -> [UInt8] {
             var result = [UInt8](repeating: 0, count: first.width * first.height * 4)
             atlas.color.getBytes(
-                &result, bytesPerRow: first.width * 4, from: MTLRegionMake2D(first.x, first.y, first.width, first.height), mipmapLevel: 0)
+                &result, bytesPerRow: first.width * 4,
+                from: MTLRegionMake2D(first.horizontalPosition, first.verticalPosition, first.width, first.height), mipmapLevel: 0)
             return result
         }
         let original = pixels()
@@ -73,7 +76,7 @@ import Testing
         let atlas = try makeAtlas(side: 64, maximumSide: 64)
         let first = atlas.entry(for: key("A"))
         var original = [UInt8](repeating: 0, count: first.width * first.height)
-        let region = MTLRegionMake2D(first.x, first.y, first.width, first.height)
+        let region = MTLRegionMake2D(first.horizontalPosition, first.verticalPosition, first.width, first.height)
         atlas.coverage.getBytes(&original, bytesPerRow: first.width, from: region, mipmapLevel: 0)
         let entries = "BCDEFGHIJKLMNOPQRSTUVWXYZ".map { atlas.entry(for: key(String($0))) }
         var after = [UInt8](repeating: 0, count: original.count)
@@ -88,7 +91,7 @@ import Testing
         let first = atlas.entry(for: key("A"))
         let old = atlas.coverage
         let oldColor = atlas.color
-        let region = MTLRegionMake2D(first.x, first.y, first.width, first.height)
+        let region = MTLRegionMake2D(first.horizontalPosition, first.verticalPosition, first.width, first.height)
         var original = [UInt8](repeating: 0, count: first.width * first.height)
         old.getBytes(&original, bytesPerRow: first.width, from: region, mipmapLevel: 0)
         for letter in "BCDEFGHIJKLMNOPQRSTUVWXYZ" { _ = atlas.entry(for: key(String(letter))) }

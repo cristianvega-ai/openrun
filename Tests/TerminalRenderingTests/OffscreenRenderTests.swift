@@ -12,10 +12,10 @@ import TerminalTheme
         let entry = atlas.entry(for: GlyphKey(text: "Å", face: .regular, columns: 1))
         var mask = [UInt8](repeating: 0, count: entry.width * entry.height)
         atlas.coverage.getBytes(&mask, bytesPerRow: entry.width,
-                                from: MTLRegionMake2D(entry.x, entry.y, entry.width, entry.height), mipmapLevel: 0)
-        let index = try #require(mask.indices.first { entry.offsetY + $0 / entry.width < 0 && mask[$0] > 0 })
-        let x = testPadding + entry.offsetX + index % entry.width
-        let y = testPadding + testFonts.cellHeight + entry.offsetY + index / entry.width
+                                from: MTLRegionMake2D(entry.horizontalPosition, entry.verticalPosition, entry.width, entry.height), mipmapLevel: 0)
+        let index = try #require(mask.indices.first { entry.verticalOffset + $0 / entry.width < 0 && mask[$0] > 0 })
+        let x = testPadding + entry.horizontalOffset + index % entry.width
+        let y = testPadding + testFonts.cellHeight + entry.verticalOffset + index / entry.width
         let device = try #require(MTLCreateSystemDefaultDevice())
         let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
         let size = renderer.pixelSize(for: screen.terminal.size)

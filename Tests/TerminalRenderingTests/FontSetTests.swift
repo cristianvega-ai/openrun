@@ -35,7 +35,7 @@ import Testing
     @Test func aLetterStandsOnTheBaselineOfTheCell() throws {
         let letter = try #require(bitmap("A"))
         #expect(letter.pixels.contains { $0 > 200 })
-        let bottom = letter.offsetY + letter.height - GlyphRasterizer.padding
+        let bottom = letter.verticalOffset + letter.height - GlyphRasterizer.padding
         #expect(abs(bottom - fonts.metrics.baseline) <= 1)
     }
 
@@ -45,8 +45,8 @@ import Testing
 
     @Test func aWideCharacterSitsInsideItsTwoCells() throws {
         let wide = try #require(bitmap("日", columns: 2))
-        #expect(wide.offsetX + GlyphRasterizer.padding >= 0)
-        #expect(wide.offsetX + wide.width - GlyphRasterizer.padding <= 2 * fonts.cellWidth)
+        #expect(wide.horizontalOffset + GlyphRasterizer.padding >= 0)
+        #expect(wide.horizontalOffset + wide.width - GlyphRasterizer.padding <= 2 * fonts.cellWidth)
     }
 
     @Test func anEmojiFitsInItsCellsAndIsNeverEnlarged() throws {
@@ -54,11 +54,11 @@ import Testing
         for columns in [1, 2] {
             let emoji = try #require(bitmap("🙂", columns: columns))
             #expect(emoji.isColor)
-            #expect(emoji.offsetX + padding >= 0)
-            #expect(emoji.offsetX + emoji.width - padding <= columns * fonts.cellWidth)
+            #expect(emoji.horizontalOffset + padding >= 0)
+            #expect(emoji.horizontalOffset + emoji.width - padding <= columns * fonts.cellWidth)
             // The bitmap rounds its edges outward, by less than one pixel each.
-            #expect(emoji.offsetY + padding >= -1)
-            #expect(emoji.offsetY + emoji.height - padding <= fonts.cellHeight + 1)
+            #expect(emoji.verticalOffset + padding >= -1)
+            #expect(emoji.verticalOffset + emoji.height - padding <= fonts.cellHeight + 1)
         }
         #expect(try #require(bitmap("🙂", columns: 4)).width == #require(bitmap("🙂", columns: 2)).width)
     }

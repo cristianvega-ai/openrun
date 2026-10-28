@@ -19,8 +19,10 @@ struct CellQuad: Equatable {
 
     static func glyph(_ entry: GlyphAtlas.Entry, column: Int, x: Int, y: Int, color: TerminalColor) -> CellQuad {
         CellQuad(
-            origin: [Float(x + entry.offsetX), Float(y + entry.offsetY)], size: [Float(entry.width), Float(entry.height)],
-            atlasOrigin: [Float(entry.x), Float(entry.y)], isColor: entry.isColor ? 1 : 0, column: UInt32(column),
+            origin: [Float(x + entry.horizontalOffset), Float(y + entry.verticalOffset)],
+            size: [Float(entry.width), Float(entry.height)],
+            atlasOrigin: [Float(entry.horizontalPosition), Float(entry.verticalPosition)],
+            isColor: entry.isColor ? 1 : 0, column: UInt32(column),
             color: vector(color))
     }
 

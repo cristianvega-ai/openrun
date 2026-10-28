@@ -13,8 +13,8 @@ struct GlyphRasterizer {
         let width: Int
         let height: Int
         /// From the top left of the cell to the top left of the bitmap.
-        let offsetX: Int
-        let offsetY: Int
+        let horizontalOffset: Int
+        let verticalOffset: Int
         /// Whether the font gives its own colors, as for an emoji.
         let isColor: Bool
     }
@@ -46,14 +46,14 @@ struct GlyphRasterizer {
         let box = ink.applying(CGAffineTransform(scaleX: scale, y: scale))
         guard !box.isNull, box.width > 0, box.height > 0 else { return nil }
         // The origin of the line, from the bottom left of the bitmap.
-        let originX = Self.padding - Int(box.minX.rounded(.down))
-        let originY = Self.padding - Int(box.minY.rounded(.down))
-        let width = Int(box.maxX.rounded(.up)) + originX + Self.padding
-        let height = Int(box.maxY.rounded(.up)) + originY + Self.padding
+        let horizontalOrigin = Self.padding - Int(box.minX.rounded(.down))
+        let verticalOrigin = Self.padding - Int(box.minY.rounded(.down))
+        let width = Int(box.maxX.rounded(.up)) + horizontalOrigin + Self.padding
+        let height = Int(box.maxY.rounded(.up)) + verticalOrigin + Self.padding
         var pixels = [UInt8](repeating: 0, count: width * height * (isColor ? 4 : 1))
         let drawn = pixels.withUnsafeMutableBytes { buffer -> Bool in
             guard let context = Self.context(for: buffer, width: width, height: height, isColor: isColor) else { return false }
-            context.translateBy(x: CGFloat(originX), y: CGFloat(originY))
+            context.translateBy(x: CGFloat(horizontalOrigin), y: CGFloat(verticalOrigin))
             context.scaleBy(x: scale, y: scale)
             CTLineDraw(line, context)
             return true
@@ -62,8 +62,8 @@ struct GlyphRasterizer {
         // A glyph that is narrower than its cells sits in their middle.
         let center = advance * scale < space ? Int(((space - advance * scale) / 2).rounded()) : 0
         return Bitmap(
-            pixels: pixels, width: width, height: height, offsetX: center - originX,
-            offsetY: Int(baseline) - (height - originY), isColor: isColor)
+            pixels: pixels, width: width, height: height, horizontalOffset: center - horizontalOrigin,
+            verticalOffset: Int(baseline) - (height - verticalOrigin), isColor: isColor)
     }
 
     /// A wave as wide as one cell. It starts and ends in its middle, so the
@@ -80,14 +80,15 @@ struct GlyphRasterizer {
             context.setLineWidth(thickness)
             context.move(to: CGPoint(x: 0, y: middle))
             for step in 1...width * 4 {
-                let x = CGFloat(step) / 4
-                context.addLine(to: CGPoint(x: x, y: middle + (middle - thickness) * sin(x / CGFloat(width) * 2 * .pi)))
+                let horizontalPosition = CGFloat(step) / 4
+                context.addLine(to: CGPoint(
+                    x: horizontalPosition, y: middle + (middle - thickness) * sin(horizontalPosition / CGFloat(width) * 2 * .pi)))
             }
             context.strokePath()
             return true
         }
         let top = metrics.underlinePosition + metrics.underlineThickness / 2 - height / 2
-        return drawn ? Bitmap(pixels: pixels, width: width, height: height, offsetX: 0, offsetY: top, isColor: false) : nil
+        return drawn ? Bitmap(pixels: pixels, width: width, height: height, horizontalOffset: 0, verticalOffset: top, isColor: false) : nil
     }
 
     /// The number of cells that a cluster covers: 2 for a character that is
