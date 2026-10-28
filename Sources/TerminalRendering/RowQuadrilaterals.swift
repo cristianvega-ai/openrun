@@ -4,9 +4,9 @@ import TerminalEmulation
 /// glyphs, and the lines of the cells. Positions count from the top left of
 /// the row, so a row that moves down the screen keeps its quads.
 struct RowQuadrilaterals {
-    private(set) var backgrounds: [CellQuad] = []
-    private(set) var glyphs: [CellQuad] = []
-    private(set) var decorations: [CellQuad] = []
+    private(set) var backgrounds: [CellQuadrilateral] = []
+    private(set) var glyphs: [CellQuadrilateral] = []
+    private(set) var decorations: [CellQuadrilateral] = []
     /// The columns of the wide characters. A cursor on one of them covers 2 cells.
     private(set) var wideColumns: [UInt16] = []
 
@@ -23,7 +23,7 @@ struct RowQuadrilaterals {
                                               width: metrics.width, height: metrics.height, color: background))
             }
             if cell.style.isFaint { foreground = Self.halfway(foreground, background ?? colors.background) }
-            decorations += DecorationQuads.lines(for: cell, horizontalPosition: horizontalPosition, color: foreground, metrics: metrics)
+            decorations += DecorationQuadrilaterals.lines(for: cell, horizontalPosition: horizontalPosition, color: foreground, metrics: metrics)
             if cell.width == .wide { wideColumns.append(cell.column) }
             // The second cell of a wide character has nothing to draw.
             if let base = cell.base, base != " ", !cell.style.isInvisible, cell.width != .wideTail, cell.width != .wideHead {

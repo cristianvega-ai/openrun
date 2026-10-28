@@ -73,7 +73,7 @@ public final class TerminalRenderer {
     /// Returns `nil` when there is no marked text or the range is outside the grid.
     public func markedTextCaretPosition(at position: ViewportCell, in size: TerminalSize, for range: NSRange? = nil) -> ViewportCell? {
         guard let markedText, !markedText.isEmpty, size.columns > 0, size.rows > 0 else { return nil }
-        let layout = MarkedTextQuads.Layout(
+        let layout = MarkedTextQuadrilaterals.Layout(
             text: markedText, column: min(Int(position.column), Int(size.columns) - 1),
             row: min(Int(position.row), Int(size.rows) - 1), columnCount: Int(size.columns), rowCount: Int(size.rows),
             selection: markedTextSelection, atlas: atlas)
@@ -104,7 +104,7 @@ public final class TerminalRenderer {
         if atlas.isFull { _ = reclaimAtlas() }
         func update() throws -> FrameStatistics {
             try cache.update(from: state, colors: screenColors) {
-                try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
+                try RowQuadrilaterals(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
             }
         }
         let statistics = try update()
@@ -140,7 +140,7 @@ public final class TerminalRenderer {
         guard let backing = backingTexture(matching: target.texture) else { return false }
         let marked = markedTextToDraw()
         if atlas.isFull && !reclaimedForFrame { return false }
-        let flash = isFlashing ? colors.map { OverlayQuads.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
+        let flash = isFlashing ? colors.map { OverlayQuadrilaterals.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
         let frame = FrameBuilder(
             cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash)
         let bands = frame.bands(rowCount: rowCount, targetHeight: backing.height, metrics: fonts.metrics, padding: padding)
@@ -150,16 +150,16 @@ public final class TerminalRenderer {
             bands[index].bottom > bands[index].top && (rebuild || previous?[index] != bands[index])
         }
         let background = colors?.background ?? TerminalColor(red: 0, green: 0, blue: 0)
-        let lists = changed.flatMap { index -> [[CellQuad]] in
+        let lists = changed.flatMap { index -> [[CellQuadrilateral]] in
             let band = bands[index]
-            let clear = CellQuad.rectangle(horizontalPosition: 0, verticalPosition: band.top, width: backing.width, height: band.bottom - band.top, color: background)
+            let clear = CellQuadrilateral.rectangle(horizontalPosition: 0, verticalPosition: band.top, width: backing.width, height: band.bottom - band.top, color: background)
             return [[clear] + band.backgrounds, band.glyphs, band.overlays]
         }
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = backing
         pass.colorAttachments[0].loadAction = previous == nil || bands.isEmpty ? .clear : .load
         pass.colorAttachments[0].storeAction = .store
-        let clear = CellQuad.vector(background)
+        let clear = CellQuadrilateral.vector(background)
         pass.colorAttachments[0].clearColor = MTLClearColor(red: Double(clear.x), green: Double(clear.y), blue: Double(clear.z), alpha: 1)
         guard let (buffer, offsets) = copy(lists), let commands = queue.makeCommandBuffer(),
             let encoder = commands.makeRenderCommandEncoder(descriptor: pass)
@@ -181,10 +181,10 @@ public final class TerminalRenderer {
         presentation.colorAttachments[0].loadAction = .dontCare
         presentation.colorAttachments[0].storeAction = .store
         guard let presentEncoder = commands.makeRenderCommandEncoder(descriptor: presentation) else { return false }
-        var picture = CellQuad(origin: .zero, size: viewport, isColor: 1, color: SIMD4(repeating: 1))
+        var picture = CellQuadrilateral(origin: .zero, size: viewport, isColor: 1, color: SIMD4(repeating: 1))
         presentEncoder.setRenderPipelineState(shaders.glyphs)
         presentEncoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
-        presentEncoder.setVertexBytes(&picture, length: MemoryLayout<CellQuad>.stride, index: 1)
+        presentEncoder.setVertexBytes(&picture, length: MemoryLayout<CellQuadrilateral>.stride, index: 1)
         presentEncoder.setFragmentTexture(backing, index: 0)
         presentEncoder.setFragmentTexture(backing, index: 1)
         presentEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -210,9 +210,9 @@ public final class TerminalRenderer {
         return backing
     }
 
-    private func markedTextToDraw() -> MarkedTextQuads? {
+    private func markedTextToDraw() -> MarkedTextQuadrilaterals? {
         guard let markedText, !markedText.isEmpty, let colors, let position = cursor?.position else { return nil }
-        return MarkedTextQuads(
+        return MarkedTextQuadrilaterals(
             text: markedText, column: Int(position.column), row: Int(position.row), columnCount: columnCount, rowCount: rowCount, colors: colors,
             atlas: atlas, metrics: fonts.metrics, padding: padding, selection: markedTextSelection, selectionColor: selectionColor)
     }
@@ -226,7 +226,7 @@ public final class TerminalRenderer {
     }
 
     private func draw(
-        _ quads: [CellQuad], with pipeline: MTLRenderPipelineState, buffer: MTLBuffer, offset: Int, encoder: MTLRenderCommandEncoder
+        _ quads: [CellQuadrilateral], with pipeline: MTLRenderPipelineState, buffer: MTLBuffer, offset: Int, encoder: MTLRenderCommandEncoder
     ) {
         guard !quads.isEmpty else { return }
         encoder.setRenderPipelineState(pipeline)
@@ -236,9 +236,9 @@ public final class TerminalRenderer {
 
     /// Copies the lists of quads into the next buffer, and gives the buffer
     /// and the offset of each list.
-    private func copy(_ lists: [[CellQuad]]) -> (MTLBuffer, [Int])? {
+    private func copy(_ lists: [[CellQuadrilateral]]) -> (MTLBuffer, [Int])? {
         // The graphics processor reads each list from an offset of 256 bytes.
-        let sizes = lists.map { ($0.count * MemoryLayout<CellQuad>.stride + 255) / 256 * 256 }
+        let sizes = lists.map { ($0.count * MemoryLayout<CellQuadrilateral>.stride + 255) / 256 * 256 }
         let offsets = sizes.indices.map { sizes[..<$0].reduce(0, +) }
         let needed = sizes.reduce(0, +)
         let slot = bufferIndex

@@ -17,13 +17,13 @@ struct FrameBuilder {
 
     struct Band: Equatable {
         let top, bottom: Int
-        var backgrounds: [CellQuad] = []
-        var glyphs: [CellQuad] = []
-        var overlays: [CellQuad] = []
+        var backgrounds: [CellQuadrilateral] = []
+        var glyphs: [CellQuadrilateral] = []
+        var overlays: [CellQuadrilateral] = []
     }
 
     /// Includes a quad in every band that its pixels can reach.
-    static func bandIndices(of quad: CellQuad, rowCount: Int, targetHeight: Int, metrics: CellMetrics, padding: Int) -> ClosedRange<Int>? {
+    static func bandIndices(of quad: CellQuadrilateral, rowCount: Int, targetHeight: Int, metrics: CellMetrics, padding: Int) -> ClosedRange<Int>? {
         guard rowCount > 0 else { return nil }
         let top = max(0, Int(quad.origin.y))
         let bottom = min(targetHeight, Int(quad.origin.y + quad.size.y))
@@ -39,7 +39,7 @@ struct FrameBuilder {
             Band(top: index == 0 ? 0 : min(targetHeight, padding + index * metrics.height),
                  bottom: index == rowCount - 1 ? targetHeight : min(targetHeight, padding + (index + 1) * metrics.height))
         }
-        func add(_ list: [CellQuad], to field: WritableKeyPath<Band, [CellQuad]>) {
+        func add(_ list: [CellQuadrilateral], to field: WritableKeyPath<Band, [CellQuadrilateral]>) {
             for quad in list {
                 guard let indices = Self.bandIndices(of: quad, rowCount: rowCount, targetHeight: targetHeight, metrics: metrics, padding: padding) else { continue }
                 for index in indices { bands[index][keyPath: field].append(quad) }
@@ -51,13 +51,13 @@ struct FrameBuilder {
         return bands
     }
 
-    private(set) var backgrounds: [CellQuad] = []
-    private(set) var glyphs: [CellQuad] = []
-    private(set) var overlays: [CellQuad] = []
+    private(set) var backgrounds: [CellQuadrilateral] = []
+    private(set) var glyphs: [CellQuadrilateral] = []
+    private(set) var overlays: [CellQuadrilateral] = []
 
     /// Moves the quads of each row to its place on the screen: down by the
     /// rows above it, and in by the space around the grid.
-    init(cache: RowCache, metrics: CellMetrics, padding: Int, cursor: Cursor? = nil, markedText: MarkedTextQuads? = nil, flash: CellQuad? = nil) {
+    init(cache: RowCache, metrics: CellMetrics, padding: Int, cursor: Cursor? = nil, markedText: MarkedTextQuadrilaterals? = nil, flash: CellQuadrilateral? = nil) {
         for index in cache.order.indices {
             guard let row = cache.quads(at: index) else { continue }
             let top = padding + index * metrics.height
@@ -84,13 +84,13 @@ struct FrameBuilder {
             // On the second cell of a wide character, the cursor starts one column to the left.
             let column = cursor.column - (cursor.isOnWideCharacterTail ? 1 : 0)
             let isWide = cursor.isOnWideCharacterTail || row.wideColumns.contains(UInt16(column))
-            let quads = CursorQuads(
+            let quads = CursorQuadrilaterals(
                 style: cursor.style, horizontalPosition: padding + column * metrics.width, verticalPosition: top,
                 width: (isWide ? 2 : 1) * metrics.width, height: metrics.height, stroke: cursor.stroke, color: cursor.color)
             backgrounds += quads.backgrounds
             overlays += quads.overlays
             if cursor.style == .block, let glyph = glyphs[glyphStart...].firstIndex(where: { Int($0.column) == column }) {
-                glyphs[glyph].color = CellQuad.vector(cursor.textColor)
+                glyphs[glyph].color = CellQuadrilateral.vector(cursor.textColor)
             }
         }
         if let markedText {

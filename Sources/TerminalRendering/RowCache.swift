@@ -1,15 +1,15 @@
 import TerminalEmulation
 
-/// Keeps the `RowQuads` of the rows on the screen by their `RowIdentifier`,
+/// Keeps the `RowQuadrilaterals` of the rows on the screen by their `RowIdentifier`,
 /// so a row that did not change is not read again.
 struct RowCache {
     /// The identifiers of the rows, from the top row down.
     private(set) var order: [RowIdentifier] = []
-    private var rows: [RowIdentifier: RowQuads] = [:]
+    private var rows: [RowIdentifier: RowQuadrilaterals] = [:]
     private var size: TerminalSize?
     private var colors: RenderColors?
 
-    func quads(at index: Int) -> RowQuads? {
+    func quads(at index: Int) -> RowQuadrilaterals? {
         rows[order[index]]
     }
 
@@ -27,12 +27,12 @@ struct RowCache {
     ///   - colors: The colors of `state`. The caller reads them once for the frame, and the rows use them too.
     ///   - make: Makes the quads of a row that the cache must read.
     mutating func update(
-        from state: RenderState, colors: RenderColors, make: (RenderRow) throws -> RowQuads
+        from state: RenderState, colors: RenderColors, make: (RenderRow) throws -> RowQuadrilaterals
     ) throws -> FrameStatistics {
         let rebuildAll = state.dirtiness == .everything || state.size != size || colors != self.colors
         (size, self.colors) = (state.size, colors)
         var statistics = FrameStatistics()
-        var kept: [RowIdentifier: RowQuads] = [:]
+        var kept: [RowIdentifier: RowQuadrilaterals] = [:]
         var order: [RowIdentifier] = []
         try state.forEachRow(onlyChanged: false) { row in
             let identifier = row.identifier

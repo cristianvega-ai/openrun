@@ -45,9 +45,9 @@ struct MarkedTextQuadrilaterals {
         }
     }
 
-    private(set) var backgrounds: [CellQuad] = []
-    private(set) var glyphs: [CellQuad] = []
-    private(set) var overlays: [CellQuad] = []
+    private(set) var backgrounds: [CellQuadrilateral] = []
+    private(set) var glyphs: [CellQuadrilateral] = []
+    private(set) var overlays: [CellQuadrilateral] = []
     /// The columns that the marked text covers on each row.
     private(set) var coveredColumns: [Int: Range<Int>] = [:]
 

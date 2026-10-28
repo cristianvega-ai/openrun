@@ -3,8 +3,8 @@ import TerminalEmulation
 /// The quads of the cursor. A block fills its cell and goes under the glyphs.
 /// The other shapes are lines that go on top of them.
 struct CursorQuadrilaterals {
-    private(set) var backgrounds: [CellQuad] = []
-    private(set) var overlays: [CellQuad] = []
+    private(set) var backgrounds: [CellQuadrilateral] = []
+    private(set) var overlays: [CellQuadrilateral] = []
 
     /// - Parameters:
     ///   - horizontalPosition: The left side of the cursor in pixels of the drawable.
@@ -13,7 +13,7 @@ struct CursorQuadrilaterals {
     ///   - stroke: The thickness of a line.
     init(style: CursorStyle, horizontalPosition: Int, verticalPosition: Int, width: Int, height: Int,
          stroke: Int, color: TerminalColor) {
-        func rectangle(_ horizontalPosition: Int, _ verticalPosition: Int, _ width: Int, _ height: Int) -> CellQuad {
+        func rectangle(_ horizontalPosition: Int, _ verticalPosition: Int, _ width: Int, _ height: Int) -> CellQuadrilateral {
             .rectangle(horizontalPosition: horizontalPosition, verticalPosition: verticalPosition,
                        width: width, height: height, color: color)
         }
