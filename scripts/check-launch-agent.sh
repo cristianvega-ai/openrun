@@ -26,7 +26,7 @@ source_change_requested=0
 step() { local time; time="$(date '+%H:%M:%S')"; printf '\n=== %s %s\n' "$time" "$*"; }
 run() { local status=0; echo "\$ $*"; "$@" || status=$?; echo "[exit $status]"; return "$status"; }
 state() { launchctl print "$domain/$label" 2>&1 | grep -E '^	(state|pid|runs|last exit code|last terminating signal|immediate reason) =' | tr -d '\t' | tr '\n' ';'; echo; }
-agent_pid() { launchctl print "$domain/$label" 2>/dev/null | awk '$1 == "pid" {print $3}'; }
+agent_process_identifier() { launchctl print "$domain/$label" 2>/dev/null | awk '$1 == "pid" {print $3}'; }
 expect() { if eval "$2"; then echo "PASS: $1"; else echo "FAIL: $1"; failures=$((failures + 1)); return 1; fi; }
 code_hash() { codesign -dvvv "$application/Contents/MacOS/openrun-session" 2>&1 | sed -n 's/^CDHash=//p'; }
 # Other launchctl errors do not establish that the service is absent.
@@ -88,7 +88,7 @@ cleanup_agent=1
 application_started=1
 run open -n --env "CFFIXED_USER_HOME=$CFFIXED_USER_HOME" --env "OPENRUN_TEST_WAKE_SERVICE_NAME=$label" "$application"
 sleep 5; state
-process="$(agent_pid)"
+process="$(agent_process_identifier)"
 expect "the app registered the agent, and it runs" '[ -n "$process" ]'
 pkill -f "$application/Contents/MacOS/OpenRun"
 application_started=0
@@ -101,18 +101,18 @@ read -r -p "Did macOS ask to let openrun access data from other apps? Type yes o
 echo "prompt: $prompt"
 
 step "3. A crash after 10 seconds of run time: launchd starts the agent again"
-"$openrun" new -- /bin/sleep 600 >/dev/null; sleep 12; before="$(agent_pid)"
+"$openrun" new -- /bin/sleep 600 >/dev/null; sleep 12; before="$(agent_process_identifier)"
 kill -SEGV "$before"; sleep 3; state
-process="$(agent_pid)"
+process="$(agent_process_identifier)"
 expect "a new process runs after the crash" '[ -n "$process" ] && [ "$process" != "$before" ]'
 
 step "4. The idle exit: no session and no client for 30 seconds"
 sleep 35; state
-process="$(agent_pid)"
+process="$(agent_process_identifier)"
 expect "the agent stopped with status 0" 'launchctl print "$domain/$label" | grep "last exit code = 0" >/dev/null && [ -z "$process" ]'
 
 step "5. A new build while the agent runs: a shell starts, and the next wake works"
-"$openrun" new -- /bin/sleep 600 >/dev/null; running="$(agent_pid)"; hash="$(code_hash)"
+"$openrun" new -- /bin/sleep 600 >/dev/null; running="$(agent_process_identifier)"; hash="$(code_hash)"
 expect "the running process and code hash exist" '[ -n "$running" ] && [ -n "$hash" ]'
 source_change_requested=1
 read -r -p "Change a text in Sources/SessionProcess, so that openrun-session changes. Then press Return. " _
@@ -120,13 +120,13 @@ build_trial
 new_hash="$(code_hash)"
 expect "openrun-session has a new code hash" '[ -n "$new_hash" ] && [ "$new_hash" != "$hash" ]'
 shell="$("$openrun" new -- /bin/sh -c 'echo shell-started; exec sleep 600')"; sleep 2
-process="$(agent_pid)"
+process="$(agent_process_identifier)"
 expect "the old process ($running) starts a shell" '[ "$process" = "$running" ] && "$openrun" read "$shell" | grep shell-started >/dev/null'
 sessions="$("$openrun" list | cut -f1)"
 for session in $sessions; do "$openrun" kill "$session"; done
 sleep 35
 "$openrun" list >/dev/null
-process="$(agent_pid)"
+process="$(agent_process_identifier)"
 expect "the new build starts at the next wake, without a new registration" '[ -n "$process" ] && [ "$process" != "$running" ]'
 
 step "6. Remove the trial agent"

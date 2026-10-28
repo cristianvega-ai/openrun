@@ -75,10 +75,10 @@ import Testing
 
     /// A scroll event of the wheel (`pixels` is `false`) or of a trackpad, with the phases of AppKit.
     private func scroll(_ amount: Int32, pixels: Bool = false, phase: Int64 = 0, momentum: Int64 = 0) throws -> NSEvent {
-        let cgEvent = try #require(CGEvent(scrollWheelEvent2Source: nil, units: pixels ? .pixel : .line, wheelCount: 1, wheel1: amount, wheel2: 0, wheel3: 0))
-        cgEvent.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
-        cgEvent.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum)
-        return try #require(NSEvent(cgEvent: cgEvent))
+        let graphicsEvent = try #require(CGEvent(scrollWheelEvent2Source: nil, units: pixels ? .pixel : .line, wheelCount: 1, wheel1: amount, wheel2: 0, wheel3: 0))
+        graphicsEvent.setIntegerValueField(.scrollWheelEventScrollPhase, value: phase)
+        graphicsEvent.setIntegerValueField(.scrollWheelEventMomentumPhase, value: momentum)
+        return try #require(NSEvent(cgEvent: graphicsEvent))
     }
 
     @Test func aWheelTurnMovesThreeRowsAndATrackpadMovesByTheHeightOfARow() throws {

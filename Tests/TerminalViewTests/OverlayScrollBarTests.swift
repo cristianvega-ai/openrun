@@ -57,8 +57,8 @@ import Testing
     }
 
     private func scrollEvent() throws -> NSEvent {
-        let cgEvent = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
-        return try #require(NSEvent(cgEvent: cgEvent))
+        let graphicsEvent = try #require(CGEvent(scrollWheelEvent2Source: nil, units: .line, wheelCount: 1, wheel1: 1, wheel2: 0, wheel3: 0))
+        return try #require(NSEvent(cgEvent: graphicsEvent))
     }
 
     /// Moves the clip view of a bar, as the scroll view does when the user drags the knob.
