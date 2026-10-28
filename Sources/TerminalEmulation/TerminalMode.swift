@@ -7,6 +7,8 @@ public enum TerminalMode: Sendable, CaseIterable {
     case focusReports
     case alternateScroll
     case synchronizedOutput
+    /// Mode 2027: an emoji cluster, such as one with U+FE0F, takes two cells.
+    case graphemeClusters
     case x10MouseReports
     case normalMouseReports
     case buttonMouseReports
@@ -33,6 +35,7 @@ public enum TerminalMode: Sendable, CaseIterable {
         case .focusReports: ghostty_mode_new(1004, false)
         case .alternateScroll: ghostty_mode_new(1007, false)
         case .synchronizedOutput: ghostty_mode_new(2026, false)
+        case .graphemeClusters: ghostty_mode_new(2027, false)
         case .x10MouseReports: ghostty_mode_new(9, false)
         case .normalMouseReports: ghostty_mode_new(1000, false)
         case .buttonMouseReports: ghostty_mode_new(1002, false)
