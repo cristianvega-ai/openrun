@@ -408,6 +408,34 @@ extension OffscreenRenderTests {
         #expect(clipped == reference)
     }
 
+    @Test func aGlyphBelowTheDrawableCanDrawIntoItsLastRow() throws {
+        let screen = try makeScreen("\u{1B}[?25l\u{1B}[2;1HÅ", columns: 8, rows: 3)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let referenceRenderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let clippedRenderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let fullSize = referenceRenderer.pixelSize(for: screen.terminal.size)
+        let clippedSize = (width: fullSize.width, height: referenceRenderer.padding + testFonts.cellHeight)
+
+        func pixels(_ renderer: TerminalRenderer, targetSize: (width: Int, height: Int), clip: Bool) throws -> [UInt8] {
+            let target = try OffscreenTarget(device: device, width: targetSize.width, height: targetSize.height)
+            try renderer.prepare(from: screen.state, viewportSize: clip ? targetSize : nil)
+            #expect(renderer.draw(into: target))
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
+            var result = [UInt8](repeating: 0, count: clippedSize.width * clippedSize.height * 4)
+            target.texture.getBytes(&result, bytesPerRow: clippedSize.width * 4,
+                                    from: MTLRegionMake2D(0, 0, clippedSize.width, clippedSize.height), mipmapLevel: 0)
+            return result
+        }
+
+        let reference = try pixels(referenceRenderer, targetSize: fullSize, clip: false)
+        let clipped = try pixels(clippedRenderer, targetSize: clippedSize, clip: true)
+        let background = screen.state.colors.background
+        #expect(stride(from: 0, to: reference.count, by: 4).contains {
+            reference[$0] != background.blue || reference[$0 + 1] != background.green || reference[$0 + 2] != background.red
+        })
+        #expect(clipped == reference)
+    }
+
     @Test func colorGlyphsReclaimHistoricalEntries() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)
