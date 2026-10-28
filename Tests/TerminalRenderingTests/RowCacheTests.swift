@@ -110,7 +110,7 @@ import TerminalEmulation
         let marked = try quads("a日é")
         #expect(marked.coveredColumns == [1: 2..<6])
         #expect(marked.backgrounds.map(\.size.x) == [16, 32, 16])
-        #expect(marked.overlays.count == 3)
+        #expect(marked.overlays.count == 4)
         #expect(marked.glyphs.map(\.column) == [2, 3, 5])
         #expect(marked.backgrounds[0].origin.y == Float(testPadding + testFonts.cellHeight))
     }

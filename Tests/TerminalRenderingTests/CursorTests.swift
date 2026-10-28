@@ -1,4 +1,5 @@
 import Foundation
+import Metal
 import Testing
 import TerminalEmulation
 @testable import TerminalRendering
@@ -87,8 +88,39 @@ import TerminalEmulation
         #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.background)
     }
 
+    @Test func markedTextShowsTheCaretAfterItsLastCharacter() throws {
+        let screen = try renderScreen("\u{1B}[?25l", markedText: "a")
+        #expect(pixel(of: screen.target, column: 1, x: 0, y: metrics.height / 2) == screen.theme.cursor)
+    }
+
+    @Test func theSelectedUTF16RangeHasTheSelectionColor() throws {
+        let screen = try renderScreen("\u{1B}[?25l", markedText: "A🙂B", markedTextSelection: NSRange(location: 1, length: 2))
+        #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 2, x: 0, y: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 3, x: 0, y: 0) == screen.theme.background)
+    }
+
+    @Test func candidatePositionsUseTheDisplayedLayoutAndUTF16Boundaries() throws {
+        let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts, selectionColor: selectionColor)
+        let size = TerminalSize(columns: 10, rows: 3)
+        let position = ViewportCell(column: 9, row: 2)
+        renderer.markedText = "🙂ab"
+        renderer.markedTextSelection = NSRange(location: 2, length: 0)
+        #expect(renderer.markedTextCaretPosition(at: position, in: size) == ViewportCell(column: 2, row: 2))
+        #expect(renderer.markedTextCaretPosition(at: position, in: size, for: NSRange(location: 1, length: 0)) == ViewportCell(column: 0, row: 2))
+        #expect(renderer.markedTextCaretPosition(at: position, in: size, for: NSRange(location: 3, length: 0)) == ViewportCell(column: 3, row: 2))
+        #expect(renderer.markedTextSelection == NSRange(location: 2, length: 0))
+        renderer.markedText = "a"
+        renderer.markedTextSelection = nil
+        #expect(renderer.markedTextCaretPosition(at: ViewportCell(column: 9, row: 1), in: size) == ViewportCell(column: 10, row: 1))
+        renderer.markedText = String(repeating: "a", count: 50)
+        renderer.markedTextSelection = NSRange(location: 0, length: 0)
+        #expect(renderer.markedTextCaretPosition(at: position, in: size, for: NSRange(location: 49, length: 0)) == nil)
+    }
+
     @Test func markedTextThatCoversAWideCharacterHidesIt() throws {
-        let screen = try renderScreen("日\u{1B}[?25l\u{1B}[1G", markedText: "a")
+        let screen = try renderScreen("日\u{1B}[?25l\u{1B}[1G", markedText: "a", markedTextSelection: NSRange(location: 0, length: 0))
         #expect(inkCount(of: screen, columns: 1..<2, rows: 0..<1) < 20)
     }
 

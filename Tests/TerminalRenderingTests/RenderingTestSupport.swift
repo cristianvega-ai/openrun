@@ -1,3 +1,4 @@
+import Foundation
 import Metal
 import Testing
 import TerminalEmulation
@@ -43,7 +44,7 @@ func update(_ cache: inout RowCache, from state: RenderState, atlas: GlyphAtlas)
 /// Draws a screen with the Graphite theme into an offscreen target.
 func renderScreen(
     _ output: String, columns: UInt16 = 10, rows: UInt16 = 3, scheme: TerminalColorScheme = .dark, isFocused: Bool = true,
-    selecting cell: ViewportCell? = nil, markedText: String? = nil, isFlashing: Bool = false
+    selecting cell: ViewportCell? = nil, markedText: String? = nil, markedTextSelection: NSRange? = nil, isFlashing: Bool = false
 ) throws -> (target: OffscreenTarget, theme: TerminalTheme) {
     let device = try #require(MTLCreateSystemDefaultDevice())
     let theme = TerminalTheme.graphite(for: scheme)
@@ -56,6 +57,7 @@ func renderScreen(
     let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection)
     renderer.isFocused = isFocused
     renderer.markedText = markedText
+    renderer.markedTextSelection = markedTextSelection
     renderer.isFlashing = isFlashing
     try renderer.prepare(from: state)
     let size = renderer.pixelSize(for: terminal.size)

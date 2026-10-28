@@ -53,20 +53,27 @@ struct MarkedTextQuads {
 
     init(
         text: String, column: Int, row: Int, columnCount: Int, rowCount: Int, colors: RenderColors, atlas: GlyphAtlas,
-        metrics: CellMetrics, padding: Int
+        metrics: CellMetrics, padding: Int, selection: NSRange? = nil, selectionColor: TerminalColor? = nil
     ) {
-        let layout = Layout(text: text, column: column, row: row, columnCount: columnCount, rowCount: rowCount, selection: nil, atlas: atlas)
+        let layout = Layout(text: text, column: column, row: row, columnCount: columnCount, rowCount: rowCount, selection: selection, atlas: atlas)
         for character in layout.characters where character.row >= 0 && character.row < rowCount {
             let x = padding + character.column * metrics.width
             let top = padding + character.row * metrics.height
             let width = character.width * metrics.width
-            backgrounds.append(.rectangle(x: x, y: top, width: width, height: metrics.height, color: colors.background))
+            let background = layout.selection.overlaps(character.range) ? (selectionColor ?? colors.foreground) : colors.background
+            backgrounds.append(.rectangle(x: x, y: top, width: width, height: metrics.height, color: background))
             let entry = atlas.entry(for: GlyphKey(text: character.text, face: .regular, columns: character.width))
             if !entry.isEmpty { glyphs.append(.glyph(entry, column: character.column, x: x, y: top, color: colors.foreground)) }
             overlays.append(.rectangle(x: x, y: top + metrics.underlinePosition, width: width,
                                        height: 2 * metrics.underlineThickness, color: colors.foreground))
             let start = coveredColumns[character.row]?.lowerBound ?? character.column
             coveredColumns[character.row] = start..<character.column + character.width
+        }
+        if layout.selection.isEmpty, layout.caret.row >= 0, layout.caret.row < rowCount {
+            let thickness = max(1, metrics.underlineThickness)
+            let x = padding + layout.caret.column * metrics.width - (layout.caret.column == columnCount ? thickness : 0)
+            overlays.append(.rectangle(x: x, y: padding + layout.caret.row * metrics.height, width: thickness,
+                                       height: metrics.height, color: colors.cursor ?? colors.foreground))
         }
     }
 }

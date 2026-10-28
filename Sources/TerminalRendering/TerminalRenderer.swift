@@ -1,3 +1,4 @@
+import Foundation
 import Metal
 import TerminalEmulation
 
@@ -17,6 +18,8 @@ public final class TerminalRenderer {
     /// The text of an input method, before the user ends it. The renderer draws it
     /// at the cursor with an underline, and it is not in the terminal.
     public var markedText: String?
+    /// The UTF-16 range selected in marked text, or `nil` for its end.
+    public var markedTextSelection: NSRange?
     /// Whether the view has the keyboard focus. Without it, the cursor is a hollow block.
     public var isFocused = true
     /// Whether the cursor is in the shown phase of its blink. Without it, the renderer draws no cursor.
@@ -51,6 +54,27 @@ public final class TerminalRenderer {
     /// The size of a target that holds a grid and the space around it.
     public func pixelSize(for grid: TerminalSize) -> (width: Int, height: Int) {
         (2 * padding + Int(grid.columns) * fonts.cellWidth, 2 * padding + Int(grid.rows) * fonts.cellHeight)
+    }
+
+    /// The position of a UTF-16 range in the displayed marked text.
+    /// The end of a row can have a column equal to the grid width.
+    public func markedTextCaretPosition(at position: ViewportCell, in size: TerminalSize, for range: NSRange? = nil) -> ViewportCell? {
+        guard let markedText, !markedText.isEmpty, size.columns > 0, size.rows > 0 else { return nil }
+        let layout = MarkedTextQuads.Layout(
+            text: markedText, column: min(Int(position.column), Int(size.columns) - 1),
+            row: min(Int(position.row), Int(size.rows) - 1), columnCount: Int(size.columns), rowCount: Int(size.rows),
+            selection: markedTextSelection, atlas: atlas)
+        let caret: (column: Int, row: Int)
+        if let range, range.location != NSNotFound {
+            let location = min(max(0, range.location), markedText.utf16.count)
+            if let character = layout.characters.first(where: { location < $0.range.upperBound }) {
+                caret = (character.column, character.row)
+            } else if let last = layout.characters.last {
+                caret = (last.column + last.width, last.row)
+            } else { return nil }
+        } else { caret = layout.caret }
+        guard caret.row >= 0 && caret.row < Int(size.rows) else { return nil }
+        return ViewportCell(column: UInt16(caret.column), row: UInt32(caret.row))
     }
 
     /// Makes new quads for the rows that changed since the last call. Call it
@@ -116,7 +140,7 @@ public final class TerminalRenderer {
         guard let markedText, !markedText.isEmpty, let colors, let position = cursor?.position else { return nil }
         return MarkedTextQuads(
             text: markedText, column: Int(position.column), row: Int(position.row), columnCount: columnCount, rowCount: rowCount, colors: colors,
-            atlas: atlas, metrics: fonts.metrics, padding: padding)
+            atlas: atlas, metrics: fonts.metrics, padding: padding, selection: markedTextSelection, selectionColor: selectionColor)
     }
 
     private func cursorToDraw() -> FrameBuilder.Cursor? {
