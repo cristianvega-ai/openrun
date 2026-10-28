@@ -6,13 +6,13 @@ import SessionLaunch
 /// once, which sends a wake when nothing listens. When the user must act,
 /// it asks once and stops, so it never registers again in a loop.
 struct LaunchAgentSetup {
-    enum Outcome: Equatable {
+    enum Outcome: Equatable, Sendable {
         case ready, waitingForApproval, declined, failed
     }
 
     let source: any LaunchAgentStatusSource
     /// Connects to the session process, with a wake when nothing listens.
-    let connect: () throws(SessionWakeFailure) -> Void
+    let connect: () throws -> Void
     /// Shows a question to the user, and returns whether the user agreed.
     let ask: (LaunchAgentQuestion) -> Bool
 
@@ -33,10 +33,11 @@ struct LaunchAgentSetup {
         do {
             try connect()
             return .ready
-        } catch .timedOut where source.status == .enabled {
-            return registerAgainWhenTheUserAgrees()
+        } catch let failure as SessionWakeFailure {
+            if case .timedOut = failure, source.status == .enabled { return registerAgainWhenTheUserAgrees() }
+            return fail(failure.description)
         } catch {
-            return fail(error.description)
+            return fail(String(describing: error))
         }
     }
 
@@ -56,7 +57,7 @@ struct LaunchAgentSetup {
             try connect()
             return .ready
         } catch {
-            return fail(error.description)
+            return fail(String(describing: error))
         }
     }
 

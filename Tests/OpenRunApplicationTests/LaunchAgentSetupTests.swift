@@ -39,6 +39,20 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
 }
 
 @Suite struct LaunchAgentSetupTests {
+    private enum ConnectionFault: Error, CustomStringConvertible {
+        case closed
+        var description: String { "The connection closed." }
+    }
+
+    @Test func aConnectionErrorThatIsNotAWakeFailureIsShown() {
+        let registration = StandInRegistration(.enabled)
+        let questions = Mutex<[LaunchAgentQuestion]>([])
+        let setup = LaunchAgentSetup(
+            source: registration, connect: { throw ConnectionFault.closed },
+            ask: { question in questions.withLock { $0.append(question) }; return false })
+        #expect(setup.run() == .failed)
+        #expect(questions.withLock { $0 } == [.failed(detail: "The connection closed.")])
+    }
     @Test func anEnabledAgentThatStartsNeedsNothing() {
         let registration = StandInRegistration(.enabled)
         let result = runSetup(registration)

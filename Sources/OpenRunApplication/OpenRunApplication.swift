@@ -25,14 +25,15 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate {
     }
 
     /// Connects as each client does, so a wake goes out only when nothing
-    /// listens on the default socket. A failure that is not a wake belongs
-    /// to the window of a later milestone.
-    nonisolated private static func connect() throws(SessionWakeFailure) {
+    /// listens on the default socket. Every failure reaches the setup question.
+    nonisolated private static func connect() throws {
         do {
             _ = try SessionClient(location: SocketLocation(path: SocketLocation.defaultPath))
         } catch SessionConnectionError.wakeFailed(let failure) {
             throw failure
-        } catch {}
+        } catch {
+            throw error
+        }
     }
 
     nonisolated private static func ask(_ question: LaunchAgentQuestion) -> Bool {
