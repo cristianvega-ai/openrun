@@ -211,7 +211,7 @@ import TerminalTheme
 
     @Test func inverseSwapsTheColorsOfTheCellAndItsText() throws {
         let screen = try renderScreen("\u{1B}[?25l\u{1B}[7m █")
-        #expect(pixel(of: screen.target, x: 0, y: 0) == screen.theme.foreground)
+        #expect(pixel(of: screen.target, horizontalPosition: 0, verticalPosition: 0) == screen.theme.foreground)
         #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
     }
 
@@ -228,9 +228,9 @@ import TerminalTheme
     @Test(arguments: [TerminalColorScheme.dark, .light])
     func selectedCellsHaveTheGraphiteSelectionColor(scheme: TerminalColorScheme) throws {
         let screen = try renderScreen("\u{1B}[?25lab cd", scheme: scheme, selecting: ViewportCell(column: 0, row: 0))
-        #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.selection)
-        #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.selection)
-        #expect(pixel(of: screen.target, column: 3, x: 0, y: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 0, horizontalPosition: 0, verticalPosition: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 3, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
     }
 }
 
@@ -422,8 +422,12 @@ extension OffscreenRenderTests {
         try renderer.prepare(from: screen.state)
         let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: next))
-        #expect(pixel(of: first, column: 0, x: 8, y: 12) == pixel(of: next, column: 0, x: 8, y: 12))
-        let hasInk = (0..<testFonts.cellWidth).contains { x in (0..<testFonts.cellHeight).contains { y in pixel(of: first, x: x, y: y) != screen.state.colors.background } }
+        #expect(pixel(of: first, column: 0, horizontalPosition: 8, verticalPosition: 12) == pixel(of: next, column: 0, horizontalPosition: 8, verticalPosition: 12))
+        let hasInk = (0..<testFonts.cellWidth).contains { horizontalPosition in
+            (0..<testFonts.cellHeight).contains { verticalPosition in
+                pixel(of: first, horizontalPosition: horizontalPosition, verticalPosition: verticalPosition) != screen.state.colors.background
+            }
+        }
         #expect(hasInk)
     }
 

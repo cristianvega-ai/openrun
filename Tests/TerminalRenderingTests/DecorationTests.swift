@@ -8,7 +8,7 @@ import TerminalEmulation
     /// The colors along one pixel row of a blank cell that has an SGR `style`.
     private func row(_ style: String, top: Int) throws -> (colors: [TerminalColor], foreground: TerminalColor, background: TerminalColor) {
         let screen = try renderScreen("\u{1B}[?25l\u{1B}[\(style)m ")
-        let colors = (0..<metrics.width).map { pixel(of: screen.target, x: $0, y: top) }
+        let colors = (0..<metrics.width).map { pixel(of: screen.target, horizontalPosition: $0, verticalPosition: top) }
         return (colors, screen.theme.foreground, screen.theme.background)
     }
 
@@ -47,8 +47,10 @@ import TerminalEmulation
     @Test func aCurlyUnderlineWavesAroundTheUnderlinePosition() throws {
         let screen = try renderScreen("\u{1B}[?25l\u{1B}[4:3m  ")
         let band = metrics.underlinePosition - 2 * metrics.underlineThickness...metrics.underlinePosition + 3 * metrics.underlineThickness
-        let inked = (0..<2 * metrics.width).flatMap { x in band.map { pixel(of: screen.target, x: x, y: $0) } }
+        let inked = (0..<2 * metrics.width).flatMap { horizontalPosition in
+            band.map { pixel(of: screen.target, horizontalPosition: horizontalPosition, verticalPosition: $0) }
+        }
         #expect(inked.filter { $0 != screen.theme.background }.count > metrics.width)
-        #expect((0..<metrics.underlinePosition - 3 * metrics.underlineThickness).allSatisfy { pixel(of: screen.target, x: 3, y: $0) == screen.theme.background })
+        #expect((0..<metrics.underlinePosition - 3 * metrics.underlineThickness).allSatisfy { pixel(of: screen.target, horizontalPosition: 3, verticalPosition: $0) == screen.theme.background })
     }
 }

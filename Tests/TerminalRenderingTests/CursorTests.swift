@@ -35,9 +35,9 @@ import TerminalEmulation
 
     @Test func aBlockCursorFillsItsCellWithTheCursorColor() throws {
         let screen = try renderScreen("A\u{1B}[2 q")
-        #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 1, x: metrics.width - 1, y: metrics.height - 1) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 2, x: 3, y: 3) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: metrics.width - 1, verticalPosition: metrics.height - 1) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 2, horizontalPosition: 3, verticalPosition: 3) == screen.theme.background)
     }
 
     @Test func theTextInABlockCursorTakesTheBackgroundColor() throws {
@@ -52,29 +52,29 @@ import TerminalEmulation
 
     @Test func aBarIsALineAtTheLeftOfItsCell() throws {
         let screen = try renderScreen("A\u{1B}[6 q")
-        #expect(pixel(of: screen.target, column: 1, x: 0, y: metrics.height / 2) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 1, x: metrics.width - 1, y: metrics.height / 2) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: metrics.height / 2) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: metrics.width - 1, verticalPosition: metrics.height / 2) == screen.theme.background)
     }
 
     @Test func anUnderlineIsALineAtTheBottomOfItsCell() throws {
         let screen = try renderScreen("A\u{1B}[4 q")
-        #expect(pixel(of: screen.target, column: 1, x: metrics.width / 2, y: metrics.height - 1) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 1, x: metrics.width / 2, y: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: metrics.width / 2, verticalPosition: metrics.height - 1) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: metrics.width / 2, verticalPosition: 0) == screen.theme.background)
     }
 
     @Test func aViewWithoutFocusShowsAHollowBlock() throws {
         let screen = try renderScreen("A\u{1B}[2 q", isFocused: false)
-        #expect(pixel(of: screen.target, column: 1, x: 0, y: metrics.height / 2) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 1, x: metrics.width / 2, y: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: metrics.height / 2) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: metrics.width / 2, verticalPosition: 0) == screen.theme.cursor)
         #expect(middle(of: screen.target, column: 1, row: 0) == screen.theme.background)
     }
 
     @Test(arguments: ["\u{1B}[1;1H", "\u{1B}[1;2H"])
     func aCursorOnAWideCharacterCoversBothOfItsCells(move: String) throws {
         let screen = try renderScreen("日\(move)\u{1B}[2 q", columns: 4)
-        #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 1, x: metrics.width - 1, y: 0) == screen.theme.cursor)
-        #expect(pixel(of: screen.target, column: 2, x: 0, y: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 0, horizontalPosition: 0, verticalPosition: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: metrics.width - 1, verticalPosition: 0) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 2, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
     }
 }
 
@@ -83,22 +83,22 @@ import TerminalEmulation
 
     @Test func markedTextHasAnUnderlineAndTakesTheCursorsPlace() throws {
         let screen = try renderScreen("█\u{1B}[D\u{1B}[2 q", markedText: "´")
-        #expect(pixel(of: screen.target, x: 3, y: metrics.underlinePosition) == screen.theme.foreground)
-        #expect(pixel(of: screen.target, x: 0, y: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, horizontalPosition: 3, verticalPosition: metrics.underlinePosition) == screen.theme.foreground)
+        #expect(pixel(of: screen.target, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
         #expect(middle(of: screen.target, column: 0, row: 0) == screen.theme.background)
     }
 
     @Test func markedTextShowsTheCaretAfterItsLastCharacter() throws {
         let screen = try renderScreen("\u{1B}[?25l", markedText: "a")
-        #expect(pixel(of: screen.target, column: 1, x: 0, y: metrics.height / 2) == screen.theme.cursor)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: metrics.height / 2) == screen.theme.cursor)
     }
 
     @Test func theSelectedUTF16RangeHasTheSelectionColor() throws {
         let screen = try renderScreen("\u{1B}[?25l", markedText: "A🙂B", markedTextSelection: NSRange(location: 1, length: 2))
-        #expect(pixel(of: screen.target, column: 0, x: 0, y: 0) == screen.theme.background)
-        #expect(pixel(of: screen.target, column: 1, x: 0, y: 0) == screen.theme.selection)
-        #expect(pixel(of: screen.target, column: 2, x: 0, y: 0) == screen.theme.selection)
-        #expect(pixel(of: screen.target, column: 3, x: 0, y: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 0, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
+        #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 2, horizontalPosition: 0, verticalPosition: 0) == screen.theme.selection)
+        #expect(pixel(of: screen.target, column: 3, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
     }
 
     @Test func candidatePositionsUseTheDisplayedLayoutAndUTF16Boundaries() throws {
@@ -132,8 +132,8 @@ import TerminalEmulation
 
     @Test func markedTextHidesTheDecorationOfTheCellBelow() throws {
         let screen = try renderScreen("\u{1B}[?25l\u{1B}[31;53m█\u{1B}[1G", markedText: " ")
-        for x in 0..<metrics.width {
-            #expect(pixel(of: screen.target, x: x, y: 0) == screen.theme.background)
+        for horizontalPosition in 0..<metrics.width {
+            #expect(pixel(of: screen.target, horizontalPosition: horizontalPosition, verticalPosition: 0) == screen.theme.background)
         }
     }
 

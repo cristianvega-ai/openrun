@@ -84,7 +84,7 @@ func inkCount(of screen: (target: OffscreenTarget, theme: TerminalTheme), column
 
 /// The pixel at a place in a cell, counted in pixels from the top left of the cell.
 func pixel(of target: OffscreenTarget, column: Int = 0, row: Int = 0,
-           x horizontalPosition: Int, y verticalPosition: Int) -> TerminalColor {
+           horizontalPosition: Int, verticalPosition: Int) -> TerminalColor {
     target.pixel(horizontalPosition: testPadding + column * testFonts.cellWidth + horizontalPosition,
                  verticalPosition: testPadding + row * testFonts.cellHeight + verticalPosition)
 }
