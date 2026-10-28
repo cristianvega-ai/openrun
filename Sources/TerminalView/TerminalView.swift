@@ -433,20 +433,46 @@ public final class TerminalView: NSView {
         schedule?.requestFrame()
     }
 
+    /// The grid that fits the view, or `nil` before the first layout. It differs from `gridSize` while the session has the size of another client.
+    public private(set) var visibleGridSize: TerminalSize?
+
+    /// Gives the terminal the size that another client set, and does not tell the delegate,
+    /// so two clients never make each other change size again and again (decision of 2026-10-25).
+    public func followSessionSize(_ size: TerminalSize) {
+        resizeTerminal(to: size, tellsDelegate: false)
+    }
+
+    /// Gives the terminal the grid that fits the view again, and tells the
+    /// delegate when that is a change. A window does this when it becomes
+    /// the key window, so it takes the size back when the user uses it.
+    public func takeBackGridSize() {
+        if let visibleGridSize { resizeTerminal(to: visibleGridSize, tellsDelegate: true) }
+    }
+
     /// Gives the terminal as many whole cells as fit in the view, and tells
-    /// the delegate when that is a new size.
+    /// the delegate when that is a new size. A layout with the same fit keeps
+    /// a size that the session set.
     private func fitGrid() {
         guard bounds.width > 0, bounds.height > 0 else { return }
         let fonts = renderer.fonts
         let grid = GridFit.grid(for: bounds.size, scale: fonts.scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: renderer.padding)
+        guard grid != visibleGridSize else { return }
+        visibleGridSize = grid
+        resizeTerminal(to: grid, tellsDelegate: true)
+    }
+
+    private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool) {
         guard grid != terminal.size else { return }
+        // The output that waits came for the old size, as in the terminal of the session.
+        while parser.hasPendingOutput { _ = parser.parse(into: terminal, budget: ParseBudget(limit: .zero)) }
         do {
             try terminal.resize(to: grid)
         } catch {
             logger.error("The grid change failed: \(String(describing: error), privacy: .private)")
             return
         }
-        delegate?.terminalView(self, didChangeGridSize: grid)
+        schedule?.requestFrame()
+        if tellsDelegate { delegate?.terminalView(self, didChangeGridSize: grid) }
     }
 
     /// Brings the render state up to date and draws one frame into `target`.

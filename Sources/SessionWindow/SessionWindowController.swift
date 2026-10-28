@@ -64,7 +64,16 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
 
     private func handle(_ event: SessionAttachmentEvent) {
         guard !isClosed else { return }
-        if case .output(let bytes) = event { view?.write(bytes) }
+        switch event {
+        case .output(let bytes): view?.write(bytes)
+        case .sizeChanged(let size): view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
+        case .exited, .closed, .failed: break
+        }
+    }
+
+    /// The user uses this window now, so its size applies (decision of 2026-10-27).
+    public func windowDidBecomeKey(_ notification: Notification) {
+        view?.takeBackGridSize()
     }
 
     public func windowWillClose(_ notification: Notification) {

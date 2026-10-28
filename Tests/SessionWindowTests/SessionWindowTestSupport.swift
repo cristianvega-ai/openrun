@@ -17,6 +17,7 @@ final class FakeAttachment: AttachedSession {
     let snapshot: Data
     let record = Mutex(Record())
     private let handler = Mutex<(@Sendable (SessionAttachmentEvent) -> Void)?>(nil)
+    private let receiver = DispatchQueue(label: "fake-attachment.receiver")
 
     /// - Parameter screen: The output that the snapshot of the session holds.
     init(screen: String = "", size: TerminalSize = TerminalSize(columns: 80, rows: 24)) throws {
@@ -36,10 +37,10 @@ final class FakeAttachment: AttachedSession {
     func shutdown() { record.withLock { $0.shutDown = true } }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) { self.handler.withLock { $0 = handler } }
 
-    /// Gives an event from another thread, as the receiving thread of a real attachment does.
+    /// Gives an event from another thread, in order, as the receiving thread of a real attachment does.
     func deliver(_ event: SessionAttachmentEvent) {
         let handler = handler.withLock { $0 }
-        Thread { handler?(event) }.start()
+        receiver.async { handler?(event) }
     }
 }
 
