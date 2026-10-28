@@ -1,6 +1,6 @@
 import TerminalEmulation
 
-/// The quads of one frame, in the order of drawing: the backgrounds, the glyphs,
+/// The quadrilaterals of one frame, in the order of drawing: the backgrounds, the glyphs,
 /// and then the lines on top of the glyphs.
 struct FrameBuilder {
     /// The cursor as the renderer shows it.
@@ -22,11 +22,11 @@ struct FrameBuilder {
         var overlays: [CellQuadrilateral] = []
     }
 
-    /// Includes a quad in every band that its pixels can reach.
-    static func bandIndices(of quad: CellQuadrilateral, rowCount: Int, targetHeight: Int, metrics: CellMetrics, padding: Int) -> ClosedRange<Int>? {
+    /// Includes a quadrilateral in every band that its pixels can reach.
+    static func bandIndices(of quadrilateral: CellQuadrilateral, rowCount: Int, targetHeight: Int, metrics: CellMetrics, padding: Int) -> ClosedRange<Int>? {
         guard rowCount > 0 else { return nil }
-        let top = max(0, Int(quad.origin.y))
-        let bottom = min(targetHeight, Int(quad.origin.y + quad.size.y))
+        let top = max(0, Int(quadrilateral.origin.y))
+        let bottom = min(targetHeight, Int(quadrilateral.origin.y + quadrilateral.size.y))
         guard top < bottom else { return nil }
         let first = max(0, min(rowCount - 1, (top - padding) / metrics.height))
         let last = max(0, min(rowCount - 1, (bottom - 1 - padding) / metrics.height))
@@ -40,9 +40,9 @@ struct FrameBuilder {
                  bottom: index == rowCount - 1 ? targetHeight : min(targetHeight, padding + (index + 1) * metrics.height))
         }
         func add(_ list: [CellQuadrilateral], to field: WritableKeyPath<Band, [CellQuadrilateral]>) {
-            for quad in list {
-                guard let indices = Self.bandIndices(of: quad, rowCount: rowCount, targetHeight: targetHeight, metrics: metrics, padding: padding) else { continue }
-                for index in indices { bands[index][keyPath: field].append(quad) }
+            for quadrilateral in list {
+                guard let indices = Self.bandIndices(of: quadrilateral, rowCount: rowCount, targetHeight: targetHeight, metrics: metrics, padding: padding) else { continue }
+                for index in indices { bands[index][keyPath: field].append(quadrilateral) }
             }
         }
         add(backgrounds, to: \.backgrounds)
@@ -55,11 +55,11 @@ struct FrameBuilder {
     private(set) var glyphs: [CellQuadrilateral] = []
     private(set) var overlays: [CellQuadrilateral] = []
 
-    /// Moves the quads of each row to its place on the screen: down by the
+    /// Moves the quadrilaterals of each row to its place on the screen: down by the
     /// rows above it, and in by the space around the grid.
     init(cache: RowCache, metrics: CellMetrics, padding: Int, cursor: Cursor? = nil, markedText: MarkedTextQuadrilaterals? = nil, flash: CellQuadrilateral? = nil) {
         for index in cache.order.indices {
-            guard let row = cache.quads(at: index) else { continue }
+            guard let row = cache.quadrilaterals(at: index) else { continue }
             let top = padding + index * metrics.height
             let glyphStart = glyphs.count
             backgrounds += row.backgrounds.map { $0.moved(horizontalOffset: padding, verticalOffset: top) }
@@ -84,11 +84,11 @@ struct FrameBuilder {
             // On the second cell of a wide character, the cursor starts one column to the left.
             let column = cursor.column - (cursor.isOnWideCharacterTail ? 1 : 0)
             let isWide = cursor.isOnWideCharacterTail || row.wideColumns.contains(UInt16(column))
-            let quads = CursorQuadrilaterals(
+            let quadrilaterals = CursorQuadrilaterals(
                 style: cursor.style, horizontalPosition: padding + column * metrics.width, verticalPosition: top,
                 width: (isWide ? 2 : 1) * metrics.width, height: metrics.height, stroke: cursor.stroke, color: cursor.color)
-            backgrounds += quads.backgrounds
-            overlays += quads.overlays
+            backgrounds += quadrilaterals.backgrounds
+            overlays += quadrilaterals.overlays
             if cursor.style == .block, let glyph = glyphs[glyphStart...].firstIndex(where: { Int($0.column) == column }) {
                 glyphs[glyph].color = CellQuadrilateral.vector(cursor.textColor)
             }

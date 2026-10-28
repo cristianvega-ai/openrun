@@ -4,7 +4,7 @@ import TerminalEmulation
 
 /// Draws the screen of a terminal with Metal.
 ///
-/// `prepare(from:)` keeps the quads of unchanged rows. Drawing updates the
+/// `prepare(from:)` keeps the quadrilaterals of unchanged rows. Drawing updates the
 /// changed bands of a retained texture before it presents the whole picture.
 public final class TerminalRenderer {
     public let fonts: FontSet
@@ -90,7 +90,7 @@ public final class TerminalRenderer {
         return ViewportCell(column: UInt16(caret.column), row: UInt32(caret.row))
     }
 
-    /// Makes new quads for the rows that changed since the last call. Call it
+    /// Makes new quadrilaterals for the rows that changed since the last call. Call it
     /// after `RenderState.update`, and `markClean` when the frame is drawn.
     @discardableResult
     public func prepare(from state: RenderState) throws -> FrameStatistics {
@@ -226,15 +226,15 @@ public final class TerminalRenderer {
     }
 
     private func draw(
-        _ quads: [CellQuadrilateral], with pipeline: MTLRenderPipelineState, buffer: MTLBuffer, offset: Int, encoder: MTLRenderCommandEncoder
+        _ quadrilaterals: [CellQuadrilateral], with pipeline: MTLRenderPipelineState, buffer: MTLBuffer, offset: Int, encoder: MTLRenderCommandEncoder
     ) {
-        guard !quads.isEmpty else { return }
+        guard !quadrilaterals.isEmpty else { return }
         encoder.setRenderPipelineState(pipeline)
         encoder.setVertexBuffer(buffer, offset: offset, index: 1)
-        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: quads.count)
+        encoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4, instanceCount: quadrilaterals.count)
     }
 
-    /// Copies the lists of quads into the next buffer, and gives the buffer
+    /// Copies the lists of quadrilaterals into the next buffer, and gives the buffer
     /// and the offset of each list.
     private func copy(_ lists: [[CellQuadrilateral]]) -> (MTLBuffer, [Int])? {
         // The graphics processor reads each list from an offset of 256 bytes.

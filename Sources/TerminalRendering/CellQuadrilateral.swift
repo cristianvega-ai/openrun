@@ -41,5 +41,3 @@ struct CellQuadrilateral: Equatable {
         SIMD4(Float(color.red) / 255, Float(color.green) / 255, Float(color.blue) / 255, 1)
     }
 }
-
-typealias CellQuad = CellQuadrilateral

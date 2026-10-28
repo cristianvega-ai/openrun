@@ -9,23 +9,23 @@ struct RowCache {
     private var size: TerminalSize?
     private var colors: RenderColors?
 
-    func quads(at index: Int) -> RowQuadrilaterals? {
+    func quadrilaterals(at index: Int) -> RowQuadrilaterals? {
         rows[order[index]]
     }
 
     /// Makes the next update read every row, as when something besides the
-    /// screen changes the quads.
+    /// screen changes the quadrilaterals.
     mutating func forget() {
         size = nil
     }
 
-    /// Makes new quads for the rows that changed. Every row changes when the
+    /// Makes new quadrilaterals for the rows that changed. Every row changes when the
     /// whole screen is dirty, when the grid has a new size, or when the colors
     /// change.
     ///
     /// - Parameters:
     ///   - colors: The colors of `state`. The caller reads them once for the frame, and the rows use them too.
-    ///   - make: Makes the quads of a row that the cache must read.
+    ///   - make: Makes the quadrilaterals of a row that the cache must read.
     mutating func update(
         from state: RenderState, colors: RenderColors, make: (RenderRow) throws -> RowQuadrilaterals
     ) throws -> FrameStatistics {

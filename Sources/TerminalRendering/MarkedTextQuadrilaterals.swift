@@ -1,7 +1,7 @@
 import Foundation
 import TerminalEmulation
 
-/// The quads of the text that an input method composes. The text is not in the
+/// The quadrilaterals of the text that an input method composes. The text is not in the
 /// terminal until the input method commits it. The renderer draws it from the
 /// cursor, over a background that hides the cells below, and with a thick
 /// underline. Text continues on the next row at the right edge.
@@ -81,5 +81,3 @@ struct MarkedTextQuadrilaterals {
         }
     }
 }
-
-typealias MarkedTextQuads = MarkedTextQuadrilaterals

@@ -12,24 +12,22 @@ enum DecorationQuadrilaterals {
             .rectangle(horizontalPosition: horizontalPosition + left, verticalPosition: top,
                        width: width, height: thickness, color: color)
         }
-        var quads: [CellQuadrilateral] = []
+        var quadrilaterals: [CellQuadrilateral] = []
         switch cell.style.underline {
         case .single:
-            quads.append(line(0, underline, metrics.width, underlineColor))
+            quadrilaterals.append(line(0, underline, metrics.width, underlineColor))
         case .double:
-            quads += [underline - thickness, underline + thickness].map { line(0, $0, metrics.width, underlineColor) }
+            quadrilaterals += [underline - thickness, underline + thickness].map { line(0, $0, metrics.width, underlineColor) }
         case .dotted:
-            quads += stride(from: 0, to: metrics.width, by: 2 * thickness).map { line($0, underline, thickness, underlineColor) }
+            quadrilaterals += stride(from: 0, to: metrics.width, by: 2 * thickness).map { line($0, underline, thickness, underlineColor) }
         case .dashed:
             // Each cell has one dash, so a row of cells shows a pattern of dashes.
-            quads.append(line(0, underline, metrics.width * 3 / 5, underlineColor))
+            quadrilaterals.append(line(0, underline, metrics.width * 3 / 5, underlineColor))
         case .curly, .none:
             break
         }
-        if cell.style.isStruckThrough { quads.append(line(0, metrics.strikethroughPosition, metrics.width, color)) }
-        if cell.style.isOverlined { quads.append(line(0, 0, metrics.width, color)) }
-        return quads
+        if cell.style.isStruckThrough { quadrilaterals.append(line(0, metrics.strikethroughPosition, metrics.width, color)) }
+        if cell.style.isOverlined { quadrilaterals.append(line(0, 0, metrics.width, color)) }
+        return quadrilaterals
     }
 }
-
-typealias DecorationQuads = DecorationQuadrilaterals

@@ -2,6 +2,6 @@
 public struct FrameStatistics: Equatable, Sendable {
     /// The rows that the renderer read from the screen again.
     public var rowsPrepared = 0
-    /// The rows that kept their quads from an earlier frame.
+    /// The rows that kept their quadrilaterals from an earlier frame.
     public var rowsReused = 0
 }
