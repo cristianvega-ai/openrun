@@ -105,6 +105,25 @@ import TerminalEmulation
         }
     }
 
+    @Test func aWideMarkedCharacterWrapsAtTheLastColumn() throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[3;10H", columns: 10, rows: 3, markedText: "日")
+        #expect(inkCount(of: screen, columns: 0..<2, rows: 2..<3) > 100)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try screen.target.savePNG(to: URL(fileURLWithPath: "\(folder)/marked-wide-edge.png"))
+        }
+    }
+
+    @Test func aLongMarkedTextWrapsAndStaysInTheGrid() throws {
+        let single = try renderScreen("\u{1B}[?25l\u{1B}[3;10H", columns: 10, rows: 3, markedText: "a")
+        #expect(inkCount(of: single, columns: 9..<10, rows: 2..<3) > 20)
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[3;10H", columns: 10, rows: 3, markedText: "abc")
+        #expect(inkCount(of: screen, columns: 9..<10, rows: 1..<2) > 20)
+        #expect(inkCount(of: screen, columns: 0..<2, rows: 2..<3) > 40)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try screen.target.savePNG(to: URL(fileURLWithPath: "\(folder)/marked-long-edge.png"))
+        }
+    }
+
     @Test func theMarkedCaretUsesTheWrappedTextAndTheUTF16Selection() throws {
         let atlas = try makeAtlas()
         func layout(_ location: Int) -> MarkedTextQuads.Layout {

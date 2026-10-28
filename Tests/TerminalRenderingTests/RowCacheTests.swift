@@ -102,21 +102,21 @@ import TerminalEmulation
     private func quads(_ text: String, column: Int = 2, columnCount: Int = 10) throws -> MarkedTextQuads {
         let colors = try makeScreen("").state.colors
         return try MarkedTextQuads(
-            text: text, column: column, row: 1, columnCount: columnCount, colors: colors, atlas: makeAtlas(), metrics: testFonts.metrics,
-            padding: testPadding)
+            text: text, column: column, row: 1, columnCount: columnCount, rowCount: 3, colors: colors, atlas: makeAtlas(),
+            metrics: testFonts.metrics, padding: testPadding)
     }
 
     @Test func eachCharacterHasABackgroundAndAnUnderlineAndWideCharactersTakeTwoCells() throws {
         let marked = try quads("a日é")
-        #expect(marked.columns == 2..<6)
+        #expect(marked.coveredColumns == [1: 2..<6])
         #expect(marked.backgrounds.map(\.size.x) == [16, 32, 16])
         #expect(marked.overlays.count == 3)
         #expect(marked.glyphs.map(\.column) == [2, 3, 5])
         #expect(marked.backgrounds[0].origin.y == Float(testPadding + testFonts.cellHeight))
     }
 
-    @Test func theTextStopsAtTheRightEdgeOfTheGrid() throws {
-        #expect(try quads("abcdef", column: 8).columns == 8..<10)
-        #expect(try quads("日", column: 9).columns == 9..<9)
+    @Test func theTextContinuesAtTheLeftOfTheNextRow() throws {
+        #expect(try quads("abcdef", column: 8).coveredColumns == [1: 8..<10, 2: 0..<4])
+        #expect(try quads("日", column: 9).coveredColumns == [2: 0..<2])
     }
 }

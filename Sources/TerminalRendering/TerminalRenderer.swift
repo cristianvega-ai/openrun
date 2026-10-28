@@ -31,6 +31,7 @@ public final class TerminalRenderer {
     private var colors: RenderColors?
     private var cursor: RenderCursor?
     private var columnCount = 0
+    private var rowCount = 0
     // The graphics processor reads one buffer while the processor fills the next.
     private var buffers: [MTLBuffer?] = [nil, nil, nil]
     private var bufferIndex = 0
@@ -60,6 +61,7 @@ public final class TerminalRenderer {
         colors = screenColors
         cursor = state.cursor
         columnCount = Int(state.size.columns)
+        rowCount = Int(state.size.rows)
         return try cache.update(from: state, colors: screenColors) {
             try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
         }
@@ -113,7 +115,7 @@ public final class TerminalRenderer {
     private func markedTextToDraw() -> MarkedTextQuads? {
         guard let markedText, !markedText.isEmpty, let colors, let position = cursor?.position else { return nil }
         return MarkedTextQuads(
-            text: markedText, column: Int(position.column), row: Int(position.row), columnCount: columnCount, colors: colors,
+            text: markedText, column: Int(position.column), row: Int(position.row), columnCount: columnCount, rowCount: rowCount, colors: colors,
             atlas: atlas, metrics: fonts.metrics, padding: padding)
     }
 
