@@ -86,5 +86,18 @@ import Testing
         await waitOnMainThread { controller.view != nil }
         #expect(controller.window.title == "/tmp/project")
     }
-
+    @Test func theWindowClosesWhenTheProgramEndsAndReportsTheCloseOnce() async throws {
+        let attachment = try FakeAttachment()
+        let controller = try makeWindowController(attachment)
+        var closeCount = 0
+        controller.onClose = { closeCount += 1 }
+        await waitOnMainThread { controller.view != nil }
+        attachment.deliver(.exited(.exited(status: 0)))
+        await waitOnMainThread { closeCount == 1 }
+        #expect(!controller.window.isVisible && closeCount == 1)
+        await waitOnMainThread { attachment.record.withLock { $0.shutDown } }
+        #expect(attachment.record.withLock { $0.detached && $0.shutDown })
+        controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
+        #expect(closeCount == 1)
+    }
 }

@@ -13,6 +13,8 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
     static let contentSize = CGSize(width: 656, height: 388)
     public let window: NSWindow
+    /// Called once when the user closes the window or its program ends.
+    public var onClose: (@MainActor () -> Void)?
     /// Connects and attaches. Tests give a stand-in, so they need no socket.
     var connect: @Sendable (SessionStart, SocketLocation, SessionSize) throws -> StartedSession = { try $0.attach(at: $1, size: $2) }
     private let start: SessionStart
@@ -74,7 +76,8 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         case .sizeChanged(let size):
             view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
             showHiddenPart()
-        case .exited, .closed, .failed: break
+        case .exited: window.close()
+        case .closed, .failed: break
         }
     }
 
@@ -102,8 +105,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func windowWillClose(_ notification: Notification) {
+        guard !isClosed else { return }
         isClosed = true
         if let attachment { detach(attachment) }
+        onClose?()
     }
 
     /// The detach goes behind the keys that wait, so they still reach the program.
