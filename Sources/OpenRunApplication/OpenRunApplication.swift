@@ -22,6 +22,14 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     /// Starts the application. It returns only when the application ends.
     public static func run() {
         let application = NSApplication.shared
+#if DEBUG
+        // The screenshot test needs both appearances without a system change.
+        switch ProcessInfo.processInfo.environment["OPENRUN_TEST_APPEARANCE"] {
+        case "light": application.appearance = NSAppearance(named: .aqua)
+        case "dark": application.appearance = NSAppearance(named: .darkAqua)
+        default: break
+        }
+#endif
         application.setActivationPolicy(.regular)
         do {
             let arguments = try ApplicationArguments(arguments: Array(CommandLine.arguments.dropFirst()), environment: ProcessInfo.processInfo.environment)
