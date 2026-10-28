@@ -290,6 +290,22 @@ Next == ProgramWrites \/ ParseOutput
 
 Specification == InitialState /\ [][Next]_variables
 
+\* The agreement control restricts its scenario to a resize while an older
+\* foreign size waits in the client's queue.  The protection alone is removed.
+StaleForeignControlNext ==
+  \/ (\E client \in Clients, dimensions \in Sizes,
+          outcome \in {"success", "nil", "throw", "applyFailed"} :
+        Attach(client, dimensions, outcome))
+  \/ (\E client \in Clients, dimensions \in Sizes :
+        /\ Resize(client, dimensions)
+        /\ \E index \in 1..Len(queues[client]) :
+             /\ queues[client][index].kind = "size"
+             /\ queues[client][index].dimensions # dimensions)
+  \/ (\E client \in Clients : Deliver(client))
+
+StaleForeignControlSpecification ==
+  InitialState /\ [][StaleForeignControlNext]_variables
+
 \* ---------------------------------------------------------------------------
 \* The safety properties.
 \* ---------------------------------------------------------------------------
