@@ -10,6 +10,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate {
     private let socket: SocketLocation
     let windows: WindowList
     var makeNewSession: () -> SessionStart = { .newSessionInHomeFolder() }
+    var chooseSession: @MainActor (SocketLocation, NSWindow?) async -> UUID? = { await SessionList.choose(at: $0, in: $1) }
     private var setupIsReady = false
 
     init(socket: SocketLocation) {
@@ -53,6 +54,18 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate {
         guard outcome == .ready else { return }
         setupIsReady = true
         windows.open(makeNewSession())
+    }
+
+    @objc func newSession(_ sender: Any?) {
+        if setupIsReady { windows.open(makeNewSession()) }
+    }
+
+    @objc func attachToSession(_ sender: Any?) {
+        guard setupIsReady else { return }
+        Task { [weak self] in
+            guard let self, let identifier = await chooseSession(socket, NSApp.keyWindow) else { return }
+            windows.open(.runningSession(identifier))
+        }
     }
 
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
