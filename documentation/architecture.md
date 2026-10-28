@@ -217,7 +217,12 @@ The client side of the socket, for the command-line tool and the window of the a
 
 ### SessionWindow
 
-`SessionStart` selects a new login shell or a running session. `SessionWindowController` owns one window, its view and its attachment. It connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order. Input and size requests go back through the serial connection queue.
+`SessionStart` selects a new login shell or a running session. `SessionWindowController` owns one window, its view and its attachment.
+`AttachedSession` is the window's interface to an attachment. `SessionAttachment` and a test stand-in implement it.
+The window connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order.
+Input and size requests go back through the serial connection queue. Each input event stays one frame.
+Closing schedules a detach behind ready work. A separate shutdown wakes a send that is still blocked after 200 ms and skips later queued sends.
+A whole input event that the session already started can still reach the program after the window closes.
 The title comes from the terminal's title, or the session folder when the title is empty. A small label reports grid rows or columns that do not fit. Closing the window detaches and leaves the session running; the exit of the program closes the window. A connection failure is shown to the user. The controller asks before an unsafe paste or a link that needs confirmation. The link question shows its complete target in a selectable, scrollable sheet. Cancel or a closed window prevents the open.
 `SessionList` loads running sessions off the main thread. Its picker shows the folder and full identifier of each session. It handles an empty list and Cancel, and shows a connection failure instead of treating it as an empty list.
 
