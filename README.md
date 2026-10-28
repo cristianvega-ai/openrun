@@ -37,7 +37,7 @@ The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-
    The script signs with the one Apple Development identity of the keychain, and stops when there is none or more than one. Set `OPENRUN_SIGNING_IDENTITY` to the identity to use when the keychain has more than one. Set it to `-` for an ad hoc test build in a scratch folder. With an ad hoc signature, launchd ties the launch agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
    The script replaces each file of an existing bundle by a rename, so a session process that runs keeps its own file.
 
-4. Open `/Applications/OpenRun.app`. The app registers its launch agent and opens a window with a login shell in the home folder. Closing a window leaves its session running.
+4. Open `/Applications/OpenRun.app`. The app registers its launch agent and opens a window with a login shell in the home folder. File > New Window (Command-N) opens another session. File > Attach to Session… lists running sessions and opens the one you choose. Closing a window leaves its session running.
 
 For an isolated development run, use a nondefault socket and a scratch bundle. Start the session process yourself; the app does not register or wake the launch agent for this socket.
 
@@ -153,7 +153,7 @@ When `openrun new` is given a program name without a slash, the session process 
 | `Sources/SessionLaunch` | How launchd starts the session process: the launch agent, its wake, and its registration |
 | `Sources/CommandLineTool` | The `openrun` commands |
 | `Sources/SessionWindow` | Connects one terminal view to one session and owns its window |
-| `Sources/OpenRunApplication` | The app, its windows, and launch-agent setup |
+| `Sources/OpenRunApplication` | The app, its menus and windows, and launch-agent setup |
 | `Sources/openrun`, `Sources/openrun-session`, `Sources/openrun-application` | Thin programs that call the features above |
 | `Bundle` | The property lists of OpenRun.app and of its launch agent |
 

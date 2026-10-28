@@ -48,7 +48,7 @@ A module uses another module only through its public types.
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
 | `SessionWindow` | Connects one terminal view to one session, owns its window, and offers a session picker | `SessionWindowController`, `SessionStart`, `SessionList` |
-| `OpenRunApplication` | The app, its windows, and setup of the launch agent at the start | `OpenRunApplication` |
+| `OpenRunApplication` | The app, its menus and windows, and setup of the launch agent at the start | `OpenRunApplication` |
 
 The programs in `Sources/openrun`, `Sources/openrun-session` and `Sources/openrun-application` read their start-up input and call `CommandLineTool`, `SessionProcess` and `OpenRunApplication`. They hold no other logic.
 
@@ -219,6 +219,7 @@ The title comes from the terminal's title, or the session folder when the title 
 ### OpenRunApplication
 
 `ApplicationArguments` chooses the socket from `--socket`, then `OPENRUN_SOCKET`, then the default path. The app runs `LaunchAgentSetup` off the main thread for the default socket. A nondefault socket skips registration and wake, so a development session process must already listen there. Once setup is ready, the app opens a login shell in the home folder. Reopening the app with no windows opens another. `WindowList` keeps each controller until its window closes. Quitting closes the windows and detaches their sessions.
+`MainMenu` makes the native app, File, Edit, View and Window menus. File opens a new session or the session picker; these actions stay disabled until setup is ready. Copy, paste and text-size actions reach the focused view through the responder chain.
 
 ### SessionProcess
 
