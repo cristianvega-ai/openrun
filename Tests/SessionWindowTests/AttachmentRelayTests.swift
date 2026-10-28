@@ -19,4 +19,14 @@ import Testing
         while events.received.count < sent.count, Date() < end { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(events.received == sent && events.onMain)
     }
+
+    @Test func theConnectionWorkSendsInOrderOffTheMainThreadAndAnswersOnIt() async throws {
+        let attachment = try FakeAttachment(), work = ConnectionWork()
+        for number in 0..<100 { work.run { attachment.send(input: Data("\(number)".utf8)) } }
+        var answeredOnMainThread = false
+        work.run({ attachment.record.withLock { $0.inputs.count } }) { _ in answeredOnMainThread = Thread.isMainThread }
+        await waitOnMainThread { answeredOnMainThread }
+        let record = attachment.record.withLock { $0 }
+        #expect(record.inputs == (0..<100).map { Data("\($0)".utf8) } && !record.sentOnMainThread && answeredOnMainThread)
+    }
 }

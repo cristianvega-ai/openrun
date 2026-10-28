@@ -45,5 +45,5 @@ public enum SessionStart: Equatable, Sendable {
 /// A session that a window attached to. The attachment holds the snapshot.
 struct StartedSession: Sendable {
     let summary: SessionSummary
-    let attachment: SessionAttachment
+    let attachment: any AttachedSession
 }
