@@ -3,33 +3,33 @@ import Testing
 import TerminalEmulation
 @testable import TerminalRendering
 
-@Suite struct RowQuadsTests {
-    @Test func eachVisibleCharacterMakesOneGlyphQuadAndASpaceNone() throws {
+@Suite struct RowQuadrilateralsTests {
+    @Test func eachVisibleCharacterMakesOneGlyphQuadrilateralAndASpaceNone() throws {
         let screen = try makeScreen("Hi there")
-        let rows = try quads(of: screen.state, atlas: makeAtlas())
+        let rows = try quadrilaterals(of: screen.state, atlas: makeAtlas())
         #expect(rows[0].glyphs.count == 7)
         #expect(rows[0].backgrounds.isEmpty)
         #expect(rows[1].glyphs.isEmpty)
     }
 
-    @Test func glyphQuadsKnowTheirColumnsAndWideCharactersAreListed() throws {
+    @Test func glyphQuadrilateralsKnowTheirColumnsAndWideCharactersAreListed() throws {
         let screen = try makeScreen("a日 b", columns: 8)
-        let row = try quads(of: screen.state, atlas: makeAtlas())[0]
+        let row = try quadrilaterals(of: screen.state, atlas: makeAtlas())[0]
         #expect(row.glyphs.map(\.column) == [0, 1, 4])
         #expect(row.wideColumns == [1])
     }
 
     @Test func aBackgroundThatDiffersFromTheDefaultMakesARectangleForEachCell() throws {
         let screen = try makeScreen("\u{1B}[44m  ")
-        let row = try quads(of: screen.state, atlas: makeAtlas())[0]
+        let row = try quadrilaterals(of: screen.state, atlas: makeAtlas())[0]
         let blue = screen.state.colors.palette[4]
         #expect(row.backgrounds.map(\.origin.x) == [0, Float(testFonts.cellWidth)])
-        #expect(row.backgrounds.allSatisfy { $0.color == CellQuad.vector(blue) })
+        #expect(row.backgrounds.allSatisfy { $0.color == CellQuadrilateral.vector(blue) })
     }
 
-    @Test func aWideCharacterMakesOneGlyphQuadAndAnEmojiAColorQuad() throws {
+    @Test func aWideCharacterMakesOneGlyphQuadrilateralAndAnEmojiAColorQuadrilateral() throws {
         let screen = try makeScreen("日🙂", columns: 6)
-        let glyphs = try quads(of: screen.state, atlas: makeAtlas())[0].glyphs
+        let glyphs = try quadrilaterals(of: screen.state, atlas: makeAtlas())[0].glyphs
         #expect(glyphs.map(\.isColor) == [0, 1])
     }
 }
@@ -98,16 +98,16 @@ import TerminalEmulation
     }
 }
 
-@Suite struct MarkedTextQuadsTests {
-    private func quads(_ text: String, column: Int = 2, columnCount: Int = 10) throws -> MarkedTextQuads {
+@Suite struct MarkedTextQuadrilateralsTests {
+    private func quadrilaterals(_ text: String, column: Int = 2, columnCount: Int = 10) throws -> MarkedTextQuadrilaterals {
         let colors = try makeScreen("").state.colors
-        return try MarkedTextQuads(
+        return try MarkedTextQuadrilaterals(
             text: text, column: column, row: 1, columnCount: columnCount, rowCount: 3, colors: colors, atlas: makeAtlas(),
             metrics: testFonts.metrics, padding: testPadding)
     }
 
     @Test func eachCharacterHasABackgroundAndAnUnderlineAndWideCharactersTakeTwoCells() throws {
-        let marked = try quads("a日é")
+        let marked = try quadrilaterals("a日é")
         #expect(marked.coveredColumns == [1: 2..<6])
         #expect(marked.backgrounds.map(\.size.x) == [16, 32, 16])
         #expect(marked.overlays.count == 4)
@@ -116,7 +116,7 @@ import TerminalEmulation
     }
 
     @Test func theTextContinuesAtTheLeftOfTheNextRow() throws {
-        #expect(try quads("abcdef", column: 8).coveredColumns == [1: 8..<10, 2: 0..<4])
-        #expect(try quads("日", column: 9).coveredColumns == [2: 0..<2])
+        #expect(try quadrilaterals("abcdef", column: 8).coveredColumns == [1: 8..<10, 2: 0..<4])
+        #expect(try quadrilaterals("日", column: 9).coveredColumns == [2: 0..<2])
     }
 }

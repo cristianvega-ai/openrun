@@ -5,27 +5,27 @@ import TerminalEmulation
 @testable import TerminalRendering
 
 @Suite struct CursorShapeTests {
-    private func quads(_ style: CursorStyle) -> CursorQuads {
-        CursorQuads(style: style, horizontalPosition: 100, verticalPosition: 50, width: 32, height: 31, stroke: 2, color: TerminalColor(red: 1, green: 2, blue: 3))
+    private func quadrilaterals(_ style: CursorStyle) -> CursorQuadrilaterals {
+        CursorQuadrilaterals(style: style, horizontalPosition: 100, verticalPosition: 50, width: 32, height: 31, stroke: 2, color: TerminalColor(red: 1, green: 2, blue: 3))
     }
 
-    private func boxes(_ list: [CellQuad]) -> [[Float]] {
+    private func boxes(_ list: [CellQuadrilateral]) -> [[Float]] {
         list.map { [$0.origin.x, $0.origin.y, $0.size.x, $0.size.y] }
     }
 
     @Test func aBlockIsOneRectangleUnderTheGlyphs() {
-        #expect(boxes(quads(.block).backgrounds) == [[100, 50, 32, 31]])
-        #expect(quads(.block).overlays.isEmpty)
+        #expect(boxes(quadrilaterals(.block).backgrounds) == [[100, 50, 32, 31]])
+        #expect(quadrilaterals(.block).overlays.isEmpty)
     }
 
     @Test func aBarAndAnUnderlineAreOneLineOnTopOfTheGlyphs() {
-        #expect(boxes(quads(.bar).overlays) == [[100, 50, 4, 31]])
-        #expect(boxes(quads(.underline).overlays) == [[100, 77, 32, 4]])
-        #expect(quads(.bar).backgrounds.isEmpty)
+        #expect(boxes(quadrilaterals(.bar).overlays) == [[100, 50, 4, 31]])
+        #expect(boxes(quadrilaterals(.underline).overlays) == [[100, 77, 32, 4]])
+        #expect(quadrilaterals(.bar).backgrounds.isEmpty)
     }
 
     @Test func aHollowBlockIsFourLines() {
-        let edges = boxes(quads(.hollowBlock).overlays)
+        let edges = boxes(quadrilaterals(.hollowBlock).overlays)
         #expect(edges == [[100, 50, 32, 2], [100, 79, 32, 2], [100, 50, 2, 31], [130, 50, 2, 31]])
     }
 }
@@ -158,8 +158,8 @@ import TerminalEmulation
 
     @Test func theMarkedCaretUsesTheWrappedTextAndTheSixteenBitCodeUnitSelection() throws {
         let atlas = try makeAtlas()
-        func layout(_ location: Int) -> MarkedTextQuads.Layout {
-            MarkedTextQuads.Layout(text: "🙂ab", column: 9, row: 2, columnCount: 10, rowCount: 3,
+        func layout(_ location: Int) -> MarkedTextQuadrilaterals.Layout {
+            MarkedTextQuadrilaterals.Layout(text: "🙂ab", column: 9, row: 2, columnCount: 10, rowCount: 3,
                                    selection: NSRange(location: location, length: 0), atlas: atlas)
         }
         #expect(layout(2).caret.column == 2 && layout(2).caret.row == 2)
@@ -168,8 +168,8 @@ import TerminalEmulation
 
     @Test func theCaretDoesNotSplitACombiningCharacter() throws {
         let atlas = try makeAtlas()
-        func layout(_ location: Int) -> MarkedTextQuads.Layout {
-            MarkedTextQuads.Layout(text: "e\u{301}日", column: 8, row: 0, columnCount: 10, rowCount: 3,
+        func layout(_ location: Int) -> MarkedTextQuadrilaterals.Layout {
+            MarkedTextQuadrilaterals.Layout(text: "e\u{301}日", column: 8, row: 0, columnCount: 10, rowCount: 3,
                                    selection: NSRange(location: location, length: 0), atlas: atlas)
         }
         #expect(layout(1).caret.column == 8 && layout(1).caret.row == 0)

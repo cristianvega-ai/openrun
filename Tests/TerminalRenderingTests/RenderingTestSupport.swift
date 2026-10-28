@@ -25,11 +25,11 @@ func makeAtlas() throws -> GlyphAtlas {
     try GlyphAtlas(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts)
 }
 
-/// The quads of every row of the screen, from the top.
-func quads(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuads] {
-    var rows: [RowQuads] = []
+/// The quadrilaterals of every row of the screen, from the top.
+func quadrilaterals(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuadrilaterals] {
+    var rows: [RowQuadrilaterals] = []
     try state.forEachRow(onlyChanged: false) {
-        rows.append(try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics))
+        rows.append(try RowQuadrilaterals(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics))
     }
     return rows
 }
@@ -37,7 +37,7 @@ func quads(of state: RenderState, atlas: GlyphAtlas) throws -> [RowQuads] {
 /// Brings the cache up to date with the screen, as the renderer does.
 func update(_ cache: inout RowCache, from state: RenderState, atlas: GlyphAtlas) throws -> FrameStatistics {
     try cache.update(from: state, colors: state.colors) {
-        try RowQuads(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics)
+        try RowQuadrilaterals(row: $0, colors: state.colors, selection: selectionColor, atlas: atlas, metrics: testFonts.metrics)
     }
 }
 

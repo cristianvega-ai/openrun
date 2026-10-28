@@ -4,9 +4,9 @@ import TerminalEmulation
 
 @Suite struct OverlayTests {
     @Test func theFlashIsATranslucentRectangleOverTheWholePicture() {
-        let quad = OverlayQuads.flash(width: 640, height: 480, color: TerminalColor(red: 255, green: 0, blue: 0))
-        #expect(quad.origin == [0, 0] && quad.size == [640, 480])
-        #expect(quad.color == [1, 0, 0, 0.3])
+        let quadrilateral = OverlayQuadrilaterals.flash(width: 640, height: 480, color: TerminalColor(red: 255, green: 0, blue: 0))
+        #expect(quadrilateral.origin == [0, 0] && quadrilateral.size == [640, 480])
+        #expect(quadrilateral.color == [1, 0, 0, 0.3])
     }
 
     @Test func aFlashMixesTheTextColorIntoEveryPixelAndTheLetterStaysVisible() throws {
