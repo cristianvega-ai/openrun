@@ -44,5 +44,13 @@ import Testing
         #expect(attachment.record.withLock { $0.inputs } == [Data("one\rtwo".utf8)])
         #expect(questions == [.unsafePaste, .unsafePaste])
         #expect(UserQuestion.unsafePaste.words.buttons == ["Paste", "Cancel"])
+        view.paste(nil)
+        await waitOnMainThread { answer != nil }
+        let third = try #require(answer)
+        answer = nil
+        controller.window.close()
+        third.resume(returning: true)
+        await waitOnMainThread(seconds: 0.1) { false }
+        #expect(attachment.record.withLock { $0.inputs } == [Data("one\rtwo".utf8)])
     }
 }

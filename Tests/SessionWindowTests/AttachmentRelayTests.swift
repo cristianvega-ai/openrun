@@ -22,7 +22,7 @@ import Testing
 
     @Test func theConnectionWorkSendsInOrderOffTheMainThreadAndAnswersOnIt() async throws {
         let attachment = try FakeAttachment(), work = ConnectionWork()
-        for number in 0..<100 { work.run { attachment.send(input: Data("\(number)".utf8)) } }
+        for number in 0..<100 { work.run { try? attachment.send(input: Data("\(number)".utf8)) } }
         var answeredOnMainThread = false
         work.run({ attachment.record.withLock { $0.inputs.count } }) { _ in answeredOnMainThread = Thread.isMainThread }
         await waitOnMainThread { answeredOnMainThread }

@@ -1,4 +1,5 @@
 import AppKit
+import SessionConnection
 import SessionProtocol
 import TerminalEmulation
 import Testing
@@ -121,5 +122,48 @@ import Testing
         #expect(attachment.record.withLock { $0.detached && $0.shutDown })
         controller.windowWillClose(Notification(name: NSWindow.willCloseNotification))
         #expect(closeCount == 1)
+    }
+
+    @Test(arguments: ["receive", "input", "size"])
+    func aLostConnectionOrAWriteErrorIsShownOnce(source: String) async throws {
+        let attachment = try FakeAttachment()
+        let controller = try makeWindowController(attachment)
+        await waitOnMainThread { controller.view != nil }
+        let view = try #require(controller.view)
+        var questions: [UserQuestion] = []
+        var answer: CheckedContinuation<Bool, Never>?
+        controller.ask = { question, _ in
+            questions.append(question)
+            return await withCheckedContinuation { answer = $0 }
+        }
+        switch source {
+        case "input":
+            attachment.record.withLock { $0.failsInput = true }
+            controller.terminalView(view, send: [65])
+        case "size":
+            attachment.record.withLock { $0.failsSize = true }
+            controller.terminalView(view, didChangeGridSize: TerminalSize(columns: 40, rows: 10))
+        default:
+            attachment.deliver(.failed(.connectionClosed))
+        }
+        await waitOnMainThread { answer != nil }
+        attachment.deliver(.closed)
+        await waitOnMainThread(seconds: 0.1) { false }
+        #expect(questions == [.connectionFailure("The session connection failed. The session process closed the connection.")])
+        let acknowledgment = try #require(answer)
+        acknowledgment.resume(returning: true)
+        await waitOnMainThread { !controller.window.isVisible }
+        #expect(!controller.window.isVisible)
+    }
+
+    @Test func anUnexpectedCloseIsShownToTheUser() async throws {
+        let attachment = try FakeAttachment()
+        let controller = try makeWindowController(attachment)
+        var questions: [UserQuestion] = []
+        controller.ask = { question, _ in questions.append(question); return true }
+        await waitOnMainThread { controller.view != nil }
+        attachment.deliver(.closed)
+        await waitOnMainThread { !controller.window.isVisible }
+        #expect(questions == [.connectionFailure("The session process closed the connection.")])
     }
 }

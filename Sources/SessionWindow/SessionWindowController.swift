@@ -89,7 +89,8 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
             view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
             showHiddenPart()
         case .exited: window.close()
-        case .closed, .failed: break
+        case .closed: connectionFailed("The session process closed the connection.")
+        case .failed(let error): connectionFailed("The session connection failed. \(error)")
         }
     }
 
@@ -140,15 +141,24 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func terminalView(_ view: TerminalView, send bytes: [UInt8]) {
-        guard let attachment else { return }
-        // A send fails only when the connection is gone, and the receiving thread reports that.
-        work.run { try? attachment.send(input: Data(bytes)) }
+        guard !isClosed, !hasConnectionFailure, let attachment else { return }
+        send { try attachment.send(input: Data(bytes)) }
     }
 
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
         showHiddenPart()
-        guard let attachment else { return }
-        work.run { try? attachment.send(size: SessionSize(columns: size.columns, rows: size.rows)) }
+        guard !isClosed, !hasConnectionFailure, let attachment else { return }
+        send { try attachment.send(size: SessionSize(columns: size.columns, rows: size.rows)) }
+    }
+
+    private func send(_ operation: @escaping @Sendable () throws -> Void) {
+        let report: @MainActor @Sendable (String) -> Void = { [weak self] in self?.connectionFailed($0) }
+        work.run {
+            do { try operation() } catch {
+                let detail = "The session connection failed. \(error)"
+                DispatchQueue.main.async { MainActor.assumeIsolated { report(detail) } }
+            }
+        }
     }
 
     public func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {
@@ -160,6 +170,8 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
-        await ask(.unsafePaste, window)
+        guard !isClosed else { return false }
+        let agreed = await ask(.unsafePaste, window)
+        return !isClosed && agreed
     }
 }

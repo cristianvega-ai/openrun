@@ -12,6 +12,7 @@ final class FakeAttachment: AttachedSession {
     struct Record {
         var inputs: [Data] = [], sizes: [SessionSize] = [], detached = false, shutDown = false, sentOnMainThread = false
         var attachSize: SessionSize?
+        var failsInput = false, failsSize = false
     }
 
     let snapshot: Data
@@ -34,8 +35,22 @@ final class FakeAttachment: AttachedSession {
         earlyEvent = nil
     }
 
-    func send(input: Data) { record.withLock { $0.inputs.append(input); $0.sentOnMainThread = $0.sentOnMainThread || Thread.isMainThread } }
-    func send(size: SessionSize) { record.withLock { $0.sizes.append(size); $0.sentOnMainThread = $0.sentOnMainThread || Thread.isMainThread } }
+    func send(input: Data) throws {
+        let failed = record.withLock { state in
+            state.sentOnMainThread = state.sentOnMainThread || Thread.isMainThread
+            if !state.failsInput { state.inputs.append(input) }
+            return state.failsInput
+        }
+        if failed { throw SessionConnectionError.connectionClosed }
+    }
+    func send(size: SessionSize) throws {
+        let failed = record.withLock { state in
+            state.sentOnMainThread = state.sentOnMainThread || Thread.isMainThread
+            if !state.failsSize { state.sizes.append(size) }
+            return state.failsSize
+        }
+        if failed { throw SessionConnectionError.connectionClosed }
+    }
     func detach() { record.withLock { $0.detached = true } }
     func shutdown() { record.withLock { $0.shutDown = true } }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
