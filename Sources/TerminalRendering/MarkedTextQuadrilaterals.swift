@@ -5,7 +5,7 @@ import TerminalEmulation
 /// terminal until the input method commits it. The renderer draws it from the
 /// cursor, over a background that hides the cells below, and with a thick
 /// underline. Text continues on the next row at the right edge.
-struct MarkedTextQuads {
+struct MarkedTextQuadrilaterals {
     struct Layout {
         struct CharacterPosition {
             let text: String
@@ -81,3 +81,5 @@ struct MarkedTextQuads {
         }
     }
 }
+
+typealias MarkedTextQuads = MarkedTextQuadrilaterals

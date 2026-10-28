@@ -3,7 +3,7 @@ import TerminalEmulation
 /// The quads of one row: the backgrounds that differ from the default, the
 /// glyphs, and the lines of the cells. Positions count from the top left of
 /// the row, so a row that moves down the screen keeps its quads.
-struct RowQuads {
+struct RowQuadrilaterals {
     private(set) var backgrounds: [CellQuad] = []
     private(set) var glyphs: [CellQuad] = []
     private(set) var decorations: [CellQuad] = []
@@ -50,3 +50,5 @@ struct RowQuads {
             blue: UInt8((Int(first.blue) + Int(second.blue)) / 2))
     }
 }
+
+typealias RowQuads = RowQuadrilaterals

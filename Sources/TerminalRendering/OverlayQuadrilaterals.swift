@@ -1,7 +1,7 @@
 import TerminalEmulation
 
 /// Quads that cover the whole picture, over the text and the cursor.
-enum OverlayQuads {
+enum OverlayQuadrilaterals {
     /// The flash of the visual bell: one rectangle of the text color. It is translucent, so the
     /// text under it stays readable.
     static func flash(width: Int, height: Int, color: TerminalColor) -> CellQuad {
@@ -10,3 +10,5 @@ enum OverlayQuads {
         return quad
     }
 }
+
+typealias OverlayQuads = OverlayQuadrilaterals

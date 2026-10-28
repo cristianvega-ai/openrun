@@ -2,7 +2,7 @@ import TerminalEmulation
 
 /// The lines that a cell can have: an underline in one of five styles, a line
 /// through the text, and a line over it.
-enum DecorationQuads {
+enum DecorationQuadrilaterals {
     /// The position is the left side of the cell. A program can give the underline its own color.
     static func lines(for cell: RenderCell, horizontalPosition: Int, color: TerminalColor, metrics: CellMetrics) -> [CellQuad] {
         let thickness = metrics.underlineThickness
@@ -31,3 +31,5 @@ enum DecorationQuads {
         return quads
     }
 }
+
+typealias DecorationQuads = DecorationQuadrilaterals

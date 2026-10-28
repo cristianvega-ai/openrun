@@ -2,7 +2,7 @@ import TerminalEmulation
 
 /// The quads of the cursor. A block fills its cell and goes under the glyphs.
 /// The other shapes are lines that go on top of them.
-struct CursorQuads {
+struct CursorQuadrilaterals {
     private(set) var backgrounds: [CellQuad] = []
     private(set) var overlays: [CellQuad] = []
 
@@ -34,3 +34,5 @@ struct CursorQuads {
         }
     }
 }
+
+typealias CursorQuads = CursorQuadrilaterals
