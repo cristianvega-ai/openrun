@@ -13,16 +13,17 @@ struct RowQuads {
     init(row: RenderRow, colors: RenderColors, selection: TerminalColor, atlas: GlyphAtlas, metrics: CellMetrics) throws {
         let selected = row.selectedColumns
         try row.forEachCell(palette: colors.palette) { cell in
-            let x = Int(cell.column) * metrics.width
+            let horizontalPosition = Int(cell.column) * metrics.width
             var foreground = cell.foreground ?? colors.foreground
             var background = cell.background
             if cell.style.isInverse { (foreground, background) = (background ?? colors.background, foreground) }
             if selected?.contains(cell.column) == true { background = selection }
             if let background, background != colors.background {
-                backgrounds.append(.rectangle(x: x, y: 0, width: metrics.width, height: metrics.height, color: background))
+                backgrounds.append(.rectangle(horizontalPosition: horizontalPosition, verticalPosition: 0,
+                                              width: metrics.width, height: metrics.height, color: background))
             }
             if cell.style.isFaint { foreground = Self.halfway(foreground, background ?? colors.background) }
-            decorations += DecorationQuads.lines(for: cell, x: x, color: foreground, metrics: metrics)
+            decorations += DecorationQuads.lines(for: cell, horizontalPosition: horizontalPosition, color: foreground, metrics: metrics)
             if cell.width == .wide { wideColumns.append(cell.column) }
             // The second cell of a wide character has nothing to draw.
             if let base = cell.base, base != " ", !cell.style.isInvisible, cell.width != .wideTail, cell.width != .wideHead {
@@ -30,11 +31,14 @@ struct RowQuads {
                 let text = cell.extraScalars.isEmpty ? String(Character(base)) : cell.text
                 let key = GlyphKey(text: text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
                 let entry = atlas.entry(for: key)
-                if !entry.isEmpty { glyphs.append(.glyph(entry, column: Int(cell.column), x: x, y: 0, color: foreground)) }
+                if !entry.isEmpty {
+                    glyphs.append(.glyph(entry, column: Int(cell.column), horizontalPosition: horizontalPosition, verticalPosition: 0, color: foreground))
+                }
             }
             // The wave goes after the text, so the first glyph of a column is its text.
             if cell.style.underline == .curly {
-                glyphs.append(.glyph(atlas.entry(for: .curlyUnderline), column: Int(cell.column), x: x, y: 0, color: cell.underlineColor ?? foreground))
+                glyphs.append(.glyph(atlas.entry(for: .curlyUnderline), column: Int(cell.column), horizontalPosition: horizontalPosition,
+                                     verticalPosition: 0, color: cell.underlineColor ?? foreground))
             }
         }
     }

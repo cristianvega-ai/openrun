@@ -152,7 +152,7 @@ public final class TerminalRenderer {
         let background = colors?.background ?? TerminalColor(red: 0, green: 0, blue: 0)
         let lists = changed.flatMap { index -> [[CellQuad]] in
             let band = bands[index]
-            let clear = CellQuad.rectangle(x: 0, y: band.top, width: backing.width, height: band.bottom - band.top, color: background)
+            let clear = CellQuad.rectangle(horizontalPosition: 0, verticalPosition: band.top, width: backing.width, height: band.bottom - band.top, color: background)
             return [[clear] + band.backgrounds, band.glyphs, band.overlays]
         }
         let pass = MTLRenderPassDescriptor()

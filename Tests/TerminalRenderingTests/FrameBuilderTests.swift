@@ -5,10 +5,10 @@ import TerminalEmulation
 @Suite struct FrameBuilderTests {
     @Test func aQuadThatExtendsAcrossRowsBelongsToEachBand() {
         let metrics = testFonts.metrics
-        let quad = CellQuad.rectangle(x: 0, y: testPadding + metrics.height - 2, width: 4, height: 4, color: TerminalColor(red: 1, green: 2, blue: 3))
+        let quad = CellQuad.rectangle(horizontalPosition: 0, verticalPosition: testPadding + metrics.height - 2, width: 4, height: 4, color: TerminalColor(red: 1, green: 2, blue: 3))
         #expect(FrameBuilder.bandIndices(of: quad, rowCount: 3, targetHeight: 3 * metrics.height + 2 * testPadding,
                                          metrics: metrics, padding: testPadding) == 0...1)
-        let contained = CellQuad.rectangle(x: 0, y: testPadding, width: 4, height: metrics.height, color: TerminalColor(red: 1, green: 2, blue: 3))
+        let contained = CellQuad.rectangle(horizontalPosition: 0, verticalPosition: testPadding, width: 4, height: metrics.height, color: TerminalColor(red: 1, green: 2, blue: 3))
         #expect(FrameBuilder.bandIndices(of: contained, rowCount: 3, targetHeight: 3 * metrics.height + 2 * testPadding,
                                          metrics: metrics, padding: testPadding) == 0...0)
     }

@@ -62,7 +62,7 @@ struct FrameBuilder {
             guard let row = cache.quads(at: index) else { continue }
             let top = padding + index * metrics.height
             let glyphStart = glyphs.count
-            backgrounds += row.backgrounds.map { $0.moved(x: padding, y: top) }
+            backgrounds += row.backgrounds.map { $0.moved(horizontalOffset: padding, verticalOffset: top) }
             // The background of marked text hides the glyphs under it.
             let covered = markedText?.coveredColumns[index]
             let visible = covered.map { columns in
@@ -72,21 +72,21 @@ struct FrameBuilder {
                     return !columns.overlaps(start..<start + width)
                 }
             } ?? row.glyphs
-            glyphs += visible.map { $0.moved(x: padding, y: top) }
+            glyphs += visible.map { $0.moved(horizontalOffset: padding, verticalOffset: top) }
             let decorations = covered.map { columns in
                 row.decorations.filter { line in
                     line.origin.x + line.size.x <= Float(columns.lowerBound * metrics.width)
                         || line.origin.x >= Float(columns.upperBound * metrics.width)
                 }
             } ?? row.decorations
-            overlays += decorations.map { $0.moved(x: padding, y: top) }
+            overlays += decorations.map { $0.moved(horizontalOffset: padding, verticalOffset: top) }
             guard let cursor, cursor.row == index else { continue }
             // On the second cell of a wide character, the cursor starts one column to the left.
             let column = cursor.column - (cursor.isOnWideCharacterTail ? 1 : 0)
             let isWide = cursor.isOnWideCharacterTail || row.wideColumns.contains(UInt16(column))
             let quads = CursorQuads(
-                style: cursor.style, x: padding + column * metrics.width, y: top, width: (isWide ? 2 : 1) * metrics.width,
-                height: metrics.height, stroke: cursor.stroke, color: cursor.color)
+                style: cursor.style, horizontalPosition: padding + column * metrics.width, verticalPosition: top,
+                width: (isWide ? 2 : 1) * metrics.width, height: metrics.height, stroke: cursor.stroke, color: cursor.color)
             backgrounds += quads.backgrounds
             overlays += quads.overlays
             if cursor.style == .block, let glyph = glyphs[glyphStart...].firstIndex(where: { Int($0.column) == column }) {

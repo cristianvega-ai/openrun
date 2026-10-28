@@ -6,7 +6,7 @@ import TerminalEmulation
 
 @Suite struct CursorShapeTests {
     private func quads(_ style: CursorStyle) -> CursorQuads {
-        CursorQuads(style: style, x: 100, y: 50, width: 32, height: 31, stroke: 2, color: TerminalColor(red: 1, green: 2, blue: 3))
+        CursorQuads(style: style, horizontalPosition: 100, verticalPosition: 50, width: 32, height: 31, stroke: 2, color: TerminalColor(red: 1, green: 2, blue: 3))
     }
 
     private func boxes(_ list: [CellQuad]) -> [[Float]] {

@@ -57,23 +57,27 @@ struct MarkedTextQuads {
     ) {
         let layout = Layout(text: text, column: column, row: row, columnCount: columnCount, rowCount: rowCount, selection: selection, atlas: atlas)
         for character in layout.characters where character.row >= 0 && character.row < rowCount {
-            let x = padding + character.column * metrics.width
+            let horizontalPosition = padding + character.column * metrics.width
             let top = padding + character.row * metrics.height
             let width = character.width * metrics.width
             let background = layout.selection.overlaps(character.range) ? (selectionColor ?? colors.foreground) : colors.background
-            backgrounds.append(.rectangle(x: x, y: top, width: width, height: metrics.height, color: background))
+            backgrounds.append(.rectangle(horizontalPosition: horizontalPosition, verticalPosition: top,
+                                          width: width, height: metrics.height, color: background))
             let entry = atlas.entry(for: GlyphKey(text: character.text, face: .regular, columns: character.width))
-            if !entry.isEmpty { glyphs.append(.glyph(entry, column: character.column, x: x, y: top, color: colors.foreground)) }
-            overlays.append(.rectangle(x: x, y: top + metrics.underlinePosition, width: width,
+            if !entry.isEmpty {
+                glyphs.append(.glyph(entry, column: character.column, horizontalPosition: horizontalPosition,
+                                     verticalPosition: top, color: colors.foreground))
+            }
+            overlays.append(.rectangle(horizontalPosition: horizontalPosition, verticalPosition: top + metrics.underlinePosition, width: width,
                                        height: 2 * metrics.underlineThickness, color: colors.foreground))
             let start = coveredColumns[character.row]?.lowerBound ?? character.column
             coveredColumns[character.row] = start..<character.column + character.width
         }
         if layout.selection.isEmpty, layout.caret.row >= 0, layout.caret.row < rowCount {
             let thickness = max(1, metrics.underlineThickness)
-            let x = padding + layout.caret.column * metrics.width - (layout.caret.column == columnCount ? thickness : 0)
-            overlays.append(.rectangle(x: x, y: padding + layout.caret.row * metrics.height, width: thickness,
-                                       height: metrics.height, color: colors.cursor ?? colors.foreground))
+            let horizontalPosition = padding + layout.caret.column * metrics.width - (layout.caret.column == columnCount ? thickness : 0)
+            overlays.append(.rectangle(horizontalPosition: horizontalPosition, verticalPosition: padding + layout.caret.row * metrics.height,
+                                       width: thickness, height: metrics.height, color: colors.cursor ?? colors.foreground))
         }
     }
 }

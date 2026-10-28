@@ -13,22 +13,27 @@ struct CellQuad: Equatable {
     var column: UInt32 = 0
     var color: SIMD4<Float>
 
-    static func rectangle(x: Int, y: Int, width: Int, height: Int, color: TerminalColor) -> CellQuad {
-        CellQuad(origin: [Float(x), Float(y)], size: [Float(width), Float(height)], color: vector(color))
+    static func rectangle(
+        horizontalPosition: Int, verticalPosition: Int, width: Int, height: Int, color: TerminalColor
+    ) -> CellQuad {
+        CellQuad(origin: [Float(horizontalPosition), Float(verticalPosition)],
+                 size: [Float(width), Float(height)], color: vector(color))
     }
 
-    static func glyph(_ entry: GlyphAtlas.Entry, column: Int, x: Int, y: Int, color: TerminalColor) -> CellQuad {
+    static func glyph(
+        _ entry: GlyphAtlas.Entry, column: Int, horizontalPosition: Int, verticalPosition: Int, color: TerminalColor
+    ) -> CellQuad {
         CellQuad(
-            origin: [Float(x + entry.horizontalOffset), Float(y + entry.verticalOffset)],
+            origin: [Float(horizontalPosition + entry.horizontalOffset), Float(verticalPosition + entry.verticalOffset)],
             size: [Float(entry.width), Float(entry.height)],
             atlasOrigin: [Float(entry.horizontalPosition), Float(entry.verticalPosition)],
             isColor: entry.isColor ? 1 : 0, column: UInt32(column),
             color: vector(color))
     }
 
-    func moved(x: Int, y: Int) -> CellQuad {
+    func moved(horizontalOffset: Int, verticalOffset: Int) -> CellQuad {
         var quad = self
-        quad.origin += [Float(x), Float(y)]
+        quad.origin += [Float(horizontalOffset), Float(verticalOffset)]
         return quad
     }
 
