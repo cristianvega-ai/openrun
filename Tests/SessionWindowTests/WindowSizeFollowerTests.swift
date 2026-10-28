@@ -32,6 +32,19 @@ import Testing
         #expect(view.gridSize == larger && view.visibleGridSize == own && attachment.record.withLock { $0.sizes }.isEmpty)
     }
 
+    @Test func theHiddenGridLabelWaitsUntilTheNewSizeApplies() async throws {
+        let (controller, attachment, view) = try await makeAttachedWindow()
+        defer { controller.window.close() }
+        let own = try #require(view.visibleGridSize)
+        let larger = TerminalSize(columns: own.columns + 40, rows: own.rows + 20)
+        view.write([UInt8](repeating: 0, count: 2 * 1024 * 1024))
+        view.followSessionSize(larger)
+        #expect(view.gridSize == own && controller.hiddenGridLabel.isHidden)
+        await waitOnMainThread(seconds: 10) { view.gridSize == larger }
+        #expect(view.gridSize == larger && !controller.hiddenGridLabel.isHidden)
+        #expect(attachment.record.withLock { $0.sizes.isEmpty })
+    }
+
     @Test func theWindowTakesItsSizeBackWhenItBecomesKeyAndOnlyThen() async throws {
         let (controller, attachment, view) = try await makeAttachedWindow()
         defer { controller.window.close() }

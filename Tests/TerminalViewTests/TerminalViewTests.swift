@@ -189,6 +189,22 @@ import Testing
         #expect(view.gridSize == first && delegate.sizes == [first, second, first, first])
     }
 
+    @Test func queuedSizesApplyInSequenceEvenWhenTheLastMatchesTheCurrentSize() async throws {
+        let initial = TerminalSize(columns: 80, rows: 24)
+        let foreign = TerminalSize(columns: 30, rows: 8)
+        let view = try TerminalView(initialGrid: initial)
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.waitsForSizeConfirmation = true
+        view.write([UInt8](repeating: 0, count: 2 * 1024 * 1024))
+        view.followSessionSize(foreign)
+        view.followSessionSize(initial)
+        #expect(view.gridSize == initial && delegate.appliedSizes.isEmpty)
+        await settle(seconds: 10) { delegate.appliedSizes == [foreign, initial] }
+        #expect(view.gridSize == initial && delegate.appliedSizes == [foreign, initial])
+        #expect(delegate.sizes.isEmpty)
+    }
+
     @Test func aViewWithoutSizeKeepsItsGrid() throws {
         let view = try TerminalView(initialGrid: TerminalSize(columns: 30, rows: 5))
         layout(view, width: 0, height: 0)

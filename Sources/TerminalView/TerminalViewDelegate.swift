@@ -7,6 +7,9 @@ public protocol TerminalViewDelegate: AnyObject {
     /// The owner passes the size to the session of the view.
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize)
 
+    /// The terminal applied a grid size after all earlier output.
+    func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize)
+
     /// The part of the grid that fits the view changed, even if the terminal size did not.
     func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize)
 
@@ -30,4 +33,5 @@ public protocol TerminalViewDelegate: AnyObject {
 public extension TerminalViewDelegate {
     func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool { false }
     func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {}
+    func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) {}
 }

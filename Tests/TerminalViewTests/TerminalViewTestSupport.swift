@@ -5,6 +5,7 @@ import TerminalEmulation
 /// Keeps what a view tells its owner.
 @MainActor final class RecordingDelegate: TerminalViewDelegate {
     var sizes: [TerminalSize] = []
+    var appliedSizes: [TerminalSize] = []
     var sent: [UInt8] = []
     var titles: [String] = []
     /// The texts of the pastes that asked, and the answer that the user gives.
@@ -14,6 +15,7 @@ import TerminalEmulation
     var linkAnswer = false
 
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) { sizes.append(size) }
+    func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) { appliedSizes.append(size) }
     func terminalView(_ view: TerminalView, send bytes: [UInt8]) { sent += bytes }
     func terminalView(_ view: TerminalView, didChangeTitle title: String) { titles.append(title) }
 

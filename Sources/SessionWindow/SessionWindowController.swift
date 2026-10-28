@@ -96,7 +96,6 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         case .output(let bytes): view?.write(bytes)
         case .sizeChanged(let size):
             view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
-            showHiddenPart()
         case .exited: window.close()
         case .closed: connectionFailed("The session process closed the connection.")
         case .failed(let error): connectionFailed("The session connection failed. \(error)")
@@ -176,6 +175,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
                 DispatchQueue.main.async { MainActor.assumeIsolated { report(detail) } }
             }
         }
+    }
+
+    public func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) {
+        showHiddenPart()
     }
 
     public func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {

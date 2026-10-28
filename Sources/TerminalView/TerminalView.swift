@@ -81,6 +81,9 @@ public final class TerminalView: NSView {
         self.device = device
         host = MetalLayerHost(device: device)
         super.init(frame: .zero)
+        parser.onSize = { [weak self] size, tellsDelegate in
+            MainActor.assumeIsolated { self?.applySize(size, tellsDelegate: tellsDelegate) }
+        }
         wantsLayer = true
         focus.onChange = { [weak self] isKey in self?.windowKeyChanged(isKey) }
         links.ask = { [weak self] address in
@@ -133,9 +136,9 @@ public final class TerminalView: NSView {
     ///
     /// - Returns: `true` when output is left for another turn.
     @discardableResult
-    func parseTurn() -> Bool {
+    func parseTurn(budget: ParseBudget = ParseBudget(limit: .milliseconds(4))) -> Bool {
         isParseScheduled = false
-        let hasMore = parser.parse(into: terminal, budget: ParseBudget(limit: .milliseconds(4)))
+        let hasMore = parser.parse(into: terminal, budget: budget)
         if terminal.pointerShape != pointerShape {
             pointerShape = terminal.pointerShape
             window?.invalidateCursorRects(for: self)
@@ -479,9 +482,16 @@ public final class TerminalView: NSView {
     }
 
     private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool) {
+        if parser.hasPendingOutput {
+            parser.append(size: grid, tellsDelegate: tellsDelegate)
+            scheduleParseTurn()
+        } else {
+            applySize(grid, tellsDelegate: tellsDelegate)
+        }
+    }
+
+    private func applySize(_ grid: TerminalSize, tellsDelegate: Bool) {
         guard grid != terminal.size else { return }
-        // The output that waits came for the old size, as in the terminal of the session.
-        while parser.hasPendingOutput { _ = parser.parse(into: terminal, budget: ParseBudget(limit: .zero)) }
         do {
             try terminal.resize(to: grid)
         } catch {
@@ -489,6 +499,7 @@ public final class TerminalView: NSView {
             return
         }
         schedule?.requestFrame()
+        delegate?.terminalView(self, didApplyGridSize: grid)
         if tellsDelegate { delegate?.terminalView(self, didChangeGridSize: grid) }
     }
 
