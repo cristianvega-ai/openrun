@@ -29,7 +29,7 @@ extension SessionProcessIntegration {
                 defer { watchdog.cancel(); client.shutdown() }
                 #expect(try client.greetSessionProcess().orderedResizeConfirmation)
                 let initial = SessionSize(columns: 80, rows: 24)
-                try client.send(ClientMessage.attach(identifier: identifier, size: initial, receivesSizeChanges: true))
+                try client.send(ClientMessage.attach(identifier: identifier, size: initial))
                 guard case .attached = try client.receive(ServerMessage.self),
                       case .snapshot = try client.receive(ServerMessage.self) else {
                     Issue.record("The client did not receive its snapshot.")
@@ -113,6 +113,57 @@ extension SessionProcessIntegration {
                     return
                 }
                 #expect(sessions.first(where: { $0.identifier == identifier })?.size == initial)
+            }
+        }
+
+        @Test func queuedOutputUsesThePreviousGridUntilTheConfirmation() async throws {
+            try await RunningSessionProcess.run { process in
+                let program = ["/bin/sh", "-c", "/bin/stty -echo; printf 'ready\\n'; read line; printf '\\033[1;70HX'; /bin/sleep 60"]
+                let text = try process.createSession(program: program)
+                try #require(await process.waitForScreen(of: text, containing: "ready"))
+                let identifier = try #require(UUID(uuidString: text))
+                let initial = SessionSize(columns: 80, rows: 24)
+                let requested = SessionSize(columns: 12, rows: 24)
+                let (client, snapshot) = try Self.attach(to: process, identifier: identifier, size: initial)
+                let (observer, _) = try Self.attach(to: process, identifier: identifier, size: initial)
+                defer { client.shutdown(); observer.shutdown() }
+                try observer.send(ClientMessage.input(Data("one\n".utf8)))
+                var observed = ""
+                while !observed.contains("X") {
+                    if case .output(let bytes) = try Self.next(on: observer) { observed += String(decoding: bytes, as: UTF8.self) }
+                }
+                let ordered = try TerminalSnapshot(bytes: Array(snapshot)).restoreTerminal(scrollbackLimit: 10_000)
+                let optimistic = try TerminalSnapshot(bytes: Array(snapshot)).restoreTerminal(scrollbackLimit: 10_000)
+                try optimistic.resize(to: TerminalSize(columns: requested.columns, rows: requested.rows))
+                try client.send(ClientMessage.resize(requested, requestsConfirmation: true))
+                var receivedOutput = false
+                var confirmed = false
+                while !confirmed {
+                    switch try Self.next(on: client) {
+                    case .output(let bytes):
+                        receivedOutput = true
+                        ordered.write(bytes)
+                        optimistic.write(bytes)
+                    case .sizeChanged(let size):
+                        #expect(size == requested)
+                        #expect(receivedOutput)
+                        try ordered.resize(to: TerminalSize(columns: size.columns, rows: size.rows))
+                        confirmed = true
+                    default: continue
+                    }
+                }
+                let reader = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { reader.shutdown() }
+                try reader.greetSessionProcess()
+                try reader.send(ClientMessage.readScreen(identifier: identifier, includeScrollback: false))
+                guard case .screen(let screen) = try Self.next(on: reader) else {
+                    Issue.record("The session screen did not arrive.")
+                    return
+                }
+                let orderedText = String(decoding: try ordered.formatted(.plainText), as: UTF8.self)
+                let optimisticText = String(decoding: try optimistic.formatted(.plainText), as: UTF8.self)
+                #expect(orderedText == screen)
+                #expect(optimisticText != screen)
             }
         }
     }
