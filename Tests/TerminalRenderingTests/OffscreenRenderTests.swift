@@ -571,18 +571,19 @@ extension OffscreenRenderTests {
         #expect(matches)
     }
 
-    @Test func aScreenBeyondTheAtlasLimitDoesNotRetryWithoutEnd() throws {
+    @Test(arguments: [false, true])
+    func aScreenBeyondTheAtlasLimitDoesNotRetryWithoutEnd(usesViewport: Bool) throws {
         let screen = try makeScreen("\u{1B}[?25lABCDEFGHIJKLMNOPQRSTUVWXYZ", columns: 40, rows: 3)
         let device = try #require(MTLCreateSystemDefaultDevice())
         let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor, atlasSide: 64, atlasMaximumSide: 64)
         let size = renderer.pixelSize(for: screen.terminal.size)
-        try renderer.prepare(from: screen.state)
+        try renderer.prepare(from: screen.state, viewportSize: usesViewport ? size : nil)
         let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: first))
         _ = first.pixel(horizontalPosition: 0, verticalPosition: 0)
         screen.state.markClean()
         try screen.state.update(from: screen.terminal)
-        try renderer.prepare(from: screen.state)
+        try renderer.prepare(from: screen.state, viewportSize: usesViewport ? size : nil)
         let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: next))
         #expect(pixel(of: first, column: 0, horizontalPosition: 8, verticalPosition: 12) == pixel(of: next, column: 0, horizontalPosition: 8, verticalPosition: 12))
