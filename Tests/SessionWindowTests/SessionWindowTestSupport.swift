@@ -15,27 +15,33 @@ final class FakeAttachment: AttachedSession {
     }
 
     let snapshot: Data
+    private let earlyEvent: SessionAttachmentEvent?
     let record = Mutex(Record())
     private let handler = Mutex<(@Sendable (SessionAttachmentEvent) -> Void)?>(nil)
     private let receiver = DispatchQueue(label: "fake-attachment.receiver")
 
     /// - Parameter screen: The output that the snapshot of the session holds.
-    init(screen: String = "", size: TerminalSize = TerminalSize(columns: 80, rows: 24)) throws {
+    init(screen: String = "", size: TerminalSize = TerminalSize(columns: 80, rows: 24), earlyEvent: SessionAttachmentEvent? = nil) throws {
         let terminal = try Terminal(size: size, scrollbackLimit: 100)
         terminal.write(screen)
         snapshot = Data(try TerminalSnapshot(capturing: terminal).bytes)
+        self.earlyEvent = earlyEvent
     }
 
     /// A snapshot of other bytes, such as one of another build.
     init(snapshot: Data) {
         self.snapshot = snapshot
+        earlyEvent = nil
     }
 
     func send(input: Data) { record.withLock { $0.inputs.append(input); $0.sentOnMainThread = $0.sentOnMainThread || Thread.isMainThread } }
     func send(size: SessionSize) { record.withLock { $0.sizes.append(size); $0.sentOnMainThread = $0.sentOnMainThread || Thread.isMainThread } }
     func detach() { record.withLock { $0.detached = true } }
     func shutdown() { record.withLock { $0.shutDown = true } }
-    func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) { self.handler.withLock { $0 = handler } }
+    func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
+        self.handler.withLock { $0 = handler }
+        if let earlyEvent { handler(earlyEvent) }
+    }
 
     /// Gives an event from another thread, in order, as the receiving thread of a real attachment does.
     func deliver(_ event: SessionAttachmentEvent) {

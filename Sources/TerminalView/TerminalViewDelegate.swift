@@ -7,6 +7,9 @@ public protocol TerminalViewDelegate: AnyObject {
     /// size. The owner passes the size on to the session of the view.
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize)
 
+    /// The part of the grid that fits the view changed, even if the terminal size did not.
+    func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize)
+
     /// The program set a new title with OSC 0 or OSC 2. The owner shows it, or the folder of the session when the title is empty.
     func terminalView(_ view: TerminalView, didChangeTitle title: String)
 
@@ -19,4 +22,8 @@ public protocol TerminalViewDelegate: AnyObject {
     ///
     /// - Returns: `true` when the user wants the paste. The view pastes only after a yes.
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool
+}
+
+public extension TerminalViewDelegate {
+    func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {}
 }

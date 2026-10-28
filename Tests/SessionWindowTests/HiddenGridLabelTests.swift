@@ -30,4 +30,32 @@ import Testing
         controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
         #expect(controller.hiddenGridLabel.isHidden)
     }
+
+    @Test func theLabelClearsWhenTheViewGrowsToTheSizeOfTheSession() async throws {
+        let attachment = try FakeAttachment(size: TerminalView.estimatedGrid(for: SessionWindowController.contentSize, scale: NSScreen.main?.backingScaleFactor ?? 2))
+        let controller = try makeWindowController(attachment)
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view?.visibleGridSize != nil }
+        let view = try #require(controller.view), own = try #require(view.visibleGridSize)
+        let larger = TerminalSize(columns: own.columns + 2, rows: own.rows + 3)
+        attachment.deliver(.sizeChanged(SessionSize(columns: larger.columns, rows: larger.rows)))
+        await waitOnMainThread { !controller.hiddenGridLabel.isHidden }
+        view.frame.size = NSSize(width: CGFloat(larger.columns) * view.cellSize.width + 2 * view.gridPadding + 0.5,
+                                 height: CGFloat(larger.rows) * view.cellSize.height + 2 * view.gridPadding + 0.5)
+        view.layout()
+        #expect(view.visibleGridSize == larger && view.gridSize == larger && controller.hiddenGridLabel.isHidden)
+        #expect(attachment.record.withLock { $0.sizes }.isEmpty)
+    }
+
+    @Test func aSizeThatArrivesAsReceivingStartsFollowsTheFirstLayout() async throws {
+        let own = TerminalView.estimatedGrid(for: SessionWindowController.contentSize, scale: NSScreen.main?.backingScaleFactor ?? 2)
+        let larger = SessionSize(columns: own.columns + 1, rows: own.rows + 2)
+        let attachment = try FakeAttachment(size: own, earlyEvent: .sizeChanged(larger))
+        let controller = try makeWindowController(attachment)
+        defer { controller.window.close() }
+        await waitOnMainThread { !controller.hiddenGridLabel.isHidden }
+        #expect(controller.view?.visibleGridSize == own)
+        #expect(controller.hiddenGridLabel.stringValue == "2 rows and 1 column hidden")
+        #expect(attachment.record.withLock { $0.sizes }.isEmpty)
+    }
 }

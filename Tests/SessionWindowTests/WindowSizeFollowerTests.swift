@@ -1,6 +1,8 @@
 import AppKit
+import Metal
 import SessionProtocol
 import TerminalEmulation
+import TerminalRendering
 import Testing
 @testable import SessionWindow
 @testable import TerminalView
@@ -50,5 +52,21 @@ import Testing
         attachment.deliver(.sizeChanged(SessionSize(columns: 30, rows: 8)))
         await waitOnMainThread { view.gridSize == TerminalSize(columns: 30, rows: 8) }
         #expect(view.screenText == String(repeating: "x", count: 30))
+    }
+
+    @Test func aSmallerSessionGridStaysAtTheTopLeftAndFillsTheRest() async throws {
+        let (controller, attachment, view) = try await makeAttachedWindow()
+        defer { controller.window.close() }
+        attachment.deliver(.sizeChanged(SessionSize(columns: 10, rows: 3)))
+        await waitOnMainThread { view.gridSize == TerminalSize(columns: 10, rows: 3) }
+        view.terminal.write("\u{1B}[?25l█")
+        let scale = view.renderer.fonts.scale
+        let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()),
+            width: Int((view.bounds.width * scale).rounded()), height: Int((view.bounds.height * scale).rounded()))
+        #expect(try view.drawFrame(into: target))
+        #expect(target.pixel(x: view.renderer.padding + view.renderer.fonts.cellWidth / 2,
+                             y: view.renderer.padding + view.renderer.fonts.cellHeight / 2) == view.theme.foreground)
+        #expect(target.pixel(x: target.texture.width - 1, y: target.texture.height - 1) == view.theme.background)
+        #expect(controller.hiddenGridLabel.isHidden && attachment.record.withLock { $0.sizes }.isEmpty)
     }
 }

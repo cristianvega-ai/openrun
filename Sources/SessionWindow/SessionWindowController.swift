@@ -60,6 +60,8 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         view.delegate = self
         window.contentView = container(holding: view)
         window.makeFirstResponder(view)
+        // Complete the snapshot fit before a later size from another client arrives.
+        view.layoutSubtreeIfNeeded()
         started.attachment.startReceiving(AttachmentRelay.handler { [weak self] in self?.handle($0) })
     }
 
@@ -117,6 +119,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         showHiddenPart()
         guard let attachment else { return }
         work.run { try? attachment.send(size: SessionSize(columns: size.columns, rows: size.rows)) }
+    }
+
+    public func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {
+        showHiddenPart()
     }
 
     public func terminalView(_ view: TerminalView, didChangeTitle title: String) {}

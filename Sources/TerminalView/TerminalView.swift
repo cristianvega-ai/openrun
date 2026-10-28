@@ -459,6 +459,7 @@ public final class TerminalView: NSView {
         guard grid != visibleGridSize else { return }
         visibleGridSize = grid
         resizeTerminal(to: grid, tellsDelegate: true)
+        delegate?.terminalView(self, didChangeVisibleGridSize: grid)
     }
 
     private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool) {
