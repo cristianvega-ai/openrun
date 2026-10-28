@@ -155,7 +155,11 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
 
     public func terminalView(_ view: TerminalView, send bytes: [UInt8]) {
         guard !isClosed, !hasConnectionFailure, let attachment else { return }
-        send { try attachment.send(input: Data(bytes)) }
+        // A partially written input frame must finish, so keep its size bounded.
+        for start in stride(from: 0, to: bytes.count, by: 64 * 1024) {
+            let piece = bytes[start..<min(start + 64 * 1024, bytes.count)]
+            send { try attachment.send(input: Data(piece)) }
+        }
     }
 
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
