@@ -1,14 +1,40 @@
 import Dispatch
+import Synchronization
 
 /// Runs the calls of one window that wait for the socket, on a serial queue.
 /// The main thread must never wait: a connection can wake the launch agent,
 /// and a send waits while the program reads no input. The queue keeps the
-/// order of keys and sizes, and a detach goes behind the keys before it.
+/// order of keys and sizes. A detach waits at most 200 ms for queued input.
 final class ConnectionWork: Sendable {
     private let queue = DispatchQueue(label: "ai.cristianvega.openrun.window-connection")
+    private let isStopped = Mutex(false)
 
     func run(_ work: @escaping @Sendable () -> Void) {
-        queue.async(execute: work)
+        queue.async { [self] in
+            guard !isStopped.withLock({ $0 }) else { return }
+            work()
+        }
+    }
+
+    /// Lets ready input and a detach go out, but wakes a stalled send after 200 ms.
+    func detach(_ attachment: any AttachedSession) {
+        queue.async { [self] in
+            if !isStopped.withLock({ $0 }) { try? attachment.detach() }
+            shutdown(attachment)
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now() + .milliseconds(200)) { [self] in
+            shutdown(attachment)
+        }
+    }
+
+    /// Ends the transport independently of the queue, and skips its remaining sends.
+    func shutdown(_ attachment: any AttachedSession) {
+        let first = isStopped.withLock { stopped in
+            guard !stopped else { return false }
+            stopped = true
+            return true
+        }
+        if first { attachment.shutdown() }
     }
 
     /// Runs `work` on the queue, and then gives its result to `finish` on the main thread.

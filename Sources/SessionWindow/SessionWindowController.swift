@@ -106,7 +106,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private func connectionFailed(_ detail: String) {
         guard !isClosed, !hasConnectionFailure else { return }
         hasConnectionFailure = true
-        attachment?.shutdown()
+        if let attachment { work.shutdown(attachment) }
         Task { [weak self] in
             guard let self, !isClosed else { return }
             _ = await ask(.connectionFailure(detail), window)
@@ -148,9 +148,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         onClose?()
     }
 
-    /// The detach goes behind the keys that wait, so they still reach the program.
+    /// A blocked send cannot hold the window open.
     private func detach(_ attachment: any AttachedSession) {
-        work.run { try? attachment.detach(); attachment.shutdown() }
+        work.detach(attachment)
     }
 
     public func terminalView(_ view: TerminalView, send bytes: [UInt8]) {
