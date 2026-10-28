@@ -53,7 +53,7 @@ public final class MouseEncoder {
         case nil: ghostty_mouse_event_clear_button(event)
         }
         ghostty_mouse_event_set_mods(event, mouse.modifiers.rawValue)
-        ghostty_mouse_event_set_position(event, GhosttyMousePosition(x: mouse.x, y: mouse.y))
+        ghostty_mouse_event_set_position(event, GhosttyMousePosition(x: mouse.horizontalPosition, y: mouse.verticalPosition))
         var output = [UInt8](repeating: 0, count: 64)
         var written = 0
         let result = output.withUnsafeMutableBytes {

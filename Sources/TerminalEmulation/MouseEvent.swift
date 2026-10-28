@@ -12,9 +12,9 @@ public struct MouseEvent: Sendable {
     public var button: Button?
     public var modifiers: KeyModifiers
     /// The pointer in pixels from the top left of the grid.
-    public var x, y: Float
+    public var horizontalPosition, verticalPosition: Float
 
-    public init(action: Action, button: Button?, modifiers: KeyModifiers = [], x: Float, y: Float) {
-        (self.action, self.button, self.modifiers, self.x, self.y) = (action, button, modifiers, x, y)
+    public init(action: Action, button: Button?, modifiers: KeyModifiers = [], horizontalPosition: Float, verticalPosition: Float) {
+        (self.action, self.button, self.modifiers, self.horizontalPosition, self.verticalPosition) = (action, button, modifiers, horizontalPosition, verticalPosition)
     }
 }
