@@ -93,7 +93,7 @@ import TerminalEmulation
         #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: metrics.height / 2) == screen.theme.cursor)
     }
 
-    @Test func theSelectedUTF16RangeHasTheSelectionColor() throws {
+    @Test func theSelectedSixteenBitCodeUnitRangeHasTheSelectionColor() throws {
         let screen = try renderScreen("\u{1B}[?25l", markedText: "A🙂B", markedTextSelection: NSRange(location: 1, length: 2))
         #expect(pixel(of: screen.target, column: 0, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
         #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: 0) == screen.theme.selection)
@@ -101,7 +101,7 @@ import TerminalEmulation
         #expect(pixel(of: screen.target, column: 3, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
     }
 
-    @Test func candidatePositionsUseTheDisplayedLayoutAndUTF16Boundaries() throws {
+    @Test func candidatePositionsUseTheDisplayedLayoutAndSixteenBitCodeUnitBoundaries() throws {
         let renderer = try TerminalRenderer(device: #require(MTLCreateSystemDefaultDevice()), fonts: testFonts, selectionColor: selectionColor)
         let size = TerminalSize(columns: 10, rows: 3)
         let position = ViewportCell(column: 9, row: 2)
@@ -156,7 +156,7 @@ import TerminalEmulation
         }
     }
 
-    @Test func theMarkedCaretUsesTheWrappedTextAndTheUTF16Selection() throws {
+    @Test func theMarkedCaretUsesTheWrappedTextAndTheSixteenBitCodeUnitSelection() throws {
         let atlas = try makeAtlas()
         func layout(_ location: Int) -> MarkedTextQuads.Layout {
             MarkedTextQuads.Layout(text: "🙂ab", column: 9, row: 2, columnCount: 10, rowCount: 3,
