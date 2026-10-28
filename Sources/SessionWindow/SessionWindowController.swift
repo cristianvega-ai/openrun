@@ -1,9 +1,13 @@
 import AppKit
+import SessionConnection
 import SessionProtocol
+import TerminalEmulation
 import TerminalView
 
 /// One window that shows one session. The window attaches off the main
-/// thread. Closing the window detaches, and the session goes on.
+/// thread and makes its view from the snapshot. Then the output of the
+/// session goes to the view. Closing the window detaches, and the session
+/// goes on.
 @MainActor
 public final class SessionWindowController: NSObject, NSWindowDelegate {
     /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
@@ -15,6 +19,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate {
     private let socket: SocketLocation
     private let work = ConnectionWork()
     private(set) var attachment: (any AttachedSession)?
+    private(set) var view: TerminalView?
     private var isClosed = false
 
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
@@ -42,7 +47,20 @@ public final class SessionWindowController: NSObject, NSWindowDelegate {
         guard let started = try? result.get() else { return window.close() }
         // The user can close the window while it attaches.
         guard !isClosed else { return detach(started.attachment) }
-        attachment = started.attachment
+        // Only the build that made a snapshot can restore it (decision of 2026-10-24).
+        guard let view = try? TerminalView(restoring: TerminalSnapshot(bytes: Array(started.attachment.snapshot))) else {
+            detach(started.attachment)
+            return window.close()
+        }
+        (attachment, self.view) = (started.attachment, view)
+        window.contentView = view
+        window.makeFirstResponder(view)
+        started.attachment.startReceiving(AttachmentRelay.handler { [weak self] in self?.handle($0) })
+    }
+
+    private func handle(_ event: SessionAttachmentEvent) {
+        guard !isClosed else { return }
+        if case .output(let bytes) = event { view?.write(bytes) }
     }
 
     public func windowWillClose(_ notification: Notification) {

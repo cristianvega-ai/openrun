@@ -4,6 +4,7 @@ import SessionProtocol
 import Synchronization
 import TerminalEmulation
 @testable import SessionWindow
+@testable import TerminalView
 
 /// Plays an attached session: it keeps what the window sends, and a test
 /// gives it the events of the session.
@@ -24,11 +25,22 @@ final class FakeAttachment: AttachedSession {
         snapshot = Data(try TerminalSnapshot(capturing: terminal).bytes)
     }
 
+    /// A snapshot of other bytes, such as one of another build.
+    init(snapshot: Data) {
+        self.snapshot = snapshot
+    }
+
     func send(input: Data) { record.withLock { $0.inputs.append(input); $0.sentOnMainThread = $0.sentOnMainThread || Thread.isMainThread } }
     func send(size: SessionSize) { record.withLock { $0.sizes.append(size); $0.sentOnMainThread = $0.sentOnMainThread || Thread.isMainThread } }
     func detach() { record.withLock { $0.detached = true } }
     func shutdown() { record.withLock { $0.shutDown = true } }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) { self.handler.withLock { $0 = handler } }
+
+    /// Gives an event from another thread, as the receiving thread of a real attachment does.
+    func deliver(_ event: SessionAttachmentEvent) {
+        let handler = handler.withLock { $0 }
+        Thread { handler?(event) }.start()
+    }
 }
 
 /// A window that attaches to `attachment`, or fails to attach when it is `nil`.
@@ -62,4 +74,9 @@ func waitOnMainThread(seconds: Double = 5, until condition: () -> Bool) async {
 @MainActor
 private func runLoopTurn() {
     RunLoop.main.run(until: Date().addingTimeInterval(0.005))
+}
+
+extension TerminalView {
+    /// The text on the screen of the view.
+    var screenText: String { String(decoding: (try? terminal.formatted(.plainText)) ?? [], as: UTF8.self) }
 }
