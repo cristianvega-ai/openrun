@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 import SessionConnection
 import SessionProtocol
 import Synchronization
@@ -10,6 +10,7 @@ import TerminalEmulation
 final class FakeAttachment: AttachedSession {
     struct Record {
         var inputs: [Data] = [], sizes: [SessionSize] = [], detached = false, shutDown = false, sentOnMainThread = false
+        var attachSize: SessionSize?
     }
 
     let snapshot: Data
@@ -28,6 +29,21 @@ final class FakeAttachment: AttachedSession {
     func detach() { record.withLock { $0.detached = true } }
     func shutdown() { record.withLock { $0.shutDown = true } }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) { self.handler.withLock { $0 = handler } }
+}
+
+/// A window that attaches to `attachment`, or fails to attach when it is `nil`.
+@MainActor
+func makeWindowController(_ attachment: FakeAttachment?, folder: String = "/tmp/project") throws -> SessionWindowController {
+    // AppKit needs an application object before it makes a window.
+    _ = NSApplication.shared
+    let controller = SessionWindowController(start: .runningSession(UUID()), socket: try SocketLocation(path: "/tmp/openrun-window-test.socket"))
+    controller.connect = { _, _, size in
+        guard let attachment else { throw SessionConnectionError.connectionClosed }
+        attachment.record.withLock { $0.attachSize = size }
+        return StartedSession(summary: SessionSummary(identifier: UUID(), folder: folder, command: ["/bin/zsh"], size: size, createdAt: Date()), attachment: attachment)
+    }
+    controller.showWindow()
+    return controller
 }
 
 /// Lets the main thread work until `condition` is true or `seconds` have passed.
