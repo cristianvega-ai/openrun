@@ -77,8 +77,8 @@ import Testing
         let size = view.renderer.pixelSize(for: view.terminal.size)
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: size.width, height: size.height)
         try view.drawFrame(into: target)
-        #expect(target.pixel(x: view.renderer.padding + fonts.cellWidth / 2, y: view.renderer.padding + fonts.cellHeight / 2) == view.theme.foreground)
-        #expect(target.pixel(x: size.width - 1, y: size.height - 1) == view.theme.background)
+        #expect(target.pixel(horizontalPosition: view.renderer.padding + fonts.cellWidth / 2, verticalPosition: view.renderer.padding + fonts.cellHeight / 2) == view.theme.foreground)
+        #expect(target.pixel(horizontalPosition: size.width - 1, verticalPosition: size.height - 1) == view.theme.background)
     }
 
     @Test(.enabled(if: NSScreen.main != nil))

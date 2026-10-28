@@ -20,7 +20,7 @@ import Testing
     private func showsBlock(_ view: TerminalView, _ target: OffscreenTarget) throws -> Bool {
         try view.drawFrame(into: target)
         let fonts = view.renderer.fonts, padding = view.renderer.padding
-        return target.pixel(x: padding + fonts.cellWidth / 2, y: padding + fonts.cellHeight / 2) == view.theme.foreground
+        return target.pixel(horizontalPosition: padding + fonts.cellWidth / 2, verticalPosition: padding + fonts.cellHeight / 2) == view.theme.foreground
     }
 
     @Test func theViewKeepsTheFrameOfTheHoldUntilTheProgramLetsGo() throws {

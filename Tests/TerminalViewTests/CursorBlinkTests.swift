@@ -67,7 +67,7 @@ import Testing
         let fonts = view.renderer.fonts, padding = view.renderer.padding
         func isCursorDrawn() throws -> Bool {
             try view.drawFrame(into: target)
-            return target.pixel(x: padding + fonts.cellWidth / 2, y: padding + fonts.cellHeight / 2) == view.theme.cursor
+            return target.pixel(horizontalPosition: padding + fonts.cellWidth / 2, verticalPosition: padding + fonts.cellHeight / 2) == view.theme.cursor
         }
         #expect(try isCursorDrawn())
         clock.advance(by: .milliseconds(500))

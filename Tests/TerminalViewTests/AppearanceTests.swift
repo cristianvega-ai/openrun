@@ -26,7 +26,7 @@ import TerminalTheme
         let size = view.renderer.pixelSize(for: view.gridSize)
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: size.width, height: size.height)
         try view.drawFrame(into: target)
-        return target.pixel(x: 0, y: 0)
+        return target.pixel(horizontalPosition: 0, verticalPosition: 0)
     }
 
     @Test func theViewFollowsTheAppearanceWithTheGraphiteTheme() throws {

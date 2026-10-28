@@ -114,9 +114,9 @@ import Testing
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()),
             width: Int((view.bounds.width * scale).rounded()), height: Int((view.bounds.height * scale).rounded()))
         #expect(try view.drawFrame(into: target))
-        #expect(target.pixel(x: view.renderer.padding + view.renderer.fonts.cellWidth / 2,
-                             y: view.renderer.padding + view.renderer.fonts.cellHeight / 2) == view.theme.foreground)
-        #expect(target.pixel(x: target.texture.width - 1, y: target.texture.height - 1) == view.theme.background)
+        #expect(target.pixel(horizontalPosition: view.renderer.padding + view.renderer.fonts.cellWidth / 2,
+                             verticalPosition: view.renderer.padding + view.renderer.fonts.cellHeight / 2) == view.theme.foreground)
+        #expect(target.pixel(horizontalPosition: target.texture.width - 1, verticalPosition: target.texture.height - 1) == view.theme.background)
         #expect(controller.hiddenGridLabel.isHidden && attachment.record.withLock { $0.sizes }.isEmpty)
     }
 }

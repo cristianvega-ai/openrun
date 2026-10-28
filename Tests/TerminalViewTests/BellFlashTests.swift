@@ -16,7 +16,7 @@ import Testing
     /// Draws a frame and tells if the corner of the picture has the flash.
     private func isFlashing(_ view: TerminalView, _ target: OffscreenTarget) throws -> Bool {
         try view.drawFrame(into: target)
-        return target.pixel(x: 0, y: 0) != view.theme.background
+        return target.pixel(horizontalPosition: 0, verticalPosition: 0) != view.theme.background
     }
 
     @Test func theBellFlashesTheViewFor150MillisecondsWithoutASound() throws {
