@@ -8,17 +8,17 @@ import TerminalEmulation
 final class OutputParser {
     /// The most bytes that one call of `Terminal.write` gets.
     let pieceSize: Int
-    private var bytes: [UInt8] = []
+    private let queue = TerminalOutputQueue()
     private var offset = 0
 
     init(pieceSize: Int = 64 * 1024) {
         self.pieceSize = pieceSize
     }
 
-    var hasPendingOutput: Bool { offset < bytes.count }
+    var hasPendingOutput: Bool { queue.first != nil }
 
     func append(_ output: some ContiguousBytes) {
-        output.withUnsafeBytes { bytes.append(contentsOf: $0) }
+        output.withUnsafeBytes { queue.append(.bytes(Array($0))) }
     }
 
     /// Parses pieces until the budget is used. A turn always parses one piece,
@@ -27,18 +27,12 @@ final class OutputParser {
     /// - Returns: `true` when output is left for another turn.
     func parse(into terminal: Terminal, budget: ParseBudget) -> Bool {
         repeat {
+            guard case .bytes(let bytes)? = queue.first else { break }
             let end = min(offset + pieceSize, bytes.count)
             terminal.write(bytes[offset..<end])
             offset = end
+            if offset == bytes.count { queue.removeFirst(); offset = 0 }
         } while hasPendingOutput && !budget.isUsed
-        if !hasPendingOutput {
-            bytes.removeAll(keepingCapacity: true)
-            offset = 0
-        } else if offset >= 1 << 20 {
-            // The parsed part would grow without limit under a long flood.
-            bytes.removeFirst(offset)
-            offset = 0
-        }
         return hasPendingOutput
     }
 }
