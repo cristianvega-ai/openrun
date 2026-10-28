@@ -63,6 +63,9 @@ let package = Package(
             name: "openrun",
             dependencies: ["CommandLineTool"]
         ),
+        // One window for one session: the attach, the size rules, the title and the questions.
+        .target(name: "SessionWindow", dependencies: ["TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
+        .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionConnection", "SessionProtocol"]),
         // The app. In milestone 2 it registers the launch agent at its start.
         .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch"]),
