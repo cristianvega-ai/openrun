@@ -17,6 +17,8 @@ final class GlyphAtlas {
     private(set) var color: MTLTexture
     /// How many times a glyph was drawn. A glyph in the texture is not drawn again.
     private(set) var drawnCount = 0
+    /// A glyph could not be placed in either texture.
+    private(set) var isFull = false
     private let device: MTLDevice
     private let maximumSide: Int
     private let rasterizer: GlyphRasterizer
@@ -51,7 +53,7 @@ final class GlyphAtlas {
         drawnCount += 1
         var place = place(bitmap)
         while place == nil {
-            guard grow(isColor: bitmap.isColor) else { return .empty }
+            guard grow(isColor: bitmap.isColor) else { isFull = true; return .empty }
             place = self.place(bitmap)
         }
         guard let place else { return .empty }
@@ -67,6 +69,21 @@ final class GlyphAtlas {
         bitmap.isColor
             ? colorPacker.place(width: bitmap.width, height: bitmap.height)
             : coveragePacker.place(width: bitmap.width, height: bitmap.height)
+    }
+
+    /// Replaces the textures so commands already in flight keep their pixels.
+    @discardableResult
+    func reclaim() -> Bool {
+        guard let nextCoverage = try? Self.makeTexture(device, format: coverage.pixelFormat, side: coverage.width),
+            let nextColor = try? Self.makeTexture(device, format: color.pixelFormat, side: color.width)
+        else { return false }
+        coverage = nextCoverage
+        color = nextColor
+        coveragePacker = AtlasPacker(side: coverage.width)
+        colorPacker = AtlasPacker(side: color.width)
+        entries.removeAll()
+        isFull = false
+        return true
     }
 
     private func grow(isColor: Bool) -> Bool {

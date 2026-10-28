@@ -82,4 +82,21 @@ import Testing
         #expect(atlas.coverage.width == 64)
         #expect(atlas.entry(for: key("A")) == first && after == original)
     }
+
+    @Test func reclaimLeavesTheOldTextureForFramesInFlight() throws {
+        let atlas = try makeAtlas(side: 64, maximumSide: 64)
+        let first = atlas.entry(for: key("A"))
+        let old = atlas.coverage
+        let oldColor = atlas.color
+        let region = MTLRegionMake2D(first.x, first.y, first.width, first.height)
+        var original = [UInt8](repeating: 0, count: first.width * first.height)
+        old.getBytes(&original, bytesPerRow: first.width, from: region, mipmapLevel: 0)
+        for letter in "BCDEFGHIJKLMNOPQRSTUVWXYZ" { _ = atlas.entry(for: key(String(letter))) }
+        #expect(atlas.isFull && atlas.reclaim())
+        #expect(!atlas.isFull && atlas.coverage !== old && atlas.color !== oldColor)
+        #expect(!atlas.entry(for: key("Z")).isEmpty)
+        var after = [UInt8](repeating: 0, count: original.count)
+        old.getBytes(&after, bytesPerRow: first.width, from: region, mipmapLevel: 0)
+        #expect(after == original)
+    }
 }

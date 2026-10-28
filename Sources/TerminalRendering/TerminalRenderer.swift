@@ -40,6 +40,7 @@ public final class TerminalRenderer {
     private var drawnColors: RenderColors?
     private var drawnSelectionColor: TerminalColor?
     private var drawnBands: [FrameBuilder.Band]?
+    private var reclaimedForFrame = false
     private(set) var rowsDrawn = 0
     // The graphics processor reads one buffer while the processor fills the next.
     private var buffers: [MTLBuffer?] = [nil, nil, nil]
@@ -50,7 +51,8 @@ public final class TerminalRenderer {
         try self.init(device: device, fonts: fonts, selectionColor: selectionColor, pixelFormat: pixelFormat, atlasSide: 2048)
     }
 
-    init(device: MTLDevice, fonts: FontSet, selectionColor: TerminalColor, pixelFormat: MTLPixelFormat = .bgra8Unorm, atlasSide: Int) throws {
+    init(device: MTLDevice, fonts: FontSet, selectionColor: TerminalColor, pixelFormat: MTLPixelFormat = .bgra8Unorm,
+         atlasSide: Int, atlasMaximumSide: Int = 8192) throws {
         guard let queue = device.makeCommandQueue() else { throw RenderingError.commandQueueUnavailable }
         self.device = device
         self.fonts = fonts
@@ -58,7 +60,7 @@ public final class TerminalRenderer {
         self.queue = queue
         shaders = try ShaderLibrary(device: device, pixelFormat: pixelFormat)
         padding = Int((8 * fonts.scale).rounded())
-        atlas = try GlyphAtlas(device: device, fonts: fonts, side: atlasSide)
+        atlas = try GlyphAtlas(device: device, fonts: fonts, side: atlasSide, maximumSide: atlasMaximumSide)
     }
 
     /// The size of a target that holds a grid and the space around it.
@@ -97,9 +99,24 @@ public final class TerminalRenderer {
         columnCount = Int(state.size.columns)
         rowCount = Int(state.size.rows)
         grid = state.size
-        return try cache.update(from: state, colors: screenColors) {
-            try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
+        reclaimedForFrame = false
+        if atlas.isFull { _ = reclaimAtlas() }
+        func update() throws -> FrameStatistics {
+            try cache.update(from: state, colors: screenColors) {
+                try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
+            }
         }
+        let statistics = try update()
+        if atlas.isFull, !reclaimedForFrame, reclaimAtlas() { return try update() }
+        return statistics
+    }
+
+    private func reclaimAtlas() -> Bool {
+        reclaimedForFrame = true
+        guard atlas.reclaim() else { return false }
+        cache.forget()
+        drawnBands = nil
+        return true
     }
 
     /// Draws the prepared rows into the target. The space around the grid and

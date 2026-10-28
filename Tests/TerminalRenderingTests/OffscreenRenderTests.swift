@@ -305,7 +305,42 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
     }
 }
 @Suite struct AtlasFrameTests {
-    private func image(_ output: String, markedText: String?, side: Int, name: String) throws -> [UInt8] {
+    @Test func aNewScreenReclaimsGlyphsFromEarlierScreens() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 3), scrollbackLimit: 0)
+        try theme.apply(to: terminal)
+        terminal.write("\u{1B}[?25lABCDEFGHIJKLMNOPQRST")
+        let state = try RenderState()
+        try state.update(from: terminal)
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection, atlasSide: 128, atlasMaximumSide: 128)
+        let size = renderer.pixelSize(for: terminal.size)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        try renderer.prepare(from: state)
+        #expect(renderer.draw(into: first))
+        state.markClean()
+        let text = "uvwxyz0123456789!@#$"
+        terminal.write("\u{1B}[2J\u{1B}[H" + text)
+        try state.update(from: terminal)
+        try renderer.prepare(from: state)
+        let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
+        _ = next.pixel(x: 0, y: 0)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-history-small.png"))
+        }
+        var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
+        next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
+                              from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+        let reference = try image("\u{1B}[?25l" + text, markedText: nil, side: 2048, name: "reclaim-history")
+        let matches = pixels == reference
+        #expect(matches)
+        first.texture.getBytes(&pixels, bytesPerRow: size.width * 4, from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+        let prior = try image("\u{1B}[?25lABCDEFGHIJKLMNOPQRST", markedText: nil, side: 2048, name: "reclaim-prior")
+        #expect(pixels == prior)
+    }
+
+    private func image(_ output: String, markedText: String?, side: Int, name: String, fonts: FontSet = testFonts) throws -> [UInt8] {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)
         let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 3), scrollbackLimit: 0)
@@ -313,7 +348,7 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
         terminal.write(output)
         let state = try RenderState()
         try state.update(from: terminal)
-        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection, atlasSide: side)
+        let renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection, atlasSide: side)
         try renderer.prepare(from: state)
         renderer.markedText = markedText
         let size = renderer.pixelSize(for: terminal.size)
