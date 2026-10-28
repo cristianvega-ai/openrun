@@ -305,6 +305,38 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
     }
 }
 extension OffscreenRenderTests {
+    @Test func colorGlyphsReclaimHistoricalEntries() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 3), scrollbackLimit: 0)
+        try theme.apply(to: terminal)
+        terminal.write("\u{1B}[?25l🙂😀😃😄😁😆😅😂")
+        let state = try RenderState()
+        try state.update(from: terminal)
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection, atlasSide: 256, atlasMaximumSide: 256)
+        let size = renderer.pixelSize(for: terminal.size)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        try renderer.prepare(from: state)
+        #expect(renderer.draw(into: first))
+        state.markClean()
+        let text = "🤣😊😇🙃😉😍😘😎"
+        terminal.write("\u{1B}[2J\u{1B}[H" + text)
+        try state.update(from: terminal)
+        try renderer.prepare(from: state)
+        let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
+        _ = next.pixel(x: 0, y: 0)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-color-small.png"))
+        }
+        var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
+        next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
+                              from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+        let reference = try image("\u{1B}[?25l" + text, markedText: nil, side: 2048, name: "reclaim-color")
+        let matches = pixels == reference
+        #expect(matches)
+    }
+
     @Test func markedTextAfterPreparationReclaimsHistoricalGlyphs() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)
