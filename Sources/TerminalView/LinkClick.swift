@@ -9,6 +9,8 @@ import TerminalEmulation
 @MainActor
 final class LinkClick {
     var opener: any LinkOpener = WorkspaceLinkOpener()
+    /// The window asks before a link opens an app or a file.
+    var ask: @MainActor (String) async -> Bool = { _ in false }
     private let terminal: Terminal
     /// The address of the link that the click started on, or `nil` when no link click is going on.
     private var pressedAddress: String?
@@ -22,7 +24,7 @@ final class LinkClick {
 
     /// - Returns: `true` when the press is the start of a link click.
     func press(modifiers: NSEvent.ModifierFlags, at cell: ViewportCell) -> Bool {
-        guard modifiers.contains(.command), let address = terminal.hyperlink(at: cell), URL(string: address) != nil else { return false }
+        guard modifiers.contains(.command), let address = terminal.hyperlink(at: cell), LinkSchemeRule.target(for: address) != nil else { return false }
         pressedAddress = address
         return true
     }
@@ -30,7 +32,9 @@ final class LinkClick {
     /// Ends the click. The link opens when the pointer is still over it.
     func release(at cell: ViewportCell) {
         defer { pressedAddress = nil }
-        guard let address = pressedAddress, terminal.hyperlink(at: cell) == address, let url = URL(string: address) else { return }
-        opener.open(url)
+        guard let address = pressedAddress, terminal.hyperlink(at: cell) == address, let target = LinkSchemeRule.target(for: address) else { return }
+        guard LinkSchemeRule.needsQuestion(for: target) else { return opener.open(target) }
+        let (ask, opener) = (ask, opener)
+        Task { if await ask(address) { opener.open(target) } }
     }
 }

@@ -10,6 +10,8 @@ import TerminalEmulation
     /// The texts of the pastes that asked, and the answer that the user gives.
     var questions: [String] = []
     var pasteAnswer = false
+    var linkQuestions: [String] = []
+    var linkAnswer = false
 
     func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) { sizes.append(size) }
     func terminalView(_ view: TerminalView, send bytes: [UInt8]) { sent += bytes }
@@ -18,6 +20,11 @@ import TerminalEmulation
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
         questions.append(text)
         return pasteAnswer
+    }
+
+    func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool {
+        linkQuestions.append(address)
+        return linkAnswer
     }
 
     /// The bytes that the view sent since the last call, as text.

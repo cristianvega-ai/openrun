@@ -83,6 +83,10 @@ public final class TerminalView: NSView {
         super.init(frame: .zero)
         wantsLayer = true
         focus.onChange = { [weak self] isKey in self?.windowKeyChanged(isKey) }
+        links.ask = { [weak self] address in
+            guard let self, let delegate else { return false }
+            return await delegate.terminalView(self, shouldOpenLink: address)
+        }
         addSubview(scrollBar)
         scrollBar.onScroll = { [weak self] scroll in
             self?.terminal.scrollViewport(scroll)

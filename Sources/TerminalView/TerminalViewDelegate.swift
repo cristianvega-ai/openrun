@@ -22,8 +22,12 @@ public protocol TerminalViewDelegate: AnyObject {
     ///
     /// - Returns: `true` when the user wants the paste. The view pastes only after a yes.
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool
+
+    /// The user clicked a link that can open another app or a file. The owner asks before opening it.
+    func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool
 }
 
 public extension TerminalViewDelegate {
+    func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool { false }
     func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {}
 }

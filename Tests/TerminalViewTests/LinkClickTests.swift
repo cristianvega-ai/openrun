@@ -9,9 +9,9 @@ import Testing
 }
 
 @MainActor @Suite struct LinkClickTests {
-    private func makeClick() throws -> (LinkClick, RecordingLinkOpener) {
+    private func makeClick(address: String = "https://example.com/docs") throws -> (LinkClick, RecordingLinkOpener) {
         let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 5), scrollbackLimit: 0)
-        terminal.write("\u{1B}]8;;https://example.com/docs\u{07}link\u{1B}]8;;\u{07} plain")
+        terminal.write("\u{1B}]8;;\(address)\u{07}link\u{1B}]8;;\u{07} plain")
         let click = LinkClick(terminal: terminal), opener = RecordingLinkOpener()
         click.opener = opener
         return (click, opener)
@@ -25,6 +25,37 @@ import Testing
         #expect(opener.targets.isEmpty)
         click.release(at: cell(2))
         #expect(opener.targets == [URL(string: "https://example.com/docs")] && !click.isActive)
+    }
+
+    @Test func otherSchemesWaitForYesAndInvalidAddressesAreRejected() async throws {
+        let address = "file:///tmp/example"
+        let (click, opener) = try makeClick(address: address)
+        var questions: [String] = []
+        var answer: CheckedContinuation<Bool, Never>?
+        click.ask = { text in
+            questions.append(text)
+            return await withCheckedContinuation { answer = $0 }
+        }
+        #expect(click.press(modifiers: .command, at: cell(0)))
+        click.release(at: cell(1))
+        await settle { answer != nil }
+        #expect(questions == [address] && opener.targets.isEmpty)
+        let first = try #require(answer)
+        answer = nil
+        first.resume(returning: false)
+        await settle(seconds: 0.1) { false }
+        #expect(opener.targets.isEmpty)
+        #expect(click.press(modifiers: .command, at: cell(0)))
+        click.release(at: cell(1))
+        await settle { answer != nil }
+        #expect(opener.targets.isEmpty)
+        let second = try #require(answer)
+        answer = nil
+        second.resume(returning: true)
+        await settle { !opener.targets.isEmpty }
+        #expect(opener.targets == [URL(string: address)] && questions == [address, address])
+        let (invalid, rejected) = try makeClick(address: "https://")
+        #expect(!invalid.press(modifiers: .command, at: cell(0)) && rejected.targets.isEmpty)
     }
 
     @Test func aClickWithoutCommandOrOutsideALinkIsNotALinkClick() throws {
@@ -44,13 +75,13 @@ import Testing
 }
 
 @MainActor @Suite struct LinkClickOfViewTests {
-    private func makeView(_ output: String) throws -> (view: TerminalView, delegate: RecordingDelegate, opener: RecordingLinkOpener) {
+    private func makeView(_ output: String, address: String = "https://example.com/docs") throws -> (view: TerminalView, delegate: RecordingDelegate, opener: RecordingLinkOpener) {
         let view = try TerminalView()
         let delegate = RecordingDelegate(), opener = RecordingLinkOpener()
         (view.delegate, view.links.opener) = (delegate, opener)
         view.frame = NSRect(x: 0, y: 0, width: 800, height: 400)
         view.layoutSubtreeIfNeeded()
-        view.terminal.write("\u{1B}]8;;https://example.com/docs\u{07}link\u{1B}]8;;\u{07} plain" + output)
+        view.terminal.write("\u{1B}]8;;\(address)\u{07}link\u{1B}]8;;\u{07} plain" + output)
         return (view, delegate, opener)
     }
 
@@ -69,6 +100,21 @@ import Testing
         view.mouseUp(with: try event(.leftMouseUp, column: 2, in: view, .command))
         #expect(delegate.takeSent() == "" && !view.terminal.hasSelection)
         #expect(opener.targets == [URL(string: "https://example.com/docs")])
+    }
+
+    @Test func theViewAsksItsDelegateWithoutSendingTheClickToTheProgram() async throws {
+        let address = "file:///tmp/example"
+        let (view, delegate, opener) = try makeView("\u{1B}[?1003h\u{1B}[?1006h", address: address)
+        view.mouseDown(with: try event(.leftMouseDown, column: 1, in: view, .command))
+        view.mouseUp(with: try event(.leftMouseUp, column: 1, in: view, .command))
+        await settle { !delegate.linkQuestions.isEmpty }
+        #expect(delegate.linkQuestions == [address] && delegate.takeSent() == "" && opener.targets.isEmpty)
+        delegate.linkAnswer = true
+        view.mouseDown(with: try event(.leftMouseDown, column: 1, in: view, .command))
+        view.mouseUp(with: try event(.leftMouseUp, column: 1, in: view, .command))
+        await settle { !opener.targets.isEmpty }
+        #expect(delegate.linkQuestions == [address, address] && opener.targets == [URL(string: address)])
+        #expect(delegate.takeSent() == "")
     }
 
     @Test func otherClicksGoToTheProgramAndOpenNoLink() throws {
