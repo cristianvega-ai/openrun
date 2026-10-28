@@ -4,8 +4,8 @@ import Testing
 @testable import TerminalView
 
 @MainActor final class RecordingLinkOpener: LinkOpener {
-    var urls: [URL] = []
-    func open(_ url: URL) { urls.append(url) }
+    var targets: [URL] = []
+    func open(_ target: URL) { targets.append(target) }
 }
 
 @MainActor @Suite struct LinkClickTests {
@@ -22,9 +22,9 @@ import Testing
     @Test func aCommandClickOpensTheLinkUnderThePointerOnRelease() throws {
         let (click, opener) = try makeClick()
         #expect(click.press(modifiers: .command, at: cell(1)) && click.isActive)
-        #expect(opener.urls.isEmpty)
+        #expect(opener.targets.isEmpty)
         click.release(at: cell(2))
-        #expect(opener.urls == [URL(string: "https://example.com/docs")] && !click.isActive)
+        #expect(opener.targets == [URL(string: "https://example.com/docs")] && !click.isActive)
     }
 
     @Test func aClickWithoutCommandOrOutsideALinkIsNotALinkClick() throws {
@@ -32,14 +32,14 @@ import Testing
         #expect(!click.press(modifiers: [], at: cell(1)))
         #expect(!click.press(modifiers: .command, at: cell(6)))
         click.release(at: cell(1))
-        #expect(opener.urls.isEmpty && !click.isActive)
+        #expect(opener.targets.isEmpty && !click.isActive)
     }
 
     @Test func aReleaseOutsideTheLinkOpensNothingAndEndsTheClick() throws {
         let (click, opener) = try makeClick()
         #expect(click.press(modifiers: .command, at: cell(0)))
         click.release(at: cell(8))
-        #expect(opener.urls.isEmpty && !click.isActive)
+        #expect(opener.targets.isEmpty && !click.isActive)
     }
 }
 
@@ -68,7 +68,7 @@ import Testing
         view.mouseDragged(with: try event(.leftMouseDragged, column: 2, in: view, .command))
         view.mouseUp(with: try event(.leftMouseUp, column: 2, in: view, .command))
         #expect(delegate.takeSent() == "" && !view.terminal.hasSelection)
-        #expect(opener.urls == [URL(string: "https://example.com/docs")])
+        #expect(opener.targets == [URL(string: "https://example.com/docs")])
     }
 
     @Test func otherClicksGoToTheProgramAndOpenNoLink() throws {
@@ -77,6 +77,6 @@ import Testing
         view.mouseUp(with: try event(.leftMouseUp, column: 1, in: view))
         view.mouseDown(with: try event(.leftMouseDown, column: 8, in: view, .command))
         view.mouseUp(with: try event(.leftMouseUp, column: 8, in: view, .command))
-        #expect(delegate.takeSent() == "\u{1B}[<0;2;1M\u{1B}[<0;2;1m\u{1B}[<0;9;1M\u{1B}[<0;9;1m" && opener.urls.isEmpty)
+        #expect(delegate.takeSent() == "\u{1B}[<0;2;1M\u{1B}[<0;2;1m\u{1B}[<0;9;1M\u{1B}[<0;9;1m" && opener.targets.isEmpty)
     }
 }
