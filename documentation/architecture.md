@@ -207,6 +207,15 @@ The client side of the socket, for the command-line tool and the window of the a
 - `SessionConnectionError` names each failure. Its text names no command or option of a client, so `CommandLineToolError(_:)` gives each error the words of the tool, such as "choose a socket with --socket".
 - A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. On the default socket, `SessionClient(location:)` first sends one wake to the launch agent and connects again. A connection that closes before `hello` leads to the same wake, because a launch agent that ends at its idle exit closes such a connection. A wake that fails gives `wakeFailed` with the `SessionWakeFailure`. Tests pass their own wake to `SessionClient(location:wake:)`.
 
+### SessionWindow
+
+`SessionStart` selects a new login shell or a running session. `SessionWindowController` owns one window, its view and its attachment. It connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order. Input and size requests go back through the serial connection queue.
+The title comes from the terminal's title, or the session folder when the title is empty. A small label reports grid rows or columns that do not fit. Closing the window detaches and leaves the session running; the exit of the program closes the window. A connection failure is shown to the user. The controller asks before an unsafe paste.
+
+### OpenRunApplication
+
+`ApplicationArguments` chooses the socket from `--socket`, then `OPENRUN_SOCKET`, then the default path. The app runs `LaunchAgentSetup` off the main thread for the default socket. A nondefault socket skips registration and wake, so a development session process must already listen there. Once setup is ready, the app opens a login shell in the home folder. Reopening the app with no windows opens another. `WindowList` keeps each controller until its window closes. Quitting closes the windows and detaches their sessions.
+
 ### SessionProcess
 
 `SessionProcess.run()` listens until SIGTERM, SIGINT or SIGHUP arrives. Internally:
@@ -294,8 +303,8 @@ A write uses the socket's send timeout (`SO_SNDTIMEO`) for its deadline, because
 
 OpenRun.app registers the session process as a launch agent with SMAppService (`LaunchAgentRegistration`). The property list is `Bundle/ai.cristianvega.openrun.session.plist`, and the bundle script copies it to `Contents/Library/LaunchAgents`. A test compares it with `LaunchAgentNames`.
 
-- **Start on demand.** The agent has the Mach service `ai.cristianvega.openrun.session` and no socket of launchd, so launchd starts it when a message reaches the service, not at login and not at registration. A client connects to the default socket as before. When nothing listens there, or the connection closes before `hello`, the client sends one wake (`SessionWake`) and connects again. The session process answers a wake only after its socket listens (`SessionWakeService`). A wake fails after 15 seconds without an answer, because a registration that launchd cannot start never answers. A socket that `--socket` or `OPENRUN_SOCKET` chooses gets no wake.
-- **The flag.** launchd runs `Contents/MacOS/openrun-session --launch-agent`. With the flag, the process ignores `OPENRUN_SOCKET`, answers wakes, and has the idle exit. A process that was started by hand gets no Mach service: it logs that the wake service did not start, and its socket still serves.
+- **Start on demand.** The agent has the Mach service `ai.cristianvega.openrun.session` and no socket of launchd, so launchd starts it when a message reaches the service, not at login and not at registration. A client connects to the default socket as before. When nothing listens there, or the connection closes before `hello`, the client sends one wake (`SessionWake`) and connects again. The session process answers a wake only after its socket listens (`SessionWakeService`). A wake fails after 15 seconds without an answer, because a registration that launchd cannot start never answers. A nondefault socket chosen with `--socket` or `OPENRUN_SOCKET` gets no wake.
+- **The flag.** launchd runs `Contents/MacOS/openrun-session --launch-agent`. With the flag, the process ignores `OPENRUN_SOCKET`, answers wakes, and has the idle exit. A process that was started by hand gets no Mach service, and its socket still serves.
 - **Idle exit.** With the flag, the process ends with status 0 after 30 seconds with no session and no client (`IdleExit`). launchd holds a start for 10 seconds after a run shorter than 10 seconds, so the time is longer than that. `SessionServer.closeWhenIdle` checks the clients, waits for the registry, checks the clients again, and closes the socket with no wait in between. The wake service stops just before, so a later wake waits in the Mach port for the next process. A connection that the listener took just before the close closes before `hello`, and its client wakes the next process. `specifications/SessionLifecycle.tla` models the idle exit.
 - **Crash.** `KeepAlive` with `Crashed` makes launchd start the agent again after a crash, and not after a clean exit such as the idle exit. Until milestone 5 restores sessions, the restarted process has no session and ends when it is idle. `ProcessType` `Interactive` gives the agent the resource limits of an app, because agents run builds in sessions.
 - **The app.** At its start, the app registers the agent when the status is `notRegistered` or `notFound`, and then connects once (`LaunchAgentSetup`). When the agent needs approval, or the user turned it off in System Settings, the app tells the user once and waits. When a wake times out while the status is `enabled`, launchd refuses the program, as after a build that changed it. The app then asks the user before it registers again, because a new registration ends every session of the old build, and it registers again one time only.
@@ -563,7 +572,7 @@ The session parses output, attaches and detaches on one serial context, so each 
 
 Tests cover no client, an attached client in a pseudo terminal that plays a real terminal and answers `ESC [ c`, an older client that sends no field, a client that attaches after the answer, and a client that detaches before the next query. In each case the program reads exactly one reply.
 
-Limit: two relaying clients attached at once both answer, so the program gets two replies. Attaching two terminal windows to one session is rare, and the app will not relay raw output.
+Limit: two relaying clients attached at once both answer, so the program gets two replies. The app does not relay raw output.
 
 ## Speed of dense output
 
