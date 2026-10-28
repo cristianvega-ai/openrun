@@ -69,20 +69,24 @@ func renderScreen(
 /// The color of the pixel in the middle of a cell.
 func middle(of target: OffscreenTarget, column: Int, row: Int) -> TerminalColor {
     return target.pixel(
-        x: testPadding + column * testFonts.cellWidth + testFonts.cellWidth / 2,
-        y: testPadding + row * testFonts.cellHeight + testFonts.cellHeight / 2)
+        horizontalPosition: testPadding + column * testFonts.cellWidth + testFonts.cellWidth / 2,
+        verticalPosition: testPadding + row * testFonts.cellHeight + testFonts.cellHeight / 2)
 }
 
 /// How many pixels of a block of cells have another color than the background.
 func inkCount(of screen: (target: OffscreenTarget, theme: TerminalTheme), columns: Range<Int>, rows: Range<Int>) -> Int {
-    let xs = testPadding + columns.lowerBound * testFonts.cellWidth..<testPadding + columns.upperBound * testFonts.cellWidth
-    let ys = testPadding + rows.lowerBound * testFonts.cellHeight..<testPadding + rows.upperBound * testFonts.cellHeight
-    return ys.flatMap { y in xs.map { screen.target.pixel(x: $0, y: y) } }.filter { $0 != screen.theme.background }.count
+    let horizontalPositions = testPadding + columns.lowerBound * testFonts.cellWidth..<testPadding + columns.upperBound * testFonts.cellWidth
+    let verticalPositions = testPadding + rows.lowerBound * testFonts.cellHeight..<testPadding + rows.upperBound * testFonts.cellHeight
+    return verticalPositions.flatMap { verticalPosition in
+        horizontalPositions.map { screen.target.pixel(horizontalPosition: $0, verticalPosition: verticalPosition) }
+    }.filter { $0 != screen.theme.background }.count
 }
 
 /// The pixel at a place in a cell, counted in pixels from the top left of the cell.
-func pixel(of target: OffscreenTarget, column: Int = 0, row: Int = 0, x: Int, y: Int) -> TerminalColor {
-    target.pixel(x: testPadding + column * testFonts.cellWidth + x, y: testPadding + row * testFonts.cellHeight + y)
+func pixel(of target: OffscreenTarget, column: Int = 0, row: Int = 0,
+           x horizontalPosition: Int, y verticalPosition: Int) -> TerminalColor {
+    target.pixel(horizontalPosition: testPadding + column * testFonts.cellWidth + horizontalPosition,
+                 verticalPosition: testPadding + row * testFonts.cellHeight + verticalPosition)
 }
 
 /// A screen that uses every style that the renderer draws.

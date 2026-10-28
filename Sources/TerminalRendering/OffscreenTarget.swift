@@ -23,11 +23,17 @@ public final class OffscreenTarget: RenderTarget {
         lastCommands = commandBuffer
     }
 
+    /// Keeps existing callers until they use the full position names.
+    public func pixel(x horizontalPosition: Int, y verticalPosition: Int) -> TerminalColor {
+        pixel(horizontalPosition: horizontalPosition, verticalPosition: verticalPosition)
+    }
+
     /// The color of one pixel, counted from the top left, after the last draw ended.
-    public func pixel(x: Int, y: Int) -> TerminalColor {
+    public func pixel(horizontalPosition: Int, verticalPosition: Int) -> TerminalColor {
         lastCommands?.waitUntilCompleted()
         var bytes = [UInt8](repeating: 0, count: 4)
-        texture.getBytes(&bytes, bytesPerRow: 4, from: MTLRegionMake2D(x, y, 1, 1), mipmapLevel: 0)
+        texture.getBytes(&bytes, bytesPerRow: 4,
+                         from: MTLRegionMake2D(horizontalPosition, verticalPosition, 1, 1), mipmapLevel: 0)
         return TerminalColor(red: bytes[2], green: bytes[1], blue: bytes[0])
     }
 

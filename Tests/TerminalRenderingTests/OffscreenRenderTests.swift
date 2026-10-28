@@ -14,22 +14,22 @@ import TerminalTheme
         atlas.coverage.getBytes(&mask, bytesPerRow: entry.width,
                                 from: MTLRegionMake2D(entry.horizontalPosition, entry.verticalPosition, entry.width, entry.height), mipmapLevel: 0)
         let index = try #require(mask.indices.first { entry.verticalOffset + $0 / entry.width < 0 && mask[$0] > 0 })
-        let x = testPadding + entry.horizontalOffset + index % entry.width
-        let y = testPadding + testFonts.cellHeight + entry.verticalOffset + index / entry.width
+        let horizontalPosition = testPadding + entry.horizontalOffset + index % entry.width
+        let verticalPosition = testPadding + testFonts.cellHeight + entry.verticalOffset + index / entry.width
         let device = try #require(MTLCreateSystemDefaultDevice())
         let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
         let size = renderer.pixelSize(for: screen.terminal.size)
         let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
         try renderer.prepare(from: screen.state)
         #expect(renderer.draw(into: first))
-        #expect(first.pixel(x: x, y: y) != screen.state.colors.background)
+        #expect(first.pixel(horizontalPosition: horizontalPosition, verticalPosition: verticalPosition) != screen.state.colors.background)
         screen.state.markClean()
         screen.terminal.write("\u{1B}[2;1H ")
         try screen.state.update(from: screen.terminal)
         try renderer.prepare(from: screen.state)
         let second = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: second) && renderer.rowsDrawn == 2)
-        #expect(second.pixel(x: x, y: y) == screen.state.colors.background)
+        #expect(second.pixel(horizontalPosition: horizontalPosition, verticalPosition: verticalPosition) == screen.state.colors.background)
     }
 
     @Test func overlaysAndInvalidationsMatchAFullRedraw() throws {
@@ -43,7 +43,7 @@ import TerminalTheme
         var frame = 0
         func target() throws -> OffscreenTarget { try OffscreenTarget(device: device, width: width, height: height) }
         func pixels(_ target: OffscreenTarget) -> [UInt8] {
-            _ = target.pixel(x: 0, y: 0)
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
             var bytes = [UInt8](repeating: 0, count: width * height * 4)
             target.texture.getBytes(&bytes, bytesPerRow: width * 4,
                                     from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
@@ -113,7 +113,7 @@ import TerminalTheme
         let size = renderer.pixelSize(for: screen.terminal.size)
         func target() throws -> OffscreenTarget { try OffscreenTarget(device: device, width: size.width, height: size.height) }
         func pixels(_ target: OffscreenTarget) -> [UInt8] {
-            _ = target.pixel(x: 0, y: 0)
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
             var bytes = [UInt8](repeating: 0, count: size.width * size.height * 4)
             target.texture.getBytes(&bytes, bytesPerRow: size.width * 4,
                                     from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
@@ -151,7 +151,7 @@ import TerminalTheme
         let second = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: first) && renderer.draw(into: second))
         func pixels(_ target: OffscreenTarget) -> [UInt8] {
-            _ = target.pixel(x: 0, y: 0)
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
             var bytes = [UInt8](repeating: 0, count: size.width * size.height * 4)
             target.texture.getBytes(&bytes, bytesPerRow: size.width * 4,
                                     from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
@@ -165,7 +165,7 @@ import TerminalTheme
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: 4, height: 3)
         var bytes: [UInt8] = [0x03, 0x02, 0x01, 0xFF]
         target.texture.replace(region: MTLRegionMake2D(2, 1, 1, 1), mipmapLevel: 0, withBytes: &bytes, bytesPerRow: 4)
-        #expect(target.pixel(x: 2, y: 1) == TerminalColor(red: 1, green: 2, blue: 3))
+        #expect(target.pixel(horizontalPosition: 2, verticalPosition: 1) == TerminalColor(red: 1, green: 2, blue: 3))
         let url = FileManager.default.temporaryDirectory.appending(path: "offscreen-\(UUID()).png")
         defer { try? FileManager.default.removeItem(at: url) }
         try target.savePNG(to: url)
@@ -176,7 +176,7 @@ import TerminalTheme
     func aBlankScreenHasTheGraphiteBackgroundOfTheAppearance(scheme: TerminalColorScheme) throws {
         let screen = try renderScreen("", scheme: scheme)
         #expect(middle(of: screen.target, column: 3, row: 1) == screen.theme.background)
-        #expect(screen.target.pixel(x: 0, y: 0) == screen.theme.background)
+        #expect(screen.target.pixel(horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
     }
 
     @Test func aCellBackgroundHasItsColorOfThePalette() throws {
@@ -199,8 +199,10 @@ import TerminalTheme
 
     @Test func anEmojiHasItsOwnColorsAndStaysInsideItsTwoCells() throws {
         let screen = try renderScreen("\u{1B}[?25l🙂", columns: 6)
-        let yellow = (0..<2 * testFonts.cellWidth).flatMap { x in (0..<testFonts.cellHeight).map { (x, $0) } }
-            .map { screen.target.pixel(x: testPadding + $0, y: testPadding + $1) }.filter { Int($0.red) > Int($0.blue) + 80 }
+        let yellow = (0..<2 * testFonts.cellWidth).flatMap { horizontalPosition in
+            (0..<testFonts.cellHeight).map { (horizontalPosition, $0) }
+        }.map { screen.target.pixel(horizontalPosition: testPadding + $0, verticalPosition: testPadding + $1) }
+            .filter { Int($0.red) > Int($0.blue) + 80 }
         #expect(yellow.count > 50)
         #expect(inkCount(of: screen, columns: 0..<2, rows: 0..<1) > 100)
         #expect(inkCount(of: screen, columns: 2..<6, rows: 0..<3) == 0)
@@ -281,7 +283,7 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
             state.markClean()
             renderer.draw(into: target)
             let time = start.duration(to: .now).components
-            _ = target.pixel(x: 0, y: 0)
+            _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
             return (Double(time.attoseconds) / 1e15 + Double(time.seconds) * 1e3, statistics.rowsPrepared)
         }
         func median(_ change: @escaping () -> Void) throws -> (milliseconds: Double, rows: Int) {
@@ -325,7 +327,7 @@ extension OffscreenRenderTests {
         try renderer.prepare(from: state)
         let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
-        _ = next.pixel(x: 0, y: 0)
+        _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
             try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-color-small.png"))
         }
@@ -350,7 +352,7 @@ extension OffscreenRenderTests {
         let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
         try renderer.prepare(from: state)
         #expect(renderer.draw(into: first))
-        _ = first.pixel(x: 0, y: 0)
+        _ = first.pixel(horizontalPosition: 0, verticalPosition: 0)
         state.markClean()
         terminal.write("\u{1B}[2J\u{1B}[H")
         try state.update(from: terminal)
@@ -361,7 +363,7 @@ extension OffscreenRenderTests {
         #expect(!renderer.draw(into: next))
         try renderer.prepare(from: state)
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
-        _ = next.pixel(x: 0, y: 0)
+        _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
             try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-marked-small.png"))
         }
@@ -394,7 +396,7 @@ extension OffscreenRenderTests {
         try renderer.prepare(from: state)
         let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
-        _ = next.pixel(x: 0, y: 0)
+        _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
             try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-large-font-small.png"))
         }
@@ -414,7 +416,7 @@ extension OffscreenRenderTests {
         try renderer.prepare(from: screen.state)
         let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: first))
-        _ = first.pixel(x: 0, y: 0)
+        _ = first.pixel(horizontalPosition: 0, verticalPosition: 0)
         screen.state.markClean()
         try screen.state.update(from: screen.terminal)
         try renderer.prepare(from: screen.state)
@@ -445,7 +447,7 @@ extension OffscreenRenderTests {
         try renderer.prepare(from: state)
         let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
-        _ = next.pixel(x: 0, y: 0)
+        _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
             try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-history-small.png"))
         }
@@ -474,7 +476,7 @@ extension OffscreenRenderTests {
         let size = renderer.pixelSize(for: terminal.size)
         let target = try OffscreenTarget(device: device, width: size.width, height: size.height)
         #expect(renderer.draw(into: target))
-        _ = target.pixel(x: 0, y: 0)
+        _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
             try target.savePNG(to: URL(fileURLWithPath: "\(folder)/\(name)-\(side).png"))
         }
