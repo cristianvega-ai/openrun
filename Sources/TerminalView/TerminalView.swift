@@ -66,7 +66,7 @@ public final class TerminalView: NSView {
     /// The lines of scrollback that the view keeps (behavior defaults of 2026-10-26).
     static let scrollbackLimit = 10_000
 
-    init(terminal: Terminal, clock: any InputClock) throws {
+    init(terminal: Terminal, clock: any InputClock, renderer: TerminalRenderer? = nil) throws {
         guard let device = MTLCreateSystemDefaultDevice() else { throw RenderingError.deviceUnavailable }
         self.terminal = terminal
         state = try RenderState()
@@ -77,7 +77,7 @@ public final class TerminalView: NSView {
         scrollBar = OverlayScrollBar(clock: clock)
         self.clock = clock
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
-        renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
+        self.renderer = try renderer ?? TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
         self.device = device
         host = MetalLayerHost(device: device)
         super.init(frame: .zero)
@@ -512,7 +512,7 @@ public final class TerminalView: NSView {
         if hold?.isHeld != true { try state.update(from: terminal) }
         blink?.update(programBlinks: state.cursor.isBlinking, windowIsKey: renderer.isFocused)
         updateScrollBar()
-        try renderer.prepare(from: state)
+        try renderer.prepare(from: state, viewportSize: (width: target.texture.width, height: target.texture.height))
         guard renderer.draw(into: target) else { return false }
         state.markClean()
         framesDrawn += 1
