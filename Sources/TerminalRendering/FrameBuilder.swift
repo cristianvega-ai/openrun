@@ -15,6 +15,42 @@ struct FrameBuilder {
         let stroke: Int
     }
 
+    struct Band: Equatable {
+        let top, bottom: Int
+        var backgrounds: [CellQuad] = []
+        var glyphs: [CellQuad] = []
+        var overlays: [CellQuad] = []
+    }
+
+    /// Includes a quad in every band that its pixels can reach.
+    static func bandIndices(of quad: CellQuad, rowCount: Int, targetHeight: Int, metrics: CellMetrics, padding: Int) -> ClosedRange<Int>? {
+        guard rowCount > 0 else { return nil }
+        let top = max(0, Int(quad.origin.y))
+        let bottom = min(targetHeight, Int(quad.origin.y + quad.size.y))
+        guard top < bottom else { return nil }
+        let first = max(0, min(rowCount - 1, (top - padding) / metrics.height))
+        let last = max(0, min(rowCount - 1, (bottom - 1 - padding) / metrics.height))
+        return first...last
+    }
+
+    func bands(rowCount: Int, targetHeight: Int, metrics: CellMetrics, padding: Int) -> [Band] {
+        guard rowCount > 0 else { return [] }
+        var bands = (0..<rowCount).map { index in
+            Band(top: index == 0 ? 0 : min(targetHeight, padding + index * metrics.height),
+                 bottom: index == rowCount - 1 ? targetHeight : min(targetHeight, padding + (index + 1) * metrics.height))
+        }
+        func add(_ list: [CellQuad], to field: WritableKeyPath<Band, [CellQuad]>) {
+            for quad in list {
+                guard let indices = Self.bandIndices(of: quad, rowCount: rowCount, targetHeight: targetHeight, metrics: metrics, padding: padding) else { continue }
+                for index in indices { bands[index][keyPath: field].append(quad) }
+            }
+        }
+        add(backgrounds, to: \.backgrounds)
+        add(glyphs, to: \.glyphs)
+        add(overlays, to: \.overlays)
+        return bands
+    }
+
     private(set) var backgrounds: [CellQuad] = []
     private(set) var glyphs: [CellQuad] = []
     private(set) var overlays: [CellQuad] = []

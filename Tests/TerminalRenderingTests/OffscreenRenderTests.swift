@@ -6,6 +6,26 @@ import TerminalTheme
 @testable import TerminalRendering
 
 @Suite struct OffscreenRenderTests {
+    @Test func eachTargetReceivesTheCompletePreparedScreen() throws {
+        let screen = try makeScreen("\u{1B}[?25lHello\r\nworld", columns: 10, rows: 3)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        try renderer.prepare(from: screen.state)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        let second = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: first) && renderer.draw(into: second))
+        func pixels(_ target: OffscreenTarget) -> [UInt8] {
+            _ = target.pixel(x: 0, y: 0)
+            var bytes = [UInt8](repeating: 0, count: size.width * size.height * 4)
+            target.texture.getBytes(&bytes, bytesPerRow: size.width * 4,
+                                    from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+            return bytes
+        }
+        let firstPixels = pixels(first), secondPixels = pixels(second)
+        #expect(firstPixels == secondPixels && Set(firstPixels).count > 3)
+    }
+
     @Test func anOffscreenTargetGivesItsPixelsAndWritesAPNGFile() throws {
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: 4, height: 3)
         var bytes: [UInt8] = [0x03, 0x02, 0x01, 0xFF]

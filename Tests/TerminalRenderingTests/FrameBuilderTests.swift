@@ -1,7 +1,17 @@
 import Testing
+import TerminalEmulation
 @testable import TerminalRendering
 
 @Suite struct FrameBuilderTests {
+    @Test func aQuadThatExtendsAcrossRowsBelongsToEachBand() {
+        let metrics = testFonts.metrics
+        let quad = CellQuad.rectangle(x: 0, y: testPadding + metrics.height - 2, width: 4, height: 4, color: TerminalColor(red: 1, green: 2, blue: 3))
+        #expect(FrameBuilder.bandIndices(of: quad, rowCount: 3, targetHeight: 3 * metrics.height + 2 * testPadding,
+                                         metrics: metrics, padding: testPadding) == 0...1)
+        let contained = CellQuad.rectangle(x: 0, y: testPadding, width: 4, height: metrics.height, color: TerminalColor(red: 1, green: 2, blue: 3))
+        #expect(FrameBuilder.bandIndices(of: contained, rowCount: 3, targetHeight: 3 * metrics.height + 2 * testPadding,
+                                         metrics: metrics, padding: testPadding) == 0...0)
+    }
     @Test func rowsMoveDownByTheirIndexAndInByThePadding() throws {
         let screen = try makeScreen("\u{1B}[44m \u{1B}[0m\r\n\u{1B}[44m ", rows: 2)
         let atlas = try makeAtlas()

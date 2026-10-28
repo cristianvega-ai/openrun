@@ -5,7 +5,7 @@ import simd
 /// also names the part of a texture that it shows, and its column, which the
 /// cursor needs. The fields have the layout of `Quad` in `ShaderSource`, and
 /// positions are pixels of the drawable.
-struct CellQuad {
+struct CellQuad: Equatable {
     var origin: SIMD2<Float>
     var size: SIMD2<Float>
     var atlasOrigin: SIMD2<Float> = .zero

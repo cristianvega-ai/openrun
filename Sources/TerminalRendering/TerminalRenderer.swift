@@ -35,6 +35,8 @@ public final class TerminalRenderer {
     private var cursor: RenderCursor?
     private var columnCount = 0
     private var rowCount = 0
+    private var backing: MTLTexture?
+    private(set) var rowsDrawn = 0
     // The graphics processor reads one buffer while the processor fills the next.
     private var buffers: [MTLBuffer?] = [nil, nil, nil]
     private var bufferIndex = 0
@@ -112,12 +114,13 @@ public final class TerminalRenderer {
     }
 
     private func encode(into target: some RenderTarget) -> Bool {
+        guard let backing = backingTexture(matching: target.texture) else { return false }
         let marked = markedTextToDraw()
         let flash = isFlashing ? colors.map { OverlayQuads.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
         let frame = FrameBuilder(
             cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash)
         let pass = MTLRenderPassDescriptor()
-        pass.colorAttachments[0].texture = target.texture
+        pass.colorAttachments[0].texture = backing
         pass.colorAttachments[0].loadAction = .clear
         pass.colorAttachments[0].storeAction = .store
         let clear = CellQuad.vector(colors?.background ?? TerminalColor(red: 0, green: 0, blue: 0))
@@ -133,11 +136,35 @@ public final class TerminalRenderer {
         draw(frame.glyphs, with: shaders.glyphs, buffer: buffer, offset: offsets[1], encoder: encoder)
         draw(frame.overlays, with: shaders.rectangles, buffer: buffer, offset: offsets[2], encoder: encoder)
         encoder.endEncoding()
+        let presentation = MTLRenderPassDescriptor()
+        presentation.colorAttachments[0].texture = target.texture
+        presentation.colorAttachments[0].loadAction = .dontCare
+        presentation.colorAttachments[0].storeAction = .store
+        guard let presentEncoder = commands.makeRenderCommandEncoder(descriptor: presentation) else { return false }
+        var picture = CellQuad(origin: .zero, size: viewport, isColor: 1, color: SIMD4(repeating: 1))
+        presentEncoder.setRenderPipelineState(shaders.glyphs)
+        presentEncoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
+        presentEncoder.setVertexBytes(&picture, length: MemoryLayout<CellQuad>.stride, index: 1)
+        presentEncoder.setFragmentTexture(backing, index: 0)
+        presentEncoder.setFragmentTexture(backing, index: 1)
+        presentEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
+        presentEncoder.endEncoding()
+        rowsDrawn = rowCount
         let finished = framesInFlight
         commands.addCompletedHandler { _ in finished.signal() }
         target.present(with: commands)
         commands.commit()
         return true
+    }
+
+    private func backingTexture(matching target: MTLTexture) -> MTLTexture? {
+        if let backing, backing.width == target.width, backing.height == target.height, backing.pixelFormat == target.pixelFormat { return backing }
+        let descriptor = MTLTextureDescriptor.texture2DDescriptor(
+            pixelFormat: target.pixelFormat, width: target.width, height: target.height, mipmapped: false)
+        descriptor.storageMode = .private
+        descriptor.usage = [.renderTarget, .shaderRead]
+        backing = device.makeTexture(descriptor: descriptor)
+        return backing
     }
 
     private func markedTextToDraw() -> MarkedTextQuads? {
