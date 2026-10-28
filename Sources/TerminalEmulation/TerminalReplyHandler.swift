@@ -11,15 +11,19 @@ final class TerminalReplyBox {
     let handler: TerminalReplyHandler
     /// Asked at each color-scheme query, because the appearance can change.
     let colorScheme: @Sendable () -> TerminalColorScheme
+    /// The colors that the answers give for each scheme.
+    let defaultColors: @Sendable (TerminalColorScheme) -> TerminalDefaultColors
 
     /// The scheme whose colors are now the defaults of the terminal.
     var appliedScheme: TerminalColorScheme?
     /// How many bytes of `ESC [ 1 5 t` the end of the last write matched.
     private var matchedQueryBytes = 0
 
-    init(handler: @escaping TerminalReplyHandler, colorScheme: @escaping @Sendable () -> TerminalColorScheme) {
+    init(handler: @escaping TerminalReplyHandler, colorScheme: @escaping @Sendable () -> TerminalColorScheme,
+         defaultColors: @escaping @Sendable (TerminalColorScheme) -> TerminalDefaultColors = { .plain(for: $0) }) {
         self.handler = handler
         self.colorScheme = colorScheme
+        self.defaultColors = defaultColors
     }
 
     private static let screenSizeQuery: [UInt8] = [0x1B, 0x5B, 0x31, 0x35, 0x74]
@@ -81,13 +85,18 @@ extension Terminal {
     ///
     /// Besides the cursor position and device attributes, the terminal answers
     /// the size queries (`CSI 14 t`, `16 t`, `18 t`, `19 t`) from its own grid,
-    /// and the color-scheme query (`CSI ? 996 n`) from `colorScheme`.
+    /// the color-scheme query (`CSI ? 996 n`) from `colorScheme`, and the
+    /// color queries (`OSC 4`, `10`, `11`, `12`) from `defaultColors`.
     ///
-    /// - Parameter colorScheme: The scheme to report. The default is the macOS
-    ///   appearance of the current user.
+    /// - Parameters:
+    ///   - colorScheme: The scheme to report. The default is the macOS
+    ///     appearance of the current user.
+    ///   - defaultColors: The colors of each scheme. The default is plain
+    ///     black and white, because this module knows no theme.
     public func setReplyHandler(
         _ handler: TerminalReplyHandler?,
-        colorScheme: @escaping @Sendable () -> TerminalColorScheme = { TerminalColorScheme.current() }
+        colorScheme: @escaping @Sendable () -> TerminalColorScheme = { TerminalColorScheme.current() },
+        defaultColors: @escaping @Sendable (TerminalColorScheme) -> TerminalDefaultColors = { .plain(for: $0) }
     ) throws {
         guard let handler else {
             let previous = replyBox
@@ -97,7 +106,7 @@ extension Terminal {
             withExtendedLifetime(previous) {}
             return
         }
-        try install(TerminalReplyBox(handler: handler, colorScheme: colorScheme))
+        try install(TerminalReplyBox(handler: handler, colorScheme: colorScheme, defaultColors: defaultColors))
     }
 
     /// Stores the box, then sets the callbacks of libghostty-vt.
@@ -132,9 +141,9 @@ extension Terminal {
         box.handler(Array("\u{1B}[5;\(height);\(width)t".utf8))
     }
 
-    /// Sets the default foreground and background to the colors of the
-    /// appearance, when the appearance changed. Programs ask for them with
-    /// OSC 10 and OSC 11, and libghostty-vt answers from these defaults.
+    /// Sets the default colors of the appearance, when the appearance
+    /// changed. Programs ask for them with OSC 4, 10, 11 and 12, and
+    /// libghostty-vt answers from these defaults.
     ///
     /// A default color is a setting of the terminal, not output. The snapshot
     /// carries it, but the picture of `openrun attach` and the text of
@@ -142,18 +151,16 @@ extension Terminal {
     func applyDefaultColors(for box: TerminalReplyBox) {
         let scheme = box.colorScheme()
         guard scheme != box.appliedScheme else { return }
-        var foreground = scheme == .dark ? GhosttyColorRgb(r: 255, g: 255, b: 255) : GhosttyColorRgb(r: 0, g: 0, b: 0)
-        var background = scheme == .dark ? GhosttyColorRgb(r: 0, g: 0, b: 0) : GhosttyColorRgb(r: 255, g: 255, b: 255)
-        // A failure leaves the old colors, and the next write tries again.
-        guard ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, &foreground) == GHOSTTY_SUCCESS,
-              ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, &background) == GHOSTTY_SUCCESS
-        else { return }
+        // A failure leaves some old colors, and the next write tries again.
+        guard (try? setDefaultColors(box.defaultColors(scheme))) != nil else { return }
         box.appliedScheme = scheme
     }
 
     private func clearDefaultColors() {
-        _ = ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_FOREGROUND, nil)
-        _ = ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_COLOR_BACKGROUND, nil)
+        try? setDefaultForegroundColor(nil)
+        try? setDefaultBackgroundColor(nil)
+        try? setDefaultCursorColor(nil)
+        try? setDefaultPalette(nil)
     }
 
     // MARK: - Private

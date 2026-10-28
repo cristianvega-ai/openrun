@@ -180,6 +180,39 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         #expect(try answers(to: "\u{1B}]11;?\u{07}", scheme: .dark) == ["\u{1B}]11;rgb:0000/0000/0000\u{07}"])
     }
 
+    /// Colors that differ in each channel and for each scheme, as a theme has them.
+    private static func colors(for scheme: TerminalColorScheme) -> TerminalDefaultColors {
+        let base: UInt8 = scheme == .dark ? 0x80 : 0x10
+        func color(_ index: Int) -> TerminalColor { TerminalColor(red: base + UInt8(index), green: 0x20 + UInt8(index), blue: 0x30) }
+        return TerminalDefaultColors(foreground: color(20), background: color(21), cursor: color(22), firstSixteenColors: (0..<16).map(color))
+    }
+
+    private static func answer(_ number: String, _ color: TerminalColor) -> String {
+        func channel(_ value: UInt8) -> String { String(repeating: String(format: "%02x", value), count: 2) }
+        return "\u{1B}]\(number);rgb:\(channel(color.red))/\(channel(color.green))/\(channel(color.blue))\u{07}"
+    }
+
+    @Test(arguments: [TerminalColorScheme.light, .dark])
+    func theColorQueriesAreAnsweredWithTheColorsOfTheCaller(scheme: TerminalColorScheme) throws {
+        let terminal = try makeTerminal()
+        let recorder = ReplyRecorder()
+        try terminal.setReplyHandler({ recorder.replies.append($0) }, colorScheme: { scheme }, defaultColors: Self.colors(for:))
+        terminal.write("\u{1B}]10;?\u{07}\u{1B}]11;?\u{07}\u{1B}]12;?\u{07}" + (0..<16).map { "\u{1B}]4;\($0);?\u{07}" }.joined())
+        let expected = Self.colors(for: scheme)
+        #expect(recorder.replies.map { String(decoding: $0, as: UTF8.self) } == [
+            Self.answer("10", expected.foreground), Self.answer("11", expected.background), Self.answer("12", expected.cursor),
+        ] + expected.firstSixteenColors.enumerated().map { Self.answer("4;\($0.offset)", $0.element) })
+    }
+
+    @Test func removingTheHandlerClearsTheCursorAndThePalette() throws {
+        let terminal = try makeTerminal()
+        let standard = terminal.defaultPalette
+        try terminal.setReplyHandler({ _ in }, colorScheme: { .dark }, defaultColors: Self.colors(for:))
+        terminal.write("x")
+        try terminal.setReplyHandler(nil)
+        #expect(terminal.defaultCursorColor == nil && terminal.defaultPalette == standard)
+    }
+
     @Test func aColorQueryEndedByStringTerminatorGetsOneReply() throws {
         #expect(try answers(to: "\u{1B}]11;?\u{1B}\\", scheme: .dark) == ["\u{1B}]11;rgb:0000/0000/0000\u{1B}\\"])
     }
