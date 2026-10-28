@@ -6,10 +6,10 @@ import TerminalView
 
 /// One window that shows one session. The window attaches off the main
 /// thread and makes its view from the snapshot. Then the output of the
-/// session goes to the view. Closing the window detaches, and the session
-/// goes on.
+/// session goes to the view, and keys and sizes go to the session. Closing
+/// the window detaches, and the session goes on.
 @MainActor
-public final class SessionWindowController: NSObject, NSWindowDelegate {
+public final class SessionWindowController: NSObject, NSWindowDelegate, TerminalViewDelegate {
     /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
     static let contentSize = CGSize(width: 656, height: 388)
     public let window: NSWindow
@@ -53,6 +53,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate {
             return window.close()
         }
         (attachment, self.view) = (started.attachment, view)
+        // The first layout fits the grid to the window. When that grid differs
+        // from the snapshot, the view reports it, and the window sends it
+        // (decision of 2026-10-25).
+        view.delegate = self
         window.contentView = view
         window.makeFirstResponder(view)
         started.attachment.startReceiving(AttachmentRelay.handler { [weak self] in self?.handle($0) })
@@ -72,4 +76,20 @@ public final class SessionWindowController: NSObject, NSWindowDelegate {
     private func detach(_ attachment: any AttachedSession) {
         work.run { try? attachment.detach(); attachment.shutdown() }
     }
+
+    public func terminalView(_ view: TerminalView, send bytes: [UInt8]) {
+        guard let attachment else { return }
+        // A send fails only when the connection is gone, and the receiving thread reports that.
+        work.run { try? attachment.send(input: Data(bytes)) }
+    }
+
+    public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
+        guard let attachment else { return }
+        work.run { try? attachment.send(size: SessionSize(columns: size.columns, rows: size.rows)) }
+    }
+
+    public func terminalView(_ view: TerminalView, didChangeTitle title: String) {}
+
+    /// The question comes with a later change. Until then, nothing unsafe is pasted.
+    public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool { false }
 }
