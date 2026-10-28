@@ -255,7 +255,7 @@ extension SessionProcessIntegration {
         private static let paletteScript = #"""
         stty raw -echo opost min 0 time 10
         printf '\033]10;?\007\033]11;?\007\033]12;?\007'
-        for n in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do printf '\033]4;%d;?\007' $n; done
+        for index in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do printf '\033]4;%d;?\007' $index; done
         printf 'answers=%s\n' "$(dd bs=1 count=2000 2>/dev/null | tr '\033\007' EB)"
         printf 'DONE\n'
         sleep 60

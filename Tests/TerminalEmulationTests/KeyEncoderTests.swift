@@ -2,7 +2,7 @@ import Testing
 @testable import TerminalEmulation
 
 @Suite struct KeyEventTests {
-    @Test func modifiersKeepTheBitsOfLibghosttyVt() {
+    @Test func eachModifierUsesItsOwnBit() {
         let all: [KeyModifiers] = [
             .shift, .control, .alternate, .superKey, .capsLock, .numberLock,
             .rightShift, .rightControl, .rightAlternate, .rightSuperKey,

@@ -13,7 +13,7 @@ public enum TerminalMode: Sendable, CaseIterable {
     case normalMouseReports
     case buttonMouseReports
     case anyMouseReports
-    case utf8MouseFormat
+    case unicodeMouseFormat
     case selectGraphicRenditionMouseFormat
     case rxvtUnicodeMouseFormat
     case pixelMouseFormat
@@ -22,7 +22,7 @@ public enum TerminalMode: Sendable, CaseIterable {
     /// encoder again when one of them changes.
     public static let mouseModes: [TerminalMode] = [
         .x10MouseReports, .normalMouseReports, .buttonMouseReports, .anyMouseReports,
-        .utf8MouseFormat, .selectGraphicRenditionMouseFormat, .rxvtUnicodeMouseFormat, .pixelMouseFormat,
+        .unicodeMouseFormat, .selectGraphicRenditionMouseFormat, .rxvtUnicodeMouseFormat, .pixelMouseFormat,
     ]
 
     /// The mode constants of libghostty-vt are C macros that call a static
@@ -40,7 +40,7 @@ public enum TerminalMode: Sendable, CaseIterable {
         case .normalMouseReports: ghostty_mode_new(1000, false)
         case .buttonMouseReports: ghostty_mode_new(1002, false)
         case .anyMouseReports: ghostty_mode_new(1003, false)
-        case .utf8MouseFormat: ghostty_mode_new(1005, false)
+        case .unicodeMouseFormat: ghostty_mode_new(1005, false)
         case .selectGraphicRenditionMouseFormat: ghostty_mode_new(1006, false)
         case .rxvtUnicodeMouseFormat: ghostty_mode_new(1015, false)
         case .pixelMouseFormat: ghostty_mode_new(1016, false)

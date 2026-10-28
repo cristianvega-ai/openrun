@@ -2,7 +2,7 @@ import Testing
 @testable import TerminalEmulation
 
 @Suite struct PhysicalKeyTests {
-    @Test func everyKeyHasItsOwnNumberInLibghosttyVt() {
+    @Test func everyPhysicalKeyHasItsOwnNumber() {
         let numbers = PhysicalKey.allCases.map { $0.raw.rawValue }
         #expect(Set(numbers).count == PhysicalKey.allCases.count)
     }
