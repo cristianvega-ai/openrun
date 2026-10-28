@@ -7,5 +7,8 @@
 # Downloads and build output of scripts/build-ghostty-library.sh
 Libraries/
 
+# Local reference material
+reference/
+
 # macOS
 .DS_Store
