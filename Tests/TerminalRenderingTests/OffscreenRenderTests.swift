@@ -6,6 +6,41 @@ import TerminalTheme
 @testable import TerminalRendering
 
 @Suite struct OffscreenRenderTests {
+    @Test func changedRowsAreSubmittedAndMatchAFullRedraw() throws {
+        let screen = try makeScreen("\u{1B}[?25l", columns: 8, rows: 3)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        func target() throws -> OffscreenTarget { try OffscreenTarget(device: device, width: size.width, height: size.height) }
+        func pixels(_ target: OffscreenTarget) -> [UInt8] {
+            _ = target.pixel(x: 0, y: 0)
+            var bytes = [UInt8](repeating: 0, count: size.width * size.height * 4)
+            target.texture.getBytes(&bytes, bytesPerRow: size.width * 4,
+                                    from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+            return bytes
+        }
+        try renderer.prepare(from: screen.state)
+        #expect(renderer.draw(into: try target()) && renderer.rowsDrawn == 3)
+        screen.state.markClean()
+        screen.terminal.write("\u{1B}[2;1H\u{1B}[41m ")
+        try screen.state.update(from: screen.terminal)
+        try renderer.prepare(from: screen.state)
+        let changed = try target()
+        #expect(renderer.draw(into: changed) && renderer.rowsDrawn == 1)
+        let reference = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        try reference.prepare(from: screen.state)
+        let full = try target()
+        #expect(reference.draw(into: full))
+        let matches = pixels(changed) == pixels(full)
+        #expect(matches)
+        screen.state.markClean()
+        try screen.state.update(from: screen.terminal)
+        try renderer.prepare(from: screen.state)
+        let unchanged = try target()
+        #expect(renderer.draw(into: unchanged) && renderer.rowsDrawn == 0)
+        #expect(pixels(unchanged) == pixels(full))
+    }
+
     @Test func eachTargetReceivesTheCompletePreparedScreen() throws {
         let screen = try makeScreen("\u{1B}[?25lHello\r\nworld", columns: 10, rows: 3)
         let device = try #require(MTLCreateSystemDefaultDevice())

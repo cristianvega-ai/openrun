@@ -4,9 +4,8 @@ import TerminalEmulation
 
 /// Draws the screen of a terminal with Metal.
 ///
-/// `prepare(from:)` reads the rows that changed and keeps the quads of the
-/// others. A frame that follows holds all quads, because the work of the
-/// graphics processor is small. The saving is in the reading of the rows.
+/// `prepare(from:)` keeps the quads of unchanged rows. Drawing updates the
+/// changed bands of a retained texture before it presents the whole picture.
 public final class TerminalRenderer {
     public let fonts: FontSet
     /// The space around the grid in pixels: 8 points.
@@ -36,6 +35,11 @@ public final class TerminalRenderer {
     private var columnCount = 0
     private var rowCount = 0
     private var backing: MTLTexture?
+    private var grid: TerminalSize?
+    private var drawnGrid: TerminalSize?
+    private var drawnColors: RenderColors?
+    private var drawnSelectionColor: TerminalColor?
+    private var drawnBands: [FrameBuilder.Band]?
     private(set) var rowsDrawn = 0
     // The graphics processor reads one buffer while the processor fills the next.
     private var buffers: [MTLBuffer?] = [nil, nil, nil]
@@ -92,6 +96,7 @@ public final class TerminalRenderer {
         cursor = state.cursor
         columnCount = Int(state.size.columns)
         rowCount = Int(state.size.rows)
+        grid = state.size
         return try cache.update(from: state, colors: screenColors) {
             try RowQuads(row: $0, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
         }
@@ -119,22 +124,38 @@ public final class TerminalRenderer {
         let flash = isFlashing ? colors.map { OverlayQuads.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
         let frame = FrameBuilder(
             cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash)
+        let bands = frame.bands(rowCount: rowCount, targetHeight: backing.height, metrics: fonts.metrics, padding: padding)
+        let previous = drawnBands
+        let rebuild = previous?.count != bands.count || drawnGrid != grid || drawnColors != colors || drawnSelectionColor != selectionColor
+        let changed = bands.indices.filter { index in
+            bands[index].bottom > bands[index].top && (rebuild || previous?[index] != bands[index])
+        }
+        let background = colors?.background ?? TerminalColor(red: 0, green: 0, blue: 0)
+        let lists = changed.flatMap { index -> [[CellQuad]] in
+            let band = bands[index]
+            let clear = CellQuad.rectangle(x: 0, y: band.top, width: backing.width, height: band.bottom - band.top, color: background)
+            return [[clear] + band.backgrounds, band.glyphs, band.overlays]
+        }
         let pass = MTLRenderPassDescriptor()
         pass.colorAttachments[0].texture = backing
-        pass.colorAttachments[0].loadAction = .clear
+        pass.colorAttachments[0].loadAction = previous == nil || bands.isEmpty ? .clear : .load
         pass.colorAttachments[0].storeAction = .store
-        let clear = CellQuad.vector(colors?.background ?? TerminalColor(red: 0, green: 0, blue: 0))
+        let clear = CellQuad.vector(background)
         pass.colorAttachments[0].clearColor = MTLClearColor(red: Double(clear.x), green: Double(clear.y), blue: Double(clear.z), alpha: 1)
-        guard let (buffer, offsets) = copy([frame.backgrounds, frame.glyphs, frame.overlays]), let commands = queue.makeCommandBuffer(),
+        guard let (buffer, offsets) = copy(lists), let commands = queue.makeCommandBuffer(),
             let encoder = commands.makeRenderCommandEncoder(descriptor: pass)
         else { return false }
         var viewport = SIMD2<Float>(Float(target.texture.width), Float(target.texture.height))
         encoder.setVertexBytes(&viewport, length: MemoryLayout<SIMD2<Float>>.size, index: 0)
-        draw(frame.backgrounds, with: shaders.rectangles, buffer: buffer, offset: offsets[0], encoder: encoder)
         encoder.setFragmentTexture(atlas.coverage, index: 0)
         encoder.setFragmentTexture(atlas.color, index: 1)
-        draw(frame.glyphs, with: shaders.glyphs, buffer: buffer, offset: offsets[1], encoder: encoder)
-        draw(frame.overlays, with: shaders.rectangles, buffer: buffer, offset: offsets[2], encoder: encoder)
+        for (index, row) in changed.enumerated() {
+            let band = bands[row]
+            encoder.setScissorRect(MTLScissorRect(x: 0, y: band.top, width: backing.width, height: band.bottom - band.top))
+            draw(lists[index * 3], with: shaders.rectangles, buffer: buffer, offset: offsets[index * 3], encoder: encoder)
+            draw(lists[index * 3 + 1], with: shaders.glyphs, buffer: buffer, offset: offsets[index * 3 + 1], encoder: encoder)
+            draw(lists[index * 3 + 2], with: shaders.rectangles, buffer: buffer, offset: offsets[index * 3 + 2], encoder: encoder)
+        }
         encoder.endEncoding()
         let presentation = MTLRenderPassDescriptor()
         presentation.colorAttachments[0].texture = target.texture
@@ -149,7 +170,8 @@ public final class TerminalRenderer {
         presentEncoder.setFragmentTexture(backing, index: 1)
         presentEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
         presentEncoder.endEncoding()
-        rowsDrawn = rowCount
+        (drawnBands, drawnGrid, drawnColors, drawnSelectionColor) = (bands, grid, colors, selectionColor)
+        rowsDrawn = changed.count
         let finished = framesInFlight
         commands.addCompletedHandler { _ in finished.signal() }
         target.present(with: commands)
@@ -159,6 +181,7 @@ public final class TerminalRenderer {
 
     private func backingTexture(matching target: MTLTexture) -> MTLTexture? {
         if let backing, backing.width == target.width, backing.height == target.height, backing.pixelFormat == target.pixelFormat { return backing }
+        drawnBands = nil
         let descriptor = MTLTextureDescriptor.texture2DDescriptor(
             pixelFormat: target.pixelFormat, width: target.width, height: target.height, mipmapped: false)
         descriptor.storageMode = .private
