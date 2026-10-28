@@ -34,6 +34,7 @@ public final class TerminalRenderer {
     private var cursor: RenderCursor?
     private var columnCount = 0
     private var rowCount = 0
+    private var viewportSize: (width: Int, height: Int)?
     private var backing: MTLTexture?
     private var grid: TerminalSize?
     private var drawnGrid: TerminalSize?
@@ -92,8 +93,14 @@ public final class TerminalRenderer {
 
     /// Makes new quadrilaterals for the rows that changed since the last call. Call it
     /// after `RenderState.update`, and `markClean` when the frame is drawn.
+    /// Give the drawable size in pixels to keep hidden bitmaps out of the atlas.
+    /// The default prepares the whole grid.
     @discardableResult
-    public func prepare(from state: RenderState) throws -> FrameStatistics {
+    public func prepare(from state: RenderState, viewportSize: (width: Int, height: Int)? = nil) throws -> FrameStatistics {
+        if self.viewportSize?.width != viewportSize?.width || self.viewportSize?.height != viewportSize?.height {
+            cache.forget()
+        }
+        self.viewportSize = viewportSize
         let screenColors = state.colors
         colors = screenColors
         cursor = state.cursor
@@ -103,8 +110,9 @@ public final class TerminalRenderer {
         reclaimedForFrame = false
         if atlas.isFull { _ = reclaimAtlas() }
         func update() throws -> FrameStatistics {
-            try cache.update(from: state, colors: screenColors) { row, _ in
-                try RowQuadrilaterals(row: row, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics)
+            try cache.update(from: state, colors: screenColors, positionsMatter: viewportSize != nil) { row, index in
+                try RowQuadrilaterals(row: row, colors: screenColors, selection: selectionColor, atlas: atlas, metrics: fonts.metrics,
+                                      rowIndex: index, padding: padding, viewportSize: viewportSize)
             }
         }
         let statistics = try update()
@@ -214,7 +222,8 @@ public final class TerminalRenderer {
         guard let markedText, !markedText.isEmpty, let colors, let position = cursor?.position else { return nil }
         return MarkedTextQuadrilaterals(
             text: markedText, column: Int(position.column), row: Int(position.row), columnCount: columnCount, rowCount: rowCount, colors: colors,
-            atlas: atlas, metrics: fonts.metrics, padding: padding, selection: markedTextSelection, selectionColor: selectionColor)
+            atlas: atlas, metrics: fonts.metrics, padding: padding, selection: markedTextSelection, selectionColor: selectionColor,
+            viewportSize: viewportSize)
     }
 
     private func cursorToDraw() -> FrameBuilder.Cursor? {
