@@ -23,6 +23,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private(set) var attachment: (any AttachedSession)?
     private(set) var view: TerminalView?
     let hiddenGridLabel = HiddenGridLabel()
+    var ask: @MainActor (UserQuestion, NSWindow) async -> Bool = { await $0.ask(in: $1) }
     private var isClosed = false
     private var folder = ""
 
@@ -136,6 +137,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         window.title = title.isEmpty ? folder : title
     }
 
-    /// The question comes with a later change. Until then, nothing unsafe is pasted.
-    public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool { false }
+    public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
+        await ask(.unsafePaste, window)
+    }
 }
