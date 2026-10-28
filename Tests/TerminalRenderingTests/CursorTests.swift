@@ -141,7 +141,7 @@ import TerminalEmulation
         let screen = try renderScreen("\u{1B}[?25l\u{1B}[3;10H", columns: 10, rows: 3, markedText: "日")
         #expect(inkCount(of: screen, columns: 0..<2, rows: 2..<3) > 100)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try screen.target.savePNG(to: URL(fileURLWithPath: "\(folder)/marked-wide-edge.png"))
+            try screen.target.saveImage(to: URL(fileURLWithPath: "\(folder)/marked-wide-edge.png"))
         }
     }
 
@@ -152,7 +152,7 @@ import TerminalEmulation
         #expect(inkCount(of: screen, columns: 9..<10, rows: 1..<2) > 20)
         #expect(inkCount(of: screen, columns: 0..<2, rows: 2..<3) > 40)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try screen.target.savePNG(to: URL(fileURLWithPath: "\(folder)/marked-long-edge.png"))
+            try screen.target.saveImage(to: URL(fileURLWithPath: "\(folder)/marked-long-edge.png"))
         }
     }
 

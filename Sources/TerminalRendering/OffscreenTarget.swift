@@ -39,7 +39,7 @@ public final class OffscreenTarget: RenderTarget {
 
     /// Saves the picture as a PNG file, with a density of 144 pixels for each
     /// inch, as a Retina screen has.
-    public func savePNG(to url: URL) throws {
+    public func saveImage(to fileLocation: URL) throws {
         lastCommands?.waitUntilCompleted()
         var bytes = [UInt8](repeating: 0, count: texture.width * texture.height * 4)
         texture.getBytes(&bytes, bytesPerRow: texture.width * 4, from: MTLRegionMake2D(0, 0, texture.width, texture.height), mipmapLevel: 0)
@@ -48,7 +48,7 @@ public final class OffscreenTarget: RenderTarget {
                 data: buffer.baseAddress, width: texture.width, height: texture.height, bitsPerComponent: 8,
                 bytesPerRow: texture.width * 4, space: CGColorSpace(name: CGColorSpace.sRGB) ?? CGColorSpaceCreateDeviceRGB(),
                 bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue)?.makeImage()
-        }), let destination = CGImageDestinationCreateWithURL(url as CFURL, UTType.png.identifier as CFString, 1, nil) else {
+        }), let destination = CGImageDestinationCreateWithURL(fileLocation as CFURL, UTType.png.identifier as CFString, 1, nil) else {
             throw RenderingError.imageFileFailed
         }
         CGImageDestinationAddImage(destination, image, [kCGImagePropertyDPIWidth: 144, kCGImagePropertyDPIHeight: 144] as CFDictionary)

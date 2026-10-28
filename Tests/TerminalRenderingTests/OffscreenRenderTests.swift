@@ -55,7 +55,7 @@ import TerminalTheme
             #expect(renderer.draw(into: changed))
             let count = renderer.rowsDrawn
             if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-                try changed.savePNG(to: URL(fileURLWithPath: "\(folder)/incremental-\(frame).png"))
+                try changed.saveImage(to: URL(fileURLWithPath: "\(folder)/incremental-\(frame).png"))
                 frame += 1
             }
             let reference = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: renderer.selectionColor)
@@ -161,15 +161,15 @@ import TerminalTheme
         #expect(firstPixels == secondPixels && Set(firstPixels).count > 3)
     }
 
-    @Test func anOffscreenTargetGivesItsPixelsAndWritesAPNGFile() throws {
+    @Test func anOffscreenTargetGivesItsPixelsAndWritesAnImageFile() throws {
         let target = try OffscreenTarget(device: #require(MTLCreateSystemDefaultDevice()), width: 4, height: 3)
         var bytes: [UInt8] = [0x03, 0x02, 0x01, 0xFF]
         target.texture.replace(region: MTLRegionMake2D(2, 1, 1, 1), mipmapLevel: 0, withBytes: &bytes, bytesPerRow: 4)
         #expect(target.pixel(horizontalPosition: 2, verticalPosition: 1) == TerminalColor(red: 1, green: 2, blue: 3))
-        let url = FileManager.default.temporaryDirectory.appending(path: "offscreen-\(UUID()).png")
-        defer { try? FileManager.default.removeItem(at: url) }
-        try target.savePNG(to: url)
-        #expect(try Data(contentsOf: url).starts(with: [0x89, 0x50, 0x4E, 0x47]))
+        let fileLocation = FileManager.default.temporaryDirectory.appending(path: "offscreen-\(UUID()).png")
+        defer { try? FileManager.default.removeItem(at: fileLocation) }
+        try target.saveImage(to: fileLocation)
+        #expect(try Data(contentsOf: fileLocation).starts(with: [0x89, 0x50, 0x4E, 0x47]))
     }
 
     @Test(arguments: [TerminalColorScheme.dark, .light])
@@ -241,25 +241,25 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
     @Test(.enabled(if: screenshotFolder != nil), arguments: [TerminalColorScheme.dark, .light])
     func theShowcaseScreenInLightAndDark(scheme: TerminalColorScheme) throws {
         let screen = try renderScreen(showcaseScreen, columns: 100, rows: 17, scheme: scheme, selecting: ViewportCell(column: 10, row: 0))
-        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/graphite-\(scheme).png"))
+        try screen.target.saveImage(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/graphite-\(scheme).png"))
     }
 
     @Test(.enabled(if: screenshotFolder != nil), arguments: ["block": "2", "bar": "6", "underline": "4"])
     func theCursorShapes(name: String, code: String) throws {
         let screen = try renderScreen("cursor\u{1B}[\(code) q", columns: 12, rows: 1)
-        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-\(name).png"))
+        try screen.target.saveImage(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-\(name).png"))
     }
 
     @Test(.enabled(if: screenshotFolder != nil))
     func theHollowBlockOfAViewWithoutFocus() throws {
         let screen = try renderScreen("cursor\u{1B}[2 q", columns: 12, rows: 1, isFocused: false)
-        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-hollow-block.png"))
+        try screen.target.saveImage(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/cursor-hollow-block.png"))
     }
 
     @Test(.enabled(if: screenshotFolder != nil))
     func theFlashOfTheBell() throws {
         let screen = try renderScreen("$ make\r\nBuild complete!\u{07}\r\n$ ", columns: 30, rows: 4, isFlashing: true)
-        try screen.target.savePNG(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/bell-flash.png"))
+        try screen.target.saveImage(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/bell-flash.png"))
     }
 }
 
@@ -329,7 +329,7 @@ extension OffscreenRenderTests {
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
         _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-color-small.png"))
+            try next.saveImage(to: URL(fileURLWithPath: "\(folder)/reclaim-color-small.png"))
         }
         var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
         next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
@@ -365,7 +365,7 @@ extension OffscreenRenderTests {
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
         _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-marked-small.png"))
+            try next.saveImage(to: URL(fileURLWithPath: "\(folder)/reclaim-marked-small.png"))
         }
         var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
         next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
@@ -398,7 +398,7 @@ extension OffscreenRenderTests {
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
         _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-large-font-small.png"))
+            try next.saveImage(to: URL(fileURLWithPath: "\(folder)/reclaim-large-font-small.png"))
         }
         var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
         next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
@@ -453,7 +453,7 @@ extension OffscreenRenderTests {
         #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
         _ = next.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-history-small.png"))
+            try next.saveImage(to: URL(fileURLWithPath: "\(folder)/reclaim-history-small.png"))
         }
         var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
         next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
@@ -482,7 +482,7 @@ extension OffscreenRenderTests {
         #expect(renderer.draw(into: target))
         _ = target.pixel(horizontalPosition: 0, verticalPosition: 0)
         if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
-            try target.savePNG(to: URL(fileURLWithPath: "\(folder)/\(name)-\(side).png"))
+            try target.saveImage(to: URL(fileURLWithPath: "\(folder)/\(name)-\(side).png"))
         }
         var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
         target.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
