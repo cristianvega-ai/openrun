@@ -427,6 +427,11 @@ The server's `hello` can also hold `capabilities.orderedResizeConfirmation`. A m
 When an attached client sends `resize` with `requestsConfirmation` true, the session applies the size and enqueues `sizeChanged` for that client in the same actor step. It does so even when the size was already in effect. The confirmation follows earlier output and earlier foreign size changes and precedes later output. A zero size, a request before attach, or a refused size gets `failure` and closes that connection. The app waits for each ordered size message before changing its local terminal. It follows a foreign size without sending a resize in reply. A key window can request its own size even when its local grid already has it, so a queued foreign size cannot leave the grid stale after the confirmation.
 
 `specifications/AttachSequence.tla` models this order. One control applies the local size before its confirmation and fails `SizeOrder`. A second removes the confirmation and fails `ConfirmedSizeAgreement` after a queued foreign size. These controls check different protections.
+
+`specifications/LocalDelivery.tla` separates the server queue from the work that has left it. The local queue includes frames in transit, relay work and view work. It applies the snapshot, output and size markers in order, and lets a client leave. Server capacity counts only the server queue; size agreement after a pause requires both queues to be empty. A control lets a size pass output. Another checks size agreement when only the server queues are empty. Both controls must fail.
+
+The model gives each counted message one unit and does not bound the local queue directly. Each client attaches once. The two-client run allows three outputs and two resizes; the three-client run allows one output and one resize. Each has two sizes and two server units. It treats each output frame as one piece and omits failed attaches, failed sizes, queries and input. It does not prove an unbounded refinement or a time limit.
+
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
 
 ### A conversation
