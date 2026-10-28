@@ -34,4 +34,16 @@ import Testing
         await waitOnMainThread { attachment.record.withLock { $0.shutDown } }
         #expect(attachment.record.withLock { $0.inputs == [Data([65])] && $0.detached && $0.shutDown })
     }
+
+    @Test func aLargeInputStaysOneEvent() async throws {
+        let attachment = try FakeAttachment()
+        let controller = try makeWindowController(attachment)
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view != nil }
+        let view = try #require(controller.view)
+        let bytes = (0..<(2 * 64 * 1024 + 17)).map { UInt8($0 % 251) }
+        controller.terminalView(view, send: bytes)
+        await waitOnMainThread { !attachment.record.withLock { $0.inputs.isEmpty } }
+        #expect(attachment.record.withLock { $0.inputs } == [Data(bytes)])
+    }
 }

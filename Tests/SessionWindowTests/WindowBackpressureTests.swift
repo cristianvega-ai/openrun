@@ -66,11 +66,12 @@ private final class TracedAttachment: AttachedSession {
         }
         try #require(blocked, "The program must hold an input send before the window closes.")
         let before = traced.record.withLock { $0 }
+        try #require(before.started < 8, "Some input events must still wait in the window queue.")
         window.window.close()
         await waitOnMainThread(seconds: 5) { traced.record.withLock { $0.shutdowns > 0 && $0.started == $0.finished } }
         let after = traced.record.withLock { $0 }
         #expect(after.shutdowns == 1 && after.started == before.started && after.finished == before.started)
-        #expect(after.largestInput <= 64 * 1024)
+        #expect(after.largestInput == bytes.count)
         await waitOnMainThread(seconds: 10) { (process.descriptorCount ?? Int.max) <= baseline }
         try #require((process.descriptorCount ?? Int.max) <= baseline, "The session process must release the closed client socket.")
         #expect(process.isRunning)
@@ -82,7 +83,9 @@ private final class TracedAttachment: AttachedSession {
         let data = try Data(contentsOf: received)
         try #require(data.suffix(marker.utf8.count) == Data(marker.utf8), "The session must take new input after the old client leaves.")
         print("window-backpressure: started \(before.started), finished \(after.finished), received \(data.count) bytes, baseline descriptors \(baseline)")
-        #expect(data.count < 256 * 1024, "The old client's queued input must be withdrawn, apart from bytes already in the pseudo terminal.")
+        #expect(data.count == bytes.count + marker.utf8.count, "Only the started input event must finish after the window closes.")
+        #expect(data.prefix(bytes.count).allSatisfy { $0 == 65 })
+        #expect(traced.record.withLock { $0.started == before.started && $0.finished == before.started })
         process.stop()
         #expect(!process.isRunning && !FileManager.default.fileExists(atPath: process.socketPath))
     }
