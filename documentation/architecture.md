@@ -47,7 +47,7 @@ A module uses another module only through its public types.
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
-| `SessionWindow` | Connects one terminal view to one session and owns its window | `SessionWindowController`, `SessionStart` |
+| `SessionWindow` | Connects one terminal view to one session, owns its window, and offers a session picker | `SessionWindowController`, `SessionStart`, `SessionList` |
 | `OpenRunApplication` | The app, its windows, and setup of the launch agent at the start | `OpenRunApplication` |
 
 The programs in `Sources/openrun`, `Sources/openrun-session` and `Sources/openrun-application` read their start-up input and call `CommandLineTool`, `SessionProcess` and `OpenRunApplication`. They hold no other logic.
@@ -214,6 +214,7 @@ The client side of the socket, for the command-line tool and the window of the a
 
 `SessionStart` selects a new login shell or a running session. `SessionWindowController` owns one window, its view and its attachment. It connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order. Input and size requests go back through the serial connection queue.
 The title comes from the terminal's title, or the session folder when the title is empty. A small label reports grid rows or columns that do not fit. Closing the window detaches and leaves the session running; the exit of the program closes the window. A connection failure is shown to the user. The controller asks before an unsafe paste.
+`SessionList` loads running sessions off the main thread. Its picker shows the folder and full identifier of each session. It handles an empty list and Cancel, and shows a connection failure instead of treating it as an empty list.
 
 ### OpenRunApplication
 
