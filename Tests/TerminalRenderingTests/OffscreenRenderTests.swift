@@ -6,6 +6,106 @@ import TerminalTheme
 @testable import TerminalRendering
 
 @Suite struct OffscreenRenderTests {
+    @Test func aGlyphAboveItsRowIsRemovedFromTheNeighbor() throws {
+        let screen = try makeScreen("\u{1B}[?25l\u{1B}[2;1HÅ", columns: 8, rows: 3)
+        let atlas = try makeAtlas()
+        let entry = atlas.entry(for: GlyphKey(text: "Å", face: .regular, columns: 1))
+        var mask = [UInt8](repeating: 0, count: entry.width * entry.height)
+        atlas.coverage.getBytes(&mask, bytesPerRow: entry.width,
+                                from: MTLRegionMake2D(entry.x, entry.y, entry.width, entry.height), mipmapLevel: 0)
+        let index = try #require(mask.indices.first { entry.offsetY + $0 / entry.width < 0 && mask[$0] > 0 })
+        let x = testPadding + entry.offsetX + index % entry.width
+        let y = testPadding + testFonts.cellHeight + entry.offsetY + index / entry.width
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        try renderer.prepare(from: screen.state)
+        #expect(renderer.draw(into: first))
+        #expect(first.pixel(x: x, y: y) != screen.state.colors.background)
+        screen.state.markClean()
+        screen.terminal.write("\u{1B}[2;1H ")
+        try screen.state.update(from: screen.terminal)
+        try renderer.prepare(from: screen.state)
+        let second = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: second) && renderer.rowsDrawn == 2)
+        #expect(second.pixel(x: x, y: y) == screen.state.colors.background)
+    }
+
+    @Test func overlaysAndInvalidationsMatchAFullRedraw() throws {
+        let screen = try makeScreen("\u{1B}[2 qAB\r\nCD", columns: 10, rows: 3)
+        try TerminalTheme.graphite(for: .dark).apply(to: screen.terminal)
+        try screen.state.update(from: screen.terminal)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        var width = size.width, height = size.height
+        var frame = 0
+        func target() throws -> OffscreenTarget { try OffscreenTarget(device: device, width: width, height: height) }
+        func pixels(_ target: OffscreenTarget) -> [UInt8] {
+            _ = target.pixel(x: 0, y: 0)
+            var bytes = [UInt8](repeating: 0, count: width * height * 4)
+            target.texture.getBytes(&bytes, bytesPerRow: width * 4,
+                                    from: MTLRegionMake2D(0, 0, width, height), mipmapLevel: 0)
+            return bytes
+        }
+        func compare() throws -> Int {
+            try renderer.prepare(from: screen.state)
+            let changed = try target()
+            #expect(renderer.draw(into: changed))
+            let count = renderer.rowsDrawn
+            if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+                try changed.savePNG(to: URL(fileURLWithPath: "\(folder)/incremental-\(frame).png"))
+                frame += 1
+            }
+            let reference = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: renderer.selectionColor)
+            (reference.isFocused, reference.isCursorShown, reference.markedText, reference.markedTextSelection, reference.isFlashing) =
+                (renderer.isFocused, renderer.isCursorShown, renderer.markedText, renderer.markedTextSelection, renderer.isFlashing)
+            try reference.prepare(from: screen.state)
+            let full = try target()
+            #expect(reference.draw(into: full))
+            let matches = pixels(changed) == pixels(full)
+            #expect(matches)
+            return count
+        }
+        #expect(try compare() == 3)
+        screen.state.markClean()
+        try screen.state.update(from: screen.terminal)
+        renderer.isCursorShown = false
+        #expect(try compare() == 1)
+        renderer.isCursorShown = true
+        #expect(try compare() == 1)
+        renderer.isFocused = false
+        #expect(try compare() == 1)
+        renderer.markedText = "日a"
+        renderer.markedTextSelection = NSRange(location: 0, length: 1)
+        #expect(try compare() > 0)
+        renderer.markedText = nil
+        #expect(try compare() > 0)
+        renderer.isFlashing = true
+        #expect(try compare() == 3)
+        renderer.isFlashing = false
+        #expect(try compare() == 3)
+        renderer.selectionColor = TerminalColor(red: 1, green: 2, blue: 3)
+        #expect(try compare() == 3)
+        try TerminalTheme.graphite(for: .light).apply(to: screen.terminal)
+        try screen.state.update(from: screen.terminal)
+        #expect(try compare() == 3)
+        screen.state.markClean()
+        try screen.terminal.resize(to: TerminalSize(columns: 9, rows: 3))
+        try screen.state.update(from: screen.terminal)
+        #expect(try compare() == 3)
+        width += 1
+        height += 1
+        #expect(try compare() == 3)
+        let fonts = FontSet(pointSize: 14, scale: 2)
+        let larger = try TerminalRenderer(device: device, fonts: fonts, selectionColor: selectionColor)
+        try larger.prepare(from: screen.state)
+        let largerSize = larger.pixelSize(for: screen.terminal.size)
+        let largerTarget = try OffscreenTarget(device: device, width: largerSize.width, height: largerSize.height)
+        #expect(larger.draw(into: largerTarget) && larger.rowsDrawn == 3)
+    }
+
     @Test func changedRowsAreSubmittedAndMatchAFullRedraw() throws {
         let screen = try makeScreen("\u{1B}[?25l", columns: 8, rows: 3)
         let device = try #require(MTLCreateSystemDefaultDevice())
