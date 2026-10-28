@@ -5,7 +5,7 @@ import simd
 /// also names the part of a texture that it shows, and its column, which the
 /// cursor needs. The fields have the layout of `Quad` in `ShaderSource`, and
 /// positions are pixels of the drawable.
-struct CellQuad: Equatable {
+struct CellQuadrilateral: Equatable {
     var origin: SIMD2<Float>
     var size: SIMD2<Float>
     var atlasOrigin: SIMD2<Float> = .zero
@@ -15,15 +15,15 @@ struct CellQuad: Equatable {
 
     static func rectangle(
         horizontalPosition: Int, verticalPosition: Int, width: Int, height: Int, color: TerminalColor
-    ) -> CellQuad {
-        CellQuad(origin: [Float(horizontalPosition), Float(verticalPosition)],
+    ) -> CellQuadrilateral {
+        CellQuadrilateral(origin: [Float(horizontalPosition), Float(verticalPosition)],
                  size: [Float(width), Float(height)], color: vector(color))
     }
 
     static func glyph(
         _ entry: GlyphAtlas.Entry, column: Int, horizontalPosition: Int, verticalPosition: Int, color: TerminalColor
-    ) -> CellQuad {
-        CellQuad(
+    ) -> CellQuadrilateral {
+        CellQuadrilateral(
             origin: [Float(horizontalPosition + entry.horizontalOffset), Float(verticalPosition + entry.verticalOffset)],
             size: [Float(entry.width), Float(entry.height)],
             atlasOrigin: [Float(entry.horizontalPosition), Float(entry.verticalPosition)],
@@ -31,13 +31,15 @@ struct CellQuad: Equatable {
             color: vector(color))
     }
 
-    func moved(horizontalOffset: Int, verticalOffset: Int) -> CellQuad {
-        var quad = self
-        quad.origin += [Float(horizontalOffset), Float(verticalOffset)]
-        return quad
+    func moved(horizontalOffset: Int, verticalOffset: Int) -> CellQuadrilateral {
+        var quadrilateral = self
+        quadrilateral.origin += [Float(horizontalOffset), Float(verticalOffset)]
+        return quadrilateral
     }
 
     static func vector(_ color: TerminalColor) -> SIMD4<Float> {
         SIMD4(Float(color.red) / 255, Float(color.green) / 255, Float(color.blue) / 255, 1)
     }
 }
+
+typealias CellQuad = CellQuadrilateral
