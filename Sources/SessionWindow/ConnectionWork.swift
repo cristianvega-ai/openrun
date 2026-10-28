@@ -4,7 +4,7 @@ import Synchronization
 /// Runs the calls of one window that wait for the socket, on a serial queue.
 /// The main thread must never wait: a connection can wake the launch agent,
 /// and a send waits while the program reads no input. The queue keeps the
-/// order of keys and sizes. A detach waits at most 200 ms for queued input.
+/// order of keys and sizes. An independent shutdown can free a stalled send.
 final class ConnectionWork: Sendable {
     private let queue = DispatchQueue(label: "ai.cristianvega.openrun.window-connection")
     private let isStopped = Mutex(false)

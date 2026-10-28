@@ -131,8 +131,8 @@ public final class TerminalView: NSView {
         scheduleParseTurn()
     }
 
-    /// Parses output for at most 4 ms, so a flood of output does not hold the
-    /// main thread from drawing and input.
+    /// Checks the budget between pieces or size events so the main thread can
+    /// process input and frames while output waits.
     ///
     /// - Returns: `true` when output is left for another turn.
     @discardableResult
