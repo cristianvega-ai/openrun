@@ -6,8 +6,8 @@ import Testing
         var packer = AtlasPacker(side: 100)
         let first = packer.place(width: 10, height: 20)
         let second = packer.place(width: 10, height: 5)
-        #expect([first?.x, first?.y] == [0, 0])
-        #expect([second?.x, second?.y] == [11, 0])
+        #expect([first?.horizontalPosition, first?.verticalPosition] == [0, 0])
+        #expect([second?.horizontalPosition, second?.verticalPosition] == [11, 0])
     }
 
     @Test func startsANewRowBelowTheTallestBitmap() {
@@ -15,7 +15,7 @@ import Testing
         _ = packer.place(width: 20, height: 8)
         _ = packer.place(width: 8, height: 12)
         let next = packer.place(width: 15, height: 4)
-        #expect([next?.x, next?.y] == [0, 13])
+        #expect([next?.horizontalPosition, next?.verticalPosition] == [0, 13])
     }
 
     @Test func answersNilWhenFullAndWorksAgainAfterAReset() {

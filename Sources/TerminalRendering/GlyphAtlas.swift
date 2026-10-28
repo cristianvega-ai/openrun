@@ -58,14 +58,14 @@ final class GlyphAtlas {
         }
         guard let place else { return .empty }
         (bitmap.isColor ? color : coverage).replace(
-            region: MTLRegionMake2D(place.x, place.y, bitmap.width, bitmap.height), mipmapLevel: 0,
+            region: MTLRegionMake2D(place.horizontalPosition, place.verticalPosition, bitmap.width, bitmap.height), mipmapLevel: 0,
             withBytes: bitmap.pixels, bytesPerRow: bitmap.width * (bitmap.isColor ? 4 : 1))
         return Entry(
-            x: place.x, y: place.y, width: bitmap.width, height: bitmap.height,
+            x: place.horizontalPosition, y: place.verticalPosition, width: bitmap.width, height: bitmap.height,
             offsetX: bitmap.offsetX, offsetY: bitmap.offsetY, isColor: bitmap.isColor)
     }
 
-    private func place(_ bitmap: GlyphRasterizer.Bitmap) -> (x: Int, y: Int)? {
+    private func place(_ bitmap: GlyphRasterizer.Bitmap) -> (horizontalPosition: Int, verticalPosition: Int)? {
         bitmap.isColor
             ? colorPacker.place(width: bitmap.width, height: bitmap.height)
             : coveragePacker.place(width: bitmap.width, height: bitmap.height)
