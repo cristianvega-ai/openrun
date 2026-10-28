@@ -5,18 +5,18 @@ date: 2026-10-15
 
 # OpenRun architecture
 
-This document explains the code of the headless core, which is milestone 1 of version 1.
+This document explains the code of the session process, its clients, and the app.
 It is for the owner. Read it with `documentation/product.md`, which holds the decisions, and `AGENTS.md`, which holds the rules of the code.
 Update it when you add a module or change the protocol.
 
 ## What exists
 
 A background program, the session process, owns every shell and agent that the user starts.
-Clients connect to it over a Unix socket. The command-line tool `openrun` is the first client.
-The app will be another. A client can leave, and the programs keep running.
+The command-line tool `openrun` and the app connect to it over a Unix socket.
+A client can leave, and the programs keep running.
 
 ```
-  openrun (client)        the app (later)
+  openrun (client)        the app (client)
         \                  /
          \   Unix socket  /
           v               v
@@ -40,14 +40,15 @@ A module uses another module only through its public types.
 | `TerminalEmulation` | Wraps libghostty-vt: the screen, the scrollback, snapshots, replies to the queries that programs send, and the default colors that a client sets | `Terminal`, `TerminalSnapshot`, `UnfinishedSequence`, `TerminalSize`, `TerminalCursorPosition`, `ScreenFormat`, `ScreenExtent`, `TerminalReplyHandler`, `TerminalColorScheme`, `TerminalColor`, `TerminalEmulationError`, `PrintableText` |
 | `TerminalTheme` | The Graphite colors for the light and the dark appearance, and the call that gives them to a terminal | `TerminalTheme` |
 | `TerminalRendering` | Draws a terminal with Metal and CoreText: fonts, glyph textures, shaders, rows, cursor, selection and marked text | `TerminalRenderer`, `FontSet`, `FrameStatistics`, `RenderTarget`, `OffscreenTarget`, `DrawableTarget`, `RenderingError` |
-| `TerminalView` | The AppKit view that shows one terminal: output, grid size, appearance and font size | `TerminalView`, `TerminalViewDelegate` |
+| `TerminalView` | The AppKit view that shows one terminal and handles its input, selection and scrollback | `TerminalView`, `TerminalViewDelegate` |
 | `PseudoTerminal` | Runs one program on a new pseudo terminal | `PseudoTerminal`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
 | `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
 | `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, and the attach conversation | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionIdentifierMatch`, `SessionConnectionError` |
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
-| `OpenRunApplication` | The app. In milestone 2 so far, the application delegate and the setup of the launch agent at the start | `OpenRunApplication` |
+| `SessionWindow` | Connects one terminal view to one session and owns its window | `SessionWindowController`, `SessionStart` |
+| `OpenRunApplication` | The app, its windows, and setup of the launch agent at the start | `OpenRunApplication` |
 
 The programs in `Sources/openrun`, `Sources/openrun-session` and `Sources/openrun-application` read their start-up input and call `CommandLineTool`, `SessionProcess` and `OpenRunApplication`. They hold no other logic.
 
@@ -63,14 +64,16 @@ openrun             -> CommandLineTool -> SessionConnection -> SessionProtocol
 openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> SessionLaunch
                                        -> PseudoTerminal
+                                       -> TerminalTheme -> TerminalEmulation
                                        -> TerminalEmulation -> libghostty-vt
-openrun-application -> OpenRunApplication -> SessionConnection
+openrun-application -> OpenRunApplication -> SessionWindow -> TerminalView
+                                          -> SessionConnection
                                           -> SessionLaunch
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
                   -> TerminalTheme     -> TerminalEmulation
 ```
 
-No program uses `TerminalView` yet. The app of milestone 2 will. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
+`SessionWindow` also uses `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
 `PseudoTerminal`, `SessionProtocol` and `SessionLaunch` depend on no other OpenRun module. `SessionConnection` depends on `SessionProtocol` and `SessionLaunch`.
