@@ -68,7 +68,7 @@ let package = Package(
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness"]),
         // The app. In milestone 2 it registers the launch agent at its start.
         .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol", "SessionWindow"]),
-        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionWindow"]),
+        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionWindow", "SessionProcessHarness"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
         .testTarget(
             name: "PseudoTerminalTests",
