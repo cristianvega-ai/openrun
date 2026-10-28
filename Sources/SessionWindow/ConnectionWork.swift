@@ -1,21 +1,4 @@
 import Dispatch
-import Foundation
-import SessionConnection
-import SessionProtocol
-
-/// What a window uses of an attached session. `SessionAttachment` is one,
-/// and tests give a stand-in, so they need no socket.
-protocol AttachedSession: AnyObject, Sendable {
-    var snapshot: Data { get }
-    func send(input: Data) throws
-    func send(size: SessionSize) throws
-    func send(size: SessionSize, requestsConfirmation: Bool) throws
-    func detach() throws
-    func shutdown()
-    func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void)
-}
-
-extension SessionAttachment: AttachedSession {}
 
 /// Runs the calls of one window that wait for the socket, on a serial queue.
 /// The main thread must never wait: a connection can wake the launch agent,
