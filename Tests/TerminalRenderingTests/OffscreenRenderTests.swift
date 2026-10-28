@@ -304,7 +304,95 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
         #expect(row.rows == 48 && page.rows == 48)
     }
 }
-@Suite struct AtlasFrameTests {
+extension OffscreenRenderTests {
+    @Test func markedTextAfterPreparationReclaimsHistoricalGlyphs() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 3), scrollbackLimit: 0)
+        try theme.apply(to: terminal)
+        terminal.write("\u{1B}[?25lABCDEFGHIJKLMNOPQRST")
+        let state = try RenderState()
+        try state.update(from: terminal)
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: theme.selection, atlasSide: 128, atlasMaximumSide: 128)
+        let size = renderer.pixelSize(for: terminal.size)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        try renderer.prepare(from: state)
+        #expect(renderer.draw(into: first))
+        _ = first.pixel(x: 0, y: 0)
+        state.markClean()
+        terminal.write("\u{1B}[2J\u{1B}[H")
+        try state.update(from: terminal)
+        try renderer.prepare(from: state)
+        let text = "uvwxyz0123456789!@#$"
+        renderer.markedText = text
+        let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(!renderer.draw(into: next))
+        try renderer.prepare(from: state)
+        #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
+        _ = next.pixel(x: 0, y: 0)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-marked-small.png"))
+        }
+        var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
+        next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
+                              from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+        let reference = try image("\u{1B}[?25l", markedText: text, side: 2048, name: "reclaim-marked")
+        let matches = pixels == reference
+        #expect(matches)
+    }
+
+    @Test func aLargeFontReclaimsGlyphsFromEarlierScreens() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let theme = TerminalTheme.graphite(for: .dark)
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 3), scrollbackLimit: 0)
+        try theme.apply(to: terminal)
+        terminal.write("\u{1B}[?25lABCDEFGHIJKLMNOPQRST")
+        let state = try RenderState()
+        try state.update(from: terminal)
+        let fonts = FontSet(pointSize: 72, scale: 2)
+        let renderer = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection, atlasSide: 512, atlasMaximumSide: 512)
+        let size = renderer.pixelSize(for: terminal.size)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        try renderer.prepare(from: state)
+        #expect(renderer.draw(into: first))
+        state.markClean()
+        let text = "uvwxyz0123456789!@#$"
+        terminal.write("\u{1B}[2J\u{1B}[H" + text)
+        try state.update(from: terminal)
+        try renderer.prepare(from: state)
+        let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: next) && renderer.rowsDrawn == 3)
+        _ = next.pixel(x: 0, y: 0)
+        if let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] {
+            try next.savePNG(to: URL(fileURLWithPath: "\(folder)/reclaim-large-font-small.png"))
+        }
+        var pixels = [UInt8](repeating: 0, count: size.width * size.height * 4)
+        next.texture.getBytes(&pixels, bytesPerRow: size.width * 4,
+                              from: MTLRegionMake2D(0, 0, size.width, size.height), mipmapLevel: 0)
+        let reference = try image("\u{1B}[?25l" + text, markedText: nil, side: 2048, name: "reclaim-large-font", fonts: fonts)
+        let matches = pixels == reference
+        #expect(matches)
+    }
+
+    @Test func aScreenBeyondTheAtlasLimitDoesNotRetryWithoutEnd() throws {
+        let screen = try makeScreen("\u{1B}[?25lABCDEFGHIJKLMNOPQRSTUVWXYZ", columns: 40, rows: 3)
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor, atlasSide: 64, atlasMaximumSide: 64)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        try renderer.prepare(from: screen.state)
+        let first = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: first))
+        _ = first.pixel(x: 0, y: 0)
+        screen.state.markClean()
+        try screen.state.update(from: screen.terminal)
+        try renderer.prepare(from: screen.state)
+        let next = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: next))
+        #expect(pixel(of: first, column: 0, x: 8, y: 12) == pixel(of: next, column: 0, x: 8, y: 12))
+        let hasInk = (0..<testFonts.cellWidth).contains { x in (0..<testFonts.cellHeight).contains { y in pixel(of: first, x: x, y: y) != screen.state.colors.background } }
+        #expect(hasInk)
+    }
+
     @Test func aNewScreenReclaimsGlyphsFromEarlierScreens() throws {
         let device = try #require(MTLCreateSystemDefaultDevice())
         let theme = TerminalTheme.graphite(for: .dark)

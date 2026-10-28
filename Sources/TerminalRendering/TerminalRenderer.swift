@@ -70,6 +70,7 @@ public final class TerminalRenderer {
 
     /// The position of a UTF-16 range in the displayed marked text.
     /// The end of a row can have a column equal to the grid width.
+    /// Returns `nil` when there is no marked text or the range is outside the grid.
     public func markedTextCaretPosition(at position: ViewportCell, in size: TerminalSize, for range: NSRange? = nil) -> ViewportCell? {
         guard let markedText, !markedText.isEmpty, size.columns > 0, size.rows > 0 else { return nil }
         let layout = MarkedTextQuads.Layout(
@@ -122,9 +123,9 @@ public final class TerminalRenderer {
     /// Draws the prepared rows into the target. The space around the grid and
     /// every cell without a background color get the background of the screen.
     ///
-    /// - Returns: `false` when the graphics processor is 3 frames behind, or
-    ///   when Metal could not make the commands. The caller tries again at the
-    ///   next frame.
+    /// - Returns: `false` when the graphics processor is behind, when the glyph
+    ///   atlas needs a new frame, or when Metal could not make the commands.
+    ///   The caller tries again at the next frame.
     @discardableResult
     public func draw(into target: some RenderTarget) -> Bool {
         guard framesInFlight.wait(timeout: .now()) == .success else { return false }
@@ -138,6 +139,7 @@ public final class TerminalRenderer {
     private func encode(into target: some RenderTarget) -> Bool {
         guard let backing = backingTexture(matching: target.texture) else { return false }
         let marked = markedTextToDraw()
+        if atlas.isFull && !reclaimedForFrame { return false }
         let flash = isFlashing ? colors.map { OverlayQuads.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
         let frame = FrameBuilder(
             cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash)
@@ -193,6 +195,7 @@ public final class TerminalRenderer {
         commands.addCompletedHandler { _ in finished.signal() }
         target.present(with: commands)
         commands.commit()
+        reclaimedForFrame = false
         return true
     }
 
