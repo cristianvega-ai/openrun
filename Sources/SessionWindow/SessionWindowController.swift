@@ -182,6 +182,12 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         window.title = title.isEmpty ? folder : title
     }
 
+    public func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool {
+        guard !isClosed else { return false }
+        let agreed = await ask(.openLink(address), window)
+        return !isClosed && agreed
+    }
+
     public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
         guard !isClosed else { return false }
         let agreed = await ask(.unsafePaste, window)
