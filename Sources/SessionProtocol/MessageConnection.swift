@@ -273,7 +273,8 @@ extension MessageConnection {
     /// - Parameter limit: The time that the answer may take. Nil waits as
     ///   long as it takes. Past the limit, it throws
     ///   `SessionProtocolError.timedOut`.
-    public func greetSessionProcess(within limit: Duration? = nil) throws {
+    @discardableResult
+    public func greetSessionProcess(within limit: Duration? = nil) throws -> ServerCapabilities {
         let deadline = limit.map { ContinuousClock.now + $0 }
         // A session process that refuses this client answers and closes at
         // once, maybe before the hello goes out. Its answer still waits here
@@ -291,10 +292,11 @@ extension MessageConnection {
             throw sendError ?? error
         }
         switch answer {
-        case .hello(let version):
+        case .hello(let version, let capabilities):
             guard version == MessageFrame.protocolVersion else {
                 throw SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: version)
             }
+            return capabilities ?? ServerCapabilities()
         case .failure(let failure) where failure.reason == .incompatibleProtocol:
             guard let version = Self.version(inRefusal: failure.message) else {
                 throw SessionProtocolError.refused(message: failure.message)

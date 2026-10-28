@@ -52,6 +52,13 @@ public final class SessionAttachment: Sendable {
         try SessionConnectionError.wrapping { try connection.send(ClientMessage.resize(size)) }
     }
 
+    /// Requests an ordered `sizeChanged` after the session applies this size.
+    public func send(size: SessionSize, requestsConfirmation: Bool) throws {
+        try SessionConnectionError.wrapping {
+            try connection.send(ClientMessage.resize(size, requestsConfirmation: requestsConfirmation ? true : nil))
+        }
+    }
+
     /// Asks the session process to detach this client. The session goes on.
     public func detach() throws {
         try SessionConnectionError.wrapping { try connection.send(ClientMessage.detach) }

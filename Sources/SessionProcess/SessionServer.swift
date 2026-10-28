@@ -212,7 +212,7 @@ actor SessionServer {
                 // program reads nothing.
                 session.type(Array(bytes), from: owner) { client.markHandled(received) }
                 continue
-            case .resize(let size):
+            case .resize(let size, _):
                 try? await attachedSession?.resize(to: size, from: client)
             case .detach:
                 client.markHandled(received)

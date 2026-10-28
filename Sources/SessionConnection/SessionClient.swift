@@ -6,6 +6,7 @@ import SessionProtocol
 /// A connection to the session process, after the greeting.
 public struct SessionClient: Sendable {
     let connection: MessageConnection
+    public let capabilities: ServerCapabilities
 
     /// Starts the session process when nothing listens on the socket.
     typealias Wake = () throws(SessionWakeFailure) -> Void
@@ -51,7 +52,7 @@ public struct SessionClient: Sendable {
 
     /// Greets the session process on an open connection, such as a test's.
     init(greeting connection: MessageConnection) throws {
-        try SessionConnectionError.wrapping { try connection.greetSessionProcess() }
+        self.capabilities = try SessionConnectionError.wrapping { try connection.greetSessionProcess() }
         self.connection = connection
     }
 

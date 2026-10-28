@@ -44,7 +44,7 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case input(Data)
     /// The size of the attached client. The last client to resize wins, and
     /// the other clients that asked receive `sizeChanged`.
-    case resize(SessionSize)
+    case resize(SessionSize, requestsConfirmation: Bool? = nil)
     /// Leaves the session running and closes this connection.
     case detach
 }

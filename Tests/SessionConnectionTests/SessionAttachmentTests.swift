@@ -65,8 +65,9 @@ import Testing
         }
         try attachment.send(input: Data("keys".utf8))
         try attachment.send(size: SessionSize(columns: 100, rows: 30))
+        try attachment.send(size: Self.size, requestsConfirmation: true)
         try attachment.detach()
-        #expect(await received.reduce(into: []) { $0.append($1) } == [.input(Data("keys".utf8)), .resize(SessionSize(columns: 100, rows: 30)), .detach])
+        #expect(await received.reduce(into: []) { $0.append($1) } == [.input(Data("keys".utf8)), .resize(SessionSize(columns: 100, rows: 30)), .resize(Self.size, requestsConfirmation: true), .detach])
     }
 
     /// A shutdown wakes the receiving thread while it waits for a frame.

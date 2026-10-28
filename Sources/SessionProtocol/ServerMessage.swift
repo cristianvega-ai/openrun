@@ -3,7 +3,7 @@ import Foundation
 /// A message from the session process to a client.
 public enum ServerMessage: Codable, Equatable, Sendable {
     /// Always first. Carries the protocol version of the session process.
-    case hello(protocolVersion: Int)
+    case hello(protocolVersion: Int, capabilities: ServerCapabilities? = nil)
     case sessionCreated(SessionSummary)
     case sessionList([SessionSummary])
     /// The client is attached. A `snapshot` follows at once.
