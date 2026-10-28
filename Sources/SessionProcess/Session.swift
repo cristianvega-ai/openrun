@@ -3,6 +3,7 @@ import PseudoTerminal
 import SessionProtocol
 import Synchronization
 import TerminalEmulation
+import TerminalTheme
 
 /// One program on one pseudo terminal, with the terminal state that lets a
 /// client attach at any moment.
@@ -35,12 +36,12 @@ actor Session {
     /// before it leaves no program running without a session.
     ///
     /// - Parameter installReplyHandler: Installs the handler on the terminal.
-    ///   Tests replace it to make the installation fail.
+    ///   Tests replace it to make the installation fail, or to fix the scheme.
     init(
         summary: SessionSummary,
         launch: ProgramLaunch,
         onFinish: @escaping @Sendable (UUID) async -> Void,
-        installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try $0.setReplyHandler($1) }
+        installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try Session.installReplies(on: $0, handler: $1) }
     ) throws {
         self.summary = summary
         self.onFinish = onFinish
@@ -54,6 +55,15 @@ actor Session {
         let pseudoTerminal = try PseudoTerminal(launching: launch)
         self.pseudoTerminal = pseudoTerminal
         gate.connect(pseudoTerminal)
+    }
+
+    /// Answers color queries with the Graphite colors of the appearance,
+    /// the colors that the view draws with, so programs choose readable colors.
+    static func installReplies(
+        on terminal: Terminal, handler: @escaping TerminalReplyHandler,
+        colorScheme: @escaping @Sendable () -> TerminalColorScheme = { TerminalColorScheme.current() }
+    ) throws {
+        try terminal.setReplyHandler(handler, colorScheme: colorScheme) { TerminalTheme.graphite(for: $0).defaultColors }
     }
 
     /// Decides whether the session process answers terminal queries.

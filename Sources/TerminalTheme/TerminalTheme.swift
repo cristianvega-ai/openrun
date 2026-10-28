@@ -23,15 +23,15 @@ public struct TerminalTheme: Equatable, Sendable {
         scheme == .dark ? GraphitePalette.dark : GraphitePalette.light
     }
 
+    /// The colors that a terminal takes as its defaults. The session process
+    /// answers the color queries of its programs with them.
+    public var defaultColors: TerminalDefaultColors {
+        TerminalDefaultColors(foreground: foreground, background: background, cursor: cursor, firstSixteenColors: firstSixteenColors)
+    }
+
     /// Gives a terminal these colors as its defaults. A program can still
     /// set its own colors with `OSC 4`, `OSC 10`, `OSC 11` and `OSC 12`.
     public func apply(to terminal: Terminal) throws {
-        try terminal.setDefaultBackgroundColor(background)
-        try terminal.setDefaultForegroundColor(foreground)
-        try terminal.setDefaultCursorColor(cursor)
-        var palette = terminal.defaultPalette
-        palette.replaceSubrange(0..<min(16, palette.count), with: firstSixteenColors)
-        // The terminal refuses a palette that does not hold 256 colors.
-        try terminal.setDefaultPalette(palette)
+        try terminal.setDefaultColors(defaultColors)
     }
 }

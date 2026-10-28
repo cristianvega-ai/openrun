@@ -1,7 +1,10 @@
 import Foundation
+import PseudoTerminal
 import SessionProcessHarness
 import SessionProtocol
+import TerminalEmulation
 import Testing
+@testable import SessionProcess
 
 extension SessionProcessIntegration {
     /// Each terminal query must get exactly one reply. The session process
@@ -206,13 +209,16 @@ extension SessionProcessIntegration {
             """#
         }
 
-        /// The colors that the macOS appearance gives: black on white in light
-        /// mode, white on black in dark mode. The test cannot tell which mode
-        /// the Mac is in, so it accepts only the two matching pairs.
-        private static func expectColors(in screen: String) {
-            let light = screen.contains("foreground=033]10;rgb:0000/0000/0000\\a") && screen.contains("background=033]11;rgb:ffff/ffff/ffff\\a")
-            let dark = screen.contains("foreground=033]10;rgb:ffff/ffff/ffff\\a") && screen.contains("background=033]11;rgb:0000/0000/0000\\a")
-            #expect(light || dark, "colors: \(screen)")
+        /// The answers of the session process: the Graphite colors of the macOS appearance, light then dark.
+        private static let graphitePairs = [("1e1e/2020/2222", "fafa/fbfb/fcfc"), ("e6e6/eeee/f4f4", "1e1e/2020/2222")]
+        /// The answers of the terminal of the harness, which plays the window: black on white or white on black.
+        private static let plainPairs = [("0000/0000/0000", "ffff/ffff/ffff"), ("ffff/ffff/ffff", "0000/0000/0000")]
+
+        /// The test cannot tell which mode the Mac is in, so it accepts only
+        /// the two matching pairs.
+        private static func expectColors(in screen: String, from pairs: [(String, String)]) {
+            let matches = pairs.contains { screen.contains("foreground=033]10;rgb:\($0.0)\\a") && screen.contains("background=033]11;rgb:\($0.1)\\a") }
+            #expect(matches, "colors: \(screen)")
             // A 80 by 24 grid of 8 by 16 pixel cells: 384 high and 640 wide.
             #expect(screen.contains("dots=033[5;384;640t"))
             for name in ["foreground", "background", "dots"] {
@@ -226,7 +232,7 @@ extension SessionProcessIntegration {
                 #expect(await process.waitForScreen(of: identifier, containing: "READY"))
                 FileManager.default.createFile(atPath: process.directory.appendingPathComponent("go").path, contents: Data())
                 #expect(await process.waitForScreen(of: identifier, containing: "DONE", timeout: .seconds(30)))
-                Self.expectColors(in: try process.screenText(of: identifier).filter { !$0.isWhitespace })
+                Self.expectColors(in: try process.screenText(of: identifier).filter { !$0.isWhitespace }, from: Self.graphitePairs)
             }
         }
 
@@ -238,10 +244,56 @@ extension SessionProcessIntegration {
                 #expect(await attached.waitForScreen(containing: "READY"))
                 FileManager.default.createFile(atPath: process.directory.appendingPathComponent("go").path, contents: Data())
                 #expect(await attached.waitForScreen(containing: "DONE", timeout: .seconds(30)))
-                Self.expectColors(in: attached.screenText.filter { !$0.isWhitespace })
+                Self.expectColors(in: attached.screenText.filter { !$0.isWhitespace }, from: Self.plainPairs)
                 // One answer for each of the three queries, all from the window.
                 #expect(attached.repliesSent == 3)
             }
+        }
+
+        /// The program asks for the foreground, background and cursor colors
+        /// and for colors 0 to 15, and prints the answers with ESC as E and BEL as B.
+        private static let paletteScript = #"""
+        stty raw -echo opost min 0 time 10
+        printf '\033]10;?\007\033]11;?\007\033]12;?\007'
+        for n in 0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15; do printf '\033]4;%d;?\007' $n; done
+        printf 'answers=%s\n' "$(dd bs=1 count=2000 2>/dev/null | tr '\033\007' EB)"
+        printf 'DONE\n'
+        sleep 60
+        """#
+
+        /// The table "Graphite theme" of `documentation/product.md`: the text,
+        /// the background, the cursor and colors 0 to 15.
+        private static let graphiteLight = "1e2022 fafbfc 1e2022 1e2022 b8364b 327339 81600e 2b67b1 8748bc 137073 d6dade 6e7277 ce3b53 3d8044 8f6c15 3073c5 9553cb 197e80 f3f4f6"
+        private static let graphiteDark = "e6eef4 1e2022 e6eef4 2e3134 e87382 9fcb8b e2c27f 79aee6 c59de6 67c9cb c8cfd5 8a8f94 f08f9b b4d8a3 ebd29b 97c1ee d5b5ee 88d8d9 e6eef4"
+
+        private static func answers(_ colors: String) -> String {
+            zip(["10", "11", "12"] + (0..<16).map { "4;\($0)" }, colors.split(separator: " ")).map { name, color in
+                "E]\(name);rgb:\([0, 2, 4].map { String(repeating: String(color.dropFirst($0).prefix(2)), count: 2) }.joined(separator: "/"))B"
+            }.joined()
+        }
+
+        @Test func theSessionProcessAnswersWithTheGraphiteColorsOfTheAppearance() async throws {
+            try await RunningSessionProcess.run { process in
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", Self.paletteScript])
+                #expect(await process.waitForScreen(of: identifier, containing: "DONE"))
+                let screen = try process.screenText(of: identifier).filter { !$0.isWhitespace }
+                #expect([Self.graphiteLight, Self.graphiteDark].contains { screen.contains("answers=" + Self.answers($0)) }, "\(screen)")
+            }
+        }
+
+        @Test(arguments: [TerminalColorScheme.light, .dark])
+        func aSessionAnswersWithTheGraphiteVersionOfItsScheme(scheme: TerminalColorScheme) async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try Session(
+                summary: SessionSummary(identifier: UUID(), folder: "/", command: ["/bin/sh"], size: size, createdAt: Date()),
+                launch: ProgramLaunch(executablePath: "/bin/sh", arguments: ["-c", Self.paletteScript], folder: "/", environment: ["PATH": "/usr/bin:/bin"],
+                                      size: PseudoTerminalSize(columns: size.columns, rows: size.rows)),
+                onFinish: { _ in }) { try Session.installReplies(on: $0, handler: $1, colorScheme: { scheme }) }
+            await session.start()
+            #expect(await eventually { (try? await session.screenText(includeScrollback: false))?.contains("DONE") == true })
+            let screen = try await session.screenText(includeScrollback: false).filter { !$0.isWhitespace }
+            #expect(screen.contains("answers=" + Self.answers(scheme == .dark ? Self.graphiteDark : Self.graphiteLight)), "\(screen)")
+            await session.terminate()
         }
 
         @Test func aReplyThatArrivesOneSecondLateIsSeenByTheDuplicateDetector() async throws {
