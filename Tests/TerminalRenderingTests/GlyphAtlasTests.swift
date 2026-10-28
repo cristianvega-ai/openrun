@@ -36,6 +36,18 @@ import Testing
         #expect(atlas.drawnCount == 0)
     }
 
+    @Test func aHiddenGlyphTakesSpaceOnlyWhenItsBitmapEntersTheDrawable() throws {
+        let atlas = try makeAtlas()
+        let glyph = key("A")
+        let bitmap = try #require(GlyphRasterizer(fonts: testFonts).bitmap(for: glyph))
+        let size = (width: 80, height: 80)
+        let top = -bitmap.verticalOffset
+        let hidden = atlas.entry(for: glyph, at: (80 - bitmap.horizontalOffset, top), within: size)
+        #expect(hidden.isEmpty && atlas.drawnCount == 0)
+        let edge = atlas.entry(for: glyph, at: (79 - bitmap.horizontalOffset, top), within: size)
+        #expect(!edge.isEmpty && atlas.drawnCount == 1)
+    }
+
     @Test func aFullTextureKeepsTheEarlierGlyphs() throws {
         let atlas = try makeAtlas(side: 64)
         let first = atlas.entry(for: key("A"))

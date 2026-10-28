@@ -4,6 +4,22 @@ import Metal
 /// then found again by its key. Text goes into a texture of coverage, and an
 /// emoji, which has its own colors, goes into a second texture of colors.
 final class GlyphAtlas {
+    private struct BitmapBounds {
+        let horizontalOffset, verticalOffset, width, height: Int
+
+        init(_ bitmap: GlyphRasterizer.Bitmap) {
+            (horizontalOffset, verticalOffset, width, height) =
+                (bitmap.horizontalOffset, bitmap.verticalOffset, bitmap.width, bitmap.height)
+        }
+
+        func intersects(origin: (horizontalPosition: Int, verticalPosition: Int), size: (width: Int, height: Int)) -> Bool {
+            let left = origin.horizontalPosition + horizontalOffset
+            let top = origin.verticalPosition + verticalOffset
+            return size.width > 0 && size.height > 0 && left < size.width && top < size.height
+                && left + width > 0 && top + height > 0
+        }
+    }
+
     /// The place of a glyph in the texture, and the place of its bitmap in the cell.
     struct Entry: Equatable {
         let horizontalPosition, verticalPosition, width, height: Int
@@ -28,6 +44,7 @@ final class GlyphAtlas {
     private var coveragePacker: AtlasPacker
     private var colorPacker: AtlasPacker
     private var entries: [GlyphKey: Entry] = [:]
+    private var hiddenBounds: [GlyphKey: BitmapBounds] = [:]
 
     /// - Parameter side: The width of the texture of coverage in pixels. The
     ///   texture of colors has half of it, because it has 4 bytes for a pixel.
@@ -48,6 +65,24 @@ final class GlyphAtlas {
     func entry(for key: GlyphKey) -> Entry {
         if let entry = entries[key] { return entry }
         let entry = rasterizer.bitmap(for: key).map(store) ?? .empty
+        hiddenBounds.removeValue(forKey: key)
+        entries[key] = entry
+        return entry
+    }
+
+    /// A bitmap outside the drawable does not take space from visible glyphs.
+    func entry(for key: GlyphKey, at origin: (horizontalPosition: Int, verticalPosition: Int),
+               within size: (width: Int, height: Int)) -> Entry {
+        if let entry = entries[key] { return entry }
+        if let bounds = hiddenBounds[key], !bounds.intersects(origin: origin, size: size) { return .empty }
+        guard let bitmap = rasterizer.bitmap(for: key) else { entries[key] = .empty; return .empty }
+        let bounds = BitmapBounds(bitmap)
+        guard bounds.intersects(origin: origin, size: size) else {
+            if hiddenBounds.count < 1024 { hiddenBounds[key] = bounds }
+            return .empty
+        }
+        hiddenBounds.removeValue(forKey: key)
+        let entry = store(bitmap)
         entries[key] = entry
         return entry
     }
