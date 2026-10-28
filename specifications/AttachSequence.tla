@@ -22,7 +22,8 @@
 EXTENDS Naturals, Sequences, FiniteSets
 
 CONSTANTS ClientCount, ChunkCount, OutputLimit, ResizeLimit,
-          RestoreFailedSize, RelayingClients, SizeSubscribers, QueryChunks
+          RestoreFailedSize, RelayingClients, SizeSubscribers, QueryChunks,
+          ConfirmingClients, ConfirmResizes, ApplySizeBeforeConfirmation
 
 Clients == 1..ClientCount
 Chunks  == 1..ChunkCount
@@ -180,29 +181,35 @@ Attach(client, dimensions, outcome) ==
              drawingSize, knownSizes, resizeCount, wrongSizeOrder, queryOwners,
              replies, pendingReplies>>
 
-\* Session.resize, which uses Session.apply and Session.announceSize.  A
-\* resize applies to both copies of the terminal, then announces the new size
-\* to the other clients that asked.  The requester knows its own size and
-\* gets no message.
+\* A confirming client waits for its ordered size message before it changes
+\* its local grid.  Each control removes one of these protections.
+\* Session queues the confirmation with the resize, even for the same size.
 Resize(client, dimensions) ==
   /\ client \in attached
-  /\ dimensions # sessionSize
+  /\ (client \notin ConfirmingClients \/ client \in restored)
   /\ resizeCount < ResizeLimit
-  /\ LET otherAttached == (attached \cap SizeSubscribers) \ {client}
-         full == {recipient \in otherAttached :
+  /\ LET otherAttached == IF dimensions # sessionSize
+                            THEN (attached \cap SizeSubscribers) \ {client}
+                            ELSE {}
+         confirmation == IF ConfirmResizes /\ client \in ConfirmingClients
+                           THEN {client} ELSE {}
+         recipients == otherAttached \cup confirmation
+         full == {recipient \in recipients :
                     Counted(queues[recipient]) >= OutputLimit}
      IN /\ sessionSize' = dimensions
         /\ resizeCount' = resizeCount + 1
         /\ queues' = [recipient \in Clients |->
              IF recipient \in full THEN <<>>
-             ELSE IF recipient \in otherAttached
+             ELSE IF recipient \in recipients
                   THEN Append(queues[recipient],
                               Message("size", 0, dimensions))
                   ELSE queues[recipient]]
         /\ attached' = attached \ full
         /\ open' = open \ full
-        /\ drawingSize' = [drawingSize EXCEPT ![client] = dimensions]
-        /\ knownSizes' = [knownSizes EXCEPT ![client] = @ \cup {dimensions}]
+        /\ drawingSize' = IF client \in ConfirmingClients /\ ~ApplySizeBeforeConfirmation
+             THEN drawingSize ELSE [drawingSize EXCEPT ![client] = dimensions]
+        /\ knownSizes' = IF client \in ConfirmingClients /\ ~ApplySizeBeforeConfirmation
+             THEN knownSizes ELSE [knownSizes EXCEPT ![client] = @ \cup {dimensions}]
         /\ UNCHANGED <<written, parsed, attempted, restored, received,
              refusedChangedSize, refusedAnnounced, wrongSizeOrder,
              queryOwners, replies, pendingReplies>>
@@ -231,7 +238,9 @@ Deliver(client) ==
              (wrongSizeOrder \/
               (message.kind = "output"
                /\ client \in SizeSubscribers
-               /\ message.dimensions \notin knownSizes[client]))
+               /\ IF client \in ConfirmingClients
+                     THEN message.dimensions # drawingSize[client]
+                     ELSE message.dimensions \notin knownSizes[client]))
         /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
              resizeCount, refusedChangedSize, refusedAnnounced, queryOwners,
              replies, pendingReplies>>
@@ -298,8 +307,8 @@ NoRefusedSize == ~refusedChangedSize
 
 NoRefusedAnnouncement == ~refusedAnnounced
 
-\* sizeChanged reaches a client that asked for size changes before any output
-\* laid out for the new size.
+\* A confirming client uses the size in effect when each output was parsed.
+\* A legacy subscriber has learned the size before the output reaches it.
 SizeOrder == ~wrongSizeOrder
 
 \* While a relaying client is attached the session process sends no reply.
@@ -323,14 +332,19 @@ ReplyOwnership ==
 \* agrees with the session on the size.  This is what two clients of
 \* different sizes settle on.
 \*
-\* The session process does not promise this.  A client that sends a resize
+\* The legacy protocol does not promise this.  A client that sends a resize
 \* after the attach was applied, but before it receives its snapshot, gets no
 \* sizeChanged for it.  So AttachSequenceEarlyResize.cfg expects this
-\* property to fail.  The client closes the gap: each client sends its own
-\* window size after it restores the snapshot.
+\* property to fail.  Legacy clients send their window size after the restore,
+\* but an older foreign size can still arrive after that request.
 QuiescentSizeAgreement ==
   (\A client \in Clients : Len(queues[client]) = 0) =>
     (\A client \in attached \cap SizeSubscribers :
+       drawingSize[client] = sessionSize)
+
+ConfirmedSizeAgreement ==
+  (\A client \in Clients : Len(queues[client]) = 0) =>
+    (\A client \in attached \cap ConfirmingClients :
        drawingSize[client] = sessionSize)
 
 \* ---------------------------------------------------------------------------

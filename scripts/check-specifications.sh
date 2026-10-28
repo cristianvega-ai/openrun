@@ -17,6 +17,7 @@ AttachSequence AttachSequenceWithoutRestoredSize invariant:NoRefusedSize quick
 AttachSequence AttachSequenceAnnouncementWithoutRestoredSize invariant:NoRefusedAnnouncement quick
 AttachSequence AttachSequenceSizePolicy no-error quick
 AttachSequence AttachSequenceEarlyResize invariant:QuiescentSizeAgreement quick
+AttachSequence AttachSequenceWithoutResizeConfirmation invariant:SizeOrder quick
 AttachSequence AttachSequenceLiveness no-error quick
 AttachSequence AttachSequenceThreeClients no-error long
 SessionLifecycle SessionLifecycle no-error quick
