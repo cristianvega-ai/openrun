@@ -53,7 +53,8 @@ struct MarkedTextQuadrilaterals {
 
     init(
         text: String, column: Int, row: Int, columnCount: Int, rowCount: Int, colors: RenderColors, atlas: GlyphAtlas,
-        metrics: CellMetrics, padding: Int, selection: NSRange? = nil, selectionColor: TerminalColor? = nil
+        metrics: CellMetrics, padding: Int, selection: NSRange? = nil, selectionColor: TerminalColor? = nil,
+        viewportSize: (width: Int, height: Int)? = nil
     ) {
         let layout = Layout(text: text, column: column, row: row, columnCount: columnCount, rowCount: rowCount, selection: selection, atlas: atlas)
         for character in layout.characters where character.row >= 0 && character.row < rowCount {
@@ -63,7 +64,13 @@ struct MarkedTextQuadrilaterals {
             let background = layout.selection.overlaps(character.range) ? (selectionColor ?? colors.foreground) : colors.background
             backgrounds.append(.rectangle(horizontalPosition: horizontalPosition, verticalPosition: top,
                                           width: width, height: metrics.height, color: background))
-            let entry = atlas.entry(for: GlyphKey(text: character.text, face: .regular, columns: character.width))
+            let key = GlyphKey(text: character.text, face: .regular, columns: character.width)
+            let entry: GlyphAtlas.Entry
+            if let viewportSize {
+                entry = atlas.entry(for: key, at: (horizontalPosition, top), within: viewportSize)
+            } else {
+                entry = atlas.entry(for: key)
+            }
             if !entry.isEmpty {
                 glyphs.append(.glyph(entry, column: character.column, horizontalPosition: horizontalPosition,
                                      verticalPosition: top, color: colors.foreground))

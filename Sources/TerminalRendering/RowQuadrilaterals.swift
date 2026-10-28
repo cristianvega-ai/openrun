@@ -10,8 +10,14 @@ struct RowQuadrilaterals {
     /// The columns of the wide characters. A cursor on one of them covers 2 cells.
     private(set) var wideColumns: [UInt16] = []
 
-    init(row: RenderRow, colors: RenderColors, selection: TerminalColor, atlas: GlyphAtlas, metrics: CellMetrics) throws {
+    init(row: RenderRow, colors: RenderColors, selection: TerminalColor, atlas: GlyphAtlas, metrics: CellMetrics,
+         rowIndex: Int = 0, padding: Int = 0, viewportSize: (width: Int, height: Int)? = nil) throws {
         let selected = row.selectedColumns
+        func entry(for key: GlyphKey, at horizontalPosition: Int) -> GlyphAtlas.Entry {
+            guard let viewportSize else { return atlas.entry(for: key) }
+            return atlas.entry(for: key, at: (padding + horizontalPosition, padding + rowIndex * metrics.height),
+                               within: viewportSize)
+        }
         try row.forEachCell(palette: colors.palette) { cell in
             let horizontalPosition = Int(cell.column) * metrics.width
             var foreground = cell.foreground ?? colors.foreground
@@ -30,14 +36,14 @@ struct RowQuadrilaterals {
                 // Most cells hold one scalar, and a short string needs no memory from the heap.
                 let text = cell.extraScalars.isEmpty ? String(Character(base)) : cell.text
                 let key = GlyphKey(text: text, face: FontFace(style: cell.style), columns: cell.width == .wide ? 2 : 1)
-                let entry = atlas.entry(for: key)
+                let entry = entry(for: key, at: horizontalPosition)
                 if !entry.isEmpty {
                     glyphs.append(.glyph(entry, column: Int(cell.column), horizontalPosition: horizontalPosition, verticalPosition: 0, color: foreground))
                 }
             }
             // The wave goes after the text, so the first glyph of a column is its text.
             if cell.style.underline == .curly {
-                glyphs.append(.glyph(atlas.entry(for: .curlyUnderline), column: Int(cell.column), horizontalPosition: horizontalPosition,
+                glyphs.append(.glyph(entry(for: .curlyUnderline, at: horizontalPosition), column: Int(cell.column), horizontalPosition: horizontalPosition,
                                      verticalPosition: 0, color: cell.underlineColor ?? foreground))
             }
         }
