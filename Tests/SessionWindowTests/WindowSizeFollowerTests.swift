@@ -1,6 +1,7 @@
 import AppKit
 import Metal
 import SessionProtocol
+import SessionConnection
 import TerminalEmulation
 import TerminalRendering
 import Testing
@@ -57,6 +58,40 @@ import Testing
         await waitOnMainThread { view.gridSize == own }
         #expect(view.gridSize == own && attachment.record.withLock { $0.sizes } == [sessionSize(own)])
         #expect(attachment.record.withLock { $0.confirmationRequests } == [sessionSize(own)])
+    }
+
+    @Test func keyStatusDuringAttachControlsTheDeferredTakeover() async throws {
+        try await checkKeyStatusDuringAttach(staysKey: true)
+        try await checkKeyStatusDuringAttach(staysKey: false)
+        try await checkKeyStatusDuringAttach(staysKey: false, reportsResign: false)
+    }
+
+    private func checkKeyStatusDuringAttach(staysKey: Bool, reportsResign: Bool = true) async throws {
+        _ = NSApplication.shared
+        let controller = SessionWindowController(start: .runningSession(UUID()), socket: try SocketLocation(path: "/tmp/openrun-window-test.socket"))
+        let size = TerminalView.estimatedGrid(for: controller.window.contentLayoutRect.size, scale: controller.window.backingScaleFactor)
+        let attachment = try FakeAttachment(size: size)
+        let gate = DispatchSemaphore(value: 0)
+        defer { gate.signal(); controller.window.close() }
+        controller.connect = { _, _, size in
+            guard gate.wait(timeout: .now() + .seconds(20)) == .success else { throw SessionConnectionError.connectionClosed }
+            return StartedSession(summary: SessionSummary(identifier: UUID(), folder: "/tmp", command: ["/bin/sh"], size: size, createdAt: Date()), attachment: attachment)
+        }
+        var isKey = false
+        controller.isWindowKey = { _ in isKey }
+        controller.showWindow()
+        isKey = true
+        controller.windowDidBecomeKey(Notification(name: NSWindow.didBecomeKeyNotification))
+        if !staysKey {
+            isKey = false
+            if reportsResign { controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification)) }
+        }
+        gate.signal()
+        await waitOnMainThread { controller.view?.visibleGridSize != nil }
+        let visible = try #require(controller.view?.visibleGridSize)
+        if staysKey { await waitOnMainThread { !attachment.record.withLock { $0.confirmationRequests }.isEmpty } }
+        else { await waitOnMainThread(seconds: 0.2) { false } }
+        #expect(attachment.record.withLock { $0.confirmationRequests } == (staysKey ? [sessionSize(visible)] : []))
     }
 
     /// The alternate screen does not reflow, so a line shows the size it came for.

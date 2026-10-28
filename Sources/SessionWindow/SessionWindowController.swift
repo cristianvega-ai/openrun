@@ -24,6 +24,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private(set) var view: TerminalView?
     let hiddenGridLabel = HiddenGridLabel()
     var ask: @MainActor (UserQuestion, NSWindow) async -> Bool = { await $0.ask(in: $1) }
+    var isWindowKey: @MainActor (NSWindow) -> Bool = { $0.isKeyWindow }
+    private var isAttaching = false
+    private var pendingKeyTakeover = false
     private var isClosed = false
     private var hasConnectionFailure = false
     private var folder = ""
@@ -44,12 +47,14 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         window.makeKeyAndOrderFront(nil)
         let grid = TerminalView.estimatedGrid(for: window.contentLayoutRect.size, scale: window.backingScaleFactor)
         let (start, socket, connect) = (start, socket, connect)
+        isAttaching = true
         work.run({ try connect(start, socket, SessionSize(columns: grid.columns, rows: grid.rows)) }) { [weak self] result in
             self?.attached(result)
         }
     }
 
     private func attached(_ result: Result<StartedSession, any Error>) {
+        isAttaching = false
         // The user can close the window while it attaches.
         guard !isClosed else {
             if case .success(let started) = result { detach(started.attachment) }
@@ -79,6 +84,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         window.makeFirstResponder(view)
         // Complete the snapshot fit before a later size from another client arrives.
         view.layoutSubtreeIfNeeded()
+        // A key event during the attach must follow any earlier foreign size.
+        if pendingKeyTakeover, isWindowKey(window), view.gridSize == view.visibleGridSize { view.takeBackGridSize() }
+        pendingKeyTakeover = false
         started.attachment.startReceiving(AttachmentRelay.handler { [weak self] in self?.handle($0) })
     }
 
@@ -126,7 +134,11 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
 
     /// The user uses this window now, so its size applies (decision of 2026-10-27).
     public func windowDidBecomeKey(_ notification: Notification) {
-        view?.takeBackGridSize()
+        if let view { view.takeBackGridSize() } else if isAttaching { pendingKeyTakeover = true }
+    }
+
+    public func windowDidResignKey(_ notification: Notification) {
+        pendingKeyTakeover = false
     }
 
     public func windowWillClose(_ notification: Notification) {
