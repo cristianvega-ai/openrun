@@ -3,6 +3,7 @@ import SessionProcessHarness
 import SessionProtocol
 @testable import SessionWindow
 import Testing
+import TerminalView
 @testable import OpenRunApplication
 
 @MainActor @Suite(.serialized) struct MainMenuTests {
@@ -38,6 +39,9 @@ import Testing
         await wait { application.windows.controllers.first?.view != nil }
         let afterReopen = try process.listedIdentifiers()
         #expect(application.windows.controllers.count == 1 && afterReopen.count == 2)
+        application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+        let afterQuit = try process.listedIdentifiers()
+        #expect(application.windows.controllers.isEmpty && afterQuit == afterReopen)
     }
 
     @Test func theWindowActionsMakeANewSessionOrAttachToAnOldOne() async throws {
@@ -89,10 +93,58 @@ import Testing
         #expect(file.item(withTitle: "Close Window")?.keyEquivalent == "w")
         #expect(edit.item(withTitle: "Copy")?.action == Selector(("copy:")))
         #expect(edit.item(withTitle: "Paste")?.action == Selector(("paste:")))
-        #expect(view.item(withTitle: "Make Text Bigger")?.keyEquivalent == "=")
+        #expect(view.item(withTitle: "Make Text Bigger")?.keyEquivalent == "=" && view.item(withTitle: "Make Text Bigger")?.target == nil)
         #expect(view.item(withTitle: "Make Text Smaller")?.keyEquivalent == "-")
         #expect(view.item(withTitle: "Reset Text Size")?.keyEquivalent == "0")
         #expect(!application.validateMenuItem(try #require(file.item(withTitle: "New Window"))))
+    }
+
+    @Test func theFontShortcutsWorkWithTheInstalledMenu() async throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        FileManager.default.createFile(atPath: folder.appendingPathComponent(".zshrc").path, contents: Data())
+        let process = try RunningSessionProcess()
+        defer { process.stop() }
+        let application = OpenRunApplication(socket: try SocketLocation(path: process.socketPath))
+        application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
+        let oldMenu = NSApp.mainMenu, oldWindows = NSApp.windowsMenu
+        defer {
+            application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
+            NSApp.mainMenu = oldMenu
+            NSApp.windowsMenu = oldWindows
+        }
+        NSApp.mainMenu = MainMenu.make(target: application)
+        application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        await wait { application.windows.controllers.first?.view != nil }
+        let controller = try #require(application.windows.controllers.first), view = try #require(controller.view)
+        NSApp.activate()
+        controller.window.makeKeyAndOrderFront(nil)
+        controller.window.makeFirstResponder(view)
+        // The test host cannot become the key app, so select the responder that AppKit would find.
+        let textMenu = try #require(NSApp.mainMenu?.item(withTitle: "View")?.submenu)
+        for title in ["Make Text Bigger", "Make Text Smaller", "Reset Text Size"] {
+            let item = try #require(textMenu.item(withTitle: title))
+            item.target = view
+        }
+        let first = view.gridSize
+        #expect(view.performKeyEquivalent(with: try key("=", .command)))
+        await wait { view.gridSize.columns < first.columns }
+        let second = view.gridSize
+        #expect(second.columns < first.columns)
+        #expect(view.performKeyEquivalent(with: try key("+", [.command, .shift])))
+        await wait { view.gridSize.columns < second.columns }
+        #expect(view.gridSize.columns < second.columns)
+        #expect(view.performKeyEquivalent(with: try key("-", .command)))
+        await wait { view.gridSize == second }
+        #expect(view.gridSize == second)
+        #expect(view.performKeyEquivalent(with: try key("0", .command)))
+        await wait { view.gridSize == first }
+        #expect(view.gridSize == first)
+    }
+
+    private func key(_ characters: String, _ flags: NSEvent.ModifierFlags) throws -> NSEvent {
+        try #require(NSEvent.keyEvent(with: .keyDown, location: .zero, modifierFlags: flags, timestamp: 0, windowNumber: 0,
+            context: nil, characters: characters, charactersIgnoringModifiers: characters, isARepeat: false, keyCode: 0))
     }
 
     @Test func theStandardNewSessionUsesTheHomeFolder() {
