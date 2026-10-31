@@ -84,6 +84,8 @@ CheckingOutputRoom == ClientCount + 1
 PausesForRoom == TRUE
 ClosesBehindFasterViewer == TRUE
 WakesOnOtherViewerDrain == TRUE
+WakesOnOwnRoom == TRUE
+ReleasesWaitOnLeave == TRUE
 \* product.md, 2026-10-31: a viewer keeps up when it has received output and
 \* has room.
 KeepsUp(client) == client \in progressedClients /\ Counted(queues[client]) <= LowMark
@@ -283,8 +285,9 @@ Deliver(client) ==
         \* The waiter's own room ends the wait, and so does another viewer
         \* that keeps up after this delivery.
         /\ outputRoom' = IF outputRoom \in Clients /\ Counted(Tail(queues[client])) <= LowMark
-             /\ (outputRoom = client \/ (WakesOnOtherViewerDrain /\
-                   (client \in progressedClients \/ message.kind = "output")))
+             /\ IF outputRoom = client THEN WakesOnOwnRoom
+                ELSE WakesOnOtherViewerDrain /\
+                     (client \in progressedClients \/ message.kind = "output")
              THEN CheckingOutputRoom ELSE outputRoom
         /\ restored' = IF message.kind = "snapshot"
              THEN restored \cup {client} ELSE restored
@@ -313,7 +316,7 @@ Deliver(client) ==
 \* SessionServer.serve.  A client leaves, by detach or by disconnect.
 \* Session.detach drops it from the client list and updates the reply gate:
 \* the gate opens when the client was the last relaying client.
-Leave(client) ==
+Disconnect(client, releasesWait) ==
   /\ client \in open
   /\ open' = open \ {client}
   /\ attached' = attached \ {client}
@@ -321,14 +324,19 @@ Leave(client) ==
   /\ pendingReplies' = [pendingReplies EXCEPT ![client] = {}]
   /\ waitingClients' = waitingClients \ {client}
   /\ progressedClients' = progressedClients \ {client}
-  /\ outputRoom' = IF outputRoom = client THEN CheckingOutputRoom ELSE outputRoom
+  /\ outputRoom' = IF outputRoom = client /\ releasesWait
+       THEN CheckingOutputRoom ELSE outputRoom
   /\ UNCHANGED <<written, parsed, sessionSize, attempted, restored, received,
        drawingSize, knownSizes, resizeCount, refusedChangedSize,
        refusedAnnounced, wrongSizeOrder, queryOwners, replies, isEnding>>
 
+\* Session.detach releases a wait for the client (refuseOutputRoomWait), and
+\* the end of a connection resumes the waiter.  A control removes the release.
+Leave(client) == Disconnect(client, ReleasesWaitOnLeave)
+
 \* Session.run checks all opted-in clients after each output. It waits for
 \* one full client, or ends it when another client has made progress and has
-\* room. A timeout is represented by Leave while that client is waiting.
+\* room. OutputRoomTimeout ends that client while it waits.
 CheckOutputRoom ==
   /\ outputRoom = CheckingOutputRoom
   /\ LET full == {client \in waitingClients : Counted(queues[client]) >= HighMark}
@@ -351,7 +359,7 @@ CheckOutputRoom ==
 
 OutputRoomTimeout(client) ==
   /\ outputRoom = client
-  /\ Leave(client)
+  /\ Disconnect(client, TRUE)
 
 BeginShutdown ==
   /\ ~isEnding
@@ -499,15 +507,18 @@ ConfirmedSizeAgreement ==
        drawingSize[client] = sessionSize)
 
 \* ---------------------------------------------------------------------------
-\* Liveness: a parsed query is answered when nobody can withdraw the answer.
+\* Liveness: a parsed query is answered when nobody can withdraw the answer,
+\* each wait for room ends, and parsing goes on.
 \* Run only with RelayingClients = {}.
 \* ---------------------------------------------------------------------------
+\* The fairness leaves out OutputRoomTimeout.  Every client reads, so a wait
+\* must end because room appears.  A fair timeout ends every wait by itself,
+\* and WaitingForRoomEnds would then show nothing about the wakes.
 Fairness ==
   /\ WF_variables(ProgramWrites)
   /\ WF_variables(ParseOutput)
   /\ WF_variables(CheckOutputRoom)
   /\ (\A client \in Clients : WF_variables(Deliver(client)))
-  /\ (\A client \in Clients : WF_variables(OutputRoomTimeout(client)))
 
 LiveSpecification == Specification /\ Fairness
 
@@ -516,5 +527,9 @@ QueryEventuallyAnswered ==
 
 WaitingForRoomEnds ==
   \A client \in Clients : (outputRoom = client) ~> (outputRoom # client)
+
+\* QueryEventuallyAnswered also holds when parsing stops before the query.
+\* This property fails when parsing stops before the session ends.
+EveryChunkIsParsed == <>(parsed = ChunkCount \/ isEnding)
 
 =============================================================================

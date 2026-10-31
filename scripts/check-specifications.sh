@@ -12,7 +12,8 @@ TOOLS_CHECKSUM="936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
 
 # Each row: model, configuration, expected outcome, size of the run.
 # An outcome is no-error, invariant:<name>, action:<name> or
-# temporal-violation.
+# temporal-violation. TLC does not name the temporal property that fails,
+# so each control with that outcome checks one property.
 EXPECTED_OUTCOMES="AttachSequence AttachSequence no-error quick
 AttachSequence AttachSequenceWithoutRestoredSize invariant:NoRefusedSize quick
 AttachSequence AttachSequenceAnnouncementWithoutRestoredSize invariant:NoRefusedAnnouncement quick
@@ -24,6 +25,8 @@ AttachSequence AttachSequenceWithoutOutputRoomWait invariant:OutputWaitBoundsQue
 AttachSequence AttachSequenceWithoutPrecedence action:NoNewPauseWhileViewerKeepsUp quick
 AttachSequence AttachSequenceWithoutDrainWake invariant:NoPauseWhileViewerKeepsUp quick
 AttachSequence AttachSequenceLiveness no-error quick
+AttachSequence AttachSequenceWithoutRoomWake temporal-violation quick
+AttachSequence AttachSequenceLivenessWithoutParsing temporal-violation quick
 AttachSequence AttachSequenceThreeClients no-error long
 AttachSequence AttachSequenceThreeClientsLiveness no-error long
 LocalDelivery LocalDelivery no-error quick
