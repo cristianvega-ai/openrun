@@ -302,6 +302,54 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         await settle(seconds: 0.05) { false }
         #expect(!view.hasMarkedText() && delegate.sent.isEmpty && delegate.questions.isEmpty)
     }
+
+    @Test func approvalCannotSendToAChangedOrReattachedOwner() async throws {
+        for external in [true, false] {
+            let view = try TerminalView()
+            let original = PendingPasteDelegate()
+            let replacement = RecordingDelegate()
+            view.delegate = original
+            if external {
+                view.insertText("first\nsecond", replacementRange: nowhere)
+            } else {
+                let pasteboard = FakePasteboard()
+                pasteboard.text = "first\nsecond"
+                view.pasteboard = pasteboard
+                view.paste(nil)
+            }
+            await settle { original.questions.count == 1 }
+            #expect(original.questions == ["first\nsecond"] && original.sent.isEmpty)
+            view.delegate = replacement
+            view.delegate = original
+            original.respond(true)
+            await settle { original.responses == 1 }
+            #expect(original.responses == 1 && original.sent.isEmpty && replacement.sent.isEmpty)
+        }
+    }
+
+    @Test(.enabled(if: NSScreen.main != nil))
+    func approvalCannotSendAfterTheWindowClosesOrTheViewMoves() async throws {
+        for closesWindow in [true, false] {
+            let view = try TerminalView()
+            let delegate = PendingPasteDelegate()
+            view.delegate = delegate
+            let window = show(view)
+            view.insertText("first\nsecond", replacementRange: nowhere)
+            await settle { delegate.questions.count == 1 }
+            #expect(delegate.questions == ["first\nsecond"] && delegate.sent.isEmpty)
+            if closesWindow {
+                window.close()
+            } else {
+                window.contentView = nil
+                window.contentView = view
+            }
+            delegate.respond(true)
+            await settle { delegate.responses == 1 }
+            #expect(delegate.responses == 1 && delegate.sent.isEmpty)
+            window.close()
+        }
+    }
+
     private final class PendingPasteDelegate: TerminalViewDelegate {
         var sent: [UInt8] = []
         var questions: [String] = []
