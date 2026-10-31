@@ -20,10 +20,10 @@ public protocol TerminalViewDelegate: AnyObject {
     /// these bytes. The owner writes them to the session.
     func terminalView(_ view: TerminalView, send bytes: [UInt8])
 
-    /// The user pasted text with a line break, and the program has not turned on bracketed
-    /// paste, so each line could run as a command. The owner asks the user.
+    /// The user pasted or inserted text with a line break, and the program has not
+    /// turned on bracketed paste, so each line could run as a command. The owner asks.
     ///
-    /// - Returns: `true` when the user wants the paste. The view pastes only after a yes.
+    /// - Returns: `true` when the user wants the text. The view sends it only after a yes.
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool
 
     /// The user clicked a link that can open another app or a file. The owner asks before opening it.
