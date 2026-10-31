@@ -249,6 +249,23 @@ extension SessionProcessIntegration {
             #expect(ContinuousClock.now - start < .seconds(1))
             #expect(client.queuedOutputBytes != nil)
         }
+        @Test(.tags(.takesEverySlot)) func aProgramThatEndsWakesAFullViewer() async throws {
+            try await RunningSessionProcess.run { process in
+                let go = process.directory.appendingPathComponent("end-go")
+                let script = "echo ready; while [ ! -f '\(go.path)' ]; do sleep 0.02; done; head -c \(ConnectionLimits.outputHighMark) /dev/zero | tr '\\000' x"
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                try #require(await process.waitForScreen(of: identifier, containing: "ready"))
+                let client = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { client.connection.shutdown() }
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                let start = ContinuousClock.now
+                let gone = await eventually(timeout: .seconds(5)) { (try? process.listedIdentifiers())?.isEmpty == true }
+                print("program-exit-wake: gone \(gone) after \(ContinuousClock.now - start)")
+                #expect(gone)
+                #expect(ContinuousClock.now - start < .seconds(3))
+            }
+        }
+
         @Test(.tags(.takesEverySlot)) func shutdownWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
                 let (identifier, go) = try startFlood(process)

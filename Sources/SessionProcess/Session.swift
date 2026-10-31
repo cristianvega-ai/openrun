@@ -230,6 +230,10 @@ actor Session {
     // MARK: - Private
 
     private func run() async {
+        let exitWatcher = Task { [weak self, pseudoTerminal] in
+            _ = await pseudoTerminal.waitForExit()
+            await self?.programDidExit()
+        }
         for await bytes in pseudoTerminal.output {
             // Output that arrives while the session ends needs no parsing. The
             // screen is about to disappear, and parsing could delay a shutdown.
@@ -247,6 +251,7 @@ actor Session {
             // serve nobody else. Yielding lets attach, read and kill run.
             await Task.yield()
         }
+        exitWatcher.cancel()
         let exit = SessionExit(await pseudoTerminal.waitForExit())
         programExit = exit
         isFinished = true
@@ -265,6 +270,12 @@ actor Session {
 
     private func updateReplyGate() {
         replyGate.close(!relayingClients.isEmpty)
+    }
+
+    /// The program ended, so the remaining output gets the normal room
+    /// deadline without the snapshot grace.
+    private func programDidExit() {
+        for client in clients.values { client.programDidExit() }
     }
 
     /// A fast viewer takes precedence over a client whose queue is full.

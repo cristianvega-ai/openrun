@@ -41,6 +41,7 @@ final class ClientConnection: Sendable {
         var outputWaiter: OutputWaiter?
         var outputProgressObserver: (@Sendable () -> Void)?
         var refusesOutputRoomWait = false
+        var programHasExited = false
         var nextOutputWaiterIdentifier: UInt64 = 0
         var phase = Phase.open
         var hasLeft = false
@@ -183,12 +184,15 @@ final class ClientConnection: Sendable {
             let wait = state.withLock { state -> (UInt64, Duration)? in
                 guard state.phase == .open, !state.refusesOutputRoomWait,
                       state.queuedOutputBytes >= ConnectionLimits.outputHighMark else { return nil }
-                precondition(state.outputWaiter == nil)
+                guard state.outputWaiter == nil else { return nil }
                 state.nextOutputWaiterIdentifier &+= 1
                 let identifier = state.nextOutputWaiterIdentifier
                 state.outputWaiter = OutputWaiter(identifier: identifier, continuation: continuation)
                 let grace = state.snapshotGraceDeadline.map { $0 - .now } ?? .zero
-                return (identifier, max(ConnectionLimits.outputRoomTimeLimit, grace))
+                let limit = state.programHasExited
+                    ? ConnectionLimits.outputRoomTimeLimit
+                    : max(ConnectionLimits.outputRoomTimeLimit, grace)
+                return (identifier, limit)
             }
             guard let (identifier, duration) = wait else {
                 continuation.resume()
@@ -214,6 +218,13 @@ final class ClientConnection: Sendable {
             return state.outputWaiter
         }
         waiter?.continuation.resume()
+    }
+
+    /// The remaining output after the program exits gets the normal room
+    /// deadline, so a large snapshot grace cannot hold the session.
+    func programDidExit() {
+        state.withLock { $0.programHasExited = true }
+        stopWaitingForOutputRoom()
     }
 
     /// A client that detaches or a session that ends must not start a new wait.
