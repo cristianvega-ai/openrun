@@ -121,6 +121,8 @@ import Testing
         bar.update(from: reading)
         bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: 100)
         bar.update(from: reading)
+        let rowHeight = bar.bounds.height / CGFloat(reading.visibleRows)
+        #expect(abs(bar.scrollView.contentView.bounds.origin.y - rowHeight * CGFloat(reading.firstVisibleRow)) < 0.5)
         #expect(received.isEmpty)
     }
 
