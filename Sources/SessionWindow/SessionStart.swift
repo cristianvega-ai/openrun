@@ -41,7 +41,7 @@ public enum SessionStart: Equatable, Sendable {
         case .runningSession(let identifier):
             summary = try client.session(matching: SessionSummary.text(for: identifier))
         }
-        let attachment = try client.attach(to: summary.identifier, size: size, relaysRawOutput: false, receivesSizeChanges: true)
+        let attachment = try client.attach(to: summary.identifier, size: size, relaysRawOutput: false, receivesSizeChanges: true, waitsForOutputRoom: true)
         return StartedSession(summary: summary, attachment: attachment)
     }
 }

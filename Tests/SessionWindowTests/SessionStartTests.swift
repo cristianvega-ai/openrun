@@ -39,6 +39,37 @@ import Synchronization
         }
     }
 
+    @Test func aWindowRequestsRoomForOutputForNewAndRunningSessions() throws {
+        let size = SessionSize(columns: 80, rows: 24)
+        let summary = SessionSummary(identifier: UUID(), folder: "/tmp", command: ["sh"], size: size, createdAt: Date(timeIntervalSince1970: 0))
+        for start in [SessionStart.newSession(folder: "/tmp", environment: [:]), .runningSession(summary.identifier)] {
+            let (clientSide, serverSide) = try MessageConnection.makePair()
+            let received = Mutex<ClientMessage?>(nil)
+            Thread {
+                defer { serverSide.shutdown() }
+                do {
+                    try serverSide.greetClient(capabilities: ServerCapabilities(orderedResizeConfirmation: true))
+                    switch try serverSide.receive(ClientMessage.self) {
+                    case .createSession:
+                        try serverSide.send(ServerMessage.sessionCreated(summary))
+                    case .listSessions:
+                        try serverSide.send(ServerMessage.sessionList([summary]))
+                    default:
+                        return
+                    }
+                    let request = try serverSide.receive(ClientMessage.self)
+                    received.withLock { $0 = request }
+                    try serverSide.send(ServerMessage.attached(summary))
+                    try serverSide.send(ServerMessage.snapshot(Data()))
+                } catch {}
+            }.start()
+            let client = try SessionClient(greeting: clientSide)
+            let started = try start.attach(using: client, size: size)
+            defer { started.attachment.shutdown() }
+            #expect(received.withLock { $0 } == .attach(identifier: summary.identifier, size: size, receivesSizeChanges: true, waitsForOutputRoom: true))
+        }
+    }
+
     @Test func aNewSessionRunsTheLoginShellInTheFolderAtTheSizeOfTheWindow() async throws {
         try await RunningSessionProcess.run { process in
             let home = try RunningSessionProcess.makeDirectory()
