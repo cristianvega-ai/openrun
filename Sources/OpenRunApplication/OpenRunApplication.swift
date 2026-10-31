@@ -24,6 +24,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
 
     /// Starts the application. It returns only when the application ends.
     public static func run() {
+        registerKeyboardDefaults()
         let application = NSApplication.shared
 #if DEBUG
         // The screenshot test needs both appearances without a system change.
@@ -48,6 +49,11 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
             alert.addButton(withTitle: "OK")
             alert.runModal()
         }
+    }
+
+    /// A registered default leaves an explicit user preference in force.
+    static func registerKeyboardDefaults() {
+        UserDefaults.standard.register(defaults: ["ApplePressAndHoldEnabled": false])
     }
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
