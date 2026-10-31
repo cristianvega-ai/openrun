@@ -264,6 +264,62 @@ extension SessionProcessIntegration {
                 #expect(ContinuousClock.now - start < .seconds(6))
             }
         }
+        @Test(.tags(.takesEverySlot)) func aLargeSnapshotCanBeRestoredWhileOutputWaits() async throws {
+            try await RunningSessionProcess.run { process in
+                let go = process.directory.appendingPathComponent("snapshot-go")
+                let program = process.directory.appendingPathComponent("large-snapshot")
+                let script = #"""
+                $| = 1;
+                for my $line (1 .. 1600) {
+                    my $text = '';
+                    for my $column (1 .. 239) {
+                        $text .= sprintf("\e[38;5;%dm%c", ($column * 7 + $line) % 256, 97 + ($column + $line) % 26);
+                    }
+                    print $text, "\e[0m\n";
+                }
+                print "snapshot-ready\n";
+                while (! -e $ARGV[0]) { select(undef, undef, undef, 0.02); }
+                exec "/usr/bin/yes";
+                """#
+                try script.write(to: program, atomically: true, encoding: .utf8)
+                let size = SessionSize(columns: 240, rows: 50)
+                let control = try greetedConnection(to: process.socketPath)
+                defer { control.connection.shutdown() }
+                try control.connection.send(ClientMessage.createSession(folder: process.directory.path,
+                    command: ["/usr/bin/perl", program.path, go.path], size: size, environment: ["PATH": "/usr/bin:/bin"]))
+                guard case .sessionCreated(let summary) = try receiveMessage(control.connection, within: 30) else {
+                    Issue.record("The session was not created.")
+                    return
+                }
+                let identifier = SessionSummary.text(for: summary.identifier)
+                try #require(await process.waitForScreen(of: identifier, containing: "snapshot-ready", timeout: .seconds(120)))
+                let client = try greetedConnection(to: process.socketPath)
+                defer { client.connection.shutdown() }
+                try client.connection.send(ClientMessage.attach(identifier: summary.identifier, size: size, waitsForOutputRoom: true))
+                guard case .attached = try receiveMessage(client.connection, within: 30),
+                      case .snapshot(let snapshot) = try receiveMessage(client.connection, within: 60) else {
+                    Issue.record("The large snapshot did not arrive.")
+                    return
+                }
+                try #require(snapshot.count >= 1024 * 1024, "The snapshot must exercise the large-snapshot grace period.")
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                try await Task.sleep(for: .seconds(3))
+                #expect(!isClosedBySessionProcess(client.descriptor), "The client lost its connection while restoring the snapshot.")
+                let terminal = try TerminalSnapshot(bytes: Array(snapshot)).restoreTerminal(scrollbackLimit: 10_000)
+                let text = String(decoding: try terminal.formatted(.plainText, extent: .withScrollback), as: UTF8.self)
+                #expect(text.contains("snapshot-ready"))
+                let reader = FloodReader(client.connection)
+                reader.start()
+                let advanced = await eventually(timeout: .seconds(8)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
+                try client.connection.send(ClientMessage.input(Data([3])))
+                let stopped = await eventually(timeout: .seconds(8)) { reader.state.withLock { $0.isDone } }
+                let result = reader.state.withLock { $0 }
+                print("large-snapshot-flow: \(snapshot.count) snapshot bytes; output \(result.byteCount); stopped \(stopped)")
+                #expect(advanced && result.byteCount > 1024 * 1024)
+                #expect(stopped && result.exit == .signaled(signal: SIGINT))
+            }
+        }
+
         /// Closing a client that stopped reading waited for a write
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
