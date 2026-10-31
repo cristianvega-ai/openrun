@@ -9,6 +9,9 @@
 \* announce the size.  The steps that remain are the ones between the
 \* methods of Session: output parsing, attach, resize, detach, and the
 \* delivery of queued messages to each client.
+\* An attach can opt into output-room waits. The high and low marks use
+\* abstract message units; a deadline and fast-client precedence can end
+\* a stalled client. The snapshot grace period is part of the deadline.
 \*
 \* The constant RestoreFailedSize switches one protection of Session.attach.
 \*   TRUE   The code has this protection.  A failed attach puts the old
@@ -52,12 +55,14 @@ Sizes   == 1..2
 VARIABLES written, parsed, sessionSize, attached, open, attempted,
           queues, restored, received, drawingSize, knownSizes, resizeCount,
           refusedChangedSize, refusedAnnounced, wrongSizeOrder,
-          queryOwners, replies, pendingReplies, isEnding
+          queryOwners, replies, pendingReplies, waitingClients, outputRoom,
+          isEnding
 
 variables == <<written, parsed, sessionSize, attached, open, attempted,
                queues, restored, received, drawingSize, knownSizes,
                resizeCount, refusedChangedSize, refusedAnnounced,
-               wrongSizeOrder, queryOwners, replies, pendingReplies, isEnding>>
+               wrongSizeOrder, queryOwners, replies, pendingReplies,
+               waitingClients, outputRoom, isEnding>>
 
 Message(kind, number, dimensions) ==
   [kind |-> kind, number |-> number, dimensions |-> dimensions]
@@ -70,6 +75,9 @@ Prefix(count) == [index \in 1..count |-> index]
 Counted(queue) ==
   Cardinality({index \in 1..Len(queue) : queue[index].kind # "snapshot"})
 
+HighMark == IF OutputLimit > 1 THEN OutputLimit - 1 ELSE OutputLimit
+LowMark == IF OutputLimit > 2 THEN OutputLimit - 2 ELSE 0
+CheckingOutputRoom == ClientCount + 1
 \* Only these clients use the stored sizes in a guard or a property.
 TracksDrawingSize(client) == client \in SizeSubscribers \cup ConfirmingClients
 TracksKnownSizes(client) == client \in SizeSubscribers \ ConfirmingClients
@@ -93,6 +101,8 @@ InitialState ==
   /\ queryOwners = [chunk \in Chunks |-> {}]
   /\ replies = [chunk \in Chunks |-> {}]
   /\ pendingReplies = [client \in Clients |-> {}]
+  /\ waitingClients = {}
+  /\ outputRoom = 0
   /\ isEnding = FALSE
 
 \* PseudoTerminal.readAvailableOutput.  The program writes a chunk to the
@@ -103,13 +113,16 @@ ProgramWrites ==
   /\ UNCHANGED <<parsed, sessionSize, attached, open, attempted, queues,
        restored, received, drawingSize, knownSizes, resizeCount,
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
-       replies, pendingReplies, isEnding>>
+       replies, pendingReplies, waitingClients, outputRoom,
+       isEnding>>
 
 \* Session.run.  The write to the terminal, the reply handler, and the
 \* fan-out to every attached client are one actor step.  The loop waits only
-\* after the fan-out, in waitForAnswerRoom and Task.yield.
+\* after the fan-out, in waitForAnswerRoom and Task.yield. The room check
+\* has no suspension when no client needs it, so that path is one step.
 ParseOutput ==
   /\ parsed < written
+  /\ outputRoom = 0
   /\ ~isEnding
   /\ LET number == parsed + 1
          relays == attached \cap RelayingClients
@@ -120,10 +133,14 @@ ParseOutput ==
              ELSE IF client \in attached
              THEN Append(queues[client], Message("output", number, sessionSize))
              ELSE queues[client]]
+         needsRoom == \E client \in waitingClients \ full :
+           Counted(nextQueues[client]) >= HighMark
      IN /\ parsed' = number
         /\ queues' = nextQueues
         /\ attached' = attached \ full
         /\ open' = open \ full
+        /\ waitingClients' = waitingClients \ full
+        /\ outputRoom' = IF needsRoom THEN CheckingOutputRoom ELSE 0
         \* documentation/architecture.md, "Query replies": the decision is
         \* made at the moment the bytes are parsed.  With no relaying client
         \* attached the session answers at once (the handler writes
@@ -156,7 +173,7 @@ ParseOutput ==
 \* attach must leave it as it was and must not announce a size.
 \* documentation/architecture.md, "Attach sequence", says that the other
 \* clients get no sizeChanged, because the size did not change in the end.
-Attach(client, dimensions, outcome) ==
+Attach(client, dimensions, outcome, waits) ==
   /\ client \in open \ attempted
   /\ attempted' = attempted \cup {client}
   /\ LET previous == sessionSize
@@ -192,8 +209,11 @@ Attach(client, dimensions, outcome) ==
              (refusedChangedSize \/ (~success /\ failedSize # previous))
         /\ refusedAnnounced' =
              (refusedAnnounced \/ (~success /\ didAnnounce))
+        /\ waitingClients' = IF success /\ waits
+             THEN (waitingClients \ full) \cup {client} ELSE waitingClients \ full
         /\ pendingReplies' = [recipient \in Clients |->
              IF recipient \in full THEN {} ELSE pendingReplies[recipient]]
+        /\ outputRoom' = IF outputRoom \in full THEN CheckingOutputRoom ELSE outputRoom
         /\ UNCHANGED <<written, parsed, restored, received,
              drawingSize, knownSizes, resizeCount, wrongSizeOrder, queryOwners,
              replies, isEnding>>
@@ -223,8 +243,10 @@ Resize(client, dimensions) ==
                   ELSE queues[recipient]]
         /\ attached' = attached \ full
         /\ open' = open \ full
+        /\ waitingClients' = waitingClients \ full
         /\ pendingReplies' = [recipient \in Clients |->
              IF recipient \in full THEN {} ELSE pendingReplies[recipient]]
+        /\ outputRoom' = IF outputRoom \in full THEN CheckingOutputRoom ELSE outputRoom
         /\ drawingSize' = IF TracksDrawingSize(client) /\
              (client \notin ConfirmingClients \/ ApplySizeBeforeConfirmation)
              THEN [drawingSize EXCEPT ![client] = dimensions] ELSE drawingSize
@@ -241,6 +263,9 @@ Deliver(client) ==
   /\ Len(queues[client]) > 0
   /\ LET message == Head(queues[client])
      IN /\ queues' = [queues EXCEPT ![client] = Tail(@)]
+        /\ outputRoom' = IF outputRoom \in Clients /\ Counted(Tail(queues[client])) <= LowMark
+             /\ (outputRoom = client \/ message.kind = "output")
+             THEN CheckingOutputRoom ELSE outputRoom
         /\ restored' = IF message.kind = "snapshot"
              THEN restored \cup {client} ELSE restored
         /\ received' = IF message.kind = "snapshot"
@@ -263,7 +288,7 @@ Deliver(client) ==
                      ELSE message.dimensions \notin knownSizes[client]))
         /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
              resizeCount, refusedChangedSize, refusedAnnounced, queryOwners,
-             replies, pendingReplies, isEnding>>
+             replies, pendingReplies, waitingClients, isEnding>>
 
 \* SessionServer.serve.  A client leaves, by detach or by disconnect.
 \* Session.detach drops it from the client list and updates the reply gate:
@@ -274,6 +299,8 @@ Leave(client) ==
   /\ attached' = attached \ {client}
   /\ queues' = [queues EXCEPT ![client] = <<>>]
   /\ pendingReplies' = [pendingReplies EXCEPT ![client] = {}]
+  /\ waitingClients' = waitingClients \ {client}
+  /\ outputRoom' = IF outputRoom = client THEN CheckingOutputRoom ELSE outputRoom
   /\ UNCHANGED <<written, parsed, sessionSize, attempted, restored, received,
        drawingSize, knownSizes, resizeCount, refusedChangedSize,
        refusedAnnounced, wrongSizeOrder, queryOwners, replies, isEnding>>
@@ -281,10 +308,11 @@ Leave(client) ==
 BeginShutdown ==
   /\ ~isEnding
   /\ isEnding' = TRUE
+  /\ outputRoom' = 0
   /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
        queues, restored, received, drawingSize, knownSizes, resizeCount,
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
-       replies, pendingReplies>>
+       replies, pendingReplies, waitingClients>>
 
 \* The real terminal of a relaying client answers a query that the session
 \* routed to it.  The answer comes back as an input message, which
@@ -298,24 +326,24 @@ RelayReply(client, chunk) ==
   /\ pendingReplies' = [pendingReplies EXCEPT ![client] = @ \ {chunk}]
   /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
        queues, restored, received, drawingSize, knownSizes, resizeCount,
-       refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners, isEnding>>
+       refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
+       waitingClients, outputRoom, isEnding>>
 
 Next == ProgramWrites \/ ParseOutput \/ BeginShutdown
   \/ (\E client \in Clients, dimensions \in Sizes,
-          outcome \in {"success", "nil", "throw", "applyFailed"} :
-        Attach(client, dimensions, outcome))
+          outcome \in {"success", "nil", "throw", "applyFailed"}, waits \in BOOLEAN :
+        Attach(client, dimensions, outcome, waits))
   \/ (\E client \in Clients, dimensions \in Sizes : Resize(client, dimensions))
-  \/ (\E client \in Clients : Deliver(client) \/ Leave(client))
+  \/ (\E client \in Clients :
+        Deliver(client) \/ Leave(client))
   \/ (\E client \in Clients, chunk \in Chunks : RelayReply(client, chunk))
 
 Specification == InitialState /\ [][Next]_variables
 
-\* The agreement control restricts its scenario to a resize while an older
-\* foreign size waits in the client's queue.  The protection alone is removed.
 StaleForeignControlNext ==
   \/ (\E client \in Clients, dimensions \in Sizes,
-          outcome \in {"success", "nil", "throw", "applyFailed"} :
-        Attach(client, dimensions, outcome))
+          outcome \in {"success", "nil", "throw", "applyFailed"}, waits \in BOOLEAN :
+        Attach(client, dimensions, outcome, waits))
   \/ (\E client \in Clients, dimensions \in Sizes :
         /\ Resize(client, dimensions)
         /\ \E index \in 1..Len(queues[client]) :
@@ -326,14 +354,16 @@ StaleForeignControlNext ==
 StaleForeignControlSpecification ==
   InitialState /\ [][StaleForeignControlNext]_variables
 
-\* ---------------------------------------------------------------------------
+
+\* A closed client cannot attach again or receive another message. Its old
+\* display sizes do not affect later actions or the safety properties.
 \* The safety properties.
 \* ---------------------------------------------------------------------------
 
-\* For every client that has a snapshot, the snapshot prefix plus the output
-\* it received is a prefix of the program output.  No gap, no repeat.
 ServerCapacity == \A client \in Clients : Counted(queues[client]) <= OutputLimit
 
+\* For every client that has a snapshot, the snapshot prefix plus the output
+\* it received is a prefix of the program output.  No gap, no repeat.
 NoGapNoRepeat ==
   \A client \in restored :
     /\ received[client] = Prefix(Len(received[client]))
