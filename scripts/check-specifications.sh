@@ -11,7 +11,8 @@ TOOLS_ADDRESS="https://github.com/tlaplus/tlaplus/releases/download/v1.7.4/tla2t
 TOOLS_CHECKSUM="936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88"
 
 # Each row: model, configuration, expected outcome, size of the run.
-# An outcome is no-error, invariant:<name> or temporal-violation.
+# An outcome is no-error, invariant:<name>, action:<name> or
+# temporal-violation.
 EXPECTED_OUTCOMES="AttachSequence AttachSequence no-error quick
 AttachSequence AttachSequenceWithoutRestoredSize invariant:NoRefusedSize quick
 AttachSequence AttachSequenceAnnouncementWithoutRestoredSize invariant:NoRefusedAnnouncement quick
@@ -20,6 +21,8 @@ AttachSequence AttachSequenceEarlyResize invariant:QuiescentSizeAgreement quick
 AttachSequence AttachSequenceWithoutResizeConfirmation invariant:SizeOrder quick
 AttachSequence AttachSequenceWithoutResizeConfirmationAgreement invariant:ConfirmedSizeAgreement quick
 AttachSequence AttachSequenceWithoutOutputRoomWait invariant:OutputWaitBoundsQueue quick
+AttachSequence AttachSequenceWithoutPrecedence action:NoNewPauseWhileViewerKeepsUp quick
+AttachSequence AttachSequenceWithoutDrainWake invariant:NoPauseWhileViewerKeepsUp quick
 AttachSequence AttachSequenceLiveness no-error quick
 AttachSequence AttachSequenceThreeClients no-error long
 AttachSequence AttachSequenceThreeClientsLiveness no-error long
@@ -86,6 +89,8 @@ run_configuration() {
     actual_outcome="temporal-violation"
   elif grep -q "Invariant .* is violated" "$log_path"; then
     actual_outcome="invariant:$(sed -n 's/.*Invariant \([A-Za-z]*\) is violated.*/\1/p' "$log_path" | head -1)"
+  elif grep -q "Action property .* is violated" "$log_path"; then
+    actual_outcome="action:$(sed -n 's/.*Action property \([A-Za-z]*\) is violated.*/\1/p' "$log_path" | head -1)"
   else
     actual_outcome="no-result (see $log_path)"
   fi

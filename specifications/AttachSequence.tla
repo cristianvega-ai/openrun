@@ -82,6 +82,11 @@ CheckingOutputRoom == ClientCount + 1
 \* replace one with FALSE in its configuration file and the other runs need
 \* no new constant.
 PausesForRoom == TRUE
+ClosesBehindFasterViewer == TRUE
+WakesOnOtherViewerDrain == TRUE
+\* product.md, 2026-10-31: a viewer keeps up when it has received output and
+\* has room.
+KeepsUp(client) == client \in progressedClients /\ Counted(queues[client]) <= LowMark
 OutputCount(queue) ==
   Cardinality({index \in 1..Len(queue) : queue[index].kind = "output"})
 \* Only these clients use the stored sizes in a guard or a property.
@@ -275,8 +280,11 @@ Deliver(client) ==
      IN /\ queues' = [queues EXCEPT ![client] = Tail(@)]
         /\ progressedClients' = IF message.kind = "output"
              THEN progressedClients \cup {client} ELSE progressedClients
+        \* The waiter's own room ends the wait, and so does another viewer
+        \* that keeps up after this delivery.
         /\ outputRoom' = IF outputRoom \in Clients /\ Counted(Tail(queues[client])) <= LowMark
-             /\ (outputRoom = client \/ client \in progressedClients \/ message.kind = "output")
+             /\ (outputRoom = client \/ (WakesOnOtherViewerDrain /\
+                   (client \in progressedClients \/ message.kind = "output")))
              THEN CheckingOutputRoom ELSE outputRoom
         /\ restored' = IF message.kind = "snapshot"
              THEN restored \cup {client} ELSE restored
@@ -332,8 +340,7 @@ CheckOutputRoom ==
                   wrongSizeOrder, queryOwners, replies, pendingReplies,
                   waitingClients, progressedClients, isEnding>>
         ELSE \E client \in full :
-          IF \E other \in progressedClients \ {client} :
-               Counted(queues[other]) <= LowMark
+          IF ClosesBehindFasterViewer /\ \E other \in Clients \ {client} : KeepsUp(other)
           THEN Leave(client)
           ELSE /\ outputRoom' = client
                /\ UNCHANGED <<written, parsed, sessionSize, attached, open,
@@ -425,6 +432,18 @@ OutputWaitIsValid ==
 \* to the limit and loses its connection.
 OutputWaitBoundsQueue ==
   \A client \in waitingClients : OutputCount(queues[client]) <= HighMark
+
+\* product.md, 2026-10-31: a slow client does not pause the program while
+\* another viewer keeps up.  The precedence close keeps this when a wait
+\* starts, and the wake on another viewer's drain keeps it while a wait lasts.
+NoPauseWhileViewerKeepsUp ==
+  outputRoom \in Clients => ~\E other \in Clients \ {outputRoom} : KeepsUp(other)
+
+\* The precedence close alone: a step that starts a wait finds no other
+\* viewer that keeps up.
+NoNewPauseWhileViewerKeepsUp ==
+  [][outputRoom' \in Clients /\ outputRoom' # outputRoom =>
+       ~\E other \in Clients \ {outputRoom'} : KeepsUp(other)']_variables
 
 \* For every client that has a snapshot, the snapshot prefix plus the output
 \* it received is a prefix of the program output.  No gap, no repeat.
