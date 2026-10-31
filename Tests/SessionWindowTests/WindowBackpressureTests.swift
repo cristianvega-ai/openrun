@@ -225,4 +225,59 @@ private final class TracedAttachment: AttachedSession {
         #expect(deliveries == 0)
     }
 
+    @Test func stalledParserBoundsAStreamOfOrderedSizeChanges() async throws {
+        let relay = AttachmentRelay(byteLimit: 64, eventLimit: 3)
+        let parser = OutputParser(pieceSize: 1)
+        let initial = TerminalSize(columns: 10, rows: 3)
+        let terminal = try Terminal(size: initial, scrollbackLimit: 100)
+        let reference = try Terminal(size: initial, scrollbackLimit: 100)
+        var appliedSizes: [TerminalSize] = []
+        parser.onSize = { size, _ in try? terminal.resize(to: size); appliedSizes.append(size) }
+        let first = Data("ABCD".utf8)
+        var events: [SessionAttachmentEvent] = [.output(first)]
+        reference.write(first)
+        for number in 0..<1000 {
+            let size = TerminalSize(columns: number.isMultiple(of: 2) ? 8 : 10, rows: 3)
+            events.append(.sizeChanged(SessionSize(columns: size.columns, rows: size.rows)))
+            try reference.resize(to: size)
+            if number.isMultiple(of: 10) {
+                events.append(.output(Data("x".utf8)))
+                reference.write("x")
+            }
+        }
+        let completed = Mutex(0), returned = Mutex(0)
+        var delivered = 0
+        let handler = relay.handler { event, finish in
+            delivered += 1
+            let completion: @Sendable () -> Void = { completed.withLock { $0 += 1 }; finish() }
+            switch event {
+            case .output(let bytes): parser.append(bytes, completion: completion)
+            case .sizeChanged(let size):
+                parser.append(size: TerminalSize(columns: size.columns, rows: size.rows), tellsDelegate: false, completion: completion)
+            default: completion()
+            }
+        }
+        let sent = events
+        let sender = Thread {
+            for event in sent { handler(event); returned.withLock { $0 += 1 } }
+        }
+        defer { relay.cancel(); parser.discard() }
+        sender.start()
+        await waitOnMainThread { returned.withLock { $0 == 3 } && delivered == 3 }
+        try #require(returned.withLock { $0 == 3 } && delivered == 3)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(returned.withLock { $0 == 3 })
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(completed.withLock { $0 == 0 } && returned.withLock { $0 == 3 })
+        let deadline = ContinuousClock.now + .seconds(10)
+        while completed.withLock({ $0 < sent.count }) && ContinuousClock.now < deadline {
+            if parser.hasPendingOutput { _ = parser.parse(into: terminal, budget: ParseBudget(limit: .zero)) }
+            else { try await Task.sleep(for: .milliseconds(1)) }
+        }
+        #expect(completed.withLock { $0 == sent.count })
+        #expect(appliedSizes.count == 1000)
+        #expect(try terminal.formatted(.plainText) == reference.formatted(.plainText))
+    }
+
 }
