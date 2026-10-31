@@ -1,11 +1,66 @@
 import Foundation
 import SessionProtocol
+import Synchronization
 import Testing
 @testable import SessionConnection
 
 @Suite struct SessionAttachmentTests {
     private static let size = SessionSize(columns: 80, rows: 24)
     private static let summary = SessionSummary(identifier: UUID(), folder: "/", command: ["sh"], size: size, createdAt: Date(timeIntervalSince1970: 0))
+
+    private enum EarlierClientMessage: Codable, Equatable {
+        case attach(identifier: UUID, size: SessionSize, relaysRawOutput: Bool?, receivesSizeChanges: Bool?)
+    }
+
+    private static func attachFrame(throughClient: Bool, waitsForOutputRoom: Bool?) throws -> MessageFrame {
+        let (clientSide, sessionSide) = try MessageConnection.makePair()
+        let received = Mutex<MessageFrame?>(nil)
+        Thread {
+            defer { sessionSide.shutdown() }
+            do {
+                if throughClient { try sessionSide.greetClient() }
+                guard let frame = try sessionSide.receive(MessageFrame.self) else { return }
+                received.withLock { $0 = frame }
+                try sessionSide.send(ServerMessage.attached(summary))
+                try sessionSide.send(ServerMessage.snapshot(Data()))
+            } catch {}
+        }.start()
+        let attachment: SessionAttachment
+        if throughClient {
+            let client = try SessionClient(greeting: clientSide)
+            if let waitsForOutputRoom {
+                attachment = try client.attach(to: summary.identifier, size: size, relaysRawOutput: true, receivesSizeChanges: false, waitsForOutputRoom: waitsForOutputRoom)
+            } else {
+                attachment = try client.attach(to: summary.identifier, size: size, relaysRawOutput: true, receivesSizeChanges: false)
+            }
+        } else if let waitsForOutputRoom {
+            attachment = try SessionAttachment.attach(on: clientSide, to: summary.identifier, size: size, relaysRawOutput: true, receivesSizeChanges: false, waitsForOutputRoom: waitsForOutputRoom)
+        } else {
+            attachment = try SessionAttachment.attach(on: clientSide, to: summary.identifier, size: size, relaysRawOutput: true, receivesSizeChanges: false)
+        }
+        defer { attachment.shutdown() }
+        return try #require(received.withLock { $0 })
+    }
+
+    @Test func outputRoomIsOptInAndKeepsTheEarlierWireMessageByDefault() throws {
+        let earlier = EarlierClientMessage.attach(identifier: Self.summary.identifier, size: Self.size, relaysRawOutput: true, receivesSizeChanges: nil)
+        let earlierObject = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(earlier)) as? NSObject)
+        for throughClient in [false, true] {
+            for choice in [nil, false, true] as [Bool?] {
+                let frame = try Self.attachFrame(throughClient: throughClient, waitsForOutputRoom: choice)
+                #expect(frame.kind == .control)
+                #expect(try JSONDecoder().decode(EarlierClientMessage.self, from: frame.payload) == earlier)
+                let object = try #require(JSONSerialization.jsonObject(with: frame.payload) as? NSObject)
+                let fields = try #require((object as? [String: Any])?["attach"] as? [String: Any])
+                if choice == true {
+                    #expect(fields["waitsForOutputRoom"] as? Bool == true)
+                } else {
+                    #expect(object == earlierObject)
+                    #expect(fields["waitsForOutputRoom"] == nil)
+                }
+            }
+        }
+    }
 
     /// Attaches to a stand-in session process. It answers `answers` only to
     /// the attach message that a client of the tool sends, and then runs `then`.
