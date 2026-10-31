@@ -305,17 +305,26 @@ extension SessionProcessIntegration {
 
         @Test(.tags(.takesEverySlot)) func shutdownWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
-                let (identifier, go) = try startFlood(process)
-                let stalled = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                // The program ignores the hang-up of the shutdown, and the session kills it
+                // after 1 second. It ends its output before that only when the session reads
+                // again. The large snapshot keeps the client waiting for 30 seconds, and the
+                // program does not end, so only the wake of the shutdown makes the session read.
+                let finished = process.directory.appendingPathComponent("finished")
+                let size = SessionSize(columns: 240, rows: 50)
+                let program = #"$SIG{HUP} = 'IGNORE'; print "x" x 65536 for 1 .. 256; open(my $done, '>', '\#(finished.path)'); close $done;"#
+                let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: program)
+                let stalled = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { stalled.connection.shutdown() }
+                try #require(stalled.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
                 FileManager.default.createFile(atPath: go.path, contents: Data())
-                try await Task.sleep(for: .seconds(1))
+                try await Task.sleep(for: .seconds(2))
                 let start = ContinuousClock.now
                 process.send(signal: SIGTERM)
                 let exit = await process.waitForExit(timeout: 6)
                 print("full-viewer-shutdown: exit \(String(describing: exit)) after \(ContinuousClock.now - start)")
                 #expect(exit != nil)
                 #expect(ContinuousClock.now - start < .seconds(6))
+                #expect(FileManager.default.fileExists(atPath: finished.path), "The session killed the program while it waited for room.")
             }
         }
         @Test(.tags(.takesEverySlot)) func aLargeSnapshotCanBeRestoredWhileOutputWaits() async throws {
