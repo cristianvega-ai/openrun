@@ -25,6 +25,7 @@ AttachSequence AttachSequenceThreeClientsLiveness no-error long
 LocalDelivery LocalDelivery no-error quick
 LocalDelivery LocalDeliveryWithoutOrder invariant:ApplicationOrder quick
 LocalDelivery LocalDeliveryWithoutQuiescence invariant:ServerOnlySizeAgreement quick
+LocalDelivery LocalDeliveryWithoutSizeOrder invariant:SizeOrder quick
 LocalDelivery LocalDeliveryThreeClients no-error long
 SessionLifecycle SessionLifecycle no-error quick
 SessionLifecycle SessionLifecycleWithoutStoppingState invariant:NoSessionStartsDuringShutdown quick

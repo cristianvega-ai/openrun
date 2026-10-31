@@ -194,8 +194,9 @@ Apply(client, index) ==
         /\ drawingSize' = IF message.kind \in {"snapshot", "size"}
              THEN [drawingSize EXCEPT ![client] = message.dimensions]
              ELSE drawingSize
-        /\ wrongSizeOrder' = wrongSizeOrder \/
-             (message.kind = "output" /\ message.dimensions # drawingSize[client])
+        \* = binds tighter than \/, so the right side needs the parentheses.
+        /\ wrongSizeOrder' = (wrongSizeOrder \/
+             (message.kind = "output" /\ message.dimensions # drawingSize[client]))
         /\ UNCHANGED <<outputCount, resizeCount, sessionSize, attempted,
              attached, serverQueues, receivedFrames, accepted>>
 
