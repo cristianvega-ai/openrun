@@ -1,6 +1,7 @@
 import Metal
 import Testing
 import TerminalEmulation
+import TerminalTheme
 @testable import TerminalRendering
 
 @Suite struct RowQuadrilateralsTests {
@@ -31,6 +32,35 @@ import TerminalEmulation
         let screen = try makeScreen("日🙂", columns: 6)
         let glyphs = try quadrilaterals(of: screen.state, atlas: makeAtlas())[0].glyphs
         #expect(glyphs.map(\.isColor) == [0, 1])
+    }
+
+    @Test(arguments: [TerminalColorScheme.dark, .light])
+    func selectionKeepsInverseTextLegibleAndPreservesOtherColors(scheme: TerminalColorScheme) throws {
+        let theme = TerminalTheme.graphite(for: scheme)
+        let background = theme.background, selection = theme.selection
+        let output = "\u{1B}[7;4mA\u{1B}[48;2;\(background.red);\(background.green);\(background.blue)mB"
+            + "\u{1B}[48;2;\(selection.red);\(selection.green);\(selection.blue)mC"
+            + "\u{1B}[42;58;5;1mD\u{1B}[0;32mE \u{1B}[0;7mF\u{1B}[7;42;31mG"
+        let screen = try makeScreen(output)
+        try theme.apply(to: screen.terminal)
+        try screen.terminal.selectWord(at: ViewportCell(column: 0, row: 0))
+        try screen.state.update(from: screen.terminal)
+        var row: RowQuadrilaterals?
+        let atlas = try makeAtlas()
+        try screen.state.forEachRow(onlyChanged: false) {
+            if row == nil {
+                row = try RowQuadrilaterals(row: $0, colors: screen.state.colors, selection: selection,
+                                            atlas: atlas, metrics: testFonts.metrics)
+            }
+        }
+        let result = try #require(row)
+        let foreground = CellQuadrilateral.vector(theme.foreground), green = CellQuadrilateral.vector(theme.firstSixteenColors[2])
+        #expect(result.glyphs.map(\.color) == [foreground, foreground, foreground, green, green,
+                                                CellQuadrilateral.vector(background), green])
+        #expect(result.decorations.map(\.color) == [foreground, foreground, foreground,
+                                                     CellQuadrilateral.vector(theme.firstSixteenColors[1])])
+        #expect(result.backgrounds.map(\.color) == Array(repeating: CellQuadrilateral.vector(selection), count: 5)
+                + [foreground, CellQuadrilateral.vector(theme.firstSixteenColors[1])])
     }
 }
 

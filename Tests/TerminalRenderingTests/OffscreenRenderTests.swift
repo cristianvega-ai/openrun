@@ -232,6 +232,23 @@ import TerminalTheme
         #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: 0) == screen.theme.selection)
         #expect(pixel(of: screen.target, column: 3, horizontalPosition: 0, verticalPosition: 0) == screen.theme.background)
     }
+
+    @Test(arguments: [TerminalColorScheme.dark, .light])
+    func selectedInverseTextHasReadablePixels(scheme: TerminalColorScheme) throws {
+        let screen = try renderScreen("\u{1B}[?25l\u{1B}[7mA B", scheme: scheme,
+                                      selecting: ViewportCell(column: 0, row: 0))
+        func colors(in column: Int) -> Set<TerminalColor> {
+            Set((0..<testFonts.cellWidth).flatMap { horizontal in
+                (0..<testFonts.cellHeight).map { vertical in
+                    pixel(of: screen.target, column: column, horizontalPosition: horizontal, verticalPosition: vertical)
+                }
+            })
+        }
+        #expect(colors(in: 0).contains(screen.theme.selection))
+        #expect(colors(in: 0).contains(screen.theme.foreground))
+        #expect(colors(in: 2).contains(screen.theme.foreground))
+        #expect(colors(in: 2).contains(screen.theme.background))
+    }
 }
 
 /// Run with `OPENRUN_RENDER_OUTPUT=<folder>` to save the renders as PNG files for a review.

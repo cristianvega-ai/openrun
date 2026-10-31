@@ -1,3 +1,4 @@
+import Foundation
 import TerminalEmulation
 
 /// The quadrilaterals of one row: the backgrounds that differ from the default, the
@@ -23,7 +24,15 @@ struct RowQuadrilaterals {
             var foreground = cell.foreground ?? colors.foreground
             var background = cell.background
             if cell.style.isInverse { (foreground, background) = (background ?? colors.background, foreground) }
-            if selected?.contains(cell.column) == true { background = selection }
+            if selected?.contains(cell.column) == true {
+                background = selection
+                if cell.style.isInverse {
+                    let contrast = Self.contrast(foreground, selection)
+                    if contrast < 4.5, Self.contrast(colors.foreground, selection) > contrast {
+                        foreground = colors.foreground
+                    }
+                }
+            }
             if let background, background != colors.background {
                 backgrounds.append(.rectangle(horizontalPosition: horizontalPosition, verticalPosition: 0,
                                               width: metrics.width, height: metrics.height, color: background))
@@ -47,6 +56,19 @@ struct RowQuadrilaterals {
                                      verticalPosition: 0, color: cell.underlineColor ?? foreground))
             }
         }
+    }
+
+    /// Selection can replace the background that made inverse text readable.
+    private static func contrast(_ first: TerminalColor, _ second: TerminalColor) -> Double {
+        func luminance(_ color: TerminalColor) -> Double {
+            func linear(_ component: UInt8) -> Double {
+                let value = Double(component) / 255
+                return value <= 0.04045 ? value / 12.92 : pow((value + 0.055) / 1.055, 2.4)
+            }
+            return 0.2126 * linear(color.red) + 0.7152 * linear(color.green) + 0.0722 * linear(color.blue)
+        }
+        let first = luminance(first), second = luminance(second)
+        return (max(first, second) + 0.05) / (min(first, second) + 0.05)
     }
 
     /// Faint text has half of the strength of its color against the background.
