@@ -151,4 +151,78 @@ private final class TracedAttachment: AttachedSession {
         await waitOnMainThread(seconds: 30) { titleAtClose != nil }
         #expect(titleAtClose == "output-complete")
     }
+
+    @Test func floodWaitsForRoomAndCancellationWakesTheReceiver() async throws {
+        let relay = AttachmentRelay(byteLimit: 16, eventLimit: 4)
+        var completions: [@Sendable () -> Void] = []
+        let handler = relay.handler { _, finish in completions.append(finish) }
+        let returned = Mutex(0)
+        let sender = Thread {
+            for _ in 0..<1000 {
+                handler(.output(Data(repeating: 65, count: 8)))
+                returned.withLock { $0 += 1 }
+            }
+        }
+        defer { relay.cancel(); completions.forEach { $0() } }
+        sender.start()
+        await waitOnMainThread { completions.count == 2 && returned.withLock { $0 == 2 } }
+        try #require(completions.count == 2 && returned.withLock { $0 == 2 })
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(returned.withLock { $0 == 2 }, "The third frame must wait for parsing.")
+        completions.removeFirst()()
+        await waitOnMainThread { completions.count == 2 && returned.withLock { $0 == 3 } }
+        try #require(returned.withLock { $0 == 3 })
+        relay.cancel()
+        await waitOnMainThread { returned.withLock { $0 == 1000 } }
+        #expect(returned.withLock { $0 == 1000 })
+    }
+
+    @Test func smallEventsAndOneLargeFrameStayBounded() async throws {
+        let relay = AttachmentRelay(byteLimit: 4, eventLimit: 3)
+        var completions: [@Sendable () -> Void] = []
+        let handler = relay.handler { _, finish in completions.append(finish) }
+        let returned = Mutex(0)
+        let sender = Thread {
+            handler(.output(Data(repeating: 65, count: 20)))
+            for _ in 0..<100 {
+                handler(.sizeChanged(SessionSize(columns: 80, rows: 24)))
+                returned.withLock { $0 += 1 }
+            }
+        }
+        defer { relay.cancel(); completions.forEach { $0() } }
+        sender.start()
+        await waitOnMainThread { completions.count == 1 }
+        try #require(completions.count == 1)
+        #expect(returned.withLock { $0 == 0 }, "A large frame must be alone until it is parsed.")
+        completions.removeFirst()()
+        await waitOnMainThread { completions.count == 3 && returned.withLock { $0 == 3 } }
+        try #require(completions.count == 3 && returned.withLock { $0 == 3 })
+        relay.cancel()
+        await waitOnMainThread { returned.withLock { $0 == 100 } }
+        #expect(returned.withLock { $0 == 100 })
+    }
+
+    @Test func cancellationDiscardsMainQueueCallbacksAndWakesAReceiver() async throws {
+        let relay = AttachmentRelay(byteLimit: 8, eventLimit: 1)
+        var deliveries = 0
+        let handler = relay.handler { _, finish in deliveries += 1; finish() }
+        let returned = Mutex(0)
+        let sender = Thread {
+            for _ in 0..<2 {
+                handler(.output(Data(repeating: 65, count: 8)))
+                returned.withLock { $0 += 1 }
+            }
+        }
+        defer { relay.cancel() }
+        sender.start()
+        let deadline = Date().addingTimeInterval(5)
+        while returned.withLock({ $0 < 1 }) && Date() < deadline { usleep(1000) }
+        try #require(returned.withLock { $0 == 1 })
+        relay.cancel()
+        while returned.withLock({ $0 < 2 }) && Date() < deadline { usleep(1000) }
+        try #require(returned.withLock { $0 == 2 })
+        await waitOnMainThread(seconds: 0.1) { false }
+        #expect(deliveries == 0)
+    }
+
 }
