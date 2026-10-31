@@ -37,7 +37,7 @@ struct TextInputState {
 
     /// Commits text, which ends the marked text.
     ///
-    /// - Returns: The text that the caller must use at once, because no key waits for it.
+    /// - Returns: The text to handle outside a key, because no key waits for it.
     ///   It is `nil` when the text waits for the end of the key, or when the state drops it.
     mutating func insert(_ text: String) -> String? {
         // A control key such as Control-c can give its control character as text

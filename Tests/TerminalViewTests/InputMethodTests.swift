@@ -211,6 +211,16 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         #expect([a, control, up] == ["a", "\u{03}", "\u{1B}[A"])
     }
 
+    @Test func keysAndInputMethodCommitsStayKeysInBracketedPasteMode() throws {
+        let (view, delegate) = try makeView()
+        view.terminal.write("\u{1B}[?2004h")
+        let a = press(keyEvent(kVK_ANSI_A), in: view, delegate: delegate) { view, _ in view.insertText("a", replacementRange: nowhere) }
+        view.setMarkedText("にほん", selectedRange: nowhere, replacementRange: nowhere)
+        let text = press(keyEvent(kVK_Return), in: view, delegate: delegate) { view, _ in view.insertText("日本", replacementRange: nowhere) }
+        let control = press(keyEvent(kVK_ANSI_C, .control), in: view, delegate: delegate) { view, _ in view.doCommand(by: NSSelectorFromString("noop:")) }
+        #expect([a, text, control] == ["a", "日本", "\u{03}"] && delegate.questions.isEmpty)
+    }
+
     @Test func theInputMethodSeesTheLeftOptionKeyAsNoOptionKey() throws {
         let (view, delegate) = try makeView()
         var seen: NSEvent.ModifierFlags = []

@@ -58,12 +58,6 @@ final class KeyboardInput {
             ?? event
     }
 
-    /// The bytes for a text that the text input system commits. There are none
-    /// while a key waits for its end, because the key sends the text then.
-    func bytes(forInsertedText text: String) -> [UInt8] {
-        Array((textInput.insert(text) ?? "").utf8)
-    }
-
     /// The bytes for a key that went up. Only a program that asked for key events reads them.
     func bytes(forKeyUp event: NSEvent) -> [UInt8] {
         encode(event, action: .release, text: nil)

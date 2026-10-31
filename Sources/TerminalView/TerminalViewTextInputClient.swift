@@ -5,7 +5,7 @@ import TerminalEmulation
 /// Dead keys and input methods for Japanese, Chinese and Korean need it.
 extension TerminalView: @MainActor NSTextInputClient {
     public func insertText(_ string: Any, replacementRange: NSRange) {
-        sendTyped(keyboard.bytes(forInsertedText: Self.plainText(of: string)))
+        if let text = keyboard.textInput.insert(Self.plainText(of: string)) { pasteText(text) }
         showMarkedText()
     }
 

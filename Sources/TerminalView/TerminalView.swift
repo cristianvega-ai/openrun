@@ -30,7 +30,13 @@ public final class TerminalView: NSView {
     /// The colors of the screen: the Graphite theme of the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
     private var appearanceObserver: AppearanceObserver?
-    public weak var delegate: TerminalViewDelegate?
+    public weak var delegate: TerminalViewDelegate? {
+        didSet {
+            if oldValue !== delegate { pasteGeneration &+= 1 }
+        }
+    }
+    /// A pending approval expires when its owner or window changes.
+    private var pasteGeneration: UInt64 = 0
     /// How many frames reached the graphics processor.
     private(set) var framesDrawn = 0
     private let device: MTLDevice
@@ -334,14 +340,22 @@ public final class TerminalView: NSView {
     /// Command-V: sends the plain text of the pasteboard to the program. Text that could run
     /// commands waits for a yes from the delegate. A view with no delegate cannot ask, so it sends nothing.
     @objc public func paste(_ sender: Any?) {
-        guard let text = pasteboard.plainText(), !text.isEmpty else { return }
+        guard let text = pasteboard.plainText() else { return }
+        pasteText(text)
+    }
+
+    func pasteText(_ text: String) {
+        guard !text.isEmpty else { return }
         guard UnsafePasteRule.needsQuestion(for: text, bracketedPaste: terminal.isModeEnabled(.bracketedPaste)) else {
             sendTyped(PasteInput.bytes(for: text, terminal: terminal))
             return
         }
         guard let delegate else { return }
-        Task { [weak self] in
-            guard let self, await delegate.terminalView(self, shouldPasteUnsafeText: text) else { return }
+        let generation = pasteGeneration
+        Task { [weak self, weak delegate] in
+            guard let self, let delegate, self.pasteGeneration == generation, self.delegate === delegate else { return }
+            let approved = await delegate.terminalView(self, shouldPasteUnsafeText: text)
+            guard approved, self.pasteGeneration == generation, self.delegate === delegate else { return }
             sendTyped(PasteInput.bytes(for: text, terminal: terminal))
         }
     }
@@ -393,6 +407,12 @@ public final class TerminalView: NSView {
 
     public override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
+        // A pending approval belongs to the window that asked, even if the view later returns.
+        pasteGeneration &+= 1
+        NotificationCenter.default.removeObserver(self, name: NSWindow.willCloseNotification, object: nil)
+        if let window {
+            NotificationCenter.default.addObserver(self, selector: #selector(pasteWindowWillClose(_:)), name: NSWindow.willCloseNotification, object: window)
+        }
         focus.follow(window)
         renderer.isFocused = window?.isKeyWindow ?? true
         if window == nil {
@@ -401,6 +421,10 @@ public final class TerminalView: NSView {
             adoptWindowScale()
             schedule?.attach()
         }
+    }
+
+    @objc private func pasteWindowWillClose(_ notification: Notification) {
+        pasteGeneration &+= 1
     }
 
     private func titleChanged() {
