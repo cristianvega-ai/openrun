@@ -27,6 +27,9 @@ enum MainMenu {
         let retry = item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)))
         retry.target = target
         file.addItem(retry)
+        let registerAgain = item("Register Session Process Again", #selector(OpenRunApplication.registerSessionProcessAgain(_:)))
+        registerAgain.target = target
+        file.addItem(registerAgain)
         file.addItem(.separator())
         file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
 

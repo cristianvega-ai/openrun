@@ -13,11 +13,11 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     var chooseSession: @MainActor (SocketLocation, NSWindow?) async -> UUID? = { await SessionList.choose(at: $0, in: $1) }
     private var setupIsReady = false
     private var setupIsRunning = false
-    private let runLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup.Outcome)?
+    private let makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)?
 
-    init(socket: SocketLocation, runLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup.Outcome)? = nil) {
+    init(socket: SocketLocation, makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)? = nil) {
         self.socket = socket
-        self.runLaunchAgentSetup = runLaunchAgentSetup
+        self.makeLaunchAgentSetup = makeLaunchAgentSetup
         windows = WindowList(socket: socket)
         super.init()
     }
@@ -59,18 +59,19 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
         // Only the default socket belongs to the launch agent.
-        guard socket.isDefault || runLaunchAgentSetup != nil else { return finishSetup(.ready) }
+        guard socket.isDefault || makeLaunchAgentSetup != nil else { return finishSetup(.ready) }
         startSetup()
     }
 
-    private func startSetup() {
-        guard !setupIsReady, !setupIsRunning else { return }
+    private func startSetup(registeringAgain: Bool = false) {
+        guard !setupIsRunning, registeringAgain || !setupIsReady else { return }
         setupIsRunning = true
-        let run: @Sendable () -> LaunchAgentSetup.Outcome = runLaunchAgentSetup ?? {
-            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: { try Self.connect(to: SocketLocation(path: SocketLocation.defaultPath)) }, ask: { ModalAlert.ask($0) }).run()
+        let makeSetup: @Sendable () -> LaunchAgentSetup = makeLaunchAgentSetup ?? {
+            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: { try Self.connect(to: SocketLocation(path: SocketLocation.defaultPath)) }, ask: { ModalAlert.ask($0) })
         }
         Thread.detachNewThread { [weak self] in
-            let outcome = run()
+            let setup = makeSetup()
+            let outcome = registeringAgain ? setup.registerAgain() : setup.run()
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated { self?.finishSetup(outcome) }
             }
@@ -79,12 +80,16 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
 
     private func finishSetup(_ outcome: LaunchAgentSetup.Outcome) {
         setupIsRunning = false
-        guard outcome == .ready else { return }
-        setupIsReady = true
-        windows.open(makeNewSession())
+        guard outcome != .canceled else { return }
+        // A new registration can fail after the app was ready. Then the app is
+        // not ready again, and File > Retry Session Process is on.
+        let wasReady = setupIsReady
+        setupIsReady = outcome == .ready
+        if setupIsReady, !wasReady { windows.open(makeNewSession()) }
     }
 
     @objc func retrySessionProcess(_ sender: Any?) { startSetup() }
+    @objc func registerSessionProcessAgain(_ sender: Any?) { startSetup(registeringAgain: true) }
 
     @objc func newSession(_ sender: Any?) {
         if setupIsReady { windows.open(makeNewSession()) }
@@ -102,6 +107,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         switch item.action {
         case #selector(newSession(_:)), #selector(attachToSession(_:)): setupIsReady
         case #selector(retrySessionProcess(_:)): !setupIsReady && !setupIsRunning
+        case #selector(registerSessionProcessAgain(_:)): !setupIsRunning
         default: true
         }
     }
