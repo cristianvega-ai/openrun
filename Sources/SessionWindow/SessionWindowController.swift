@@ -20,6 +20,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private let start: SessionStart
     private let socket: SocketLocation
     private let work = ConnectionWork()
+    private let relay = AttachmentRelay()
     private(set) var attachment: (any AttachedSession)?
     private(set) var view: TerminalView?
     let hiddenGridLabel = HiddenGridLabel()
@@ -87,7 +88,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         // A key event during the attach must follow any earlier foreign size.
         if pendingKeyTakeover, isWindowKey(window), view.gridSize == view.visibleGridSize { view.takeBackGridSize() }
         pendingKeyTakeover = false
-        started.attachment.startReceiving(AttachmentRelay.handler { [weak self] in self?.handle($0) })
+        started.attachment.startReceiving(relay.handler { [weak self] event, finish in
+            self?.handle(event)
+            finish()
+        })
     }
 
     private func handle(_ event: SessionAttachmentEvent) {

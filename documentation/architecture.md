@@ -139,7 +139,7 @@ The renderer draws text, styles, wide characters, emoji, the four cursor shapes,
 
 `TerminalView` is an `NSView` for one session. It has its own `Terminal`, `RenderState` and `TerminalRenderer`, and a `CAMetalLayer` (`MetalLayerHost`). It does not use the socket or `SessionConnection`. The owner gives it output bytes with `write`. The view sends input bytes, grid changes, title changes and questions through `TerminalViewDelegate`.
 The view and its terminal run on the main thread. `write` adds bytes to `TerminalOutputQueue` through `OutputParser`.
-The queue keeps output and size markers in the order they arrive. It has no total byte limit.
+The queue keeps output and size markers in the order they arrive. It has no limit of its own; the window limits events before they reach it.
 A call of `parseTurn` parses pieces of at most 64 KiB, with a 4 ms budget checked between pieces (`ParseBudget`). It always parses at least one piece, which can take longer than the budget.
 A size marker takes effect after earlier output and before later output. After a successful size change, `didApplyGridSize` tells the window to update its hidden grid label.
 When output is left, the next turn comes from a run loop source, so events and frames run between the turns.
@@ -221,6 +221,7 @@ The client side of the socket, for the command-line tool and the window of the a
 `SessionStart` selects a new login shell or a running session. `SessionWindowController` owns one window, its view and its attachment.
 `AttachedSession` is the window's interface to an attachment. `SessionAttachment` and a test stand-in implement it.
 The window connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order.
+The relay admits at most 1 MiB of output and 128 events until the view applies them. One larger frame can enter an empty relay. The receiver can hold one more frame, and the parser makes a copy of each admitted output frame. A frame can hold at most 64 MiB. When the relay is full, the receiver waits and the socket holds later frames. The window asks the session process to pause output when its queue fills, within the limits in "Slow clients". A program exit or connection failure waits for earlier output to be applied. Closing the window cancels the relay, wakes its receiver and discards pending view output.
 Input and size requests go back through the serial connection queue. Each input event stays one frame.
 Closing schedules a detach behind ready work. A separate shutdown wakes a send that is still blocked after 200 ms and skips later queued sends.
 A whole input event that the session already started can still reach the program after the window closes.

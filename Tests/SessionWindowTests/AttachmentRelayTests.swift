@@ -8,9 +8,11 @@ import Testing
     @Test func theEventsOfTheReceivingThreadReachTheMainThreadInOrder() async {
         final class Events: @unchecked Sendable { var received: [SessionAttachmentEvent] = [], onMain = true }
         let events = Events()
-        let handler = AttachmentRelay.handler { event in
+        let relay = AttachmentRelay()
+        let handler = relay.handler { event, finish in
             events.onMain = events.onMain && Thread.isMainThread
             events.received.append(event)
+            finish()
         }
         let sent = (0..<500).map { SessionAttachmentEvent.output(Data("\($0) ".utf8)) } + [.sizeChanged(SessionSize(columns: 9, rows: 3)), .exited(.exited(status: 0))]
         let thread = Thread { sent.forEach(handler) }
