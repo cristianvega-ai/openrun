@@ -305,6 +305,31 @@ Leave(client) ==
        drawingSize, knownSizes, resizeCount, refusedChangedSize,
        refusedAnnounced, wrongSizeOrder, queryOwners, replies, isEnding>>
 
+\* Session.run checks all opted-in clients after each output. It waits for
+\* one full client, or ends it when another client has made progress and has
+\* room. A timeout is represented by Leave while that client is waiting.
+CheckOutputRoom ==
+  /\ outputRoom = CheckingOutputRoom
+  /\ LET full == {client \in waitingClients : Counted(queues[client]) >= HighMark}
+     IN IF full = {}
+        THEN /\ outputRoom' = 0
+             /\ UNCHANGED <<written, parsed, sessionSize, attached, open,
+                  attempted, queues, restored, received, drawingSize,
+                  knownSizes, resizeCount, refusedChangedSize, refusedAnnounced,
+                  wrongSizeOrder, queryOwners, replies, pendingReplies,
+                  waitingClients, isEnding>>
+        ELSE \E client \in full :
+             /\ outputRoom' = client
+             /\ UNCHANGED <<written, parsed, sessionSize, attached, open,
+                  attempted, queues, restored, received, drawingSize,
+                  knownSizes, resizeCount, refusedChangedSize, refusedAnnounced,
+                  wrongSizeOrder, queryOwners, replies, pendingReplies,
+                  waitingClients, isEnding>>
+
+OutputRoomTimeout(client) ==
+  /\ outputRoom = client
+  /\ Leave(client)
+
 BeginShutdown ==
   /\ ~isEnding
   /\ isEnding' = TRUE
@@ -329,13 +354,13 @@ RelayReply(client, chunk) ==
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
        waitingClients, outputRoom, isEnding>>
 
-Next == ProgramWrites \/ ParseOutput \/ BeginShutdown
+Next == ProgramWrites \/ ParseOutput \/ CheckOutputRoom \/ BeginShutdown
   \/ (\E client \in Clients, dimensions \in Sizes,
           outcome \in {"success", "nil", "throw", "applyFailed"}, waits \in BOOLEAN :
         Attach(client, dimensions, outcome, waits))
   \/ (\E client \in Clients, dimensions \in Sizes : Resize(client, dimensions))
   \/ (\E client \in Clients :
-        Deliver(client) \/ Leave(client))
+        Deliver(client) \/ Leave(client) \/ OutputRoomTimeout(client))
   \/ (\E client \in Clients, chunk \in Chunks : RelayReply(client, chunk))
 
 Specification == InitialState /\ [][Next]_variables
@@ -361,6 +386,12 @@ StaleForeignControlSpecification ==
 \* ---------------------------------------------------------------------------
 
 ServerCapacity == \A client \in Clients : Counted(queues[client]) <= OutputLimit
+
+OutputWaitIsValid ==
+  outputRoom \in Clients =>
+    /\ outputRoom \in attached \cap waitingClients
+    /\ Counted(queues[outputRoom]) > LowMark
+    /\ ~isEnding
 
 \* For every client that has a snapshot, the snapshot prefix plus the output
 \* it received is a prefix of the program output.  No gap, no repeat.
@@ -422,11 +453,16 @@ ConfirmedSizeAgreement ==
 Fairness ==
   /\ WF_variables(ProgramWrites)
   /\ WF_variables(ParseOutput)
+  /\ WF_variables(CheckOutputRoom)
   /\ (\A client \in Clients : WF_variables(Deliver(client)))
+  /\ (\A client \in Clients : WF_variables(OutputRoomTimeout(client)))
 
 LiveSpecification == Specification /\ Fairness
 
 QueryEventuallyAnswered ==
   (parsed >= 2) ~> (replies[2] # {})
+
+WaitingForRoomEnds ==
+  \A client \in Clients : (outputRoom = client) ~> (outputRoom # client)
 
 =============================================================================
