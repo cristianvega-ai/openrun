@@ -50,6 +50,8 @@ public final class TerminalView: NSView {
     private var pointerShape = PointerShape.text
     private let parser = OutputParser()
     private var isParseScheduled = false
+    private var parseGeneration = 0
+    private var afterOutput: [@MainActor @Sendable () -> Void] = []
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
 
     /// - Parameter initialGrid: The size of the grid until the view has a size of its own.
@@ -137,6 +139,11 @@ public final class TerminalView: NSView {
         scheduleParseTurn()
     }
 
+    /// Runs after all output already in the view has been applied.
+    public func afterPendingOutput(_ action: @escaping @MainActor @Sendable () -> Void) {
+        if parser.hasPendingOutput { afterOutput.append(action) } else { action() }
+    }
+
     /// Checks the budget between pieces or size events so the main thread can
     /// process input and frames while output waits.
     ///
@@ -144,22 +151,35 @@ public final class TerminalView: NSView {
     @discardableResult
     func parseTurn(budget: ParseBudget = ParseBudget(limit: .milliseconds(4))) -> Bool {
         isParseScheduled = false
+        let generation = parseGeneration
         let hasMore = parser.parse(into: terminal, budget: budget)
+        guard generation == parseGeneration else { return false }
         if terminal.pointerShape != pointerShape {
             pointerShape = terminal.pointerShape
             window?.invalidateCursorRects(for: self)
         }
         schedule?.requestFrame()
-        if hasMore { scheduleParseTurn() }
+        if hasMore {
+            scheduleParseTurn()
+        } else {
+            let actions = afterOutput
+            afterOutput.removeAll()
+            for action in actions { action() }
+        }
         return hasMore
     }
 
     private func scheduleParseTurn() {
         guard !isParseScheduled else { return }
         isParseScheduled = true
+        parseGeneration += 1
+        let generation = parseGeneration
         // A run loop source, not a dispatch block, so events run between two turns.
         RunLoop.main.perform(inModes: [.common]) { [weak self] in
-            MainActor.assumeIsolated { _ = self?.parseTurn() }
+            MainActor.assumeIsolated {
+                guard let self, self.isParseScheduled, self.parseGeneration == generation else { return }
+                _ = self.parseTurn()
+            }
         }
     }
 

@@ -108,4 +108,27 @@ private final class TracedAttachment: AttachedSession {
         process.stop()
         #expect(!process.isRunning && !FileManager.default.fileExists(atPath: process.socketPath))
     }
+
+    @Test func outputAndSizeEventsStayOrderedThroughTheWindow() async throws {
+        let attachment = try FakeAttachment()
+        attachment.record.withLock { $0.confirmsSizes = false }
+        let window = try makeWindowController(attachment)
+        defer { window.window.close() }
+        await waitOnMainThread { window.view != nil }
+        let view = try #require(window.view)
+        let initial = view.gridSize
+        let changed = TerminalSize(columns: 4, rows: 3)
+        let first = Data(repeating: 65, count: 128 * 1024)
+        let last = Data("BCDE\u{1b}]0;ordered\u{7}".utf8)
+        attachment.deliver(.output(first))
+        attachment.deliver(.sizeChanged(SessionSize(columns: changed.columns, rows: changed.rows)))
+        attachment.deliver(.output(last))
+        await waitOnMainThread(seconds: 10) { view.title == "ordered" }
+        try #require(view.title == "ordered")
+        let reference = try Terminal(size: initial, scrollbackLimit: 10_000)
+        reference.write(first)
+        try reference.resize(to: changed)
+        reference.write(last)
+        #expect(try view.terminal.formatted(.plainText) == reference.formatted(.plainText))
+    }
 }
