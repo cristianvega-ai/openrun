@@ -24,6 +24,9 @@ enum MainMenu {
         attach.target = target
         file.addItem(newSession)
         file.addItem(attach)
+        let retry = item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)))
+        retry.target = target
+        file.addItem(retry)
         file.addItem(.separator())
         file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
 

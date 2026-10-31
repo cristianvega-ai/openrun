@@ -12,9 +12,12 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     var makeNewSession: () -> SessionStart = { .newSessionInHomeFolder() }
     var chooseSession: @MainActor (SocketLocation, NSWindow?) async -> UUID? = { await SessionList.choose(at: $0, in: $1) }
     private var setupIsReady = false
+    private var setupIsRunning = false
+    private let runLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup.Outcome)?
 
-    init(socket: SocketLocation) {
+    init(socket: SocketLocation, runLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup.Outcome)? = nil) {
         self.socket = socket
+        self.runLaunchAgentSetup = runLaunchAgentSetup
         windows = WindowList(socket: socket)
         super.init()
     }
@@ -50,9 +53,18 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
         // Only the default socket belongs to the launch agent.
-        guard socket.isDefault else { return finishSetup(.ready) }
+        guard socket.isDefault || runLaunchAgentSetup != nil else { return finishSetup(.ready) }
+        startSetup()
+    }
+
+    private func startSetup() {
+        guard !setupIsReady, !setupIsRunning else { return }
+        setupIsRunning = true
+        let run: @Sendable () -> LaunchAgentSetup.Outcome = runLaunchAgentSetup ?? {
+            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: Self.connect, ask: Self.ask).run()
+        }
         Thread.detachNewThread { [weak self] in
-            let outcome = LaunchAgentSetup(source: LaunchAgentRegistration(), connect: Self.connect, ask: Self.ask).run()
+            let outcome = run()
             DispatchQueue.main.async { [weak self] in
                 MainActor.assumeIsolated { self?.finishSetup(outcome) }
             }
@@ -60,10 +72,13 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     }
 
     private func finishSetup(_ outcome: LaunchAgentSetup.Outcome) {
+        setupIsRunning = false
         guard outcome == .ready else { return }
         setupIsReady = true
         windows.open(makeNewSession())
     }
+
+    @objc func retrySessionProcess(_ sender: Any?) { startSetup() }
 
     @objc func newSession(_ sender: Any?) {
         if setupIsReady { windows.open(makeNewSession()) }
@@ -80,6 +95,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     public func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(newSession(_:)), #selector(attachToSession(_:)): setupIsReady
+        case #selector(retrySessionProcess(_:)): !setupIsReady && !setupIsRunning
         default: true
         }
     }
