@@ -114,12 +114,16 @@ ParseOutput ==
   /\ LET number == parsed + 1
          relays == attached \cap RelayingClients
          isQuery == number \in QueryChunks
-     IN /\ parsed' = number
-        /\ queues' = [client \in Clients |->
-             IF client \in attached
-             THEN Append(queues[client],
-                         Message("output", number, sessionSize))
+         full == {client \in attached : Counted(queues[client]) >= OutputLimit}
+         nextQueues == [client \in Clients |->
+             IF client \in full THEN <<>>
+             ELSE IF client \in attached
+             THEN Append(queues[client], Message("output", number, sessionSize))
              ELSE queues[client]]
+     IN /\ parsed' = number
+        /\ queues' = nextQueues
+        /\ attached' = attached \ full
+        /\ open' = open \ full
         \* documentation/architecture.md, "Query replies": the decision is
         \* made at the moment the bytes are parsed.  With no relaying client
         \* attached the session answers at once (the handler writes
@@ -131,13 +135,12 @@ ParseOutput ==
         /\ replies' = IF isQuery /\ relays = {}
              THEN [replies EXCEPT ![number] = {0}]
              ELSE replies
-        /\ pendingReplies' = IF isQuery /\ relays # {}
-             THEN [client \in Clients |->
-                     IF client \in relays
-                     THEN pendingReplies[client] \cup {number}
-                     ELSE pendingReplies[client]]
-             ELSE pendingReplies
-        /\ UNCHANGED <<written, sessionSize, attached, open, attempted,
+        /\ pendingReplies' = [client \in Clients |->
+             IF client \in full THEN {}
+             ELSE IF isQuery /\ client \in relays
+             THEN pendingReplies[client] \cup {number}
+             ELSE pendingReplies[client]]
+        /\ UNCHANGED <<written, sessionSize, attempted,
              restored, received, drawingSize, knownSizes, resizeCount,
              refusedChangedSize, refusedAnnounced, wrongSizeOrder, isEnding>>
 
@@ -171,10 +174,16 @@ Attach(client, dimensions, outcome) ==
            ELSE <<>>
          otherAttached == (attached \cap SizeSubscribers) \ {client}
          didAnnounce == announces /\ otherAttached # {}
+         full == IF announces THEN
+           {recipient \in otherAttached : Counted(queues[recipient]) >= OutputLimit}
+           ELSE {}
      IN /\ sessionSize' = failedSize
-        /\ attached' = IF success THEN attached \cup {client} ELSE attached
+        /\ attached' = IF success THEN (attached \ full) \cup {client}
+             ELSE attached \ full
+        /\ open' = open \ full
         /\ queues' = [recipient \in Clients |->
              IF recipient = client THEN payload
+             ELSE IF recipient \in full THEN <<>>
              ELSE IF recipient \in otherAttached /\ announces
                   THEN Append(queues[recipient],
                               Message("size", 0, failedSize))
@@ -183,9 +192,11 @@ Attach(client, dimensions, outcome) ==
              (refusedChangedSize \/ (~success /\ failedSize # previous))
         /\ refusedAnnounced' =
              (refusedAnnounced \/ (~success /\ didAnnounce))
-        /\ UNCHANGED <<written, parsed, open, restored, received,
+        /\ pendingReplies' = [recipient \in Clients |->
+             IF recipient \in full THEN {} ELSE pendingReplies[recipient]]
+        /\ UNCHANGED <<written, parsed, restored, received,
              drawingSize, knownSizes, resizeCount, wrongSizeOrder, queryOwners,
-             replies, pendingReplies, isEnding>>
+             replies, isEnding>>
 
 \* A confirming client waits for its ordered size message before it changes
 \* its local grid.  Each control removes one of these protections.
@@ -212,6 +223,8 @@ Resize(client, dimensions) ==
                   ELSE queues[recipient]]
         /\ attached' = attached \ full
         /\ open' = open \ full
+        /\ pendingReplies' = [recipient \in Clients |->
+             IF recipient \in full THEN {} ELSE pendingReplies[recipient]]
         /\ drawingSize' = IF TracksDrawingSize(client) /\
              (client \notin ConfirmingClients \/ ApplySizeBeforeConfirmation)
              THEN [drawingSize EXCEPT ![client] = dimensions] ELSE drawingSize
@@ -219,7 +232,7 @@ Resize(client, dimensions) ==
              THEN [knownSizes EXCEPT ![client] = @ \cup {dimensions}] ELSE knownSizes
         /\ UNCHANGED <<written, parsed, attempted, restored, received,
              refusedChangedSize, refusedAnnounced, wrongSizeOrder,
-             queryOwners, replies, pendingReplies, isEnding>>
+             queryOwners, replies, isEnding>>
 
 \* ClientConnection.write.  The serial writer of one client takes the next
 \* message.  This is where the client learns a size or receives output.
@@ -265,13 +278,6 @@ Leave(client) ==
        drawingSize, knownSizes, resizeCount, refusedChangedSize,
        refusedAnnounced, wrongSizeOrder, queryOwners, replies, isEnding>>
 
-\* ClientConnection.enqueue.  The process closes a connection whose queued
-\* output is past the limit.
-DropSlowClient(client) ==
-  /\ client \in attached
-  /\ Counted(queues[client]) > OutputLimit
-  /\ Leave(client)
-
 BeginShutdown ==
   /\ ~isEnding
   /\ isEnding' = TRUE
@@ -299,8 +305,7 @@ Next == ProgramWrites \/ ParseOutput \/ BeginShutdown
           outcome \in {"success", "nil", "throw", "applyFailed"} :
         Attach(client, dimensions, outcome))
   \/ (\E client \in Clients, dimensions \in Sizes : Resize(client, dimensions))
-  \/ (\E client \in Clients : Deliver(client) \/ Leave(client)
-        \/ DropSlowClient(client))
+  \/ (\E client \in Clients : Deliver(client) \/ Leave(client))
   \/ (\E client \in Clients, chunk \in Chunks : RelayReply(client, chunk))
 
 Specification == InitialState /\ [][Next]_variables
@@ -327,6 +332,8 @@ StaleForeignControlSpecification ==
 
 \* For every client that has a snapshot, the snapshot prefix plus the output
 \* it received is a prefix of the program output.  No gap, no repeat.
+ServerCapacity == \A client \in Clients : Counted(queues[client]) <= OutputLimit
+
 NoGapNoRepeat ==
   \A client \in restored :
     /\ received[client] = Prefix(Len(received[client]))
