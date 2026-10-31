@@ -211,8 +211,16 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
+        await agrees(to: .unsafePaste)
+    }
+
+    public func terminalView(_ view: TerminalView, shouldInsertUnsafeText text: String) async -> Bool {
+        await agrees(to: .unsafeInsertion)
+    }
+
+    private func agrees(to question: UserQuestion) async -> Bool {
         guard !isClosed else { return false }
-        let agreed = await ask(.unsafePaste, window)
+        let agreed = await ask(question, window)
         return !isClosed && agreed
     }
 }

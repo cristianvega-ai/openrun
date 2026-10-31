@@ -3,6 +3,7 @@ import AppKit
 /// A question that belongs to one session window.
 enum UserQuestion: Equatable, Sendable {
     case unsafePaste
+    case unsafeInsertion
     case openLink(String)
     case connectionFailure(String)
 
@@ -10,6 +11,8 @@ enum UserQuestion: Equatable, Sendable {
         switch self {
         case .unsafePaste:
             ("Paste multiple lines?", "This paste can run commands because the program does not protect pasted text.", ["Paste", "Cancel"])
+        case .unsafeInsertion:
+            ("Insert multiple lines?", "This text can run commands because the program does not protect inserted text.", ["Insert", "Cancel"])
         case .openLink:
             ("Open this link?", "This link can open another app or a file.", ["Open", "Cancel"])
         case .connectionFailure(let detail):

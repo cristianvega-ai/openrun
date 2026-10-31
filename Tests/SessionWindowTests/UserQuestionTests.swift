@@ -85,7 +85,9 @@ import Testing
         await waitOnMainThread { !attachment.record.withLock { $0.inputs }.isEmpty }
         #expect(attachment.record.withLock { $0.inputs } == [Data("one\rtwo".utf8)])
         #expect(questions == [.unsafePaste, .unsafePaste])
-        #expect(UserQuestion.unsafePaste.words.buttons == ["Paste", "Cancel"])
+        let words = UserQuestion.unsafePaste.words
+        #expect(words.title == "Paste multiple lines?" && words.buttons == ["Paste", "Cancel"])
+        #expect(words.message == "This paste can run commands because the program does not protect pasted text.")
         view.paste(nil)
         await waitOnMainThread { answer != nil }
         let third = try #require(answer)
@@ -94,5 +96,28 @@ import Testing
         third.resume(returning: true)
         await waitOnMainThread(seconds: 0.1) { false }
         #expect(attachment.record.withLock { $0.inputs } == [Data("one\rtwo".utf8)])
+    }
+
+    @Test func textInsertedWithoutAKeyPressAsksItsOwnQuestionAndAPasteKeepsItsQuestion() async throws {
+        let attachment = try FakeAttachment()
+        let controller = try makeWindowController(attachment)
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view != nil }
+        let view = try #require(controller.view), board = Pasteboard()
+        view.pasteboard = board
+        var questions: [UserQuestion] = []
+        controller.ask = { question, _ in
+            questions.append(question)
+            return true
+        }
+        view.insertText("one\ntwo", replacementRange: NSRange(location: NSNotFound, length: 0))
+        await waitOnMainThread { attachment.record.withLock { $0.inputs.count } == 1 }
+        view.paste(nil)
+        await waitOnMainThread { attachment.record.withLock { $0.inputs.count } == 2 }
+        #expect(questions == [.unsafeInsertion, .unsafePaste])
+        #expect(attachment.record.withLock { $0.inputs } == Array(repeating: Data("one\rtwo".utf8), count: 2))
+        let words = UserQuestion.unsafeInsertion.words
+        #expect(words.title == "Insert multiple lines?" && words.buttons == ["Insert", "Cancel"])
+        #expect(words.message == "This text can run commands because the program does not protect inserted text.")
     }
 }
