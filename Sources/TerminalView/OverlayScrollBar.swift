@@ -56,20 +56,25 @@ final class OverlayScrollBar: NSView {
     /// Moves the knob to the place of the visible rows.
     func update(from scrollbar: Scrollbar) {
         isHidden = scrollbar.totalRows <= scrollbar.visibleRows
-        guard !isHidden, let document = scrollView.documentView, last?.scrollbar != scrollbar || last?.height != bounds.height else { return }
+        guard !isHidden else { last = nil; return }
+        guard let document = scrollView.documentView, last?.scrollbar != scrollbar || last?.height != bounds.height else { return }
         last = (scrollbar, bounds.height)
+        // AppKit corrects the origin of the clip view when the document or the bar changes
+        // height. That correction is not a move of the user, so the flag covers the whole change.
+        isUpdating = true
+        defer { isUpdating = false }
         // A visible row has the height of the bar divided by the number of visible rows.
         let rowHeight = bounds.height / CGFloat(scrollbar.visibleRows)
         document.frame = NSRect(x: 0, y: 0, width: bounds.width, height: rowHeight * CGFloat(scrollbar.totalRows))
-        isUpdating = true
         scrollView.contentView.scroll(to: NSPoint(x: 0, y: rowHeight * CGFloat(scrollbar.firstVisibleRow)))
         scrollView.reflectScrolledClipView(scrollView.contentView)
-        isUpdating = false
     }
 
     /// The user moved the knob, or clicked above or below it. The row at the top of the clip view is the new first row.
     @objc private func clipMoved(_ notification: Notification) {
-        guard !isUpdating, let (scrollbar, height) = last else { return }
+        // A height that no `update` has seen comes from AppKit, which corrects the origin during
+        // a resize. The row of that change is unknown, and the user did not move the knob.
+        guard !isUpdating, let (scrollbar, height) = last, height == bounds.height else { return }
         reveal()
         onScroll?(.toRow(Int((scrollView.contentView.bounds.origin.y / (height / CGFloat(scrollbar.visibleRows))).rounded())))
     }

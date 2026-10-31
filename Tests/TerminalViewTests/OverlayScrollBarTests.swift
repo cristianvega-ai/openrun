@@ -46,10 +46,16 @@ import Testing
         view.updateScrollBar()
         let point = NSPoint(x: 1, y: 1)
         #expect(!view.scrollBar.isRevealed && view.scrollBar.hitTest(point) == nil)
-        view.scrollWheel(with: try scrollEvent())
+        let event = try scrollEvent()
+        try #require(event.scrollingDeltaY != 0)
+        let bottom = view.terminal.scrollbar.firstVisibleRow
+        view.scrollWheel(with: event)
+        #expect(view.terminal.scrollbar.firstVisibleRow < bottom)
         #expect(view.scrollBar.isRevealed && view.scrollBar.hitTest(point) != nil)
         clock.advance(by: .milliseconds(800))
-        view.scrollWheel(with: try scrollEvent())
+        let row = view.terminal.scrollbar.firstVisibleRow
+        view.scrollWheel(with: event)
+        #expect(view.terminal.scrollbar.firstVisibleRow < row)
         clock.advance(by: .milliseconds(800))
         #expect(view.scrollBar.isRevealed)
         clock.advance(by: .milliseconds(300))
@@ -88,6 +94,34 @@ import Testing
         #expect(view.terminal.scrollbar.firstVisibleRow == 0)
         dragKnob(of: view.scrollBar, toRow: Int(all.totalRows - all.visibleRows), of: all)
         #expect(view.terminal.isViewportAtBottom)
+    }
+
+    @Test func aTallerBarDoesNotScrollTheView() throws {
+        let bar = OverlayScrollBar(clock: ManualClock())
+        var received: [ViewportScroll] = []
+        bar.onScroll = { received.append($0) }
+        let atBottom = try scrollbar(lines: 80)
+        bar.update(from: atBottom)
+        // A window resize sets the frame first, and the next frame calls `update` again.
+        bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: 200)
+        #expect(received.isEmpty)
+        bar.update(from: atBottom)
+        #expect(received.isEmpty)
+        // A real drag still works with the new geometry.
+        dragKnob(of: bar, toRow: 40, of: atBottom)
+        #expect(received == [.toRow(40)])
+    }
+
+    @Test func aShorterBarKeepsTheRowThatTheReaderSees() throws {
+        let bar = OverlayScrollBar(clock: ManualClock())
+        var received: [ViewportScroll] = []
+        bar.onScroll = { received.append($0) }
+        let reading = try scrollbar(lines: 80, scrolledTo: .toRow(40))
+        bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: 200)
+        bar.update(from: reading)
+        bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: 100)
+        bar.update(from: reading)
+        #expect(received.isEmpty)
     }
 
     /// Run with `OPENRUN_RENDER_OUTPUT=<folder>` to save a screenshot of a window with the scroll bar for a review.
