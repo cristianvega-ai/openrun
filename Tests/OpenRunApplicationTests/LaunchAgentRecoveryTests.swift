@@ -8,9 +8,16 @@ import Testing
 @testable import OpenRunApplication
 
 private final class RecoveryRegistration: LaunchAgentStatusSource {
-    let state = Mutex((status: LaunchAgentStatus.requiresApproval, calls: [String]()))
+    struct Refusal: Error, CustomStringConvertible { var description: String { "launchd refused the agent." } }
+
+    let state = Mutex((status: LaunchAgentStatus.requiresApproval, calls: [String](), refuses: false))
     var status: LaunchAgentStatus { state.withLock { $0.status } }
-    func register() throws { state.withLock { $0.calls.append("register") } }
+    func register() throws {
+        try state.withLock {
+            $0.calls.append("register")
+            if $0.refuses { throw Refusal() }
+        }
+    }
     func unregister() throws { state.withLock { $0.calls.append("unregister") } }
     func openSystemSettings() { state.withLock { $0.calls.append("openSystemSettings") } }
 }
@@ -106,6 +113,47 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(questions.withLock { $0 } == [.registerAgain, .registerAgain])
         #expect(registration.state.withLock { $0.calls } == ["unregister", "register", "connect"])
         #expect(application.validateMenuItem(registerAgain))
+    }
+
+    @MainActor @Test func aNewRegistrationThatFailsAfterSetupTurnsRetryOnAndLeavesTheWindow() async throws {
+        _ = NSApplication.shared
+        let oldMenu = NSApp.mainMenu, oldWindows = NSApp.windowsMenu
+        defer { NSApp.mainMenu = oldMenu; NSApp.windowsMenu = oldWindows }
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        FileManager.default.createFile(atPath: folder.appendingPathComponent(".zshrc").path, contents: Data())
+        let process = try RunningSessionProcess()
+        defer { process.stop() }
+        let registration = RecoveryRegistration()
+        registration.state.withLock { $0.status = .enabled }
+        let questions = Mutex<[LaunchAgentQuestion]>([])
+        let application = OpenRunApplication(socket: try SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
+            LaunchAgentSetup(source: registration, connect: {}, ask: { question in
+                questions.withLock { $0.append(question) }
+                return question == .registerAgain
+            })
+        })
+        application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
+        defer { application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
+        let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
+        let retry = try #require(file.item(withTitle: "Retry Session Process"))
+        let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
+        let newWindow = try #require(file.item(withTitle: "New Window"))
+
+        application.registerSessionProcessAgain(nil)
+        await waitForRecovery { application.windows.controllers.first?.view != nil }
+        #expect(!application.validateMenuItem(retry) && application.validateMenuItem(newWindow))
+        registration.state.withLock { $0.refuses = true }
+        application.registerSessionProcessAgain(nil)
+        await waitForRecovery { application.validateMenuItem(retry) }
+        #expect(questions.withLock { $0 }.last == .failed(detail: "launchd refused the agent."))
+        #expect(application.windows.controllers.count == 1 && application.validateMenuItem(registerAgain))
+        #expect(!application.validateMenuItem(newWindow))
+
+        registration.state.withLock { $0.refuses = false }
+        application.retrySessionProcess(nil)
+        await waitForRecovery { application.validateMenuItem(newWindow) }
+        #expect(application.windows.controllers.count == 1)
     }
 
     /// The session process takes the connection and never answers hello, so

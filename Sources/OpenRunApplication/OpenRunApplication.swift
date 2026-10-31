@@ -82,10 +82,11 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         setupIsRunning = false
         guard outcome != .canceled else { return }
         // A new registration can fail after the app was ready. Then the app is
-        // not ready again, and File > Retry Session Process is on.
+        // not ready, and File > Retry Session Process is on. The windows that
+        // exist stay, so a later success opens no second one.
         let wasReady = setupIsReady
         setupIsReady = outcome == .ready
-        if setupIsReady, !wasReady { windows.open(makeNewSession()) }
+        if setupIsReady, !wasReady, windows.controllers.isEmpty { windows.open(makeNewSession()) }
     }
 
     @objc func retrySessionProcess(_ sender: Any?) { startSetup() }
