@@ -161,6 +161,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         guard !isClosed else { return }
         isClosed = true
         relay.cancel()
+        view?.discardPendingOutput()
         if let attachment { detach(attachment) }
         onClose?()
     }

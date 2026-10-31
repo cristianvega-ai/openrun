@@ -144,6 +144,14 @@ public final class TerminalView: NSView {
         if parser.hasPendingOutput { afterOutput.append(action) } else { action() }
     }
 
+    /// Releases output when the window closes.
+    public func discardPendingOutput() {
+        isParseScheduled = false
+        parseGeneration += 1
+        afterOutput.removeAll()
+        parser.discard()
+    }
+
     /// Checks the budget between pieces or size events so the main thread can
     /// process input and frames while output waits.
     ///

@@ -1,4 +1,5 @@
 import AppKit
+import Darwin
 import SessionConnection
 import SessionProcessHarness
 import SessionProtocol
@@ -9,7 +10,7 @@ import Testing
 @testable import TerminalView
 
 private final class TracedAttachment: AttachedSession {
-    struct Record: Equatable { var started = 0, finished = 0, shutdowns = 0, largestInput = 0 }
+    struct Record: Equatable { var started = 0, finished = 0, shutdowns = 0, largestInput = 0, eventsStarted = 0, eventsFinished = 0 }
     let real: SessionAttachment
     let record = Mutex(Record())
     init(_ real: SessionAttachment) { self.real = real }
@@ -23,7 +24,13 @@ private final class TracedAttachment: AttachedSession {
     func send(size: SessionSize, requestsConfirmation: Bool) throws { try real.send(size: size, requestsConfirmation: requestsConfirmation) }
     func detach() throws { try real.detach() }
     func shutdown() { record.withLock { $0.shutdowns += 1 }; real.shutdown() }
-    func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) { real.startReceiving(handler) }
+    func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
+        real.startReceiving { [self] event in
+            record.withLock { $0.eventsStarted += 1 }
+            handler(event)
+            record.withLock { $0.eventsFinished += 1 }
+        }
+    }
 }
 
 @MainActor @Suite(.serialized) struct WindowBackpressureTests {
@@ -43,6 +50,67 @@ private final class TracedAttachment: AttachedSession {
         #expect(!completed.withLock { $0 } && view.gridSize != changed)
         _ = view.parseTurn(budget: ParseBudget(limit: .zero))
         #expect(completed.withLock { $0 } && view.gridSize == changed)
+    }
+
+    @Test func closeDiscardsPendingOutputAndScheduledActions() async throws {
+        let attachment = try FakeAttachment()
+        attachment.record.withLock { $0.confirmsSizes = false }
+        let window = try makeWindowController(attachment)
+        await waitOnMainThread { window.view != nil }
+        let view = try #require(window.view)
+        let before = view.gridSize
+        let finished = Mutex(0)
+        var delayedAction = false, closes = 0
+        window.onClose = { closes += 1 }
+        view.write(Data(repeating: 65, count: 1024 * 1024)) { finished.withLock { $0 += 1 } }
+        view.followSessionSize(TerminalSize(columns: 4, rows: 3))
+        view.afterPendingOutput { delayedAction = true }
+        window.window.close()
+        #expect(finished.withLock { $0 == 1 })
+        await waitOnMainThread(seconds: 0.1) { false }
+        #expect(!delayedAction && closes == 1 && view.gridSize == before)
+        #expect(finished.withLock { $0 == 1 })
+    }
+
+    @Test func closeWakesARealReceiverWaitingForOutputRoom() async throws {
+        _ = NSApplication.shared
+        let process = try RunningSessionProcess()
+        defer { process.stop() }
+        let go = process.directory.appendingPathComponent("output-go")
+        let script = "echo ready; while [ ! -f '\(go.path)' ]; do sleep 0.02; done; head -c 2097152 /dev/zero | tr '\\000' x; sleep 30"
+        let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+        try #require(await process.waitForScreen(of: identifier, containing: "ready"))
+        let holder = Mutex<TracedAttachment?>(nil)
+        let window = SessionWindowController(start: .runningSession(try #require(UUID(uuidString: identifier))), socket: try SocketLocation(path: process.socketPath))
+        defer { holder.withLock { $0 }?.real.shutdown(); window.window.close() }
+        window.connect = { start, location, size in
+            let started = try start.attach(at: location, size: size)
+            guard let real = started.attachment as? SessionAttachment else { throw SessionConnectionError.unexpectedAttachAnswer }
+            let traced = TracedAttachment(real)
+            holder.withLock { $0 = traced }
+            return StartedSession(summary: started.summary, attachment: traced)
+        }
+        window.showWindow()
+        await waitOnMainThread(seconds: 10) { window.view != nil && holder.withLock { $0 != nil } }
+        let traced = try #require(holder.withLock { $0 })
+        FileManager.default.createFile(atPath: go.path, contents: Data())
+        let deadline = Date().addingTimeInterval(10)
+        var previous = traced.record.withLock { $0 }, stableSince = Date()
+        while Date() < deadline {
+            let state = traced.record.withLock { $0 }
+            if state != previous { previous = state; stableSince = Date() }
+            if state.eventsStarted > state.eventsFinished && Date().timeIntervalSince(stableSince) >= 0.2 { break }
+            usleep(1000)
+        }
+        let before = traced.record.withLock { $0 }
+        try #require(before.eventsStarted > before.eventsFinished && Date().timeIntervalSince(stableSince) >= 0.2, "The receiver must wait while the main thread is held.")
+        window.window.close()
+        await waitOnMainThread(seconds: 5) {
+            traced.record.withLock { $0.shutdowns > 0 && $0.eventsStarted == $0.eventsFinished }
+        }
+        let after = traced.record.withLock { $0 }
+        #expect(after.shutdowns == 1 && after.eventsStarted == after.eventsFinished)
+        #expect(process.isRunning)
     }
 
     @Test func closeReleasesARealBlockedWriterAndWithdrawsItsInput() async throws {
