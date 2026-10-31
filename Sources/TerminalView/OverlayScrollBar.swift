@@ -46,6 +46,14 @@ final class OverlayScrollBar: NSView {
         NotificationCenter.default.addObserver(self, selector: #selector(clipMoved), name: NSView.boundsDidChangeNotification, object: scrollView.contentView)
     }
 
+    /// AppKit corrects the clip view at every change of height, also when the next layout gives the old
+    /// height back before a frame calls `update`. The cache cannot see that, so any change of height drops it
+    /// and the next `update` places the knob again. This runs before the correction, so `clipMoved` ignores it.
+    override func setFrameSize(_ newSize: NSSize) {
+        if newSize.height != frame.height { last = nil }
+        super.setFrameSize(newSize)
+    }
+
     /// A bar that is not shown must not take the clicks and the wheel of the grid below it.
     override func hitTest(_ point: NSPoint) -> NSView? { isRevealed ? super.hitTest(point) : nil }
 

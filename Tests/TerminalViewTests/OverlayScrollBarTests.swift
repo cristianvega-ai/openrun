@@ -126,6 +126,54 @@ import Testing
         #expect(received.isEmpty)
     }
 
+    /// The knob must show the last `Scrollbar` and nothing from an earlier one.
+    private func expectKnob(of bar: OverlayScrollBar, shows last: Scrollbar, sourceLocation: SourceLocation = #_sourceLocation) {
+        guard last.totalRows > last.visibleRows else {
+            #expect(bar.isHidden, sourceLocation: sourceLocation)
+            return
+        }
+        let travel = Double(last.totalRows - last.visibleRows)
+        #expect(!bar.isHidden, sourceLocation: sourceLocation)
+        #expect(abs(bar.scroller.doubleValue - Double(last.firstVisibleRow) / travel) < 0.0001, sourceLocation: sourceLocation)
+        #expect(abs(bar.scroller.knobProportion - Double(last.visibleRows) / Double(last.totalRows)) < 0.0001, sourceLocation: sourceLocation)
+    }
+
+    @Test func theKnobShowsTheLastScrollbarAfterTheScrollbackGrowsShrinksAndGrowsAgain() throws {
+        let bar = OverlayScrollBar(clock: ManualClock())
+        var received: [ViewportScroll] = []
+        bar.onScroll = { received.append($0) }
+        // Each step is a frame: the bar may get a new height and then a new `Scrollbar` with no turn of the run loop between.
+        let steps: [(lines: Int, scrolledTo: ViewportScroll?, height: CGFloat)] = [
+            (80, .toRow(30), 100), (30, nil, 100), (200, .toRow(120), 140), (25, nil, 100),
+            (150, .toTop, 60), (3, nil, 60), (100, .toRow(50), 100), (400, nil, 100),
+        ]
+        var last = try scrollbar(lines: 0)
+        for step in steps {
+            bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: step.height)
+            last = try scrollbar(lines: step.lines, scrolledTo: step.scrolledTo)
+            bar.update(from: last)
+            expectKnob(of: bar, shows: last)
+        }
+        // AppKit can correct the clip view later, in a layout pass of the run loop.
+        wait(seconds: 0.05) { false }
+        expectKnob(of: bar, shows: last)
+        #expect(received.isEmpty)
+    }
+
+    @Test func aBarThatGrowsAndShrinksBetweenTwoUpdatesStillShowsTheLastScrollbar() throws {
+        let bar = OverlayScrollBar(clock: ManualClock())
+        var received: [ViewportScroll] = []
+        bar.onScroll = { received.append($0) }
+        let reading = try scrollbar(lines: 80, scrolledTo: .toRow(55))
+        bar.update(from: reading)
+        // Two layouts can come before the next frame, and the second one gives back the first height.
+        bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: 200)
+        bar.frame = NSRect(x: 0, y: 0, width: bar.frame.width, height: 100)
+        bar.update(from: reading)
+        expectKnob(of: bar, shows: reading)
+        #expect(received.isEmpty)
+    }
+
     /// Run with `OPENRUN_RENDER_OUTPUT=<folder>` to save a screenshot of a window with the scroll bar for a review.
     /// `screencapture` takes the window from the screen, because the knob of the overlay style is not in a bitmap of the view.
     @Test(.enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil && NSScreen.main != nil))
