@@ -200,10 +200,40 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test func slowClientReceivesOrderedOutputAcrossTheQueueLimit() async throws {
+            let expected = Self.expectedOutput() + Self.expectedOutput()
+            try await RunningSessionProcess.run { process in
+                let releaseFile = process.directory.appendingPathComponent("release").path
+                let script = "while [ ! -e '\(releaseFile)' ]; do sleep 0.05; done; " + Self.writeCommand + "; " + Self.writeCommand
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                defer { connection.shutdown() }
+                try connection.greetSessionProcess()
+                try connection.send(ClientMessage.attach(identifier: try #require(UUID(uuidString: identifier)),
+                    size: SessionSize(columns: 80, rows: 24), waitsForOutputRoom: true))
+                guard case .attached = try connection.receive(ServerMessage.self),
+                      case .snapshot = try connection.receive(ServerMessage.self) else {
+                    Issue.record("The attach did not return a snapshot.")
+                    return
+                }
+                FileManager.default.createFile(atPath: releaseFile, contents: Data())
+                let watchdog = Task {
+                    try await Task.sleep(for: Self.wallTimeLimit)
+                    connection.shutdown()
+                }
+                defer { watchdog.cancel() }
+                let rawReceived = try await BlockingWork.onNewThread { try Self.readUntilExit(connection, bytesPerSecond: 8 * 1024 * 1024) }
+                let received = Self.removingRepeatedCarriageReturns(from: rawReceived)
+                print("paced-output: received \(received.count) bytes")
+                #expect(received == expected, "The paced client lost, repeated, or reordered output.")
+            }
+        }
+
         /// Reads every message, as fast as it arrives, until the program exits.
         /// Returns the output bytes in the order received.
-        private static func readUntilExit(_ connection: MessageConnection) throws -> Data {
+        private static func readUntilExit(_ connection: MessageConnection, bytesPerSecond: Int? = nil) throws -> Data {
             var received = Data()
+            var bytesSincePause = 0
             received.reserveCapacity(byteCount + lineCount)
             while let message = try connection.receive(ServerMessage.self) {
                 switch message {
@@ -211,6 +241,11 @@ extension SessionProcessIntegration {
                     continue
                 case .output(let bytes):
                     received.append(bytes)
+                    bytesSincePause += bytes.count
+                    if let bytesPerSecond, bytesSincePause >= 256 * 1024 {
+                        Thread.sleep(forTimeInterval: Double(bytesSincePause) / Double(bytesPerSecond))
+                        bytesSincePause = 0
+                    }
                 case .exited:
                     return received
                 default:
