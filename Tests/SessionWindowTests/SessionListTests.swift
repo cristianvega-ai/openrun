@@ -38,20 +38,60 @@ import Testing
         _ = NSApplication.shared
         let first = SessionSummary(identifier: UUID(), folder: "/one", command: ["/bin/sh"], size: SessionSize(columns: 80, rows: 24), createdAt: Date())
         let second = SessionSummary(identifier: UUID(), folder: "/two", command: ["/bin/sh"], size: SessionSize(columns: 80, rows: 24), createdAt: Date())
-        let selected = await SessionListPanel.choose([first, second], in: nil) { alert, _ in
+        let selected = await SessionListPanel.choose([first, second], in: nil) { alert in
             let choices = alert.accessoryView as? NSPopUpButton
             #expect(choices?.itemTitles == ["/one — \(first.identifierText)", "/two — \(second.identifierText)"])
             choices?.selectItem(at: 1)
             return .alertFirstButtonReturn
         }
         #expect(selected == second.identifier)
-        let canceled = await SessionListPanel.choose([first], in: nil) { _, _ in .alertSecondButtonReturn }
+        let canceled = await SessionListPanel.choose([first], in: nil) { _ in .alertSecondButtonReturn }
         #expect(canceled == nil)
-        let empty = await SessionListPanel.choose([], in: nil) { alert, _ in
+        let empty = await SessionListPanel.choose([], in: nil) { alert in
             #expect(alert.messageText == "No running sessions")
             return .alertFirstButtonReturn
         }
         #expect(empty == nil)
     }
 
+    /// A window that receives a flood stays attached only when its output
+    /// reaches the window while an alert is open.
+    @MainActor @Test func theAlertsLeaveTheMainQueueFreeWhileTheyAreOpen() async {
+        _ = NSApplication.shared
+        let summary = SessionSummary(identifier: UUID(), folder: "/one", command: ["/bin/sh"], size: SessionSize(columns: 80, rows: 24), createdAt: Date())
+        #expect(await ModalLoopProbe.mainQueueRunsWhileAnAlertIsOpen { _ = await SessionListPanel.choose([summary], in: nil, runModal: $0) })
+        #expect(await ModalLoopProbe.mainQueueRunsWhileAnAlertIsOpen { _ = await SessionListPanel.choose([], in: nil, runModal: $0) })
+        #expect(await ModalLoopProbe.mainQueueRunsWhileAnAlertIsOpen { await SessionListPanel.showFailure("No socket.", in: nil, runModal: $0) })
+    }
+}
+
+/// Stands in for the modal loop of an alert, which runs the run loop in the
+/// mode of a modal panel. It posts a block to the main queue, as the relay
+/// of an attached window does, and tells whether the block ran before the
+/// alert closed.
+@MainActor private final class ModalLoopProbe {
+    private var blockRan = false
+    private(set) var blockRanWhileTheAlertWasOpen = false
+
+    func spinTheLoop() {
+        DispatchQueue.main.async { MainActor.assumeIsolated { self.blockRan = true } }
+        let deadline = Date().addingTimeInterval(0.2)
+        while !blockRan, Date() < deadline {
+            RunLoop.current.run(mode: .modalPanel, before: Date().addingTimeInterval(0.01))
+        }
+        blockRanWhileTheAlertWasOpen = blockRan
+    }
+
+    /// A test that runs at the same time can wait with a run loop of its
+    /// own, and that loop can run this modal loop inside a block of the main
+    /// queue. So one pass in several tries is enough. The code under test
+    /// never starts a block of the main queue for itself.
+    static func mainQueueRunsWhileAnAlertIsOpen(_ present: (@escaping SessionListPanel.RunModal) async -> Void) async -> Bool {
+        for _ in 0..<10 {
+            let probe = ModalLoopProbe()
+            await present { _ in probe.spinTheLoop(); return .alertFirstButtonReturn }
+            if probe.blockRanWhileTheAlertWasOpen { return true }
+        }
+        return false
+    }
 }
