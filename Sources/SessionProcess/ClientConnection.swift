@@ -6,8 +6,13 @@ import Synchronization
 /// One client of the session process.
 ///
 /// Reading and writing each have a thread of their own, so a client that
-/// stops reading blocks only its own writes and never a session. The limits
-/// and deadlines in `ConnectionLimits` bound what each client costs.
+/// stops reading blocks only its own writes. The exception is a client that
+/// asks for output room: while its queue is full, the session pauses the
+/// program. One pause lasts at most `ConnectionLimits.outputRoomTimeLimit`
+/// in total, however many clients are full, and only a client inside its
+/// large-snapshot grace can extend it. A client that has not made room by
+/// then loses its connection. The limits and deadlines in `ConnectionLimits`
+/// bound what each client costs.
 final class ClientConnection: Sendable {
     /// A message from the client, and the room it takes in the read-ahead.
     struct Received: Sendable {
