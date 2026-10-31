@@ -516,7 +516,6 @@ extension SessionProcessIntegration {
         }
 
         /// Closing a client that stopped reading waited for a write
-        /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
         @Test func stalledClientsAreClosedSoonAfterTheirProgramEnds() async throws {
             try await RunningSessionProcess.run { process in
