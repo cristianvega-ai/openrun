@@ -139,6 +139,36 @@ extension SessionProcessIntegration {
             slowPeer.shutdown()
             await wait.value
         }
+        @Test func aViewerThatMakesRoomBeforeTheCheckKeepsItsConnection() async throws {
+            let (socket, peer) = try MessageConnection.makePair()
+            let client = ClientConnection(connection: socket)
+            defer { peer.shutdown() }
+            try peer.greetSessionProcess()
+            client.send(.output(Data(repeating: 65, count: ConnectionLimits.outputHighMark)))
+            guard case .output = try receiveMessage(peer, within: 5) else {
+                Issue.record("The client did not write its output.")
+                return
+            }
+            try #require(await eventually(timeout: .seconds(5)) { client.queuedOutputBytes == 0 })
+            client.endForOutputBackpressure()
+            #expect(client.queuedOutputBytes != nil, "A client that made room must stay attached.")
+        }
+
+        @Test func aRefusedOutputRoomWaitReturnsAtOnce() async throws {
+            let (socket, peer) = try MessageConnection.makePair()
+            let client = ClientConnection(connection: socket)
+            defer { peer.shutdown() }
+            try peer.greetSessionProcess()
+            client.send(.output(Data(repeating: 65, count: ConnectionLimits.outputHighMark)))
+            try #require(await eventually(timeout: .seconds(5)) {
+                (client.queuedOutputBytes ?? 0) >= ConnectionLimits.outputHighMark
+            })
+            client.refuseOutputRoomWait()
+            let start = ContinuousClock.now
+            await client.waitForOutputRoom()
+            #expect(ContinuousClock.now - start < .seconds(1))
+            #expect(client.queuedOutputBytes != nil)
+        }
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
         @Test func stalledClientsAreClosedSoonAfterTheirProgramEnds() async throws {
