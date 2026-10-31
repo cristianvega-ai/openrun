@@ -38,7 +38,7 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
     return record.withLock { (outcome, $0.questions, $0.connections) }
 }
 
-@Suite struct LaunchAgentSetupTests {
+@Suite(.serialized) struct LaunchAgentSetupTests {
     private enum ConnectionFault: Error, CustomStringConvertible {
         case closed
         var description: String { "The connection closed." }
@@ -87,31 +87,27 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
     @Test func aWakeForAnAgentThatLaunchdDoesNotKnowTellsTheUser() {
         let registration = StandInRegistration(.enabled)
         let result = runSetup(registration, failures: [.notRegistered])
-        #expect(result.outcome == .failed && result.questions == [.failed(detail: SessionWakeFailure.notRegistered.description)])
+        #expect(result.outcome == .failed && result.questions == [.failed(detail: "launchd could not find the OpenRun session process.")])
         #expect(registration.calls.isEmpty)
     }
 
-    /// Owner decision D3 of 2026-10-27: the user decides, because a new
-    /// registration ends the sessions of the old build.
-    @Test func aWakeThatTimesOutWhileEnabledRegistersAgainOnlyWhenTheUserAgrees() {
-        let timeout = SessionWakeFailure.timedOut(limit: .seconds(15))
-        let declined = StandInRegistration(.enabled)
-        let refusal = runSetup(declined, failures: [timeout], answers: [false])
-        #expect(refusal.outcome == .declined && refusal.questions == [.registerAgain] && refusal.connections == 1)
-        #expect(declined.calls.isEmpty)
-
-        let agreed = StandInRegistration(.enabled)
-        let renewal = runSetup(agreed, failures: [timeout, nil], answers: [true])
-        #expect(renewal.outcome == .ready && renewal.questions == [.registerAgain] && renewal.connections == 2)
-        #expect(agreed.calls == ["unregister", "register"])
-    }
-
-    @Test func aSecondTimeoutAfterTheNewRegistrationStopsTheSetup() {
+    @Test func aWakeTimeoutDoesNotSuggestOrPerformARegistration() {
         let timeout = SessionWakeFailure.timedOut(limit: .seconds(15))
         let registration = StandInRegistration(.enabled)
-        let result = runSetup(registration, failures: [timeout, timeout], answers: [true])
-        #expect(result.outcome == .failed && result.connections == 2)
-        #expect(result.questions == [.registerAgain, .failed(detail: timeout.description)])
-        #expect(registration.calls == ["unregister", "register"])
+        let result = runSetup(registration, failures: [timeout], answers: [true])
+        let question = LaunchAgentQuestion.failed(detail: "The OpenRun session process did not answer within 15 seconds.")
+        #expect(result.outcome == .failed && result.questions == [question] && result.connections == 1)
+        #expect(question.words.title == "OpenRun could not set up the session process")
+        #expect(question.words.buttons == ["OK"] && !question.words.message.contains("register"))
+        #expect(registration.calls.isEmpty)
+    }
+
+    @Test func aLaterAttemptCanRecoverFromAConnectionFailure() {
+        let registration = StandInRegistration(.enabled)
+        let first = runSetup(registration, failures: [.noAnswer(detail: "Not available")])
+        let retry = runSetup(registration)
+        #expect(first.outcome == .failed && first.questions.count == 1 && first.connections == 1)
+        #expect(retry.outcome == .ready && retry.questions.isEmpty && retry.connections == 1)
+        #expect(registration.calls.isEmpty)
     }
 }

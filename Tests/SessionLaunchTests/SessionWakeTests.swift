@@ -19,7 +19,7 @@ import Testing
 
     @Test func eachFailureTellsTheUserWhatToDo() {
         #expect(SessionWakeFailure.notRegistered.description.contains("Open OpenRun once to register it."))
-        #expect(SessionWakeFailure.timedOut(limit: .seconds(15)).description.contains("within 15 seconds. Open OpenRun to register it again."))
+        #expect(SessionWakeFailure.timedOut(limit: .seconds(15)).description == "The session process did not answer the request to start within 15 seconds.")
     }
 
     /// A session process that was started by hand gets no Mach service.

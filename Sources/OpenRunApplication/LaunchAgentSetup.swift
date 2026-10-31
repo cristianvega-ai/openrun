@@ -7,7 +7,7 @@ import SessionLaunch
 /// it asks once and stops, so it never registers again in a loop.
 struct LaunchAgentSetup {
     enum Outcome: Equatable, Sendable {
-        case ready, waitingForApproval, declined, failed
+        case ready, waitingForApproval, failed
     }
 
     let source: any LaunchAgentStatusSource
@@ -34,28 +34,13 @@ struct LaunchAgentSetup {
             try connect()
             return .ready
         } catch let failure as SessionWakeFailure {
-            if case .timedOut = failure, source.status == .enabled { return registerAgainWhenTheUserAgrees() }
+            if case .timedOut(let limit) = failure {
+                return fail("The OpenRun session process did not answer within \(limit.components.seconds) seconds.")
+            }
+            if case .notRegistered = failure {
+                return fail("launchd could not find the OpenRun session process.")
+            }
             return fail(failure.description)
-        } catch {
-            return fail(String(describing: error))
-        }
-    }
-
-    /// A wake without an answer while the agent is enabled means that
-    /// launchd refuses the program, as after a build that changed its code
-    /// signature. A new registration ends every session of the old build,
-    /// so the user decides. The app registers again one time only.
-    private func registerAgainWhenTheUserAgrees() -> Outcome {
-        guard ask(.registerAgain) else { return .declined }
-        do {
-            try source.unregister()
-            try source.register()
-        } catch {
-            return fail("\(error)")
-        }
-        do {
-            try connect()
-            return .ready
         } catch {
             return fail(String(describing: error))
         }

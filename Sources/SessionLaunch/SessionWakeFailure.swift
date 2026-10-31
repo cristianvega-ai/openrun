@@ -5,9 +5,7 @@ public enum SessionWakeFailure: Error, Equatable, Sendable, CustomStringConverti
     case notRegistered
     /// The request ended without an answer. The detail is the error text.
     case noAnswer(detail: String)
-    /// launchd did not start the session process in time. A registration
-    /// whose program has a new code signature fails this way, because
-    /// launchd refuses the program and the request waits for ever.
+    /// The request received no answer before the time limit.
     case timedOut(limit: Duration)
 
     public var description: String {
@@ -17,7 +15,7 @@ public enum SessionWakeFailure: Error, Equatable, Sendable, CustomStringConverti
         case .noAnswer(let detail):
             "The session process did not answer the request to start (\(detail))."
         case .timedOut(let limit):
-            "launchd did not start the session process within \(limit.components.seconds) seconds. Open OpenRun to register it again."
+            "The session process did not answer the request to start within \(limit.components.seconds) seconds."
         }
     }
 }
