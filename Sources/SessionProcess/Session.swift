@@ -279,12 +279,17 @@ actor Session {
     }
 
     /// A fast viewer takes precedence over a client whose queue is full.
-    /// Otherwise the program waits, with a deadline for each full client.
+    /// Otherwise the program waits. One call is one pause with one deadline,
+    /// however many clients are full. Waits that ran one after another would
+    /// stop the program for the time limit once for each stalled client.
     func waitForOutputRoom() async {
+        var pauseDeadline: ContinuousClock.Instant?
         while !isEnding {
             let counts = clients.compactMapValues(\.queuedOutputBytes)
             let full = clientsThatWaitForOutputRoom.filter { (counts[$0] ?? 0) >= ConnectionLimits.outputHighMark }
             guard let first = full.first, let client = clients[first] else { return }
+            let deadline = pauseDeadline ?? .now + ConnectionLimits.outputRoomTimeLimit
+            pauseDeadline = deadline
             if counts.contains(where: { $0.key != first && $0.value <= ConnectionLimits.outputLowMark && clients[$0.key]?.hasMadeOutputProgress == true }) {
                 client.endForOutputBackpressure()
             } else {
@@ -292,7 +297,7 @@ actor Session {
                 for other in otherClients {
                     other.observeOutputProgress { [weak client] in client?.stopWaitingForOutputRoom() }
                 }
-                await client.waitForOutputRoom {
+                await client.waitForOutputRoom(until: deadline) {
                     // Progress can occur before the waiter is installed.
                     if otherClients.contains(where: { ($0.queuedOutputBytes ?? Int.max) <= ConnectionLimits.outputLowMark && $0.hasMadeOutputProgress }) {
                         client.stopWaitingForOutputRoom()

@@ -245,7 +245,7 @@ extension SessionProcessIntegration {
             })
             client.refuseOutputRoomWait()
             let start = ContinuousClock.now
-            await client.waitForOutputRoom()
+            await client.waitForOutputRoom(until: .now + ConnectionLimits.outputRoomTimeLimit)
             #expect(ContinuousClock.now - start < .seconds(1))
             #expect(client.queuedOutputBytes != nil)
         }
@@ -493,6 +493,23 @@ extension SessionProcessIntegration {
                 let result = reader.state.withLock { $0 }
                 #expect(advanced && result.byteCount > 1024 * 1024)
                 #expect(stopped && result.exit == .signaled(signal: SIGINT))
+            }
+        }
+
+        /// The waits for the full clients ran one after another, so the program
+        /// stopped for 2 seconds for each stalled client: about 6 seconds here.
+        @Test(.tags(.takesEverySlot)) func severalStalledViewersPauseTheProgramForTwoSecondsInTotal() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let stalled = try (0..<3).map { _ in try attachFlood(process, identifier: identifier, waitsForOutputRoom: true) }
+                defer { stalled.forEach { $0.connection.shutdown() } }
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                let start = ContinuousClock.now
+                let closed = await eventually(timeout: .seconds(4)) { stalled.allSatisfy { isClosedBySessionProcess($0.descriptor) } }
+                let elapsed = ContinuousClock.now - start
+                print("stalled-viewers: all closed \(closed) after \(elapsed)")
+                #expect(closed, "Three stalled viewers must lose their connections within one pause of 2 seconds.")
+                #expect(elapsed > .seconds(1.5), "The pause must last the 2 seconds that a viewer gets to make room.")
             }
         }
 

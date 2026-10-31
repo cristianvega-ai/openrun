@@ -180,28 +180,30 @@ final class ClientConnection: Sendable {
     }
 
     /// Waits without holding an actor or a thread. A client that cannot
-    /// make enough room by the deadline loses its connection.
-    func waitForOutputRoom(onWaiting: @Sendable () -> Void = {}) async {
+    /// make enough room by `pauseDeadline` loses its connection, also when
+    /// that time has passed already. A client inside its large-snapshot
+    /// grace may wait until the grace ends, if that is later.
+    func waitForOutputRoom(until pauseDeadline: ContinuousClock.Instant, onWaiting: @Sendable () -> Void = {}) async {
         await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
-            let wait = state.withLock { state -> (UInt64, Duration)? in
+            let wait = state.withLock { state -> (UInt64, ContinuousClock.Instant)? in
                 guard state.phase == .open, !state.refusesOutputRoomWait,
                       state.queuedOutputBytes >= ConnectionLimits.outputHighMark else { return nil }
                 guard state.outputWaiter == nil else { return nil }
                 state.nextOutputWaiterIdentifier &+= 1
                 let identifier = state.nextOutputWaiterIdentifier
                 state.outputWaiter = OutputWaiter(identifier: identifier, continuation: continuation)
-                let grace = state.snapshotGraceDeadline.map { $0 - .now } ?? .zero
-                let limit = state.programHasExited
-                    ? ConnectionLimits.outputRoomTimeLimit
-                    : max(ConnectionLimits.outputRoomTimeLimit, grace)
-                return (identifier, limit)
+                var deadline = pauseDeadline
+                if !state.programHasExited, let graceDeadline = state.snapshotGraceDeadline {
+                    deadline = max(deadline, graceDeadline)
+                }
+                return (identifier, deadline)
             }
-            guard let (identifier, duration) = wait else {
+            guard let (identifier, deadline) = wait else {
                 continuation.resume()
                 return
             }
             onWaiting()
-            let parts = duration.components
+            let parts = max(deadline - .now, .zero).components
             let delay = DispatchTimeInterval.nanoseconds(Int(parts.seconds) * 1_000_000_000 + Int(parts.attoseconds / 1_000_000_000))
             DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
                 self?.end(waitingForOutput: identifier)
