@@ -498,17 +498,23 @@ extension SessionProcessIntegration {
 
         @Test(.tags(.takesEverySlot)) func detachWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
-                let (identifier, go) = try startFlood(process)
-                let stalled = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                // The large snapshot keeps the client waiting for 30 seconds. Without the wake of
+                // the detach, only the closing of the connection ends the wait, 2 seconds later.
+                let size = SessionSize(columns: 240, rows: 50)
+                let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: #"exec "/usr/bin/yes";"#)
+                let stalled = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { stalled.connection.shutdown() }
+                try #require(stalled.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
                 FileManager.default.createFile(atPath: go.path, contents: Data())
-                try await Task.sleep(for: .milliseconds(750))
+                try await Task.sleep(for: .milliseconds(1500))
                 try stalled.connection.send(ClientMessage.detach)
-                let active = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                let active = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { active.connection.shutdown() }
                 let reader = FloodReader(active.connection)
                 reader.start()
-                let advanced = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
+                let start = ContinuousClock.now
+                let advanced = await eventually(timeout: .seconds(1)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
+                print("detach-wake: advanced \(advanced) after \(ContinuousClock.now - start)")
                 try active.connection.send(ClientMessage.input(Data([3])))
                 let stopped = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.isDone } }
                 let result = reader.state.withLock { $0 }
