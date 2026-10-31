@@ -131,4 +131,24 @@ private final class TracedAttachment: AttachedSession {
         reference.write(last)
         #expect(try view.terminal.formatted(.plainText) == reference.formatted(.plainText))
     }
+
+    @Test func realFloodIsParsedBeforeTheExitClosesTheWindow() async throws {
+        _ = NSApplication.shared
+        let process = try RunningSessionProcess()
+        defer { process.stop() }
+        let go = process.directory.appendingPathComponent("flood-go")
+        let script = "echo ready; while [ ! -f '\(go.path)' ]; do sleep 0.02; done; head -c 2097152 /dev/zero | tr '\\000' x; printf '\\033]0;output-complete\\007'"
+        let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+        try #require(await process.waitForScreen(of: identifier, containing: "ready"))
+        let window = SessionWindowController(start: .runningSession(try #require(UUID(uuidString: identifier))), socket: try SocketLocation(path: process.socketPath))
+        var titleAtClose: String?
+        window.onClose = { titleAtClose = window.window.title }
+        defer { window.window.close() }
+        window.showWindow()
+        await waitOnMainThread(seconds: 10) { window.view != nil }
+        try #require(window.view != nil)
+        FileManager.default.createFile(atPath: go.path, contents: Data())
+        await waitOnMainThread(seconds: 30) { titleAtClose != nil }
+        #expect(titleAtClose == "output-complete")
+    }
 }

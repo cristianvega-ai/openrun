@@ -89,20 +89,33 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         if pendingKeyTakeover, isWindowKey(window), view.gridSize == view.visibleGridSize { view.takeBackGridSize() }
         pendingKeyTakeover = false
         started.attachment.startReceiving(relay.handler { [weak self] event, finish in
-            self?.handle(event)
-            finish()
+            guard let self else { finish(); return }
+            self.handle(event, finish: finish)
         })
     }
 
-    private func handle(_ event: SessionAttachmentEvent) {
-        guard !isClosed else { return }
+    private func handle(_ event: SessionAttachmentEvent, finish: @escaping @Sendable () -> Void) {
+        guard !isClosed else { finish(); return }
         switch event {
-        case .output(let bytes): view?.write(bytes)
+        case .output(let bytes):
+            guard let view else { finish(); return }
+            view.write(bytes, completion: finish)
         case .sizeChanged(let size):
-            view?.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows))
-        case .exited: window.close()
-        case .closed: connectionFailed("The session process closed the connection.")
-        case .failed(let error): connectionFailed("The session connection failed. \(error)")
+            guard let view else { finish(); return }
+            view.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows), completion: finish)
+        case .exited, .closed, .failed:
+            let afterOutput: @MainActor @Sendable () -> Void = { [weak self] in
+                if let self, !self.isClosed {
+                    switch event {
+                    case .exited: self.window.close()
+                    case .closed: self.connectionFailed("The session process closed the connection.")
+                    case .failed(let error): self.connectionFailed("The session connection failed. \(error)")
+                    default: break
+                    }
+                }
+                finish()
+            }
+            if let view { view.afterPendingOutput(afterOutput) } else { afterOutput() }
         }
     }
 
