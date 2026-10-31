@@ -55,14 +55,14 @@ Sizes   == 1..2
 VARIABLES written, parsed, sessionSize, attached, open, attempted,
           queues, restored, received, drawingSize, knownSizes, resizeCount,
           refusedChangedSize, refusedAnnounced, wrongSizeOrder,
-          queryOwners, replies, pendingReplies, waitingClients, outputRoom,
-          isEnding
+          queryOwners, replies, pendingReplies, waitingClients, progressedClients,
+          outputRoom, isEnding
 
 variables == <<written, parsed, sessionSize, attached, open, attempted,
                queues, restored, received, drawingSize, knownSizes,
                resizeCount, refusedChangedSize, refusedAnnounced,
                wrongSizeOrder, queryOwners, replies, pendingReplies,
-               waitingClients, outputRoom, isEnding>>
+               waitingClients, progressedClients, outputRoom, isEnding>>
 
 Message(kind, number, dimensions) ==
   [kind |-> kind, number |-> number, dimensions |-> dimensions]
@@ -102,6 +102,7 @@ InitialState ==
   /\ replies = [chunk \in Chunks |-> {}]
   /\ pendingReplies = [client \in Clients |-> {}]
   /\ waitingClients = {}
+  /\ progressedClients = {}
   /\ outputRoom = 0
   /\ isEnding = FALSE
 
@@ -113,7 +114,7 @@ ProgramWrites ==
   /\ UNCHANGED <<parsed, sessionSize, attached, open, attempted, queues,
        restored, received, drawingSize, knownSizes, resizeCount,
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
-       replies, pendingReplies, waitingClients, outputRoom,
+       replies, pendingReplies, waitingClients, progressedClients, outputRoom,
        isEnding>>
 
 \* Session.run.  The write to the terminal, the reply handler, and the
@@ -140,6 +141,7 @@ ParseOutput ==
         /\ attached' = attached \ full
         /\ open' = open \ full
         /\ waitingClients' = waitingClients \ full
+        /\ progressedClients' = progressedClients \ full
         /\ outputRoom' = IF needsRoom THEN CheckingOutputRoom ELSE 0
         \* documentation/architecture.md, "Query replies": the decision is
         \* made at the moment the bytes are parsed.  With no relaying client
@@ -211,6 +213,7 @@ Attach(client, dimensions, outcome, waits) ==
              (refusedAnnounced \/ (~success /\ didAnnounce))
         /\ waitingClients' = IF success /\ waits
              THEN (waitingClients \ full) \cup {client} ELSE waitingClients \ full
+        /\ progressedClients' = progressedClients \ full
         /\ pendingReplies' = [recipient \in Clients |->
              IF recipient \in full THEN {} ELSE pendingReplies[recipient]]
         /\ outputRoom' = IF outputRoom \in full THEN CheckingOutputRoom ELSE outputRoom
@@ -244,6 +247,7 @@ Resize(client, dimensions) ==
         /\ attached' = attached \ full
         /\ open' = open \ full
         /\ waitingClients' = waitingClients \ full
+        /\ progressedClients' = progressedClients \ full
         /\ pendingReplies' = [recipient \in Clients |->
              IF recipient \in full THEN {} ELSE pendingReplies[recipient]]
         /\ outputRoom' = IF outputRoom \in full THEN CheckingOutputRoom ELSE outputRoom
@@ -263,8 +267,10 @@ Deliver(client) ==
   /\ Len(queues[client]) > 0
   /\ LET message == Head(queues[client])
      IN /\ queues' = [queues EXCEPT ![client] = Tail(@)]
+        /\ progressedClients' = IF message.kind = "output"
+             THEN progressedClients \cup {client} ELSE progressedClients
         /\ outputRoom' = IF outputRoom \in Clients /\ Counted(Tail(queues[client])) <= LowMark
-             /\ (outputRoom = client \/ message.kind = "output")
+             /\ (outputRoom = client \/ client \in progressedClients \/ message.kind = "output")
              THEN CheckingOutputRoom ELSE outputRoom
         /\ restored' = IF message.kind = "snapshot"
              THEN restored \cup {client} ELSE restored
@@ -300,6 +306,7 @@ Leave(client) ==
   /\ queues' = [queues EXCEPT ![client] = <<>>]
   /\ pendingReplies' = [pendingReplies EXCEPT ![client] = {}]
   /\ waitingClients' = waitingClients \ {client}
+  /\ progressedClients' = progressedClients \ {client}
   /\ outputRoom' = IF outputRoom = client THEN CheckingOutputRoom ELSE outputRoom
   /\ UNCHANGED <<written, parsed, sessionSize, attempted, restored, received,
        drawingSize, knownSizes, resizeCount, refusedChangedSize,
@@ -317,14 +324,17 @@ CheckOutputRoom ==
                   attempted, queues, restored, received, drawingSize,
                   knownSizes, resizeCount, refusedChangedSize, refusedAnnounced,
                   wrongSizeOrder, queryOwners, replies, pendingReplies,
-                  waitingClients, isEnding>>
+                  waitingClients, progressedClients, isEnding>>
         ELSE \E client \in full :
-             /\ outputRoom' = client
-             /\ UNCHANGED <<written, parsed, sessionSize, attached, open,
-                  attempted, queues, restored, received, drawingSize,
-                  knownSizes, resizeCount, refusedChangedSize, refusedAnnounced,
-                  wrongSizeOrder, queryOwners, replies, pendingReplies,
-                  waitingClients, isEnding>>
+          IF \E other \in progressedClients \ {client} :
+               Counted(queues[other]) <= LowMark
+          THEN Leave(client)
+          ELSE /\ outputRoom' = client
+               /\ UNCHANGED <<written, parsed, sessionSize, attached, open,
+                    attempted, queues, restored, received, drawingSize,
+                    knownSizes, resizeCount, refusedChangedSize, refusedAnnounced,
+                    wrongSizeOrder, queryOwners, replies, pendingReplies,
+                    waitingClients, progressedClients, isEnding>>
 
 OutputRoomTimeout(client) ==
   /\ outputRoom = client
@@ -337,7 +347,7 @@ BeginShutdown ==
   /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
        queues, restored, received, drawingSize, knownSizes, resizeCount,
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
-       replies, pendingReplies, waitingClients>>
+       replies, pendingReplies, waitingClients, progressedClients>>
 
 \* The real terminal of a relaying client answers a query that the session
 \* routed to it.  The answer comes back as an input message, which
@@ -352,7 +362,7 @@ RelayReply(client, chunk) ==
   /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
        queues, restored, received, drawingSize, knownSizes, resizeCount,
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
-       waitingClients, outputRoom, isEnding>>
+       waitingClients, progressedClients, outputRoom, isEnding>>
 
 Next == ProgramWrites \/ ParseOutput \/ CheckOutputRoom \/ BeginShutdown
   \/ (\E client \in Clients, dimensions \in Sizes,
