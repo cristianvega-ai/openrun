@@ -65,6 +65,19 @@ import Synchronization
         #expect(controller.view?.screenText == "before\nafter")
     }
 
+    @Test func theWindowKeepsTheRelaySlotUntilTheViewAppliesTheOutput() async throws {
+        let controller = try makeWindowController(FakeAttachment())
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view != nil }
+        let view = try #require(controller.view)
+        let freedSlots = Mutex(0)
+        // No await runs between the next lines, so the run loop gives the view no turn to parse.
+        controller.handle(.output(Data("held".utf8))) { freedSlots.withLock { $0 += 1 } }
+        #expect(freedSlots.withLock { $0 } == 0 && !view.screenText.contains("held"))
+        view.parseTurn()
+        #expect(freedSlots.withLock { $0 } == 1 && view.screenText.contains("held"))
+    }
+
     @Test func aSnapshotThatCannotBeRestoredDetachesAndClosesTheWindow() async throws {
         let attachment = FakeAttachment(snapshot: Data("not a snapshot".utf8))
         let controller = try makeWindowController(attachment)

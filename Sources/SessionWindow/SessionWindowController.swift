@@ -94,7 +94,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         })
     }
 
-    private func handle(_ event: SessionAttachmentEvent, finish: @escaping @Sendable () -> Void) {
+    /// `finish` frees the slot of the event in the relay. The slot stays held until the view applies the
+    /// output, and that keeps the relay bounded. A test calls this method to see the order.
+    func handle(_ event: SessionAttachmentEvent, finish: @escaping @Sendable () -> Void) {
         guard !isClosed else { finish(); return }
         switch event {
         case .output(let bytes):
