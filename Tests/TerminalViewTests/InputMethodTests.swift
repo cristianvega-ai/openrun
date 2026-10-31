@@ -234,6 +234,97 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
     }
 }
 
+@MainActor @Suite struct ExternalInputMethodTests {
+    @Test func externalTextUsesPasteEncodingAndClearsMarkedText() throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.insertText(NSAttributedString(string: "é😀e\u{301}"), replacementRange: nowhere)
+        #expect(delegate.takeSent() == "é😀e\u{301}" && delegate.questions.isEmpty)
+
+        view.terminal.write("\u{1B}[?2004h")
+        view.setMarkedText("にほん", selectedRange: nowhere, replacementRange: nowhere)
+        view.insertText(NSAttributedString(string: "日本😀\n次\u{1B}[201~"), replacementRange: nowhere)
+        #expect(!view.hasMarkedText() && view.renderer.markedText == nil)
+        #expect(delegate.takeSent() == "\u{1B}[200~日本😀\n次 [201~\u{1B}[201~" && delegate.questions.isEmpty)
+    }
+
+    @Test func externalLinesWaitForApprovalAndUseTheCurrentPasteMode() async throws {
+        let view = try TerminalView()
+        let delegate = PendingPasteDelegate()
+        view.delegate = delegate
+        let text = "echo a\necho b"
+
+        view.insertText(text, replacementRange: nowhere)
+        #expect(delegate.sent.isEmpty)
+        await settle { delegate.questions.count == 1 }
+        #expect(delegate.questions == [text] && delegate.sent.isEmpty)
+        delegate.respond(false)
+        await settle { delegate.responses == 1 }
+        #expect(delegate.sent.isEmpty)
+
+        view.insertText(text, replacementRange: nowhere)
+        await settle { delegate.questions.count == 2 }
+        #expect(delegate.sent.isEmpty)
+        delegate.respond(true)
+        await settle { delegate.responses == 2 }
+        #expect(String(decoding: delegate.sent, as: UTF8.self) == "echo a\recho b")
+        delegate.sent = []
+
+        view.insertText(text, replacementRange: nowhere)
+        await settle { delegate.questions.count == 3 }
+        view.terminal.write("\u{1B}[?2004h")
+        delegate.respond(true)
+        await settle { delegate.responses == 3 }
+        #expect(String(decoding: delegate.sent, as: UTF8.self) == "\u{1B}[200~echo a\necho b\u{1B}[201~")
+    }
+
+    @Test(arguments: ["\n", "\r", "\r\n"])
+    func everyExternalLineBreakAsksWithoutBracketedPaste(lineBreak: String) async throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        let text = "one" + lineBreak + "two"
+        view.insertText(text, replacementRange: nowhere)
+        await settle { !delegate.questions.isEmpty }
+        #expect(delegate.questions == [text] && delegate.sent.isEmpty)
+    }
+
+    @Test func externalControlTextWhileMarkedAndUnsafeTextWithoutAnOwnerSendNothing() async throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        view.setMarkedText("ㅎ", selectedRange: nowhere, replacementRange: nowhere)
+        view.insertText("\u{03}\r", replacementRange: nowhere)
+        #expect(view.hasMarkedText() && delegate.sent.isEmpty && delegate.questions.isEmpty)
+        view.delegate = nil
+        view.insertText("하\r다", replacementRange: nowhere)
+        await settle(seconds: 0.05) { false }
+        #expect(!view.hasMarkedText() && delegate.sent.isEmpty && delegate.questions.isEmpty)
+    }
+    private final class PendingPasteDelegate: TerminalViewDelegate {
+        var sent: [UInt8] = []
+        var questions: [String] = []
+        var responses = 0
+        private var continuation: CheckedContinuation<Bool, Never>?
+
+        func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {}
+        func terminalView(_ view: TerminalView, didChangeTitle title: String) {}
+        func terminalView(_ view: TerminalView, send bytes: [UInt8]) { sent += bytes }
+        func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
+            questions.append(text)
+            let answer = await withCheckedContinuation { continuation = $0 }
+            responses += 1
+            return answer
+        }
+        func respond(_ answer: Bool) {
+            let pending = continuation
+            continuation = nil
+            pending?.resume(returning: answer)
+        }
+    }
+}
+
 /// Japanese, Chinese and Korean input methods, played call by call as they use `NSTextInputClient`.
 /// The owner checks a real input method by hand at the review of the milestone.
 @MainActor @Suite struct InputMethodStringTests {
