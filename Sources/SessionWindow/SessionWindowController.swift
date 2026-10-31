@@ -147,6 +147,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     public func windowWillClose(_ notification: Notification) {
         guard !isClosed else { return }
         isClosed = true
+        relay.cancel()
         if let attachment { detach(attachment) }
         onClose?()
     }
