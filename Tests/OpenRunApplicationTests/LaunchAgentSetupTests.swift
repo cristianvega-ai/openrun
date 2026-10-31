@@ -102,6 +102,15 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
         #expect(registration.calls.isEmpty)
     }
 
+    @Test func aHelloThatTakesTooLongIsShownWithItsLimit() {
+        let questions = Mutex<[LaunchAgentQuestion]>([])
+        let setup = LaunchAgentSetup(
+            source: StandInRegistration(.enabled), connect: { throw LaunchAgentSetup.HelloTimedOut(limit: .seconds(15)) },
+            ask: { question in questions.withLock { $0.append(question) }; return false })
+        #expect(setup.run() == .failed)
+        #expect(questions.withLock { $0 } == [.failed(detail: "The OpenRun session process did not answer hello within 15 seconds.")])
+    }
+
     @Test func aLaterAttemptCanRecoverFromAConnectionFailure() {
         let registration = StandInRegistration(.enabled)
         let first = runSetup(registration, failures: [.noAnswer(detail: "Not available")])

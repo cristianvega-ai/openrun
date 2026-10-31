@@ -10,6 +10,12 @@ struct LaunchAgentSetup {
         case ready, waitingForApproval, failed
     }
 
+    /// The session process took the connection and did not answer hello
+    /// within the limit.
+    struct HelloTimedOut: Error, Equatable {
+        let limit: Duration
+    }
+
     let source: any LaunchAgentStatusSource
     /// Connects to the session process, with a wake when nothing listens.
     let connect: () throws -> Void
@@ -41,6 +47,8 @@ struct LaunchAgentSetup {
                 return fail("launchd could not find the OpenRun session process.")
             }
             return fail(failure.description)
+        } catch let timedOut as HelloTimedOut {
+            return fail("The OpenRun session process did not answer hello within \(timedOut.limit.components.seconds) seconds.")
         } catch {
             return fail(String(describing: error))
         }

@@ -70,6 +70,38 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(record.withLock { $0.questions.count } == 2)
     }
 
+    /// The session process takes the connection and never answers hello, so
+    /// the setup ends only because of its time limit.
+    @MainActor @Test func aSessionProcessThatNeverAnswersHelloEndsTheSetupAndEnablesRetry() async throws {
+        _ = NSApplication.shared
+        let oldMenu = NSApp.mainMenu, oldWindows = NSApp.windowsMenu
+        defer { NSApp.mainMenu = oldMenu; NSApp.windowsMenu = oldWindows }
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let location = try SocketLocation(path: folder.appendingPathComponent("silent.socket").path)
+        let listener = socket(AF_UNIX, SOCK_STREAM, 0)
+        defer { close(listener) }
+        try #require(location.withAddress { bind(listener, $0, $1) } == 0 && listen(listener, 1) == 0)
+        let registration = RecoveryRegistration()
+        registration.state.withLock { $0.status = .enabled }
+        let questions = Mutex<[LaunchAgentQuestion]>([])
+        let application = OpenRunApplication(socket: location, runLaunchAgentSetup: {
+            LaunchAgentSetup(source: registration, connect: {
+                try OpenRunApplication.connect(to: location, helloTimeLimit: .seconds(2))
+            }, ask: { question in
+                questions.withLock { $0.append(question) }
+                return false
+            }).run()
+        })
+        let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
+        let retry = try #require(file.item(withTitle: "Retry Session Process"))
+        application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
+        #expect(!application.validateMenuItem(retry))
+        await waitForRecovery { application.validateMenuItem(retry) }
+        #expect(questions.withLock { $0 } == [.failed(detail: "The OpenRun session process did not answer hello within 2 seconds.")])
+        #expect(application.windows.controllers.isEmpty && registration.state.withLock { $0.calls }.isEmpty)
+    }
+
     @MainActor private func waitForRecovery(_ condition: () -> Bool) async {
         let deadline = Date().addingTimeInterval(5)
         while !condition(), Date() < deadline {

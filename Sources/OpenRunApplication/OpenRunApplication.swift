@@ -67,7 +67,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         guard !setupIsReady, !setupIsRunning else { return }
         setupIsRunning = true
         let run: @Sendable () -> LaunchAgentSetup.Outcome = runLaunchAgentSetup ?? {
-            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: Self.connect, ask: { ModalAlert.ask($0) }).run()
+            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: { try Self.connect(to: SocketLocation(path: SocketLocation.defaultPath)) }, ask: { ModalAlert.ask($0) }).run()
         }
         Thread.detachNewThread { [weak self] in
             let outcome = run()
@@ -115,14 +115,18 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     public func applicationWillTerminate(_ notification: Notification) { windows.closeAll() }
 
     /// Connects as each client does, so a wake goes out only when nothing
-    /// listens on the default socket. Every failure reaches the setup question.
-    nonisolated private static func connect() throws {
+    /// listens on the socket. Every failure reaches the setup question.
+    ///
+    /// The hello has a time limit. A session process that takes the
+    /// connection and never answers would keep the setup running for ever,
+    /// and File > Retry Session Process would stay off.
+    nonisolated static func connect(to location: SocketLocation, helloTimeLimit: Duration = SessionWake.answerTimeLimit) throws {
         do {
-            _ = try SessionClient(location: SocketLocation(path: SocketLocation.defaultPath))
+            _ = try SessionClient(location: location, helloTimeLimit: helloTimeLimit)
         } catch SessionConnectionError.wakeFailed(let failure) {
             throw failure
-        } catch {
-            throw error
+        } catch SessionConnectionError.protocolFailure(.timedOut) {
+            throw LaunchAgentSetup.HelloTimedOut(limit: helloTimeLimit)
         }
     }
 }
