@@ -152,6 +152,28 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
         #expect(registration.calls.isEmpty && registration.status == .enabled)
     }
 
+    @Test(arguments: ["unregister", "register"])
+    func aNewRegistrationThatFailsShowsTheFailure(failingCall: String) {
+        let registration = StandInRegistration(.enabled, failingCall: failingCall)
+        let result = runSetup(registration, answers: [true], registersAgain: true)
+        #expect(result.outcome == .failed && result.connections == 0)
+        #expect(result.questions == [.registerAgain, .failed(detail: "The \(failingCall) call failed.")])
+    }
+
+    @Test(arguments: [LaunchAgentStatus.notRegistered, .notFound])
+    func aNewRegistrationOfAnAgentThatIsNotRegisteredOnlyRegisters(status: LaunchAgentStatus) {
+        let registration = StandInRegistration(status)
+        let result = runSetup(registration, answers: [true], registersAgain: true)
+        #expect(result.outcome == .ready && registration.events == ["register", "connect"])
+    }
+
+    @Test func aNewRegistrationThatNeedsApprovalAsksTheUserToAllowIt() {
+        let registration = StandInRegistration(.enabled, afterRegistration: .requiresApproval)
+        let result = runSetup(registration, answers: [true, false], registersAgain: true)
+        #expect(result.outcome == .waitingForApproval && result.questions == [.registerAgain, .approvalNeeded])
+        #expect(registration.calls == ["unregister", "register"])
+    }
+
     @Test func aLaterAttemptCanRecoverFromAConnectionFailure() {
         let registration = StandInRegistration(.enabled)
         let first = runSetup(registration, failures: [.noAnswer(detail: "Not available")])
