@@ -11,10 +11,10 @@ final class MainMenuResponderTests: XCTestCase {
         try XCTSkipUnless(ProcessInfo.processInfo.environment["OPENRUN_INTERACTIVE_MENU_TEST"] == "1",
             "Set OPENRUN_INTERACTIVE_MENU_TEST=1 in an interactive session; this test activates its window.")
 
-        let app = NSApplication.shared
+        let sharedApplication = NSApplication.shared
         let previousApplication = NSWorkspace.shared.frontmostApplication
-        let oldPolicy = app.activationPolicy()
-        let oldMenu = app.mainMenu, oldWindows = app.windowsMenu
+        let oldPolicy = sharedApplication.activationPolicy()
+        let oldMenu = sharedApplication.mainMenu, oldWindows = sharedApplication.windowsMenu
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
         FileManager.default.createFile(atPath: folder.appendingPathComponent(".zshrc").path, contents: Data())
@@ -24,22 +24,22 @@ final class MainMenuResponderTests: XCTestCase {
         application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer {
             application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
-            app.mainMenu = oldMenu
-            app.windowsMenu = oldWindows
-            if app.isActive, previousApplication?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
+            sharedApplication.mainMenu = oldMenu
+            sharedApplication.windowsMenu = oldWindows
+            if sharedApplication.isActive, previousApplication?.processIdentifier != ProcessInfo.processInfo.processIdentifier {
                 previousApplication?.activate()
             }
-            _ = app.setActivationPolicy(oldPolicy)
+            _ = sharedApplication.setActivationPolicy(oldPolicy)
         }
-        try XCTSkipUnless(app.setActivationPolicy(.regular), "The test host cannot use the regular activation policy.")
+        try XCTSkipUnless(sharedApplication.setActivationPolicy(.regular), "The test host cannot use the regular activation policy.")
         let menu = MainMenu.make(target: application)
-        app.mainMenu = menu
+        sharedApplication.mainMenu = menu
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         await wait { application.windows.controllers.first?.view != nil }
         let controller = try XCTUnwrap(application.windows.controllers.first)
         let view = try XCTUnwrap(controller.view)
-        await wait { app.isActive && app.keyWindow === controller.window && controller.window.isKeyWindow }
-        try XCTSkipUnless(app.isActive && app.keyWindow === controller.window && controller.window.isKeyWindow,
+        await wait { sharedApplication.isActive && sharedApplication.keyWindow === controller.window && controller.window.isKeyWindow }
+        try XCTSkipUnless(sharedApplication.isActive && sharedApplication.keyWindow === controller.window && controller.window.isKeyWindow,
             "The test host did not become active with its OpenRun window key; AppKit cannot resolve its first responder.")
         XCTAssertTrue(controller.window.firstResponder === view)
         let textMenu = try XCTUnwrap(menu.item(withTitle: "View")?.submenu)
@@ -47,7 +47,7 @@ final class MainMenuResponderTests: XCTestCase {
             let item = try XCTUnwrap(textMenu.item(withTitle: title))
             let action = try XCTUnwrap(item.action)
             XCTAssertNil(item.target)
-            XCTAssertTrue((app.target(forAction: action, to: nil, from: item) as AnyObject?) === view)
+            XCTAssertTrue((sharedApplication.target(forAction: action, to: nil, from: item) as AnyObject?) === view)
         }
 
         let first = view.gridSize
@@ -73,7 +73,7 @@ final class MainMenuResponderTests: XCTestCase {
         let otherFirst = otherView.gridSize
         XCTAssertTrue(controller.window.makeFirstResponder(otherView))
         let bigger = try XCTUnwrap(textMenu.item(withTitle: "Make Text Bigger"))
-        XCTAssertTrue((app.target(forAction: try XCTUnwrap(bigger.action), to: nil, from: bigger) as AnyObject?) === otherView)
+        XCTAssertTrue((sharedApplication.target(forAction: try XCTUnwrap(bigger.action), to: nil, from: bigger) as AnyObject?) === otherView)
         XCTAssertTrue(menu.performKeyEquivalent(with: try key("=", .command, in: controller.window, code: 24)))
         await wait { otherView.gridSize.columns < otherFirst.columns }
         XCTAssertLessThan(otherView.gridSize.columns, otherFirst.columns)
