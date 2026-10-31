@@ -30,6 +30,19 @@ enum ConnectionLimits {
     /// limit alone. The limit applies to the output queued after them.
     static let queuedOutputByteLimit = 8 * 1024 * 1024
 
+    /// A client that asks for backpressure pauses output at seven MiB. It
+    /// must then take enough to leave at most four MiB within two seconds.
+    /// A small trickle cannot keep a stalled client attached indefinitely.
+    static let outputHighMark = 7 * 1024 * 1024
+    static let outputLowMark = 4 * 1024 * 1024
+    static let outputRoomTimeLimit: Duration = .seconds(2)
+
+    /// A large snapshot may take longer to transfer and restore. Its client
+    /// gets one bounded grace period, measured from the attach, before the
+    /// normal output-room deadline applies.
+    static let largeSnapshotByteLimit = 1024 * 1024
+    static let largeSnapshotGraceTimeLimit: Duration = .seconds(30)
+
     /// The frames that were read from a client and not yet handled may hold
     /// this many bytes, length fields included. Past it, the reading thread
     /// stops reading, the socket fills up, and the client's own sends wait.

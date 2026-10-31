@@ -29,8 +29,19 @@ final class ClientConnection: Sendable {
         case ended
     }
 
+    private struct OutputWaiter {
+        let identifier: UInt64
+        let continuation: CheckedContinuation<Void, Never>
+    }
+
     private struct State {
         var queuedOutputBytes = 0
+        var writtenOutputBytes = 0
+        var snapshotGraceDeadline: ContinuousClock.Instant?
+        var outputWaiter: OutputWaiter?
+        var outputProgressObserver: (@Sendable () -> Void)?
+        var refusesOutputRoomWait = false
+        var nextOutputWaiterIdentifier: UInt64 = 0
         var phase = Phase.open
         var hasLeft = false
         var leaveHandlers: [@Sendable () -> Void] = []
@@ -145,6 +156,51 @@ final class ClientConnection: Sendable {
         }
     }
 
+    /// The bytes that count toward the output limit, or nil after closing.
+    var queuedOutputBytes: Int? {
+        state.withLock { $0.phase == .open ? $0.queuedOutputBytes : nil }
+    }
+
+    var hasOutputRoomWaiter: Bool {
+        state.withLock { $0.outputWaiter != nil }
+    }
+
+    /// A new viewer must show real progress before it takes precedence over
+    /// another viewer. A small socket buffer alone is not enough.
+    var hasMadeOutputProgress: Bool {
+        state.withLock { $0.writtenOutputBytes >= ConnectionLimits.outputLowMark }
+    }
+
+    func allowLargeSnapshotRestoration(byteCount: Int) {
+        guard byteCount >= ConnectionLimits.largeSnapshotByteLimit else { return }
+        state.withLock { $0.snapshotGraceDeadline = .now + ConnectionLimits.largeSnapshotGraceTimeLimit }
+    }
+
+    func observeOutputProgress(_ observer: (@Sendable () -> Void)?) {
+        state.withLock { $0.outputProgressObserver = observer }
+    }
+
+    /// Lets a session that detaches or ends continue without this client.
+    func stopWaitingForOutputRoom() {
+        let waiter = state.withLock { state -> OutputWaiter? in
+            defer { state.outputWaiter = nil }
+            return state.outputWaiter
+        }
+        waiter?.continuation.resume()
+    }
+
+    /// A client that detaches or a session that ends must not start a new wait.
+    /// The flag covers the time before the waiter is installed.
+    func refuseOutputRoomWait() {
+        state.withLock { $0.refusesOutputRoomWait = true }
+        stopWaitingForOutputRoom()
+    }
+
+    /// A faster viewer must not stay behind this client's full queue. The
+    /// queue can drain between the session's check and this call, so the
+    /// decision and the close use the same lock.
+    func endForOutputBackpressure() { end(onlyIfFull: true) }
+
     /// Frees the message's room in the read-ahead, so the reading thread can
     /// read on.
     func markHandled(_ received: Received) {
@@ -216,14 +272,27 @@ final class ClientConnection: Sendable {
     }
 
     private func write(_ frame: MessageFrame, countedAs size: Int, whenWritten: (@Sendable () -> Void)?) {
+        var outputWasWritten = false
         if !hasEnded {
             do {
                 try connection.send(frame, stallLimit: ConnectionLimits.writeStallLimit)
+                outputWasWritten = frame.kind == .output
             } catch {
                 end()
             }
         }
-        state.withLock { $0.queuedOutputBytes -= size }
+        let result = state.withLock { state -> (OutputWaiter?, (@Sendable () -> Void)?) in
+            state.queuedOutputBytes -= size
+            if outputWasWritten { state.writtenOutputBytes += size }
+            guard state.queuedOutputBytes <= ConnectionLimits.outputLowMark else { return (nil, nil) }
+            if state.outputWaiter != nil { state.snapshotGraceDeadline = nil }
+            defer { state.outputWaiter = nil }
+            let observer = state.phase == .open && state.writtenOutputBytes >= ConnectionLimits.outputLowMark
+                ? state.outputProgressObserver : nil
+            return (state.outputWaiter, observer)
+        }
+        result.0?.continuation.resume()
+        result.1?()
         whenWritten?()
     }
 
@@ -247,13 +316,17 @@ final class ClientConnection: Sendable {
 
     /// Ends the connection at once. Messages that still wait are lost. The
     /// shutdown wakes the reading thread and a write that waits.
-    private func end() {
-        let ends = state.withLock { state -> Bool in
-            guard state.phase != .ended else { return false }
+    private func end(waitingForOutput identifier: UInt64? = nil, onlyIfFull: Bool = false) {
+        let result = state.withLock { state -> (Bool, OutputWaiter?) in
+            guard state.phase != .ended else { return (false, nil) }
+            if let identifier, state.outputWaiter?.identifier != identifier { return (false, nil) }
+            if onlyIfFull, state.queuedOutputBytes < ConnectionLimits.outputHighMark { return (false, nil) }
             state.phase = .ended
-            return true
+            defer { state.outputWaiter = nil }
+            return (true, state.outputWaiter)
         }
-        guard ends else { return }
+        guard result.0 else { return }
+        result.1?.continuation.resume()
         readAhead.close()
         connection.shutdown()
         clientLeft()
