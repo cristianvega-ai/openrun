@@ -21,6 +21,7 @@ AttachSequence AttachSequenceWithoutResizeConfirmation invariant:SizeOrder quick
 AttachSequence AttachSequenceWithoutResizeConfirmationAgreement invariant:ConfirmedSizeAgreement quick
 AttachSequence AttachSequenceLiveness no-error quick
 AttachSequence AttachSequenceThreeClients no-error long
+AttachSequence AttachSequenceThreeClientsLiveness no-error long
 LocalDelivery LocalDelivery no-error quick
 LocalDelivery LocalDeliveryWithoutOrder invariant:ApplicationOrder quick
 LocalDelivery LocalDeliveryWithoutQuiescence invariant:ServerOnlySizeAgreement quick
