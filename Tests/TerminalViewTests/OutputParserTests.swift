@@ -1,5 +1,6 @@
 import Testing
 import TerminalEmulation
+import Synchronization
 @testable import TerminalView
 
 @Suite struct OutputParserTests {
@@ -33,6 +34,47 @@ import TerminalEmulation
         parser.append(Array("日本".utf8))
         #expect(!parser.parse(into: terminal, budget: ParseBudget(limit: .seconds(60))))
         #expect(try screen(terminal) == "日本")
+    }
+
+    @Test func admissionEndsOnlyAfterTheWholeOutputIsParsedOrDiscarded() throws {
+        let terminal = try Terminal(size: TerminalSize(columns: 20, rows: 2), scrollbackLimit: 0)
+        let parser = OutputParser(pieceSize: 2)
+        let finished = Mutex<[Int]>([])
+        parser.append(Array("abcde".utf8)) { finished.withLock { $0.append(1) } }
+        parser.append(Array("fg".utf8)) { finished.withLock { $0.append(2) } }
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(finished.withLock { $0.isEmpty })
+        #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(finished.withLock { $0 } == [1])
+        parser.discard()
+        #expect(finished.withLock { $0 } == [1, 2])
+        #expect(!parser.hasPendingOutput)
+        #expect(try screen(terminal) == "abcde")
+    }
+
+    @Test func sizeAdmissionEndsAfterTheSizeIsApplied() throws {
+        let terminal = try Terminal(size: TerminalSize(columns: 20, rows: 2), scrollbackLimit: 0)
+        let parser = OutputParser()
+        let order = Mutex<[String]>([])
+        parser.onSize = { _, _ in order.withLock { $0.append("applied") } }
+        parser.append(size: TerminalSize(columns: 10, rows: 2), tellsDelegate: false) {
+            order.withLock { $0.append("completed") }
+        }
+        #expect(!parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
+        #expect(order.withLock { $0 } == ["applied", "completed"])
+    }
+
+    @Test func aCloseDuringASizeCallbackReleasesEachEventOnce() throws {
+        let terminal = try Terminal(size: TerminalSize(columns: 20, rows: 2), scrollbackLimit: 0)
+        let parser = OutputParser()
+        let finished = Mutex(0)
+        parser.onSize = { _, _ in parser.discard() }
+        parser.append(size: TerminalSize(columns: 10, rows: 2), tellsDelegate: false) { finished.withLock { $0 += 1 } }
+        parser.append(Array("later".utf8)) { finished.withLock { $0 += 1 } }
+        #expect(!parser.parse(into: terminal, budget: ParseBudget(limit: .seconds(60))))
+        #expect(finished.withLock { $0 == 2 })
+        #expect(try screen(terminal).isEmpty)
     }
 
     @Test func aSizeWaitsForEarlierOutputAndPrecedesLaterOutput() throws {

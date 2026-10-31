@@ -10,6 +10,8 @@ final class OutputParser {
     let pieceSize: Int
     private let queue = TerminalOutputQueue()
     private var offset = 0
+    private var isParsing = false
+    private var discardsAfterParse = false
     var onSize: ((TerminalSize, Bool) -> Void)?
 
     init(pieceSize: Int = 64 * 1024) {
@@ -18,13 +20,20 @@ final class OutputParser {
 
     var hasPendingOutput: Bool { queue.first != nil }
 
-    func append(_ output: some ContiguousBytes) {
-        output.withUnsafeBytes { queue.append(.bytes(Array($0))) }
+    func append(_ output: some ContiguousBytes, completion: (@Sendable () -> Void)? = nil) {
+        output.withUnsafeBytes { queue.append(.bytes(Array($0)), completion: completion) }
     }
 
     /// Applies a size after all output that came before it.
-    func append(size: TerminalSize, tellsDelegate: Bool) {
-        queue.append(.size(size, tellsDelegate: tellsDelegate))
+    func append(size: TerminalSize, tellsDelegate: Bool, completion: (@Sendable () -> Void)? = nil) {
+        queue.append(.size(size, tellsDelegate: tellsDelegate), completion: completion)
+    }
+
+    /// A closed view releases its pending output and its admission slots.
+    func discard() {
+        if isParsing { discardsAfterParse = true; return }
+        while queue.first != nil { queue.removeFirst() }
+        offset = 0
     }
 
     /// Parses pieces until the budget is used. A turn always parses one piece,
@@ -32,6 +41,8 @@ final class OutputParser {
     ///
     /// - Returns: `true` when output is left for another turn.
     func parse(into terminal: Terminal, budget: ParseBudget) -> Bool {
+        precondition(!isParsing)
+        isParsing = true
         repeat {
             guard let event = queue.first else { break }
             switch event {
@@ -41,11 +52,13 @@ final class OutputParser {
                 offset = end
                 if offset == bytes.count { queue.removeFirst(); offset = 0 }
             case .size(let size, let tellsDelegate):
-                queue.removeFirst()
                 guard let onSize else { preconditionFailure("The size has no handler.") }
                 onSize(size, tellsDelegate)
+                queue.removeFirst()
             }
-        } while hasPendingOutput && !budget.isUsed
+        } while hasPendingOutput && !budget.isUsed && !discardsAfterParse
+        isParsing = false
+        if discardsAfterParse { discardsAfterParse = false; discard() }
         return hasPendingOutput
     }
 }

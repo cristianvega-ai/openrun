@@ -2,16 +2,20 @@
 final class TerminalOutputQueue {
     private final class Entry {
         let event: TerminalOutputEvent
+        let completion: (@Sendable () -> Void)?
         var next: Entry?
-        init(_ event: TerminalOutputEvent) { self.event = event }
+        init(_ event: TerminalOutputEvent, completion: (@Sendable () -> Void)?) {
+            self.event = event
+            self.completion = completion
+        }
     }
 
     private var firstEntry: Entry?
     private var lastEntry: Entry?
     var first: TerminalOutputEvent? { firstEntry?.event }
 
-    func append(_ event: TerminalOutputEvent) {
-        let entry = Entry(event)
+    func append(_ event: TerminalOutputEvent, completion: (@Sendable () -> Void)? = nil) {
+        let entry = Entry(event, completion: completion)
         if let lastEntry { lastEntry.next = entry } else { firstEntry = entry }
         lastEntry = entry
     }
@@ -21,6 +25,7 @@ final class TerminalOutputQueue {
         firstEntry = entry.next
         entry.next = nil
         if firstEntry == nil { lastEntry = nil }
+        entry.completion?()
     }
 
     deinit {
