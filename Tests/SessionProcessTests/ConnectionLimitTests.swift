@@ -175,16 +175,16 @@ private func startLargeSnapshotSession(_ process: RunningSessionProcess, size: S
     try #require(await process.waitForScreen(of: identifier, containing: "snapshot-ready", timeout: .seconds(120)))
     return (identifier, go)
 }
-private func attachFlood(_ process: RunningSessionProcess, identifier: String, waitsForOutputRoom: Bool, relaysRawOutput: Bool = false) throws -> (connection: MessageConnection, descriptor: Int32) {
+private func attachFlood(_ process: RunningSessionProcess, identifier: String, size: SessionSize = SessionSize(columns: 80, rows: 24), waitsForOutputRoom: Bool, relaysRawOutput: Bool = false) throws -> (connection: MessageConnection, descriptor: Int32, snapshotByteCount: Int) {
     let client = try greetedConnection(to: process.socketPath)
     try client.connection.send(ClientMessage.attach(identifier: try #require(UUID(uuidString: identifier)),
-        size: SessionSize(columns: 80, rows: 24), relaysRawOutput: relaysRawOutput, waitsForOutputRoom: waitsForOutputRoom))
+        size: size, relaysRawOutput: relaysRawOutput, waitsForOutputRoom: waitsForOutputRoom))
     guard case .attached = try receiveMessage(client.connection, within: 15),
-          case .snapshot = try receiveMessage(client.connection, within: 15) else {
+          case .snapshot(let snapshot) = try receiveMessage(client.connection, within: 15) else {
         client.connection.shutdown()
         throw SessionProtocolError.connectionClosed
     }
-    return client
+    return (client.connection, client.descriptor, snapshot.count)
 }
 extension SessionProcessIntegration {
     /// Each client costs a bounded amount: a thread, a descriptor, and memory
@@ -283,18 +283,23 @@ extension SessionProcessIntegration {
         }
         @Test(.tags(.takesEverySlot)) func aProgramThatEndsWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
-                let go = process.directory.appendingPathComponent("end-go")
-                let script = "echo ready; while [ ! -f '\(go.path)' ]; do sleep 0.02; done; head -c \(ConnectionLimits.outputHighMark) /dev/zero | tr '\\000' x"
-                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
-                try #require(await process.waitForScreen(of: identifier, containing: "ready"))
-                let client = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                // The program prints 10 MiB, more than the 7 MiB that fills the queue, and ends
+                // while the session waits. The large snapshot gives the client 30 seconds, so
+                // only the wake at the end of the program ends the wait in about 2 seconds.
+                let size = SessionSize(columns: 240, rows: 50)
+                let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: #"print "x" x 65536 for 1 .. 160;"#)
+                let client = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { client.connection.shutdown() }
+                try #require(client.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
                 FileManager.default.createFile(atPath: go.path, contents: Data())
                 let start = ContinuousClock.now
                 let gone = await eventually(timeout: .seconds(5)) { (try? process.listedIdentifiers())?.isEmpty == true }
                 print("program-exit-wake: gone \(gone) after \(ContinuousClock.now - start)")
                 #expect(gone)
-                #expect(ContinuousClock.now - start < .seconds(3))
+                // The 2-second pause starts after the queue is full, so the wake ends
+                // the wait about 2.6 seconds after the go file. Without it, the client
+                // stays past 5 seconds.
+                #expect(ContinuousClock.now - start < .seconds(4))
             }
         }
 
