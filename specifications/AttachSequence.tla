@@ -361,6 +361,23 @@ OutputRoomTimeout(client) ==
   /\ outputRoom = client
   /\ Disconnect(client, TRUE)
 
+\* The model leaves out two parts of the output-room wait, for these reasons.
+\*
+\* ClientConnection.refuseOutputRoomWait also makes each later wait of its
+\* client return at once.  In the code, a detach or the end of the session
+\* can come after Session.waitForOutputRoom chooses a client and before that
+\* client installs its waiter.  Without the flag, that waiter would hold the
+\* session for a client that has left, or hold up the shutdown.  The flag
+\* makes the code act as this model does: the choice and the wait are one
+\* step, and Leave and BeginShutdown end a wait that is in place.
+\*
+\* ClientConnection.programDidExit wakes a wait when the program ends, so the
+\* next wait has no snapshot grace.  The model has no clock and no end of the
+\* program, and OutputRoomTimeout can end any wait at any step, so a shorter
+\* deadline adds no behavior.  A wake that only repeats the check adds no
+\* state either: each step that can happen during a wait can also happen
+\* before CheckOutputRoom runs.
+
 BeginShutdown ==
   /\ ~isEnding
   /\ isEnding' = TRUE
