@@ -27,7 +27,7 @@ private final class FloodAttachment: AttachedSession {
     }
 }
 
-@MainActor @Suite(.serialized) struct SustainedOutputFloodTests {
+@MainActor @Suite(.serialized, .isolatedThread) struct SustainedOutputFloodTests {
     @Test(.tags(.takesEverySlot)) func aLongFloodStaysAttachedAndControlCStopsTheProgram() async throws {
         _ = NSApplication.shared
         let process = try RunningSessionProcess()
