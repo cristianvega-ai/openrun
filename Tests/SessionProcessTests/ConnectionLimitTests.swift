@@ -320,6 +320,83 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test(.tags(.takesEverySlot)) func sustainedPacedFloodStaysAttachedAndAcceptsControlC() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let client = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { client.connection.shutdown() }
+                let reader = FloodReader(client.connection, bytesPerSecond: 8 * 1024 * 1024)
+                reader.start()
+                let baseline = try #require(process.memoryFootprint)
+                var maximum = baseline
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                for _ in 0..<10 {
+                    try await Task.sleep(for: .seconds(1))
+                    maximum = max(maximum, try #require(process.memoryFootprint))
+                    try #require(!reader.state.withLock { $0.isDone }, "The flood connection ended before control-C.")
+                }
+                let before = reader.state.withLock { $0.byteCount }
+                try client.connection.send(ClientMessage.input(Data([3])))
+                let stopped = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.isDone } }
+                let result = reader.state.withLock { $0 }
+                print("paced-flood: \(before) bytes; memory \(baseline) to \(maximum); stopped \(stopped); exit \(String(describing: result.exit))")
+                #expect(before > 30 * 1024 * 1024)
+                #expect(maximum - baseline < 128 * 1024 * 1024)
+                #expect(stopped && result.exit == .signaled(signal: SIGINT))
+                #expect(result.failure == nil)
+            }
+        }
+
+        @Test(.tags(.takesEverySlot)) func resizeIsHandledWhileOutputWaitsAndStaysInOrder() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let client = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { client.connection.shutdown() }
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                try await Task.sleep(for: .milliseconds(750))
+                let size = SessionSize(columns: 91, rows: 31)
+                try client.connection.send(ClientMessage.resize(size, requestsConfirmation: true))
+                let applied = try await eventually(timeout: .seconds(1)) {
+                    try listedSummaries(process)?.first(where: { SessionSummary.text(for: $0.identifier) == identifier })?.size == size
+                }
+                let reader = FloodReader(client.connection)
+                reader.start()
+                let followed = await eventually(timeout: .seconds(6)) {
+                    reader.state.withLock { state in state.bytesBeforeSize.map { state.byteCount > $0 } ?? state.isDone }
+                }
+                try client.connection.send(ClientMessage.input(Data([3])))
+                let stopped = await eventually(timeout: .seconds(6)) { reader.state.withLock { $0.isDone } }
+                let result = reader.state.withLock { $0 }
+                #expect(applied && followed)
+                #expect((result.bytesBeforeSize ?? 0) > 0 && result.byteCount > (result.bytesBeforeSize ?? Int.max))
+                #expect(stopped && result.exit == .signaled(signal: SIGINT))
+            }
+        }
+
+        @Test(.tags(.takesEverySlot)) func aDeadViewerDoesNotBlockAFasterViewer() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let stalled = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                // The first client stops reading before the second attaches.
+                try await Task.sleep(for: .milliseconds(750))
+                let active = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { stalled.connection.shutdown(); active.connection.shutdown() }
+                let reader = FloodReader(active.connection)
+                reader.start()
+                let closed = await eventually(timeout: .seconds(8)) { isClosedBySessionProcess(stalled.descriptor) }
+                let before = reader.state.withLock { $0.byteCount }
+                let advanced = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.byteCount > before + 1024 * 1024 || $0.isDone } }
+                let alive = reader.state.withLock { !$0.isDone }
+                try active.connection.send(ClientMessage.input(Data([3])))
+                let stopped = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.isDone } }
+                let result = reader.state.withLock { $0 }
+                print("multiple-viewers: stalled closed \(closed); active advanced \(advanced); bytes \(result.byteCount)")
+                #expect(closed && advanced && alive)
+                #expect(stopped && result.exit == .signaled(signal: SIGINT))
+            }
+        }
+
         /// Closing a client that stopped reading waited for a write
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
