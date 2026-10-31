@@ -74,6 +74,86 @@ private func listedSummaries(_ process: RunningSessionProcess) throws -> [Sessio
 }
 
 
+
+private final class FloodReader: Sendable {
+    struct State {
+        var byteCount = 0
+        var exit: SessionExit?
+        var isDone = false
+        var failure: String?
+        var bytesBeforeSize: Int?
+        var queriesSeen = 0
+        var repliesSent = 0
+    }
+    let state = Mutex(State())
+    private let connection: MessageConnection
+    private let bytesPerSecond: Int?
+    private let tracksQueries: Bool
+    private let answersQueries: Bool
+    init(_ connection: MessageConnection, bytesPerSecond: Int? = nil, tracksQueries: Bool = false, answersQueries: Bool = false) {
+        self.connection = connection
+        self.bytesPerSecond = bytesPerSecond
+        self.tracksQueries = tracksQueries
+        self.answersQueries = answersQueries
+    }
+
+    func start() {
+        Thread { [self] in
+            var bytesSincePause = 0
+            var trailingBytes = Data()
+            do {
+                while let message = try connection.receive(ServerMessage.self) {
+                    switch message {
+                    case .output(let bytes):
+                        state.withLock { $0.byteCount += bytes.count }
+                        if tracksQueries {
+                            let searchable = trailingBytes + bytes
+                            if searchable.range(of: Data([0x1B, 0x5B, 0x63])) != nil {
+                                state.withLock { $0.queriesSeen += 1 }
+                                if answersQueries {
+                                    try connection.send(ClientMessage.input(Data([0x1B, 0x5B, 0x3F, 0x36, 0x32, 0x3B, 0x32, 0x32, 0x63])))
+                                    state.withLock { $0.repliesSent += 1 }
+                                }
+                            }
+                            trailingBytes = Data(searchable.suffix(2))
+                        }
+                        bytesSincePause += bytes.count
+                        if let bytesPerSecond, bytesSincePause >= 256 * 1024 {
+                            Thread.sleep(forTimeInterval: Double(bytesSincePause) / Double(bytesPerSecond))
+                            bytesSincePause = 0
+                        }
+                    case .exited(let exit):
+                        state.withLock { $0.exit = exit }
+                        state.withLock { $0.isDone = true }
+                        return
+                    case .sizeChanged:
+                        state.withLock { $0.bytesBeforeSize = $0.byteCount }
+                    default: break
+                    }
+                }
+            } catch {
+                state.withLock { $0.failure = "\(error)" }
+            }
+            state.withLock { $0.isDone = true }
+        }.start()
+    }
+}
+private func startFlood(_ process: RunningSessionProcess) throws -> (String, URL) {
+    let go = process.directory.appendingPathComponent("flood-go")
+    let script = "while [ ! -e '\(go.path)' ]; do sleep 0.02; done; exec /usr/bin/yes"
+    return (try process.createSession(program: ["/bin/sh", "-c", script]), go)
+}
+private func attachFlood(_ process: RunningSessionProcess, identifier: String, waitsForOutputRoom: Bool, relaysRawOutput: Bool = false) throws -> (connection: MessageConnection, descriptor: Int32) {
+    let client = try greetedConnection(to: process.socketPath)
+    try client.connection.send(ClientMessage.attach(identifier: try #require(UUID(uuidString: identifier)),
+        size: SessionSize(columns: 80, rows: 24), relaysRawOutput: relaysRawOutput, waitsForOutputRoom: waitsForOutputRoom))
+    guard case .attached = try receiveMessage(client.connection, within: 15),
+          case .snapshot = try receiveMessage(client.connection, within: 15) else {
+        client.connection.shutdown()
+        throw SessionProtocolError.connectionClosed
+    }
+    return client
+}
 extension SessionProcessIntegration {
     /// Each client costs a bounded amount: a thread, a descriptor, and memory
     /// for what it sends and receives. Deadlines end the clients that stop
@@ -169,6 +249,22 @@ extension SessionProcessIntegration {
             #expect(ContinuousClock.now - start < .seconds(1))
             #expect(client.queuedOutputBytes != nil)
         }
+        @Test(.tags(.takesEverySlot)) func shutdownWakesAFullViewer() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let stalled = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { stalled.connection.shutdown() }
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                try await Task.sleep(for: .seconds(1))
+                let start = ContinuousClock.now
+                process.send(signal: SIGTERM)
+                let exit = await process.waitForExit(timeout: 6)
+                print("full-viewer-shutdown: exit \(String(describing: exit)) after \(ContinuousClock.now - start)")
+                #expect(exit != nil)
+                #expect(ContinuousClock.now - start < .seconds(6))
+            }
+        }
+        /// Closing a client that stopped reading waited for a write
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
         @Test func stalledClientsAreClosedSoonAfterTheirProgramEnds() async throws {
