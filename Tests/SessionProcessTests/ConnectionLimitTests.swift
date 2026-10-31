@@ -1,7 +1,11 @@
 import Darwin
 import Foundation
+import PseudoTerminal
+@testable import SessionProcess
 import SessionProcessHarness
 import SessionProtocol
+import Synchronization
+import TerminalEmulation
 import Testing
 
 private enum SocketError: Error {
@@ -75,6 +79,66 @@ extension SessionProcessIntegration {
     /// for what it sends and receives. Deadlines end the clients that stop
     /// halfway, and a limit refuses clients past 64.
     @Suite struct ConnectionLimitTests {
+        @Test(.tags(.takesEverySlot), arguments: [true, false])
+        func aViewerThatDrainsAfterTheWaitTakesPrecedence(waitsForOutputRoom: Bool) async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try Session(
+                summary: SessionSummary(identifier: UUID(), folder: "/", command: ["/bin/sleep"], size: size, createdAt: Date()),
+                launch: ProgramLaunch(executablePath: "/bin/sleep", arguments: ["60"], folder: "/", environment: [:],
+                    size: PseudoTerminalSize(columns: size.columns, rows: size.rows)),
+                onFinish: { _ in }
+            )
+            await session.start()
+            defer { Task { await session.terminate() } }
+
+            let (slowSocket, slowPeer) = try MessageConnection.makePair()
+            let (fastSocket, fastPeer) = try MessageConnection.makePair()
+            let slow = ClientConnection(connection: slowSocket)
+            let fast = ClientConnection(connection: fastSocket)
+            defer { slowPeer.shutdown(); fastPeer.shutdown() }
+            try slowPeer.greetSessionProcess()
+            try fastPeer.greetSessionProcess()
+            guard case .attached = try await session.attach(slow, size: size, relaysRawOutput: false,
+                    receivesSizeChanges: false, waitsForOutputRoom: true),
+                  case .attached = try await session.attach(fast, size: size, relaysRawOutput: false,
+                    receivesSizeChanges: false, waitsForOutputRoom: waitsForOutputRoom),
+                  case .attached = try receiveMessage(slowPeer, within: 10),
+                  case .snapshot = try receiveMessage(slowPeer, within: 10),
+                  case .attached = try receiveMessage(fastPeer, within: 10),
+                  case .snapshot = try receiveMessage(fastPeer, within: 10) else {
+                Issue.record("The clients did not attach.")
+                return
+            }
+
+            fast.send(.output(Data(repeating: 65, count: ConnectionLimits.outputLowMark)))
+            guard case .output = try receiveMessage(fastPeer, within: 10) else {
+                Issue.record("The faster client did not receive its first output.")
+                return
+            }
+            try #require(await eventually(timeout: .seconds(5)) { fast.hasMadeOutputProgress })
+            fast.send(.output(Data(repeating: 66, count: 5 * 1024 * 1024)))
+            slow.allowLargeSnapshotRestoration(byteCount: ConnectionLimits.largeSnapshotByteLimit)
+            slow.send(.output(Data(repeating: 67, count: ConnectionLimits.outputHighMark)))
+            try #require(await eventually(timeout: .seconds(5)) {
+                (slow.queuedOutputBytes ?? 0) >= ConnectionLimits.outputHighMark &&
+                (fast.queuedOutputBytes ?? 0) > ConnectionLimits.outputLowMark
+            })
+
+            let wait = Task { await session.waitForOutputRoom() }
+            try #require(await eventually(timeout: .seconds(5)) { slow.hasOutputRoomWaiter },
+                "The slower client must be waiting before the faster client drains.")
+            let start = ContinuousClock.now
+            guard case .output = try receiveMessage(fastPeer, within: 10) else {
+                Issue.record("The faster client did not drain its output.")
+                return
+            }
+            let closed = await eventually(timeout: .seconds(1)) { slow.queuedOutputBytes == nil }
+            print("viewer-progress-after-wait: closed \(closed) after \(ContinuousClock.now - start); waits \(waitsForOutputRoom)")
+            #expect(closed, "A faster client must not wait for the slow client's snapshot grace.")
+            #expect(!fastPeer.peerHasClosed)
+            slowPeer.shutdown()
+            await wait.value
+        }
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
         @Test func stalledClientsAreClosedSoonAfterTheirProgramEnds() async throws {
