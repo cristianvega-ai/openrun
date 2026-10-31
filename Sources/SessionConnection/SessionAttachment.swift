@@ -20,10 +20,10 @@ public final class SessionAttachment: Sendable {
 
     /// Sends `attach` and waits for `attached` and the snapshot. A failure in
     /// their place ends the attach before the caller changes anything.
-    static func attach(on connection: MessageConnection, to identifier: UUID, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> SessionAttachment {
+    static func attach(on connection: MessageConnection, to identifier: UUID, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool, waitsForOutputRoom: Bool = false) throws -> SessionAttachment {
         // A flag that is off stays out of the message. Every session process
         // reads that as off, and the tool sends the message that it sent before.
-        let message = ClientMessage.attach(identifier: identifier, size: size, relaysRawOutput: relaysRawOutput ? true : nil, receivesSizeChanges: receivesSizeChanges ? true : nil)
+        let message = ClientMessage.attach(identifier: identifier, size: size, relaysRawOutput: relaysRawOutput ? true : nil, receivesSizeChanges: receivesSizeChanges ? true : nil, waitsForOutputRoom: waitsForOutputRoom ? true : nil)
         try SessionConnectionError.wrapping { try connection.send(message) }
         for _ in 0..<2 {
             switch try SessionConnectionError.wrapping({ try connection.receive(ServerMessage.self) }) {
@@ -74,8 +74,8 @@ public final class SessionAttachment: Sendable {
 
     /// Starts the thread that receives the events of the session. It hands
     /// each one to `handler` in order, and ends after `exited`, `closed` or
-    /// `failed`. While `handler` runs, the socket holds the later events, so
-    /// a caller on the main thread hands each event on to the main queue.
+    /// `failed`. While `handler` runs, the socket holds the later events.
+    /// A caller that hands events to the main queue must bound that work.
     /// Only the first call starts a thread.
     public func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
         guard !isReceiving.exchange(true, ordering: .acquiringAndReleasing) else { return }

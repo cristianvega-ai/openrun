@@ -39,7 +39,11 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// `receivesSizeChanges` asks for a `sizeChanged` message each time
     /// another client changes the size of the session. It is optional for
     /// the same reason. A client that does not ask never receives one.
-    case attach(identifier: UUID, size: SessionSize, relaysRawOutput: Bool? = nil, receivesSizeChanges: Bool? = nil)
+    ///
+    /// `waitsForOutputRoom` asks the session to pause output when this
+    /// client falls behind. The output queue stays bounded, and a client
+    /// that does not take enough output still loses its connection.
+    case attach(identifier: UUID, size: SessionSize, relaysRawOutput: Bool? = nil, receivesSizeChanges: Bool? = nil, waitsForOutputRoom: Bool? = nil)
     /// Keys for the attached session. Sent as a raw `input` frame.
     case input(Data)
     /// The size of the attached client. The last client to resize wins, and

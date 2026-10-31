@@ -412,6 +412,7 @@ Examples of control payloads:
 {"createSession":{"environment":{"PATH":"/usr/bin"},"folder":"/work","size":{"columns":80,"rows":24}}}
 {"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","relaysRawOutput":true,"size":{"columns":80,"rows":24}}}
 {"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}
+{"attach":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","size":{"columns":80,"rows":24},"waitsForOutputRoom":true}}
 {"resize":{"_0":{"columns":100,"rows":30}}}
 {"resize":{"_0":{"columns":100,"rows":30},"requestsConfirmation":true}}
 {"sizeChanged":{"_0":{"columns":100,"rows":30}}}
@@ -421,6 +422,8 @@ Examples of control payloads:
 
 `relaysRawOutput` is a new optional field of `attach`. It stays inside protocol version 1: a client that leaves it out, or sends `false`, does not relay raw output, and an older session process ignores the field.
 `receivesSizeChanges` is another optional field of `attach`, and it stays inside protocol version 1 too. A client that leaves it out, or sends `false`, receives no changes from other clients. An older session process ignores the field and never sends those changes. By default the client whose own `resize` or `attach` changed the size gets no `sizeChanged`. `openrun attach` keeps that behavior: its real terminal lays out the output at its own size.
+
+`waitsForOutputRoom` is also optional in version 1. A client that leaves it out, or sends `false`, keeps the earlier disconnect behavior. An older session process ignores the field. The app sends `true`; `openrun attach` leaves it out. See "Slow clients" for the pause, deadlines and precedence of a faster viewer.
 
 The server's `hello` can also hold `capabilities.orderedResizeConfirmation`. A missing field means `false`. A client that needs the confirmation must check the capability before it asks, because an older session process ignores the new request field. The app requires it and rejects an unsupported session process; a snapshot still requires the same build (decision of 2026-10-24).
 
@@ -651,7 +654,7 @@ Every error message that `openrun` prints is escaped the same way, including fai
 - A query that is pending when its relaying client detaches gets no reply.
 - A process that starts a session of its own (`setsid`), such as a daemon, outlives `openrun kill` and shutdown. A program that ends by itself leaves its background processes running. Both are owner decisions.
 - The scrollback holds about 10,000 lines. libghostty-vt prunes whole pages, so it keeps somewhat fewer after the first prune; a test measured 9,659.
-- A frame carries at most 64 MiB. An unfinished escape sequence counts at most 32 MiB of that in a snapshot. A client may fall 8 MiB of output behind before it loses its connection. Snapshots and screens do not count toward this. A first control frame that is larger than 8 MiB is queued whole, and the limit for a write that stalls (10 seconds) ends a client that does not read it.
+- A frame carries at most 64 MiB. An unfinished escape sequence counts at most 32 MiB of that in a snapshot. A client can lose its connection when it falls behind. An opted-in window pauses output but can still be closed for a deadline or a faster viewer. An older session process ignores the opt-in. Snapshots and screens do not count toward the 8 MiB limit. A first control frame that is larger than 8 MiB is queued whole, and the limit for a write that stalls (10 seconds) ends a client that does not read it.
 - A snapshot larger than 64 MiB loses its oldest scrollback. So a client of a very wide session with a full, colorful scrollback gets only the newest lines that fit. A client cannot attach at a size at which the screens alone pass 64 MiB.
 - At most 64 clients are connected at once, counting clients whose last messages still go out after they detached. While 64 such clients close, a new client is refused for up to 2 seconds. Other limits and deadlines are in "Limits and deadlines of a client". A client may still send one frame of up to 64 MiB, so 64 clients can make the session process hold 4 GiB for a moment.
 - Input that a program does not read waits: 8 MiB in the session process, 1 MiB more for each client, and up to 16 MiB in `openrun attach`. At that limit `openrun attach` stops reading the terminal until the program reads, and the terminal holds the keys. The detach key then waits behind them, and a signal, such as the SIGHUP of a closed window, still ends the tool. `openrun send` returns only when its text is in the backlog. A program that never reads its input therefore makes `openrun send` wait until the program reads or ends.

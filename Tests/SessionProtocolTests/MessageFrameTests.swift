@@ -306,6 +306,17 @@ import Testing
         try parsedObject(Data(text.utf8))
     }
 
+    @Test func anOlderAttachDecoderIgnoresTheOutputRoomField() throws {
+        enum EarlierMessage: Codable, Equatable {
+            case attach(identifier: UUID, size: SessionSize, relaysRawOutput: Bool?, receivesSizeChanges: Bool?)
+        }
+        let identifier = try #require(UUID(uuidString: Self.identifierText))
+        let size = SessionSize(columns: 80, rows: 24)
+        let frame = try ClientMessage.attach(identifier: identifier, size: size, waitsForOutputRoom: true).frame()
+        let decoded = try JSONDecoder().decode(EarlierMessage.self, from: frame.payload)
+        #expect(decoded == .attach(identifier: identifier, size: size, relaysRawOutput: nil, receivesSizeChanges: nil))
+    }
+
     @Test func everyClientMessageHasTheTextOfTheDocument() throws {
         let identifier = try #require(UUID(uuidString: Self.identifierText))
         let size = SessionSize(columns: 80, rows: 24)
@@ -327,6 +338,8 @@ import Testing
              #"{"attach":{"identifier":"\#(Self.identifierText)","size":{"columns":80,"rows":24}}}"#),
             (.attach(identifier: identifier, size: size, receivesSizeChanges: true),
              #"{"attach":{"identifier":"\#(Self.identifierText)","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}"#),
+            (.attach(identifier: identifier, size: size, waitsForOutputRoom: true),
+             #"{"attach":{"identifier":"\#(Self.identifierText)","size":{"columns":80,"rows":24},"waitsForOutputRoom":true}}"#),
             (.resize(SessionSize(columns: 100, rows: 30)), #"{"resize":{"_0":{"columns":100,"rows":30}}}"#),
             (.detach, #"{"detach":{}}"#),
         ]
@@ -391,6 +404,8 @@ import Testing
             == .attach(identifier: identifier, size: size, relaysRawOutput: nil))
         #expect(try client(#"{"attach":{"identifier":"\#(Self.identifierText)","receivesSizeChanges":true,"size":{"columns":80,"rows":24}}}"#)
             == .attach(identifier: identifier, size: size, receivesSizeChanges: true))
+        #expect(try client(#"{"attach":{"identifier":"\#(Self.identifierText)","waitsForOutputRoom":true,"size":{"columns":80,"rows":24}}}"#)
+            == .attach(identifier: identifier, size: size, waitsForOutputRoom: true))
         #expect(try client(#"{"resize":{"_0":{"columns":100,"rows":30}}}"#) == .resize(SessionSize(columns: 100, rows: 30)))
         #expect(try server(#"{"sizeChanged":{"_0":{"columns":100,"rows":30}}}"#) == .sizeChanged(SessionSize(columns: 100, rows: 30)))
         #expect(try client(#"{"listSessions":{}}"#) == .listSessions)

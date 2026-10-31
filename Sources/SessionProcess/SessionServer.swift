@@ -179,7 +179,7 @@ actor SessionServer {
                 client.send(.exited(exit), countsTowardOutputLimit: false)
                 client.markHandled(received)
                 break messages
-            case .attach(let identifier, let size, let relaysRawOutput, let receivesSizeChanges):
+            case .attach(let identifier, let size, let relaysRawOutput, let receivesSizeChanges, let waitsForOutputRoom):
                 guard attachedSession == nil else {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection is already attached.")))
                     break
@@ -194,7 +194,8 @@ actor SessionServer {
                 }
                 do {
                     let attachment = try await session.attach(
-                        client, size: size, relaysRawOutput: relaysRawOutput ?? false, receivesSizeChanges: receivesSizeChanges ?? false
+                        client, size: size, relaysRawOutput: relaysRawOutput ?? false,
+                        receivesSizeChanges: receivesSizeChanges ?? false, waitsForOutputRoom: waitsForOutputRoom ?? false
                     )
                     switch attachment {
                     case .attached: attachedSession = session

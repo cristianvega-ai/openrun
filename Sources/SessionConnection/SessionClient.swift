@@ -96,7 +96,7 @@ public struct SessionClient: Sendable {
     /// Attaches the connection to a session, and returns once the snapshot
     /// is there. The connection then belongs to the attachment, so the
     /// client takes no more requests.
-    public func attach(to identifier: UUID, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> SessionAttachment {
-        try SessionAttachment.attach(on: connection, to: identifier, size: size, relaysRawOutput: relaysRawOutput, receivesSizeChanges: receivesSizeChanges)
+    public func attach(to identifier: UUID, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool, waitsForOutputRoom: Bool = false) throws -> SessionAttachment {
+        try SessionAttachment.attach(on: connection, to: identifier, size: size, relaysRawOutput: relaysRawOutput, receivesSizeChanges: receivesSizeChanges, waitsForOutputRoom: waitsForOutputRoom)
     }
 }

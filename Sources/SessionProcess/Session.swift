@@ -23,6 +23,7 @@ actor Session {
     private var relayingClients: Set<ObjectIdentifier> = []
     /// The attached clients that asked to hear of each new size.
     private var clientsThatReceiveSizeChanges: Set<ObjectIdentifier> = []
+    private var clientsThatWaitForOutputRoom: Set<ObjectIdentifier> = []
     private let replyGate: ReplyGate
     private var isFinished = false
     private var isEnding = false
@@ -131,7 +132,7 @@ actor Session {
     /// A client that relays raw output has a real terminal that answers queries.
     /// While one is attached, the session process sends no replies. Two such
     /// clients answer the same query twice. That limit is accepted for now.
-    func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool) throws -> Attachment {
+    func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool, waitsForOutputRoom: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
         let previousSize = summary.size
         defer { if summary.size != previousSize { announceSize(changedBy: client) } }
@@ -160,6 +161,7 @@ actor Session {
         clients[ObjectIdentifier(client)] = client
         if relaysRawOutput { relayingClients.insert(ObjectIdentifier(client)) }
         if receivesSizeChanges { clientsThatReceiveSizeChanges.insert(ObjectIdentifier(client)) }
+        if waitsForOutputRoom { clientsThatWaitForOutputRoom.insert(ObjectIdentifier(client)) }
         updateReplyGate()
         return .attached
     }
@@ -168,6 +170,7 @@ actor Session {
         clients[ObjectIdentifier(client)] = nil
         relayingClients.remove(ObjectIdentifier(client))
         clientsThatReceiveSizeChanges.remove(ObjectIdentifier(client))
+        clientsThatWaitForOutputRoom.remove(ObjectIdentifier(client))
         updateReplyGate()
     }
 
@@ -251,6 +254,7 @@ actor Session {
         clients.removeAll()
         relayingClients.removeAll()
         clientsThatReceiveSizeChanges.removeAll()
+        clientsThatWaitForOutputRoom.removeAll()
         updateReplyGate()
         await onFinish(summary.identifier)
     }
