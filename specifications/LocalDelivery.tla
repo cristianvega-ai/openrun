@@ -6,13 +6,15 @@
 \* is one piece. The model assumes successful sizes and a successful attach
 \* with an empty initial server queue. It omits byte sizes, queries and input.
 \*
-\* The local queue includes frames in transit, relay work, and view work.
-\* The snapshot is restored before later events. A size follows earlier
-\* output. The local queue has no capacity limit.
+\* One receiver can hold one frame while the relay waits for room. Relay
+\* admission lasts until the view applies the event. A read that has room
+\* admits the frame in the same step; only a blocked read needs a separate
+\* state. The snapshot is restored
+\* before later events. One oversized output may enter an empty relay.
 EXTENDS Naturals, Sequences, FiniteSets, TLC
 
 CONSTANTS ClientNames, OutputCountLimit, ResizeCountLimit, OutputLimit,
-          AllowOutOfOrderSize
+          LocalEventLimit, LocalByteLimit, AllowOutOfOrderSize
 
 Clients == ClientNames
 \* The clients have the same behavior, so their names can be permuted.
@@ -23,16 +25,23 @@ Message(kind, number, dimensions) ==
 Prefix(count) == [index \in 1..count |-> index]
 Counted(queue) ==
   Cardinality({index \in 1..Len(queue) : queue[index].kind # "snapshot"})
+RelayCount(queue) ==
+  Cardinality({index \in 1..Len(queue) : queue[index].kind # "snapshot"})
+FrameBytes(message) ==
+  IF message.kind = "output" THEN 1 + (message.number % 3) ELSE 0
+RECURSIVE QueueBytes(_)
+QueueBytes(queue) ==
+  IF Len(queue) = 0 THEN 0 ELSE FrameBytes(Head(queue)) + QueueBytes(Tail(queue))
 RemoveAt(queue, index) ==
   SubSeq(queue, 1, index - 1) \o SubSeq(queue, index + 1, Len(queue))
 
 \* accepted and applied record the abstract event order, without attached.
 VARIABLES outputCount, resizeCount, sessionSize, open, attempted, attached,
-          restored, serverQueues, applicationQueues, accepted, applied,
+          restored, serverQueues, receivedFrames, applicationQueues, accepted, applied,
           appliedOutput, drawingSize, wrongSizeOrder
 
 variables == <<outputCount, resizeCount, sessionSize, open, attempted,
-               attached, restored, serverQueues, applicationQueues, accepted,
+               attached, restored, serverQueues, receivedFrames, applicationQueues, accepted,
                applied, appliedOutput, drawingSize, wrongSizeOrder>>
 
 InitialState ==
@@ -44,6 +53,7 @@ InitialState ==
   /\ attached = {}
   /\ restored = {}
   /\ serverQueues = [client \in Clients |-> <<>>]
+  /\ receivedFrames = [client \in Clients |-> <<>>]
   /\ applicationQueues = [client \in Clients |-> <<>>]
   /\ accepted = [client \in Clients |-> <<>>]
   /\ applied = [client \in Clients |-> <<>>]
@@ -74,6 +84,8 @@ Attach(client, dimensions) ==
              ELSE serverQueues[recipient]]
         /\ applicationQueues' = [recipient \in Clients |->
              IF recipient \in full THEN <<>> ELSE applicationQueues[recipient]]
+        /\ receivedFrames' = [recipient \in Clients |->
+             IF recipient \in full THEN <<>> ELSE receivedFrames[recipient]]
         /\ accepted' = [recipient \in Clients |->
              IF recipient = client THEN <<snapshot>>
              ELSE IF recipient \in others \ full THEN Append(accepted[recipient], size)
@@ -94,6 +106,8 @@ ProduceOutput ==
              ELSE serverQueues[client]]
         /\ applicationQueues' = [client \in Clients |->
              IF client \in full THEN <<>> ELSE applicationQueues[client]]
+        /\ receivedFrames' = [client \in Clients |->
+             IF client \in full THEN <<>> ELSE receivedFrames[client]]
         /\ accepted' = [client \in Clients |->
              IF client \in attached \ full THEN Append(accepted[client], message)
              ELSE accepted[client]]
@@ -116,22 +130,48 @@ Resize(client, dimensions) ==
              ELSE serverQueues[recipient]]
         /\ applicationQueues' = [recipient \in Clients |->
              IF recipient \in full THEN <<>> ELSE applicationQueues[recipient]]
+        /\ receivedFrames' = [recipient \in Clients |->
+             IF recipient \in full THEN <<>> ELSE receivedFrames[recipient]]
         /\ accepted' = [recipient \in Clients |->
              IF recipient \in recipients \ full THEN Append(accepted[recipient], message)
              ELSE accepted[recipient]]
         /\ UNCHANGED <<outputCount, attempted, restored, applied, appliedOutput,
              drawingSize, wrongSizeOrder>>
 
+CanAdmit(client, message) ==
+  LET queue == applicationQueues[client]
+  IN message.kind \in {"attached", "snapshot"} \/
+       /\ RelayCount(queue) < LocalEventLimit
+       /\ (RelayCount(queue) = 0 \/
+            QueueBytes(queue) + FrameBytes(message) <= LocalByteLimit)
+
 Receive(client) ==
   /\ client \in open
   /\ Len(serverQueues[client]) > 0
+  /\ Len(receivedFrames[client]) = 0
   /\ LET message == Head(serverQueues[client])
-     IN /\ serverQueues' = [serverQueues EXCEPT ![client] = Tail(@)]
-        /\ applicationQueues' = IF message.kind = "attached" THEN applicationQueues
-             ELSE [applicationQueues EXCEPT ![client] = Append(@, message)]
+     IN /\ message.kind \in {"attached", "snapshot"} \/ client \in restored
+        /\ serverQueues' = [serverQueues EXCEPT ![client] = Tail(@)]
+        /\ receivedFrames' = IF CanAdmit(client, message) THEN receivedFrames
+             ELSE [receivedFrames EXCEPT ![client] = <<message>>]
+        /\ applicationQueues' = IF CanAdmit(client, message) /\ message.kind # "attached"
+             THEN [applicationQueues EXCEPT ![client] = Append(@, message)]
+             ELSE applicationQueues
         /\ UNCHANGED <<outputCount, resizeCount, sessionSize, open, attempted,
              attached, restored, accepted, applied, appliedOutput, drawingSize,
              wrongSizeOrder>>
+
+Admit(client) ==
+  /\ client \in open
+  /\ Len(receivedFrames[client]) = 1
+  /\ LET message == Head(receivedFrames[client])
+     IN /\ CanAdmit(client, message)
+        /\ receivedFrames' = [receivedFrames EXCEPT ![client] = <<>>]
+        /\ applicationQueues' = IF message.kind = "attached" THEN applicationQueues
+             ELSE [applicationQueues EXCEPT ![client] = Append(@, message)]
+        /\ UNCHANGED <<outputCount, resizeCount, sessionSize, open, attempted,
+             attached, restored, serverQueues, accepted, applied, appliedOutput,
+             drawingSize, wrongSizeOrder>>
 
 Apply(client, index) ==
   /\ client \in open
@@ -154,13 +194,14 @@ Apply(client, index) ==
         /\ wrongSizeOrder' = wrongSizeOrder \/
              (message.kind = "output" /\ message.dimensions # drawingSize[client])
         /\ UNCHANGED <<outputCount, resizeCount, sessionSize, open, attempted,
-             attached, serverQueues, accepted>>
+             attached, serverQueues, receivedFrames, accepted>>
 
 Leave(client) ==
   /\ client \in open
   /\ open' = open \ {client}
   /\ attached' = attached \ {client}
   /\ serverQueues' = [serverQueues EXCEPT ![client] = <<>>]
+  /\ receivedFrames' = [receivedFrames EXCEPT ![client] = <<>>]
   /\ applicationQueues' = [applicationQueues EXCEPT ![client] = <<>>]
   /\ UNCHANGED <<outputCount, resizeCount, sessionSize, attempted, restored,
        accepted, applied, appliedOutput, drawingSize, wrongSizeOrder>>
@@ -168,13 +209,19 @@ Leave(client) ==
 Next == ProduceOutput
   \/ (\E client \in Clients, dimensions \in Sizes :
         Attach(client, dimensions) \/ Resize(client, dimensions))
-  \/ (\E client \in Clients : Receive(client) \/ Leave(client))
+  \/ (\E client \in Clients :
+        Receive(client) \/ Admit(client) \/ Leave(client))
   \/ (\E client \in Clients :
         \E index \in 1..Len(applicationQueues[client]) : Apply(client, index))
 
 Specification == InitialState /\ [][Next]_variables
 
 ServerCapacity == \A client \in Clients : Counted(serverQueues[client]) <= OutputLimit
+ApplicationCapacity == \A client \in Clients :
+  /\ RelayCount(applicationQueues[client]) <= LocalEventLimit
+  /\ QueueBytes(applicationQueues[client]) <= LocalByteLimit \/
+       RelayCount(applicationQueues[client]) = 1
+ReceiverCapacity == \A client \in Clients : Len(receivedFrames[client]) <= 1
 NoGapNoRepeat == \A client \in restored :
   /\ appliedOutput[client] = Prefix(Len(appliedOutput[client]))
   /\ Len(appliedOutput[client]) <= outputCount
@@ -184,6 +231,7 @@ SizeOrder == ~wrongSizeOrder
 ConfirmedSizeAgreement ==
   (\A client \in Clients :
      /\ Len(serverQueues[client]) = 0
+     /\ Len(receivedFrames[client]) = 0
      /\ Len(applicationQueues[client]) = 0)
   => (\A client \in attached : drawingSize[client] = sessionSize)
 
@@ -191,6 +239,7 @@ ConfirmedSizeAgreement ==
 \* control show the size marker behind output, not only a frame in transit.
 ServerOnlySizeAgreement ==
   /\ (\A client \in Clients : Len(serverQueues[client]) = 0)
+  /\ (\A client \in Clients : Len(receivedFrames[client]) = 0)
   /\ (\E client \in attached :
         \E index \in 1..Len(applicationQueues[client]) :
           applicationQueues[client][index].kind = "output")
