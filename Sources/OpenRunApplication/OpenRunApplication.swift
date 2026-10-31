@@ -67,7 +67,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         guard !setupIsReady, !setupIsRunning else { return }
         setupIsRunning = true
         let run: @Sendable () -> LaunchAgentSetup.Outcome = runLaunchAgentSetup ?? {
-            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: Self.connect, ask: Self.ask).run()
+            LaunchAgentSetup(source: LaunchAgentRegistration(), connect: Self.connect, ask: { ModalAlert.ask($0) }).run()
         }
         Thread.detachNewThread { [weak self] in
             let outcome = run()
@@ -123,20 +123,6 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
             throw failure
         } catch {
             throw error
-        }
-    }
-
-    nonisolated private static func ask(_ question: LaunchAgentQuestion) -> Bool {
-        DispatchQueue.main.sync {
-            MainActor.assumeIsolated {
-                let words = question.words
-                let alert = NSAlert()
-                alert.messageText = words.title
-                alert.informativeText = words.message
-                for button in words.buttons { alert.addButton(withTitle: button) }
-                NSApp.activate()
-                return alert.runModal() == .alertFirstButtonReturn
-            }
         }
     }
 }
