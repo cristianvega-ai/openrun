@@ -397,6 +397,67 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test(.tags(.takesEverySlot), arguments: [true, false])
+        func replyGateFollowsRelayingClientsWhileOutputWaits(terminalAnswers: Bool) async throws {
+            try await RunningSessionProcess.run { process in
+                let flood = process.directory.appendingPathComponent("query-flood")
+                let first = process.directory.appendingPathComponent("query-first")
+                let second = process.directory.appendingPathComponent("query-second")
+                let script = """
+                stty raw -echo opost
+                printf 'READY\\n'
+                while [ ! -e '\(flood.path)' ]; do sleep 0.02; done
+                head -c 12582912 /dev/zero | tr '\\000' x
+                round() {
+                  while [ ! -e "$1" ]; do sleep 0.02; done
+                  printf '\\033[c'
+                  printf 'reply%s=' "$2"
+                  dd bs=1 count=9 2>/dev/null | od -An -c
+                  stty min 0 time 10
+                  printf 'extra%s=%s\\n' "$2" "$(dd bs=1 count=64 2>/dev/null | wc -c | tr -d ' ')"
+                  stty min 1 time 0
+                  printf 'DONE%s\\n' "$2"
+                }
+                round '\(first.path)' 1
+                round '\(second.path)' 2
+                sleep 60
+                """
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                try #require(await process.waitForScreen(of: identifier, containing: "READY"))
+                let application = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { application.connection.shutdown() }
+                FileManager.default.createFile(atPath: flood.path, contents: Data())
+                try await Task.sleep(for: .milliseconds(750))
+                let terminal = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true, relaysRawOutput: true)
+                defer { terminal.connection.shutdown() }
+                let terminalReader = FloodReader(terminal.connection, tracksQueries: true, answersQueries: terminalAnswers)
+                terminalReader.start()
+                let reader = FloodReader(application.connection)
+                reader.start()
+                FileManager.default.createFile(atPath: first.path, contents: Data())
+                try #require(await eventually(timeout: .seconds(20)) { terminalReader.state.withLock { $0.queriesSeen == 1 || $0.isDone } })
+                try #require(terminalReader.state.withLock { $0.queriesSeen == 1 && !$0.isDone })
+                if !terminalAnswers {
+                    try await Task.sleep(for: .seconds(2))
+                    let premature = try process.screenText(of: identifier).contains("DONE1")
+                    print("reply-gate-control: withheld terminal reply; program completed early \(premature)")
+                    #expect(!premature, "The server must not answer while a terminal relays.")
+                    try terminal.connection.send(ClientMessage.input(Data([0x1B, 0x5B, 0x3F, 0x36, 0x32, 0x3B, 0x32, 0x32, 0x63])))
+                }
+                try #require(await process.waitForScreen(of: identifier, containing: "DONE1", timeout: .seconds(20)))
+                #expect(try process.screenText(of: identifier).contains("extra1=0"))
+                #expect(terminalReader.state.withLock { $0.repliesSent == (terminalAnswers ? 1 : 0) })
+                try terminal.connection.send(ClientMessage.detach)
+                try #require(await eventually(timeout: .seconds(8)) { terminalReader.state.withLock { $0.isDone } })
+                FileManager.default.createFile(atPath: second.path, contents: Data())
+                try #require(await process.waitForScreen(of: identifier, containing: "DONE2"))
+                let screen = try process.screenText(of: identifier)
+                #expect(screen.contains("reply2="))
+                #expect(screen.contains("extra2=0"))
+                #expect(terminalReader.state.withLock { $0.repliesSent == (terminalAnswers ? 1 : 0) })
+            }
+        }
+
         /// Closing a client that stopped reading waited for a write
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
