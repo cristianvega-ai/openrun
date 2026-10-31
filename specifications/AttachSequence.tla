@@ -78,6 +78,12 @@ Counted(queue) ==
 HighMark == IF OutputLimit > 1 THEN OutputLimit - 1 ELSE OutputLimit
 LowMark == IF OutputLimit > 2 THEN OutputLimit - 2 ELSE 0
 CheckingOutputRoom == ClientCount + 1
+\* Each protection of the output-room wait is a definition, so a control can
+\* replace one with FALSE in its configuration file and the other runs need
+\* no new constant.
+PausesForRoom == TRUE
+OutputCount(queue) ==
+  Cardinality({index \in 1..Len(queue) : queue[index].kind = "output"})
 \* Only these clients use the stored sizes in a guard or a property.
 TracksDrawingSize(client) == client \in SizeSubscribers \cup ConfirmingClients
 TracksKnownSizes(client) == client \in SizeSubscribers \ ConfirmingClients
@@ -142,7 +148,7 @@ ParseOutput ==
         /\ open' = open \ full
         /\ waitingClients' = waitingClients \ full
         /\ progressedClients' = progressedClients \ full
-        /\ outputRoom' = IF needsRoom THEN CheckingOutputRoom ELSE 0
+        /\ outputRoom' = IF PausesForRoom /\ needsRoom THEN CheckingOutputRoom ELSE 0
         \* documentation/architecture.md, "Query replies": the decision is
         \* made at the moment the bytes are parsed.  With no relaying client
         \* attached the session answers at once (the handler writes
@@ -413,6 +419,12 @@ OutputWaitIsValid ==
     /\ outputRoom \in attached \cap waitingClients
     /\ Counted(queues[outputRoom]) > LowMark
     /\ ~isEnding
+
+\* The pause holds the program back, so a client that waits for room never
+\* holds more output than the high mark.  Without it, the client fills up
+\* to the limit and loses its connection.
+OutputWaitBoundsQueue ==
+  \A client \in waitingClients : OutputCount(queues[client]) <= HighMark
 
 \* For every client that has a snapshot, the snapshot prefix plus the output
 \* it received is a prefix of the program output.  No gap, no repeat.
