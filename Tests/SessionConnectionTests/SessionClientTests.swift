@@ -1,6 +1,8 @@
 import Darwin
 import Foundation
+import SessionLaunch
 import SessionProtocol
+import Synchronization
 import Testing
 @testable import SessionConnection
 
@@ -41,6 +43,43 @@ import Testing
         let protocolError = SessionProtocolError.incompatibleVersion(ours: MessageFrame.protocolVersion, theirs: theirs)
         #expect(error == .protocolFailure(protocolError))
         #expect(error?.description == protocolError.description)
+    }
+
+    /// A session process that accepts the connection and never answers hello
+    /// leaves the client without a time limit waiting for ever.
+    @Test func aSessionProcessThatNeverSaysHelloEndsTheClientAtTheTimeLimit() throws {
+        let (clientSide, sessionSide) = try MessageConnection.makePair()
+        defer { sessionSide.shutdown() }
+        let started = ContinuousClock.now
+        let error = #expect(throws: SessionConnectionError.self) { try SessionClient(greeting: clientSide, within: .milliseconds(100)) }
+        guard case .protocolFailure(.timedOut) = error else {
+            Issue.record("Expected a time-out, got \(String(describing: error))")
+            return
+        }
+        #expect(ContinuousClock.now - started >= .milliseconds(100))
+    }
+
+    @Test func aHelloThatTakesTooLongAfterTheWakeEndsTheClientWithoutAnotherWake() throws {
+        let location = try Self.socketLocation(named: "silent")
+        defer { unlink(location.path) }
+        let listener = Mutex<Int32?>(nil)
+        defer { listener.withLock { _ = $0.map(close) } }
+        let wakes = Mutex(0)
+        let error = #expect(throws: SessionConnectionError.self) {
+            try SessionClient(location: location, wake: { () throws(SessionWakeFailure) in
+                wakes.withLock { $0 += 1 }
+                // The listener takes the connection into its queue and never reads from it.
+                let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
+                _ = location.withAddress { bind(descriptor, $0, $1) }
+                listen(descriptor, 1)
+                listener.withLock { $0 = descriptor }
+            }, helloTimeLimit: .milliseconds(100))
+        }
+        guard case .protocolFailure(.timedOut) = error else {
+            Issue.record("Expected a time-out, got \(String(describing: error))")
+            return
+        }
+        #expect(wakes.withLock { $0 } == 1)
     }
 
     @Test func aTypedIdentifierFindsItsSessionInTheList() throws {

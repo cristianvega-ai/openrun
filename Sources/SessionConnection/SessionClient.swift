@@ -17,22 +17,33 @@ public struct SessionClient: Sendable {
         try self.init(location: location, wake: Self.launchAgentWake(for: location))
     }
 
+    /// Like `init(location:)`, for a caller that cannot wait without end for
+    /// a session process that accepts the connection and never says hello.
+    /// Past the limit, it throws `SessionProtocolError.timedOut` inside
+    /// `SessionConnectionError.protocolFailure`.
+    public init(location: SocketLocation, helloTimeLimit: Duration) throws {
+        try self.init(location: location, wake: Self.launchAgentWake(for: location), helloTimeLimit: helloTimeLimit)
+    }
+
     /// Sends one wake when no session process listens, or when the
     /// connection closes before hello, and then connects once more. A
     /// launch agent that ends because it is idle closes such a connection.
+    /// A hello that takes too long is no reason for a wake.
     ///
     /// - Parameter wake: Nil for a socket without a launch agent. Tests pass
     ///   their own, because a test cannot register a launch agent.
-    init(location: SocketLocation, wake: Wake?) throws {
+    /// - Parameter helloTimeLimit: The time that each hello may take. Nil
+    ///   waits as long as it takes.
+    init(location: SocketLocation, wake: Wake?, helloTimeLimit: Duration? = nil) throws {
         do {
-            try self.init(greeting: Self.connect(to: location))
+            try self.init(greeting: Self.connect(to: location), within: helloTimeLimit)
         } catch let error as SessionConnectionError where wake != nil && Self.meansNoSessionProcess(error) {
             do {
                 try wake?()
             } catch {
                 throw SessionConnectionError.wakeFailed(error)
             }
-            try self.init(greeting: Self.connect(to: location))
+            try self.init(greeting: Self.connect(to: location), within: helloTimeLimit)
         }
     }
 
@@ -51,8 +62,8 @@ public struct SessionClient: Sendable {
     }
 
     /// Greets the session process on an open connection, such as a test's.
-    init(greeting connection: MessageConnection) throws {
-        self.capabilities = try SessionConnectionError.wrapping { try connection.greetSessionProcess() }
+    init(greeting connection: MessageConnection, within limit: Duration? = nil) throws {
+        self.capabilities = try SessionConnectionError.wrapping { try connection.greetSessionProcess(within: limit) }
         self.connection = connection
     }
 
