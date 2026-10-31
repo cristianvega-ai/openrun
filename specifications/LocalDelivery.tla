@@ -9,12 +9,14 @@
 \* The local queue includes frames in transit, relay work, and view work.
 \* The snapshot is restored before later events. A size follows earlier
 \* output. The local queue has no capacity limit.
-EXTENDS Naturals, Sequences, FiniteSets
+EXTENDS Naturals, Sequences, FiniteSets, TLC
 
-CONSTANTS ClientCount, OutputCountLimit, ResizeCountLimit, OutputLimit,
+CONSTANTS ClientNames, OutputCountLimit, ResizeCountLimit, OutputLimit,
           AllowOutOfOrderSize
 
-Clients == 1..ClientCount
+Clients == ClientNames
+\* The clients have the same behavior, so their names can be permuted.
+ClientSymmetry == Permutations(Clients)
 Sizes == 1..2
 Message(kind, number, dimensions) ==
   [kind |-> kind, number |-> number, dimensions |-> dimensions]
