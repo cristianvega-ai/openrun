@@ -52,12 +52,12 @@ Sizes   == 1..2
 VARIABLES written, parsed, sessionSize, attached, open, attempted,
           queues, restored, received, drawingSize, knownSizes, resizeCount,
           refusedChangedSize, refusedAnnounced, wrongSizeOrder,
-          queryOwners, replies, pendingReplies
+          queryOwners, replies, pendingReplies, isEnding
 
 variables == <<written, parsed, sessionSize, attached, open, attempted,
                queues, restored, received, drawingSize, knownSizes,
                resizeCount, refusedChangedSize, refusedAnnounced,
-               wrongSizeOrder, queryOwners, replies, pendingReplies>>
+               wrongSizeOrder, queryOwners, replies, pendingReplies, isEnding>>
 
 Message(kind, number, dimensions) ==
   [kind |-> kind, number |-> number, dimensions |-> dimensions]
@@ -93,6 +93,7 @@ InitialState ==
   /\ queryOwners = [chunk \in Chunks |-> {}]
   /\ replies = [chunk \in Chunks |-> {}]
   /\ pendingReplies = [client \in Clients |-> {}]
+  /\ isEnding = FALSE
 
 \* PseudoTerminal.readAvailableOutput.  The program writes a chunk to the
 \* pseudo terminal.  Session.run parses it later, on the actor.
@@ -102,13 +103,14 @@ ProgramWrites ==
   /\ UNCHANGED <<parsed, sessionSize, attached, open, attempted, queues,
        restored, received, drawingSize, knownSizes, resizeCount,
        refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
-       replies, pendingReplies>>
+       replies, pendingReplies, isEnding>>
 
 \* Session.run.  The write to the terminal, the reply handler, and the
 \* fan-out to every attached client are one actor step.  The loop waits only
 \* after the fan-out, in waitForAnswerRoom and Task.yield.
 ParseOutput ==
   /\ parsed < written
+  /\ ~isEnding
   /\ LET number == parsed + 1
          relays == attached \cap RelayingClients
          isQuery == number \in QueryChunks
@@ -137,7 +139,7 @@ ParseOutput ==
              ELSE pendingReplies
         /\ UNCHANGED <<written, sessionSize, attached, open, attempted,
              restored, received, drawingSize, knownSizes, resizeCount,
-             refusedChangedSize, refusedAnnounced, wrongSizeOrder>>
+             refusedChangedSize, refusedAnnounced, wrongSizeOrder, isEnding>>
 
 \* Session.attach, which uses Session.apply and the TerminalSnapshot
 \* initializer that captures a terminal.  The whole attach is atomic.
@@ -183,7 +185,7 @@ Attach(client, dimensions, outcome) ==
              (refusedAnnounced \/ (~success /\ didAnnounce))
         /\ UNCHANGED <<written, parsed, open, restored, received,
              drawingSize, knownSizes, resizeCount, wrongSizeOrder, queryOwners,
-             replies, pendingReplies>>
+             replies, pendingReplies, isEnding>>
 
 \* A confirming client waits for its ordered size message before it changes
 \* its local grid.  Each control removes one of these protections.
@@ -217,7 +219,7 @@ Resize(client, dimensions) ==
              THEN [knownSizes EXCEPT ![client] = @ \cup {dimensions}] ELSE knownSizes
         /\ UNCHANGED <<written, parsed, attempted, restored, received,
              refusedChangedSize, refusedAnnounced, wrongSizeOrder,
-             queryOwners, replies, pendingReplies>>
+             queryOwners, replies, pendingReplies, isEnding>>
 
 \* ClientConnection.write.  The serial writer of one client takes the next
 \* message.  This is where the client learns a size or receives output.
@@ -248,7 +250,7 @@ Deliver(client) ==
                      ELSE message.dimensions \notin knownSizes[client]))
         /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
              resizeCount, refusedChangedSize, refusedAnnounced, queryOwners,
-             replies, pendingReplies>>
+             replies, pendingReplies, isEnding>>
 
 \* SessionServer.serve.  A client leaves, by detach or by disconnect.
 \* Session.detach drops it from the client list and updates the reply gate:
@@ -261,7 +263,7 @@ Leave(client) ==
   /\ pendingReplies' = [pendingReplies EXCEPT ![client] = {}]
   /\ UNCHANGED <<written, parsed, sessionSize, attempted, restored, received,
        drawingSize, knownSizes, resizeCount, refusedChangedSize,
-       refusedAnnounced, wrongSizeOrder, queryOwners, replies>>
+       refusedAnnounced, wrongSizeOrder, queryOwners, replies, isEnding>>
 
 \* ClientConnection.enqueue.  The process closes a connection whose queued
 \* output is past the limit.
@@ -269,6 +271,14 @@ DropSlowClient(client) ==
   /\ client \in attached
   /\ Counted(queues[client]) > OutputLimit
   /\ Leave(client)
+
+BeginShutdown ==
+  /\ ~isEnding
+  /\ isEnding' = TRUE
+  /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
+       queues, restored, received, drawingSize, knownSizes, resizeCount,
+       refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners,
+       replies, pendingReplies>>
 
 \* The real terminal of a relaying client answers a query that the session
 \* routed to it.  The answer comes back as an input message, which
@@ -282,9 +292,9 @@ RelayReply(client, chunk) ==
   /\ pendingReplies' = [pendingReplies EXCEPT ![client] = @ \ {chunk}]
   /\ UNCHANGED <<written, parsed, sessionSize, attached, open, attempted,
        queues, restored, received, drawingSize, knownSizes, resizeCount,
-       refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners>>
+       refusedChangedSize, refusedAnnounced, wrongSizeOrder, queryOwners, isEnding>>
 
-Next == ProgramWrites \/ ParseOutput
+Next == ProgramWrites \/ ParseOutput \/ BeginShutdown
   \/ (\E client \in Clients, dimensions \in Sizes,
           outcome \in {"success", "nil", "throw", "applyFailed"} :
         Attach(client, dimensions, outcome))
