@@ -70,6 +70,10 @@ Prefix(count) == [index \in 1..count |-> index]
 Counted(queue) ==
   Cardinality({index \in 1..Len(queue) : queue[index].kind # "snapshot"})
 
+\* Only these clients use the stored sizes in a guard or a property.
+TracksDrawingSize(client) == client \in SizeSubscribers \cup ConfirmingClients
+TracksKnownSizes(client) == client \in SizeSubscribers \ ConfirmingClients
+
 InitialState ==
   /\ written = 0
   /\ parsed = 0
@@ -206,10 +210,11 @@ Resize(client, dimensions) ==
                   ELSE queues[recipient]]
         /\ attached' = attached \ full
         /\ open' = open \ full
-        /\ drawingSize' = IF client \in ConfirmingClients /\ ~ApplySizeBeforeConfirmation
-             THEN drawingSize ELSE [drawingSize EXCEPT ![client] = dimensions]
-        /\ knownSizes' = IF client \in ConfirmingClients /\ ~ApplySizeBeforeConfirmation
-             THEN knownSizes ELSE [knownSizes EXCEPT ![client] = @ \cup {dimensions}]
+        /\ drawingSize' = IF TracksDrawingSize(client) /\
+             (client \notin ConfirmingClients \/ ApplySizeBeforeConfirmation)
+             THEN [drawingSize EXCEPT ![client] = dimensions] ELSE drawingSize
+        /\ knownSizes' = IF TracksKnownSizes(client)
+             THEN [knownSizes EXCEPT ![client] = @ \cup {dimensions}] ELSE knownSizes
         /\ UNCHANGED <<written, parsed, attempted, restored, received,
              refusedChangedSize, refusedAnnounced, wrongSizeOrder,
              queryOwners, replies, pendingReplies>>
@@ -228,10 +233,10 @@ Deliver(client) ==
              ELSE IF message.kind = "output"
              THEN [received EXCEPT ![client] = Append(@, message.number)]
              ELSE received
-        /\ drawingSize' = IF message.kind \in {"snapshot", "size"}
+        /\ drawingSize' = IF message.kind \in {"snapshot", "size"} /\ TracksDrawingSize(client)
              THEN [drawingSize EXCEPT ![client] = message.dimensions]
              ELSE drawingSize
-        /\ knownSizes' = IF message.kind \in {"snapshot", "size"}
+        /\ knownSizes' = IF message.kind \in {"snapshot", "size"} /\ TracksKnownSizes(client)
              THEN [knownSizes EXCEPT ![client] = @ \cup {message.dimensions}]
              ELSE knownSizes
         /\ wrongSizeOrder' =
