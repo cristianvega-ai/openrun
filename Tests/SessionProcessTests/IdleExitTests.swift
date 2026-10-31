@@ -1,8 +1,11 @@
 import Foundation
+@testable import SessionLaunch
 @testable import SessionProcess
 import SessionProcessHarness
 import SessionProtocol
+import Synchronization
 import Testing
+import XPC
 
 extension SessionProcessIntegration {
     /// The launch agent ends itself after a time with no session and no
@@ -12,6 +15,32 @@ extension SessionProcessIntegration {
         static let shortLimit = [setting: "300"]
         /// Five times the short limit.
         static let longerThanTheLimit: Duration = .seconds(1.5)
+
+        @Test func theIdleExitCancelsTheWakeServiceBeforeItClosesTheSocket() async throws {
+            let folder = try RunningSessionProcess.makeDirectory()
+            defer { try? FileManager.default.removeItem(at: folder) }
+            let location = try SocketLocation(path: folder.appendingPathComponent("socket").path)
+            let server = try SessionServer(location: location)
+            await server.start()
+            let service = SessionWakeService(socketPath: location.path)
+            defer { service.cancel() }
+            let endpoint = service.endpoint
+            let first = try XPCSession(endpoint: endpoint)
+            try #require(try SessionWake.wake(session: first, timeLimit: .seconds(2)) == location.path)
+            let cancellationsBeforeClosing = Mutex<[Bool]>([])
+            await IdleExit(environment: [Self.setting: "20"]).wait(for: server) {
+                service.cancel()
+                let next = try? XPCSession(endpoint: endpoint)
+                let answer = next.flatMap { try? SessionWake.wake(session: $0, timeLimit: .seconds(1)) }
+                let connection = try? MessageConnection.connect(to: location)
+                cancellationsBeforeClosing.withLock { $0.append(answer == nil && connection != nil) }
+                connection?.shutdown()
+            }
+            #expect(cancellationsBeforeClosing.withLock { $0 } == [true])
+            #expect(!FileManager.default.fileExists(atPath: location.path))
+            #expect(throws: (any Error).self) { try MessageConnection.connect(to: location) }
+            await server.shutDown()
+        }
 
         @Test func aLaunchAgentWithNoSessionAndNoClientEndsAfterItsTimeLimit() async throws {
             let folder = try RunningSessionProcess.makeDirectory()

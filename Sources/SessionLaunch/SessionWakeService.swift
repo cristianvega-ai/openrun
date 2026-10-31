@@ -16,7 +16,18 @@ public final class SessionWakeService: Sendable {
     /// - Throws: An error when launchd did not start this process for the
     ///   service, such as a session process that was started by hand.
     public init(socketPath: String, machServiceName: String) throws {
-        listener = try XPCListener(service: machServiceName) { request in
+        listener = try XPCListener(service: machServiceName, incomingSessionHandler: Self.handler(socketPath: socketPath))
+    }
+
+    /// An anonymous listener lets a test use the same request handler.
+    init(socketPath: String) {
+        listener = XPCListener(incomingSessionHandler: Self.handler(socketPath: socketPath))
+    }
+
+    var endpoint: XPCEndpoint { listener.endpoint }
+
+    private static func handler(socketPath: String) -> @Sendable (XPCListener.IncomingSessionRequest) -> XPCListener.IncomingSessionRequest.Decision {
+        { request in
             request.accept { (_: WakeRequest) -> (any Encodable)? in
                 WakeAnswer(socketPath: socketPath)
             }

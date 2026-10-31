@@ -83,7 +83,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SessionProcessTests",
-            dependencies: ["SessionProcessHarness", "SessionProcess", "SessionProtocol", "TerminalEmulation"]
+            dependencies: ["SessionProcessHarness", "SessionProcess", "SessionProtocol", "SessionLaunch", "TerminalEmulation"]
         ),
         .testTarget(
             name: "CommandLineToolTests",

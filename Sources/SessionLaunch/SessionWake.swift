@@ -23,6 +23,11 @@ public enum SessionWake {
         } catch {
             throw .notRegistered
         }
+        return try wake(session: session, timeLimit: timeLimit)
+    }
+
+    /// The session may also use an anonymous endpoint in a test.
+    static func wake(session: XPCSession, timeLimit: Duration) throws(SessionWakeFailure) -> String {
         defer { session.cancel(reason: "The wake request is done.") }
         let outcome = Mutex<Result<String, SessionWakeFailure>?>(nil)
         let answered = DispatchSemaphore(value: 0)
