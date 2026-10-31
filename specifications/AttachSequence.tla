@@ -392,6 +392,17 @@ StaleForeignControlSpecification ==
 
 \* A closed client cannot attach again or receive another message. Its old
 \* display sizes do not affect later actions or the safety properties.
+SafetyView ==
+  <<written, parsed, sessionSize, attached, open, attempted, queues,
+    restored, received,
+    [client \in Clients |-> IF client \in open THEN drawingSize[client] ELSE 1],
+    [client \in Clients |-> IF client \in open THEN knownSizes[client] ELSE {1}],
+    resizeCount, refusedChangedSize, refusedAnnounced, wrongSizeOrder,
+    queryOwners, replies, pendingReplies, waitingClients, progressedClients,
+    outputRoom, isEnding>>
+
+\* The agreement control restricts its scenario to a resize while an older
+\* foreign size waits in the client's queue.  The protection alone is removed.
 \* The safety properties.
 \* ---------------------------------------------------------------------------
 
