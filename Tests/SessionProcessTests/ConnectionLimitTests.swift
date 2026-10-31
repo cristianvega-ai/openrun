@@ -458,6 +458,46 @@ extension SessionProcessIntegration {
             }
         }
 
+        @Test(.tags(.takesEverySlot)) func detachWakesAFullViewer() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let stalled = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { stalled.connection.shutdown() }
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                try await Task.sleep(for: .milliseconds(750))
+                try stalled.connection.send(ClientMessage.detach)
+                let active = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { active.connection.shutdown() }
+                let reader = FloodReader(active.connection)
+                reader.start()
+                let advanced = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
+                try active.connection.send(ClientMessage.input(Data([3])))
+                let stopped = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.isDone } }
+                let result = reader.state.withLock { $0 }
+                #expect(advanced && result.byteCount > 1024 * 1024)
+                #expect(stopped && result.exit == .signaled(signal: SIGINT))
+            }
+        }
+
+        @Test(.tags(.takesEverySlot)) func aTrickleCannotKeepAFullViewerAttached() async throws {
+            try await RunningSessionProcess.run { process in
+                let (identifier, go) = try startFlood(process)
+                let stalled = try attachFlood(process, identifier: identifier, waitsForOutputRoom: true)
+                defer { stalled.connection.shutdown() }
+                _ = fcntl(stalled.descriptor, F_SETFL, O_NONBLOCK)
+                FileManager.default.createFile(atPath: go.path, contents: Data())
+                let start = ContinuousClock.now
+                let closed = await eventually(timeout: .seconds(8)) {
+                    var byte: UInt8 = 0
+                    _ = Darwin.read(stalled.descriptor, &byte, 1)
+                    return isClosedBySessionProcess(stalled.descriptor)
+                }
+                print("trickle-viewer: closed \(closed) after \(ContinuousClock.now - start)")
+                #expect(closed)
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
         /// Closing a client that stopped reading waited for a write
         /// Closing a client that stopped reading waited for a write
         /// that never finished, so its descriptor and thread stayed for good.
