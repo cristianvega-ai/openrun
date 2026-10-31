@@ -15,7 +15,7 @@ public enum SessionWakeFailure: Error, Equatable, Sendable, CustomStringConverti
         case .noAnswer(let detail):
             "The session process did not answer the request to start (\(detail))."
         case .timedOut(let limit):
-            "The session process did not answer the request to start within \(limit.components.seconds) seconds."
+            "The session process did not answer the request to start within \(limit.components.seconds) seconds. If the agent does not start after a rebuild, open OpenRun and choose File > Register Session Process Again."
         }
     }
 }

@@ -78,7 +78,7 @@ import Testing
             try SessionClient(location: location) { () throws(SessionWakeFailure) in throw .timedOut(limit: .seconds(15)) }
         }
         #expect(error == .wakeFailed(.timedOut(limit: .seconds(15))))
-        #expect(error?.description == "The session process did not answer the request to start within 15 seconds.")
+        #expect(error?.description == "The session process did not answer the request to start within 15 seconds. If the agent does not start after a rebuild, open OpenRun and choose File > Register Session Process Again.")
     }
 
     /// Only the path is compared. Nothing connects to the default socket.

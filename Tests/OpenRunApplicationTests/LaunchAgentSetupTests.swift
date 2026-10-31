@@ -114,14 +114,15 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
         #expect(registration.calls.isEmpty)
     }
 
-    @Test func aWakeTimeoutDoesNotSuggestOrPerformARegistration() {
+    @Test func aWakeTimeoutNamesBothMenuItemsAndDoesNotRegister() {
         let timeout = SessionWakeFailure.timedOut(limit: .seconds(15))
         let registration = StandInRegistration(.enabled)
         let result = runSetup(registration, failures: [timeout], answers: [true])
         let question = LaunchAgentQuestion.failed(detail: "The OpenRun session process did not answer within 15 seconds.")
         #expect(result.outcome == .failed && result.questions == [question] && result.connections == 1)
         #expect(question.words.title == "OpenRun could not set up the session process")
-        #expect(question.words.buttons == ["OK"] && !question.words.message.contains("register"))
+        #expect(question.words.buttons == ["OK"])
+        #expect(question.words.message == "The OpenRun session process did not answer within 15 seconds. Choose File > Retry Session Process to try again. If you rebuilt OpenRun, choose File > Register Session Process Again.")
         #expect(registration.calls.isEmpty)
     }
 

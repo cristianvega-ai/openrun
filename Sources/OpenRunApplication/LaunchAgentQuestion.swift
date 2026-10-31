@@ -18,7 +18,7 @@ enum LaunchAgentQuestion: Equatable, Sendable {
              "The session process keeps your shells and agents running when the window closes. Turn on OpenRun in System Settings, General, Login Items & Extensions. Then choose File > Retry Session Process.",
              ["Open System Settings", "Not Now"])
         case .failed(let detail):
-            ("OpenRun could not set up the session process", "\(detail) Choose File > Retry Session Process to try again.", ["OK"])
+            ("OpenRun could not set up the session process", "\(detail) Choose File > Retry Session Process to try again. If you rebuilt OpenRun, choose File > Register Session Process Again.", ["OK"])
         case .registerAgain:
             ("Register the session process again?",
              "A new registration can end the sessions that run now. Use this after a rebuild, when the session process does not start.",

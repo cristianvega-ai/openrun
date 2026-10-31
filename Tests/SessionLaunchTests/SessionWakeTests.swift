@@ -19,7 +19,7 @@ import XPC
 
     @Test func theFailureMessagesDoNotGuessTheCauseOfATimeout() {
         #expect(SessionWakeFailure.notRegistered.description.contains("Open OpenRun once to register it."))
-        #expect(SessionWakeFailure.timedOut(limit: .seconds(15)).description == "The session process did not answer the request to start within 15 seconds.")
+        #expect(SessionWakeFailure.timedOut(limit: .seconds(15)).description == "The session process did not answer the request to start within 15 seconds. If the agent does not start after a rebuild, open OpenRun and choose File > Register Session Process Again.")
     }
 
     @Test func aWakeReceivesTheSocketPathFromTheService() throws {
