@@ -8,6 +8,8 @@ import SessionLaunch
 struct LaunchAgentSetup {
     enum Outcome: Equatable, Sendable {
         case ready, waitingForApproval, failed
+        /// The user chose not to register again, and nothing changed.
+        case canceled
     }
 
     /// The session process took the connection and did not answer hello
@@ -52,6 +54,24 @@ struct LaunchAgentSetup {
         } catch {
             return fail(String(describing: error))
         }
+    }
+
+    /// Registers the agent again, as after a rebuild that launchd refuses to
+    /// start. The status cannot show that launchd refuses the agent, so this
+    /// always asks first. It ends the sessions that run now.
+    func registerAgain() -> Outcome {
+        guard ask(.registerAgain) else { return .canceled }
+        do {
+            // An agent that is not registered has nothing to remove.
+            switch source.status {
+            case .notRegistered, .notFound: break
+            case .enabled, .requiresApproval: try source.unregister()
+            }
+            try source.register()
+        } catch {
+            return fail("\(error)")
+        }
+        return run()
     }
 
     private func waitForApproval() -> Outcome {

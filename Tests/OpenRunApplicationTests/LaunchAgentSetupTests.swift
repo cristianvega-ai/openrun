@@ -5,36 +5,59 @@ import Testing
 
 /// A stand-in for SMAppService, because a test cannot register an agent.
 private final class StandInRegistration: LaunchAgentStatusSource {
-    private let state: Mutex<(status: LaunchAgentStatus, afterRegistration: LaunchAgentStatus, calls: [String])>
-
-    init(_ status: LaunchAgentStatus, afterRegistration: LaunchAgentStatus = .enabled) {
-        state = Mutex((status, afterRegistration, []))
+    private struct Fault: Error, CustomStringConvertible {
+        let call: String
+        var description: String { "The \(call) call failed." }
     }
 
-    var calls: [String] { state.withLock { $0.calls } }
+    private let state: Mutex<(status: LaunchAgentStatus, afterRegistration: LaunchAgentStatus, calls: [String], failingCall: String?)>
+
+    /// - Parameter failingCall: The call that throws, "register" or "unregister".
+    init(_ status: LaunchAgentStatus, afterRegistration: LaunchAgentStatus = .enabled, failingCall: String? = nil) {
+        state = Mutex((status, afterRegistration, [], failingCall))
+    }
+
+    /// The calls of the setup to the registration, and each connection, in order.
+    var events: [String] { state.withLock { $0.calls } }
+    var calls: [String] { events.filter { $0 != "connect" } }
     var status: LaunchAgentStatus { state.withLock { $0.status } }
-    func register() throws { state.withLock { $0.calls.append("register"); $0.status = $0.afterRegistration } }
-    func unregister() throws { state.withLock { $0.calls.append("unregister"); $0.status = .notRegistered } }
+    func record(_ call: String) { state.withLock { $0.calls.append(call) } }
+    func register() throws {
+        try state.withLock {
+            $0.calls.append("register")
+            if $0.failingCall == "register" { throw Fault(call: "register") }
+            $0.status = $0.afterRegistration
+        }
+    }
+    func unregister() throws {
+        try state.withLock {
+            $0.calls.append("unregister")
+            if $0.failingCall == "unregister" { throw Fault(call: "unregister") }
+            $0.status = .notRegistered
+        }
+    }
     func openSystemSettings() { state.withLock { $0.calls.append("openSystemSettings") } }
 }
 
 /// Runs the setup. The connections fail with the failures in order, and
 /// the user gives the answers in order. Returns what the setup asked and
-/// how often it connected.
-private func runSetup(_ registration: StandInRegistration, failures: [SessionWakeFailure?] = [nil], answers: [Bool] = [])
+/// how often it connected. The events of the registration show the order
+/// of the calls and the connections.
+private func runSetup(_ registration: StandInRegistration, failures: [SessionWakeFailure?] = [nil], answers: [Bool] = [], registersAgain: Bool = false)
     -> (outcome: LaunchAgentSetup.Outcome, questions: [LaunchAgentQuestion], connections: Int) {
     let record = Mutex((questions: [LaunchAgentQuestion](), connections: 0))
     let setup = LaunchAgentSetup(
         source: registration,
         connect: { () throws(SessionWakeFailure) in
             let index = record.withLock { $0.connections += 1; return $0.connections - 1 }
+            registration.record("connect")
             if let failure = failures[min(index, failures.count - 1)] { throw failure }
         },
         ask: { question in
             record.withLock { $0.questions.append(question); return answers.count >= $0.questions.count && answers[$0.questions.count - 1] }
         }
     )
-    let outcome = setup.run()
+    let outcome = registersAgain ? setup.registerAgain() : setup.run()
     return record.withLock { (outcome, $0.questions, $0.connections) }
 }
 
@@ -109,6 +132,24 @@ private func runSetup(_ registration: StandInRegistration, failures: [SessionWak
             ask: { question in questions.withLock { $0.append(question) }; return false })
         #expect(setup.run() == .failed)
         #expect(questions.withLock { $0 } == [.failed(detail: "The OpenRun session process did not answer hello within 15 seconds.")])
+    }
+
+    @Test func aNewRegistrationAsksThenUnregistersRegistersAndConnects() {
+        let registration = StandInRegistration(.enabled)
+        let result = runSetup(registration, answers: [true], registersAgain: true)
+        #expect(result.outcome == .ready && result.questions == [.registerAgain])
+        #expect(registration.events == ["unregister", "register", "connect"])
+        #expect(LaunchAgentQuestion.registerAgain.words == (
+            "Register the session process again?",
+            "A new registration can end the sessions that run now. Use this after a rebuild, when the session process does not start.",
+            ["Register", "Cancel"]))
+    }
+
+    @Test func cancelingANewRegistrationChangesNothing() {
+        let registration = StandInRegistration(.enabled)
+        let result = runSetup(registration, answers: [false], registersAgain: true)
+        #expect(result.outcome == .canceled && result.questions == [.registerAgain] && result.connections == 0)
+        #expect(registration.calls.isEmpty && registration.status == .enabled)
     }
 
     @Test func aLaterAttemptCanRecoverFromAConnectionFailure() {
