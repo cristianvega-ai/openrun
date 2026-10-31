@@ -40,7 +40,7 @@ enum ConnectionLimits {
     /// A large snapshot may take longer to transfer and restore. Its client
     /// gets one bounded grace period, measured from the attach, before the
     /// normal output-room deadline applies.
-    static let largeSnapshotByteLimit = 1024 * 1024
+    static let largeSnapshotMinimumByteCount = 1024 * 1024
     static let largeSnapshotGraceTimeLimit: Duration = .seconds(30)
 
     /// The frames that were read from a client and not yet handled may hold

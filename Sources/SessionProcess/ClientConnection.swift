@@ -162,7 +162,9 @@ final class ClientConnection: Sendable {
         state.withLock { $0.phase == .open ? $0.queuedOutputBytes : nil }
     }
 
-    var hasOutputRoomWaiter: Bool {
+    /// Whether the session now waits for this client to make room. A test
+    /// needs this to act only after the wait has begun.
+    var isWaitingForOutputRoom: Bool {
         state.withLock { $0.outputWaiter != nil }
     }
 
@@ -173,7 +175,7 @@ final class ClientConnection: Sendable {
     }
 
     func allowLargeSnapshotRestoration(byteCount: Int) {
-        guard byteCount >= ConnectionLimits.largeSnapshotByteLimit else { return }
+        guard byteCount >= ConnectionLimits.largeSnapshotMinimumByteCount else { return }
         state.withLock { $0.snapshotGraceDeadline = .now + ConnectionLimits.largeSnapshotGraceTimeLimit }
     }
 

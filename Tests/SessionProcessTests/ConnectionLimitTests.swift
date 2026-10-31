@@ -197,7 +197,7 @@ extension SessionProcessIntegration {
             }
             try #require(await eventually(timeout: .seconds(5)) { fast.hasMadeOutputProgress })
             fast.send(.output(Data(repeating: 66, count: 5 * 1024 * 1024)))
-            slow.allowLargeSnapshotRestoration(byteCount: ConnectionLimits.largeSnapshotByteLimit)
+            slow.allowLargeSnapshotRestoration(byteCount: ConnectionLimits.largeSnapshotMinimumByteCount)
             slow.send(.output(Data(repeating: 67, count: ConnectionLimits.outputHighMark)))
             try #require(await eventually(timeout: .seconds(5)) {
                 (slow.queuedOutputBytes ?? 0) >= ConnectionLimits.outputHighMark &&
@@ -205,7 +205,7 @@ extension SessionProcessIntegration {
             })
 
             let wait = Task { await session.waitForOutputRoom() }
-            try #require(await eventually(timeout: .seconds(5)) { slow.hasOutputRoomWaiter },
+            try #require(await eventually(timeout: .seconds(5)) { slow.isWaitingForOutputRoom },
                 "The slower client must be waiting before the faster client drains.")
             let start = ContinuousClock.now
             guard case .output = try receiveMessage(fastPeer, within: 10) else {
