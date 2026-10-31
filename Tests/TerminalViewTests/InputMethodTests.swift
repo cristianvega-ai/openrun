@@ -286,8 +286,21 @@ private let nowhere = NSRange(location: NSNotFound, length: 0)
         view.delegate = delegate
         let text = "one" + lineBreak + "two"
         view.insertText(text, replacementRange: nowhere)
-        await settle { !delegate.questions.isEmpty }
-        #expect(delegate.questions == [text] && delegate.sent.isEmpty)
+        await settle { !delegate.insertionQuestions.isEmpty }
+        #expect(delegate.insertionQuestions == [text] && delegate.questions.isEmpty && delegate.sent.isEmpty)
+    }
+
+    @Test func insertedTextAndAPasteReachTheOwnerAsTheirOwnQuestions() async throws {
+        let view = try TerminalView()
+        let delegate = RecordingDelegate()
+        view.delegate = delegate
+        let pasteboard = FakePasteboard()
+        pasteboard.text = "pasted\nlines"
+        view.pasteboard = pasteboard
+        view.insertText("inserted\nlines", replacementRange: nowhere)
+        view.paste(nil)
+        await settle { delegate.insertionQuestions.count + delegate.questions.count == 2 }
+        #expect(delegate.insertionQuestions == ["inserted\nlines"] && delegate.questions == ["pasted\nlines"])
     }
 
     @Test func externalControlTextWhileMarkedAndUnsafeTextWithoutAnOwnerSendNothing() async throws {

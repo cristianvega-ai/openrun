@@ -10,6 +10,8 @@ import TerminalEmulation
     var titles: [String] = []
     /// The texts of the pastes that asked, and the answer that the user gives.
     var questions: [String] = []
+    /// The texts that arrived without a key press and asked. The answer is `pasteAnswer` too.
+    var insertionQuestions: [String] = []
     var pasteAnswer = false
     var linkQuestions: [String] = []
     var linkAnswer = false
@@ -21,6 +23,11 @@ import TerminalEmulation
 
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool {
         questions.append(text)
+        return pasteAnswer
+    }
+
+    func terminalView(_ view: TerminalView, shouldInsertUnsafeText text: String) async -> Bool {
+        insertionQuestions.append(text)
         return pasteAnswer
     }
 

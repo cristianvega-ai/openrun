@@ -20,17 +20,25 @@ public protocol TerminalViewDelegate: AnyObject {
     /// these bytes. The owner writes them to the session.
     func terminalView(_ view: TerminalView, send bytes: [UInt8])
 
-    /// The user pasted or inserted text with a line break, and the program has not
+    /// The user pasted text with a line break, and the program has not
     /// turned on bracketed paste, so each line could run as a command. The owner asks.
     ///
     /// - Returns: `true` when the user wants the text. The view sends it only after a yes.
     func terminalView(_ view: TerminalView, shouldPasteUnsafeText text: String) async -> Bool
+
+    /// Text with a line break arrived without a key press, such as dictation, and the program has not
+    /// turned on bracketed paste. The question is the same as for a paste, but its words must fit inserted text.
+    /// An owner that does not implement this asks its paste question.
+    func terminalView(_ view: TerminalView, shouldInsertUnsafeText text: String) async -> Bool
 
     /// The user clicked a link that can open another app or a file. The owner asks before opening it.
     func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool
 }
 
 public extension TerminalViewDelegate {
+    func terminalView(_ view: TerminalView, shouldInsertUnsafeText text: String) async -> Bool {
+        await terminalView(view, shouldPasteUnsafeText: text)
+    }
     func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool { false }
     func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {}
     func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) {}

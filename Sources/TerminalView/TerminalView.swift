@@ -369,10 +369,10 @@ public final class TerminalView: NSView {
     /// commands waits for a yes from the delegate. A view with no delegate cannot ask, so it sends nothing.
     @objc public func paste(_ sender: Any?) {
         guard let text = pasteboard.plainText() else { return }
-        pasteText(text)
+        deliverText(text, from: .paste)
     }
 
-    func pasteText(_ text: String) {
+    func deliverText(_ text: String, from source: UnsafeTextSource) {
         guard !text.isEmpty else { return }
         guard UnsafePasteRule.needsQuestion(for: text, bracketedPaste: terminal.isModeEnabled(.bracketedPaste)) else {
             sendTyped(PasteInput.bytes(for: text, terminal: terminal))
@@ -382,7 +382,7 @@ public final class TerminalView: NSView {
         let generation = pasteGeneration
         Task { [weak self, weak delegate] in
             guard let self, let delegate, self.pasteGeneration == generation, self.delegate === delegate else { return }
-            let approved = await delegate.terminalView(self, shouldPasteUnsafeText: text)
+            let approved = await source.approval(of: text, from: self, by: delegate)
             guard approved, self.pasteGeneration == generation, self.delegate === delegate else { return }
             sendTyped(PasteInput.bytes(for: text, terminal: terminal))
         }
