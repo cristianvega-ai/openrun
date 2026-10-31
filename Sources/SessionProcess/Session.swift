@@ -157,6 +157,7 @@ actor Session {
         // A snapshot of a full, colorful scrollback can be larger than the
         // limit for output that waits, so it does not count. The output that
         // follows it does.
+        if waitsForOutputRoom { client.allowLargeSnapshotRestoration(byteCount: snapshot.bytes.count) }
         client.send(.snapshot(Data(snapshot.bytes)), countsTowardOutputLimit: false)
         clients[ObjectIdentifier(client)] = client
         if relaysRawOutput { relayingClients.insert(ObjectIdentifier(client)) }
@@ -171,6 +172,7 @@ actor Session {
         relayingClients.remove(ObjectIdentifier(client))
         clientsThatReceiveSizeChanges.remove(ObjectIdentifier(client))
         clientsThatWaitForOutputRoom.remove(ObjectIdentifier(client))
+        client.refuseOutputRoomWait()
         updateReplyGate()
     }
 
@@ -218,6 +220,7 @@ actor Session {
     @discardableResult
     func terminate() async -> SessionExit {
         isEnding = true
+        for client in clients.values { client.refuseOutputRoomWait() }
         await pseudoTerminal.terminate()
         await runTask?.value
         if let programExit { return programExit }
@@ -234,6 +237,7 @@ actor Session {
                 terminal.write(bytes)
                 let message = ServerMessage.output(Data(bytes))
                 for client in clients.values { client.send(message) }
+                await waitForOutputRoom()
             }
             pseudoTerminal.markOutputConsumed(bytes.count)
             // A program that asks questions and never reads the answers waits
@@ -261,6 +265,31 @@ actor Session {
 
     private func updateReplyGate() {
         replyGate.close(!relayingClients.isEmpty)
+    }
+
+    /// A fast viewer takes precedence over a client whose queue is full.
+    /// Otherwise the program waits, with a deadline for each full client.
+    func waitForOutputRoom() async {
+        while !isEnding {
+            let counts = clients.compactMapValues(\.queuedOutputBytes)
+            let full = clientsThatWaitForOutputRoom.filter { (counts[$0] ?? 0) >= ConnectionLimits.outputHighMark }
+            guard let first = full.first, let client = clients[first] else { return }
+            if counts.contains(where: { $0.key != first && $0.value <= ConnectionLimits.outputLowMark && clients[$0.key]?.hasMadeOutputProgress == true }) {
+                client.endForOutputBackpressure()
+            } else {
+                let otherClients = clients.filter { $0.key != first }.map(\.value)
+                for other in otherClients {
+                    other.observeOutputProgress { [weak client] in client?.stopWaitingForOutputRoom() }
+                }
+                await client.waitForOutputRoom {
+                    // Progress can occur before the waiter is installed.
+                    if otherClients.contains(where: { ($0.queuedOutputBytes ?? Int.max) <= ConnectionLimits.outputLowMark && $0.hasMadeOutputProgress }) {
+                        client.stopWaitingForOutputRoom()
+                    }
+                }
+                for other in otherClients { other.observeOutputProgress(nil) }
+            }
+        }
     }
 
     /// A client that draws the screen itself must lay out the output that

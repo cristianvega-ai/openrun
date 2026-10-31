@@ -176,6 +176,33 @@ final class ClientConnection: Sendable {
         state.withLock { $0.snapshotGraceDeadline = .now + ConnectionLimits.largeSnapshotGraceTimeLimit }
     }
 
+    /// Waits without holding an actor or a thread. A client that cannot
+    /// make enough room by the deadline loses its connection.
+    func waitForOutputRoom(onWaiting: @Sendable () -> Void = {}) async {
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let wait = state.withLock { state -> (UInt64, Duration)? in
+                guard state.phase == .open, !state.refusesOutputRoomWait,
+                      state.queuedOutputBytes >= ConnectionLimits.outputHighMark else { return nil }
+                precondition(state.outputWaiter == nil)
+                state.nextOutputWaiterIdentifier &+= 1
+                let identifier = state.nextOutputWaiterIdentifier
+                state.outputWaiter = OutputWaiter(identifier: identifier, continuation: continuation)
+                let grace = state.snapshotGraceDeadline.map { $0 - .now } ?? .zero
+                return (identifier, max(ConnectionLimits.outputRoomTimeLimit, grace))
+            }
+            guard let (identifier, duration) = wait else {
+                continuation.resume()
+                return
+            }
+            onWaiting()
+            let parts = duration.components
+            let delay = DispatchTimeInterval.nanoseconds(Int(parts.seconds) * 1_000_000_000 + Int(parts.attoseconds / 1_000_000_000))
+            DispatchQueue.global().asyncAfter(deadline: .now() + delay) { [weak self] in
+                self?.end(waitingForOutput: identifier)
+            }
+        }
+    }
+
     func observeOutputProgress(_ observer: (@Sendable () -> Void)?) {
         state.withLock { $0.outputProgressObserver = observer }
     }
