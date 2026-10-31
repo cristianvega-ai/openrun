@@ -2,6 +2,7 @@ import AppKit
 import SessionConnection
 import SessionProcessHarness
 import SessionProtocol
+import TerminalEmulation
 import Synchronization
 import Testing
 @testable import SessionWindow
@@ -26,6 +27,24 @@ private final class TracedAttachment: AttachedSession {
 }
 
 @MainActor @Suite(.serialized) struct WindowBackpressureTests {
+    @Test func sizeAdmissionWaitsForTheViewToApplyTheSize() async throws {
+        let attachment = try FakeAttachment()
+        attachment.record.withLock { $0.confirmsSizes = false }
+        let window = try makeWindowController(attachment)
+        defer { window.window.close() }
+        await waitOnMainThread { window.view != nil }
+        let view = try #require(window.view)
+        let completed = Mutex(false)
+        let changed = TerminalSize(columns: 4, rows: 3)
+        view.write(Data(repeating: 65, count: 128 * 1024))
+        view.followSessionSize(changed) { completed.withLock { $0 = true } }
+        #expect(view.parseTurn(budget: ParseBudget(limit: .zero)))
+        #expect(view.parseTurn(budget: ParseBudget(limit: .zero)))
+        #expect(!completed.withLock { $0 } && view.gridSize != changed)
+        _ = view.parseTurn(budget: ParseBudget(limit: .zero))
+        #expect(completed.withLock { $0 } && view.gridSize == changed)
+    }
+
     @Test func closeReleasesARealBlockedWriterAndWithdrawsItsInput() async throws {
         _ = NSApplication.shared
         let process = try RunningSessionProcess()

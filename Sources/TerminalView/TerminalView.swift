@@ -132,8 +132,8 @@ public final class TerminalView: NSView {
 
     /// Keeps the bytes that a program wrote. The view parses them in turns
     /// with a time limit, and the next frame shows them.
-    public func write(_ bytes: some ContiguousBytes) {
-        parser.append(bytes)
+    public func write(_ bytes: some ContiguousBytes, completion: (@Sendable () -> Void)? = nil) {
+        parser.append(bytes, completion: completion)
         scheduleParseTurn()
     }
 
@@ -472,8 +472,8 @@ public final class TerminalView: NSView {
 
     /// Gives the terminal the size that another client set, and does not tell the delegate,
     /// so two clients never make each other change size again and again (decision of 2026-10-25).
-    public func followSessionSize(_ size: TerminalSize) {
-        resizeTerminal(to: size, tellsDelegate: false)
+    public func followSessionSize(_ size: TerminalSize, completion: (@Sendable () -> Void)? = nil) {
+        resizeTerminal(to: size, tellsDelegate: false, completion: completion)
     }
 
     /// Requests the grid that fits the view when its window becomes key.
@@ -505,12 +505,13 @@ public final class TerminalView: NSView {
         delegate?.terminalView(self, didChangeVisibleGridSize: grid)
     }
 
-    private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool) {
+    private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool, completion: (@Sendable () -> Void)? = nil) {
         if parser.hasPendingOutput {
-            parser.append(size: grid, tellsDelegate: tellsDelegate)
+            parser.append(size: grid, tellsDelegate: tellsDelegate, completion: completion)
             scheduleParseTurn()
         } else {
             applySize(grid, tellsDelegate: tellsDelegate)
+            completion?()
         }
     }
 
