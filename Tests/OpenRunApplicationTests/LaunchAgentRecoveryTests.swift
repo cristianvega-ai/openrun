@@ -15,9 +15,11 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
     func openSystemSettings() { state.withLock { $0.calls.append("openSystemSettings") } }
 }
 
-extension LaunchAgentSetupTests {
-    @MainActor @Test func theRetryMenuRecoversAfterRefusalApprovalAndFailure() async throws {
+@Suite(.serialized) struct LaunchAgentRecoveryTests {
+    @MainActor @Test func theRetryMenuRecoversAfterApprovalTimeoutAndSuccess() async throws {
         _ = NSApplication.shared
+        let oldMenu = NSApp.mainMenu, oldWindows = NSApp.windowsMenu
+        defer { NSApp.mainMenu = oldMenu; NSApp.windowsMenu = oldWindows }
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
         FileManager.default.createFile(atPath: folder.appendingPathComponent(".zshrc").path, contents: Data())
