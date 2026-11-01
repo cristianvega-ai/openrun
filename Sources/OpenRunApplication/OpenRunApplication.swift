@@ -15,6 +15,11 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     private var setupIsRunning = false
     private let makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)?
 
+    /// Only the default socket belongs to the launch agent. A nondefault socket
+    /// with no injected setup would otherwise register the real agent of the
+    /// running bundle, so the start and the File menu use this one rule.
+    private var ownsLaunchAgent: Bool { socket.isDefault || makeLaunchAgentSetup != nil }
+
     init(socket: SocketLocation, makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)? = nil) {
         self.socket = socket
         self.makeLaunchAgentSetup = makeLaunchAgentSetup
@@ -58,8 +63,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
 
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
-        // Only the default socket belongs to the launch agent.
-        guard socket.isDefault || makeLaunchAgentSetup != nil else { return finishSetup(.ready) }
+        guard ownsLaunchAgent else { return finishSetup(.ready) }
         startSetup()
     }
 
@@ -90,7 +94,11 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     }
 
     @objc func retrySessionProcess(_ sender: Any?) { startSetup() }
-    @objc func registerSessionProcessAgain(_ sender: Any?) { startSetup(registeringAgain: true) }
+    @objc func registerSessionProcessAgain(_ sender: Any?) {
+        // A direct call can skip the menu check, so the action checks the rule too.
+        guard ownsLaunchAgent else { return }
+        startSetup(registeringAgain: true)
+    }
 
     @objc func newSession(_ sender: Any?) {
         if setupIsReady { windows.open(makeNewSession()) }
@@ -108,7 +116,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         switch item.action {
         case #selector(newSession(_:)), #selector(attachToSession(_:)): setupIsReady
         case #selector(retrySessionProcess(_:)): !setupIsReady && !setupIsRunning
-        case #selector(registerSessionProcessAgain(_:)): !setupIsRunning
+        case #selector(registerSessionProcessAgain(_:)): ownsLaunchAgent && !setupIsRunning
         default: true
         }
     }

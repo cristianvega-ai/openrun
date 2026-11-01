@@ -95,7 +95,10 @@ import TerminalView
         #expect(titles.firstIndex(of: "Register Session Process Again") == (titles.firstIndex(of: "Retry Session Process") ?? -2) + 1)
         let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
         #expect(registerAgain.action == #selector(OpenRunApplication.registerSessionProcessAgain(_:)) && registerAgain.target === application)
-        #expect(application.validateMenuItem(registerAgain))
+        // This application has a nondefault socket and no injected setup, so
+        // the item is off. Do not send its action here: without the rule, it
+        // would register the real launch agent.
+        #expect(!application.validateMenuItem(registerAgain))
         #expect(edit.item(withTitle: "Copy")?.action == Selector(("copy:")))
         #expect(edit.item(withTitle: "Paste")?.action == Selector(("paste:")))
         for (title, action, key) in [
