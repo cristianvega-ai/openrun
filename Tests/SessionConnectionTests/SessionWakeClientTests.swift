@@ -63,6 +63,39 @@ import Testing
         #expect(wakes.withLock { $0 } == 1)
     }
 
+    @Test func aDisconnectedHelloWakesAndConnectsOnceMore() throws {
+        let location = try Self.socketLocation(named: "disconnected")
+        defer { unlink(location.path) }
+        var attempts = 0
+        var wakes = 0
+        _ = try SessionClient(wake: {
+            wakes += 1
+            try? Self.standIn(on: location, greets: true)
+        }, connect: {
+            attempts += 1
+            if attempts == 1 {
+                throw SessionConnectionError.protocolFailure(.systemCallFailed(function: "write", code: ENOTCONN))
+            }
+            return try SessionClient(greeting: MessageConnection.connect(to: location))
+        })
+        #expect(attempts == 2)
+        #expect(wakes == 1)
+    }
+
+    @Test func anUnrelatedHelloFailureDoesNotWake() throws {
+        var attempts = 0
+        var wakes = 0
+        let failure = SessionConnectionError.protocolFailure(.systemCallFailed(function: "write", code: EINVAL))
+        #expect(throws: failure) {
+            try SessionClient(wake: { wakes += 1 }, connect: {
+                attempts += 1
+                throw failure
+            })
+        }
+        #expect(attempts == 1)
+        #expect(wakes == 0)
+    }
+
     @Test func aClientSendsOnlyOneWake() throws {
         let location = try Self.socketLocation(named: "silent")
         let wakes = Mutex(0)

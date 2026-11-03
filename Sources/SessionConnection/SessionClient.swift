@@ -35,15 +35,21 @@ public struct SessionClient: Sendable {
     /// - Parameter helloTimeLimit: The time that each hello may take. Nil
     ///   waits as long as it takes.
     init(location: SocketLocation, wake: Wake?, helloTimeLimit: Duration? = nil) throws {
+        try self.init(wake: wake) {
+            try Self(greeting: Self.connect(to: location), within: helloTimeLimit)
+        }
+    }
+
+    init(wake: Wake?, connect: () throws -> SessionClient) throws {
         do {
-            try self.init(greeting: Self.connect(to: location), within: helloTimeLimit)
+            self = try connect()
         } catch let error as SessionConnectionError where wake != nil && Self.meansNoSessionProcess(error) {
             do {
                 try wake?()
             } catch {
                 throw SessionConnectionError.wakeFailed(error)
             }
-            try self.init(greeting: Self.connect(to: location), within: helloTimeLimit)
+            self = try connect()
         }
     }
 
@@ -56,7 +62,7 @@ public struct SessionClient: Sendable {
     private static func meansNoSessionProcess(_ error: SessionConnectionError) -> Bool {
         switch error {
         case .noSessionProcess, .protocolFailure(.connectionClosed): true
-        case .protocolFailure(.systemCallFailed(_, let code)): code == ECONNRESET || code == EPIPE
+        case .protocolFailure(.systemCallFailed(_, let code)): code == ECONNRESET || code == EPIPE || code == ENOTCONN
         default: false
         }
     }
