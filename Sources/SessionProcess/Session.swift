@@ -27,6 +27,10 @@ actor Session {
     private let replyGate: ReplyGate
     /// A new size that waits for the answer of a shell's line editor.
     private var lineEditorWait = LineEditorWait()
+    /// How long a new size waits for the answer. zsh and bash answer within
+    /// milliseconds, so the limit only ends a wait for an answer that has
+    /// another form.
+    private let answerTimeLimit: Duration
     private var isFinished = false
     private var isEnding = false
     private var programExit: SessionExit?
@@ -38,16 +42,20 @@ actor Session {
     /// The program starts last, so nothing can fail after it runs. A failure
     /// before it leaves no program running without a session.
     ///
-    /// - Parameter installReplyHandler: Installs the handler on the terminal.
-    ///   Tests replace it to make the installation fail, or to fix the scheme.
+    /// - Parameters:
+    ///   - answerTimeLimit: How long a new size waits for a line editor.
+    ///   - installReplyHandler: Installs the handler on the terminal. Tests
+    ///     replace it to make the installation fail, or to fix the scheme.
     init(
         summary: SessionSummary,
         launch: ProgramLaunch,
         onFinish: @escaping @Sendable (UUID) async -> Void,
+        answerTimeLimit: Duration = .milliseconds(500),
         installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try Session.installReplies(on: $0, handler: $1) }
     ) throws {
         self.summary = summary
         self.onFinish = onFinish
+        self.answerTimeLimit = answerTimeLimit
         let gate = ReplyGate()
         replyGate = gate
         terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: Self.scrollbackLimit)
@@ -365,11 +373,20 @@ actor Session {
         if size.columns > 0, size.rows > 0, size.columns != summary.size.columns, let editor = waitingLineEditor() {
             try Terminal.validate(TerminalSize(size))
             try pseudoTerminal.resize(to: PseudoTerminalSize(size))
-            _ = lineEditorWait.start(request, editor: editor, earlierByteCount: 0)
+            let number = lineEditorWait.start(request, editor: editor, earlierByteCount: 0)
+            Task { [weak self, answerTimeLimit] in
+                try? await Task.sleep(for: answerTimeLimit)
+                await self?.answerTimeLimitPassed(number)
+            }
             return
         }
         if try apply(size, requesterReportsSize: request.reportsItself) { announceSize(changedBy: request.requester) }
         confirm(request)
+    }
+
+    private func answerTimeLimitPassed(_ number: Int) {
+        guard !isFinished, lineEditorWait.isWaiting, lineEditorWait.number == number else { return }
+        finishWait()
     }
 
     /// Gives the terminal model the size that the program has, and tells the
