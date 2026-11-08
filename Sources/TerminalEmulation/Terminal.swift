@@ -135,8 +135,14 @@ public final class Terminal {
     }
 
     /// Changes the grid size. The primary screen reflows its text.
-    public func resize(to size: TerminalSize) throws {
+    ///
+    /// - Parameter keepingCursorAtLineStart: Whether a cursor at the start of
+    ///   a blank row that continues the row above keeps a row of its own.
+    ///   The session process asks for this where a shell has erased its
+    ///   lines, and tells each client that follows its size to do the same.
+    public func resize(to size: TerminalSize, keepingCursorAtLineStart: Bool = false) throws {
         try Terminal.validate(size, in: "Terminal.resize")
+        if keepingCursorAtLineStart, size.columns != self.size.columns { keepCursorAtLineStart() }
         // libghostty-vt takes the pixel size of one cell and keeps the pixel
         // size of the whole grid from it. It builds the resize report of
         // mode 2048 from that stored size, so a zero would report a window of
