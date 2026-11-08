@@ -25,6 +25,8 @@ actor Session {
     private var clientsThatReceiveSizeChanges: Set<ObjectIdentifier> = []
     private var clientsThatWaitForOutputRoom: Set<ObjectIdentifier> = []
     private let replyGate: ReplyGate
+    /// A new size that waits for the answer of a shell's line editor.
+    private var lineEditorWait = LineEditorWait()
     private var isFinished = false
     private var isEnding = false
     private var programExit: SessionExit?
@@ -127,15 +129,17 @@ actor Session {
     /// terminal model or the program's terminal refuses the previous size,
     /// both copies keep the new size, and the clients that asked hear of it.
     /// After a successful attach, the other clients that asked hear of a
-    /// new size once.
+    /// new size once. A resize that waits for a line editor applies before
+    /// the attach, without the answer, because the attach comes later.
     ///
     /// A client that relays raw output has a real terminal that answers queries.
     /// While one is attached, the session process sends no replies. Two such
     /// clients answer the same query twice. That limit is accepted for now.
     func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool, waitsForOutputRoom: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
+        while lineEditorWait.isWaiting { finishWait() }
         let previousSize = summary.size
-        defer { if summary.size != previousSize { announceSize(changedBy: client) } }
+        defer { if summary.size != previousSize { announceSize(changedBy: ObjectIdentifier(client)) } }
         try apply(size)
         let snapshot: TerminalSnapshot?
         do {
@@ -172,6 +176,7 @@ actor Session {
         relayingClients.remove(ObjectIdentifier(client))
         clientsThatReceiveSizeChanges.remove(ObjectIdentifier(client))
         clientsThatWaitForOutputRoom.remove(ObjectIdentifier(client))
+        lineEditorWait.forget(ObjectIdentifier(client))
         client.refuseOutputRoomWait()
         updateReplyGate()
     }
@@ -203,10 +208,17 @@ actor Session {
 
     /// Resizes the program's terminal and the session's copy of it. The last
     /// client to resize wins, and the other clients that asked hear of it.
+    ///
+    /// While a shell edits a command line, the copy and the clients take a
+    /// new width where the shell has erased its lines (see `LineEditorWait`).
     func resize(to size: SessionSize, from requester: ClientConnection, confirmsResize: Bool = false) throws {
-        let reportsItself = relayingClients.contains(ObjectIdentifier(requester))
-        if try apply(size, requesterReportsSize: reportsItself) { announceSize(changedBy: requester) }
-        if confirmsResize { requester.send(.sizeChanged(summary.size)) }
+        let request = LineEditorWait.Request(
+            size: size, requester: ObjectIdentifier(requester), confirms: confirmsResize,
+            reportsItself: relayingClients.contains(ObjectIdentifier(requester))
+        )
+        // The editor answers one size at a time, so a waiting size applies first.
+        while lineEditorWait.isWaiting { finishWait() }
+        try change(by: request)
     }
 
     /// The text on the screen, or on the screen and above it.
@@ -238,9 +250,13 @@ actor Session {
             // Output that arrives while the session ends needs no parsing. The
             // screen is about to disappear, and parsing could delay a shutdown.
             if !isEnding {
-                terminal.write(bytes)
-                let message = ServerMessage.output(Data(bytes))
-                for client in clients.values { client.send(message) }
+                var rest = bytes[...]
+                if let end = lineEditorWait.end(in: rest) {
+                    show(rest[..<end.index])
+                    finishWait()
+                    rest = rest[end.index...]
+                }
+                show(rest)
                 await waitForOutputRoom()
             }
             pseudoTerminal.markOutputConsumed(bytes.count)
@@ -266,6 +282,14 @@ actor Session {
         clientsThatWaitForOutputRoom.removeAll()
         updateReplyGate()
         await onFinish(summary.identifier)
+    }
+
+    /// Parses program output and sends it to every client.
+    private func show(_ bytes: ArraySlice<UInt8>) {
+        guard !bytes.isEmpty else { return }
+        terminal.write(bytes)
+        let message = ServerMessage.output(Data(bytes))
+        for client in clients.values { client.send(message) }
     }
 
     private func updateReplyGate() {
@@ -311,10 +335,59 @@ actor Session {
     /// A client that draws the screen itself must lay out the output that
     /// follows for the new size. The message goes out before that output.
     /// The requester knows its own size and does not get it.
-    private func announceSize(changedBy requester: ClientConnection) {
-        for (key, client) in clients where key != ObjectIdentifier(requester) && clientsThatReceiveSizeChanges.contains(key) {
+    private func announceSize(changedBy requester: ObjectIdentifier?) {
+        for (key, client) in clients where key != requester && clientsThatReceiveSizeChanges.contains(key) {
             client.send(.sizeChanged(summary.size))
         }
+    }
+
+    private func confirm(_ request: LineEditorWait.Request) {
+        guard request.confirms, let requester = request.requester else { return }
+        clients[requester]?.send(.sizeChanged(summary.size))
+    }
+
+    /// The line editor that waits at the cursor. zsh and bash turn on
+    /// bracketed paste only while they edit a command line, and the program
+    /// that reads the keys must be such a shell itself: an agent or another
+    /// program in the foreground draws its own way.
+    private func waitingLineEditor() -> LineEditor? {
+        guard !terminal.isAlternateScreenActive, terminal.isModeEnabled(.bracketedPaste),
+              let program = pseudoTerminal.foregroundProgram
+        else { return nil }
+        return InteractiveShell.lineEditor(of: program)
+    }
+
+    /// Applies a resize at once, or starts to wait for a line editor when
+    /// the width changes under one. New rows alone reflow no text, so the
+    /// editor's count of rows stays right.
+    private func change(by request: LineEditorWait.Request) throws {
+        let size = request.size
+        if size.columns > 0, size.rows > 0, size.columns != summary.size.columns, let editor = waitingLineEditor() {
+            try Terminal.validate(TerminalSize(size))
+            try pseudoTerminal.resize(to: PseudoTerminalSize(size))
+            _ = lineEditorWait.start(request, editor: editor, earlierByteCount: 0)
+            return
+        }
+        if try apply(size, requesterReportsSize: request.reportsItself) { announceSize(changedBy: request.requester) }
+        confirm(request)
+    }
+
+    /// Gives the terminal model the size that the program has, and tells the
+    /// clients, in order with the output.
+    private func finishWait() {
+        guard let (finished, _) = lineEditorWait.finish() else { return }
+        if !finished.reportsItself { replyGate.close(false) }
+        do {
+            try terminal.resize(to: TerminalSize(finished.size))
+            summary.size = finished.size
+            announceSize(changedBy: finished.requester)
+        } catch {
+            // The size was checked, so only a lack of memory gets here. The
+            // program goes back to the size of the model.
+            try? pseudoTerminal.resize(to: PseudoTerminalSize(summary.size))
+        }
+        updateReplyGate()
+        confirm(finished)
     }
 
     /// Resizes both copies of the terminal, or neither, and returns whether
@@ -327,8 +400,8 @@ actor Session {
     /// in-band report. A relaying client whose window changed size sends it
     /// from its own terminal. No terminal reports any other change, so the
     /// session process does, also while a relaying client is attached. The
-    /// gate opens only for the resize, which parses no output, so no query
-    /// gets a second reply.
+    /// gate opens only for the resize, which parses no output of the program,
+    /// so no query gets a second reply.
     @discardableResult
     private func apply(_ size: SessionSize, requesterReportsSize: Bool = false) throws -> Bool {
         guard size.columns > 0, size.rows > 0, size != summary.size else { return false }
