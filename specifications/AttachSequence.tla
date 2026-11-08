@@ -2,13 +2,16 @@
 \* A model of one OpenRun Session actor while clients attach, resize, receive
 \* output and leave, and of the query reply gate.
 \*
-\* A Swift actor runs one piece of its code at a time.  This model therefore
-\* makes every method of Session one atomic action.  Session.attach has no
-\* await inside it, so the whole of it is one step: apply the size, capture
-\* the snapshot, send attached and the snapshot, register the client, and
-\* announce the size.  The steps that remain are the ones between the
-\* methods of Session: output parsing, attach, resize, detach, and the
-\* delivery of queued messages to each client.
+\* This model projects each resize onto the step that applies the screen
+\* size and announces it. It does not model the earlier interval in which a
+\* line editor waits and the program has a different size. ResizeWait models
+\* that interval, including coalescing, timeout, attach and confirmations.
+\* The two models have no checked refinement between them.
+\*
+\* Session.attach has no await inside it, so this model makes it one step:
+\* apply the size, capture the snapshot, send attached and the snapshot,
+\* register the client, and announce the size. It also models output parsing,
+\* detach, and the delivery of queued messages to each client.
 \* An attach can opt into output-room waits. The high and low marks use
 \* abstract message units; a deadline and fast-client precedence can end
 \* a stalled client. The snapshot grace period is part of the deadline.
@@ -34,7 +37,7 @@ Sizes   == 1..2
 
 \* written   chunks that the program wrote to the pseudo terminal
 \* parsed    chunks that the Session actor has parsed and fanned out
-\* sessionSize  the one size that the session's terminal and program have
+\* sessionSize  the session's terminal size, projected to settled resizes
 \* attached  clients registered in Session.clients
 \* open      clients whose connection is still open
 \* attempted clients that sent an attach request
