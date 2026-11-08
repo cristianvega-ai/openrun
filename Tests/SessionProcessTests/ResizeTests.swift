@@ -113,27 +113,35 @@ extension SessionProcessIntegration {
 
         /// A snapshot capture that throws, because an unfinished sequence is
         /// larger than the continuation limit, used to leave the new size in
-        /// place and to announce it to the other clients.
+        /// place and to announce it to the other clients. The screen goes back
+        /// as well: a client's copy of it must still match the session's.
         @Test func anAttachWhoseCaptureThrowsLeavesTheSizeAndTellsNoClient() async throws {
             let oversized = 33_554_500
-            let program = ["/bin/sh", "-c", "stty -echo; echo ready; read line; printf '\\033]0;'; head -c \(oversized) /dev/zero | tr '\\0' a; sleep 60"]
+            let program = ["/bin/sh", "-c", "stty -echo; echo \(String(repeating: "w", count: 60)); echo ready; read line; printf '\\033]0;'; head -c \(oversized) /dev/zero | tr '\\0' a; read line; printf '\\007after'; sleep 60"]
             try await RunningSessionProcess.run { process in
                 let identifier = try process.createSession(program: program)
                 #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 let session = try #require(UUID(uuidString: identifier))
                 let first = try WatchedConnection(socketPath: process.socketPath)
                 let size = SessionSize(columns: 80, rows: 24)
-                guard case .attached = try first.request(.attach(identifier: session, size: size, receivesSizeChanges: true)) else {
+                guard case .attached = try first.request(.attach(identifier: session, size: size, receivesSizeChanges: true)),
+                      case .snapshot(let snapshot) = try first.connection.receive(ServerMessage.self) else {
                     Issue.record("The first client did not attach.")
                     return
+                }
+                let copy = try TerminalSnapshot(bytes: Array(snapshot)).restoreTerminal(scrollbackLimit: 10_000)
+                var announced: [SessionSize] = []
+                var received = 0
+                func follow(until isDone: () -> Bool) throws {
+                    while !isDone(), let message = try first.connection.receive(ServerMessage.self) {
+                        if case .output(let bytes) = message { copy.write(bytes); received += bytes.count }
+                        if case .sizeChanged(let changed, _) = message { announced.append(changed) }
+                    }
                 }
                 try first.connection.send(ClientMessage.input(Data("\n".utf8)))
                 // The session parses the bytes before it sends them on, so the
                 // unfinished sequence is in the terminal when all have arrived.
-                var received = 0
-                while received < oversized, let message = try first.connection.receive(ServerMessage.self) {
-                    if case .output(let bytes) = message { received += bytes.count }
-                }
+                try follow { received >= oversized }
                 #expect(received >= oversized)
 
                 let answer = try WatchedConnection(socketPath: process.socketPath)
@@ -148,11 +156,15 @@ extension SessionProcessIntegration {
                 }
                 #expect(summaries.first?.size == size)
 
+                try first.connection.send(ClientMessage.input(Data("\n".utf8)))
+                try follow { ((try? copy.formatted(.plainText)).map { String(decoding: $0, as: UTF8.self) } ?? "").contains("after") }
+                let copyText = String(decoding: try copy.formatted(.plainText), as: UTF8.self)
+                #expect(copyText.contains("ready\nafter"))
+                #expect(try process.screenText(of: identifier).trimmingCharacters(in: .newlines) == copyText)
+                #expect(copy.size == TerminalSize(columns: size.columns, rows: size.rows))
+
                 try first.connection.send(ClientMessage.detach)
-                var announced: [SessionSize] = []
-                while let message = try first.connection.receive(ServerMessage.self) {
-                    if case .sizeChanged(let changed, _) = message { announced.append(changed) }
-                }
+                try follow { false }
                 #expect(announced == [])
             }
         }
