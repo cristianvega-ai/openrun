@@ -63,6 +63,16 @@ private final class FollowingViewer {
     }
 }
 
+/// An interactive bash without its line editor. Its prompt turns on
+/// bracketed paste, so the session waits for an answer that never comes.
+private func makeSilentShell(size: SessionSize, answerTimeLimit: Duration) throws -> Session {
+    try makeSession(
+        "/bin/bash", ["--noediting", "--norc", "-i"],
+        environment: ["PATH": "/usr/bin:/bin", "PS1": "\u{1b}[?2004hready> ", "TERM": "xterm-256color"],
+        size: size, answerTimeLimit: answerTimeLimit
+    )
+}
+
 private func makeSession(_ executable: String, _ arguments: [String], environment: [String: String], size: SessionSize, answerTimeLimit: Duration = .milliseconds(500)) throws -> Session {
     try Session(
         summary: SessionSummary(identifier: UUID(), folder: "/", command: [executable] + arguments, size: size, createdAt: Date()),
@@ -75,6 +85,71 @@ private func makeSession(_ executable: String, _ arguments: [String], environmen
 
 extension SessionProcessIntegration {
     @Suite struct LineEditorResizeTests {
+        /// An interactive bash without its line editor never answers a new
+        /// size. Its prompt turns on bracketed paste, so the session waits.
+        /// The size applies after the time limit, and of the resizes that
+        /// came meanwhile only the newest applies.
+        @Test func aSizeWithoutAnAnswerAppliesAfterTheTimeLimit() async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try makeSilentShell(size: size, answerTimeLimit: .milliseconds(300))
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            #expect(try viewer.follow(until: "ready>"))
+
+            let started = ContinuousClock.now
+            for columns: UInt16 in [60, 70, 50] {
+                try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: true)
+            }
+            try viewer.follow(quiet: .milliseconds(900))
+            #expect(viewer.sizes == [SessionSize(columns: 60, rows: 24), SessionSize(columns: 50, rows: 24)])
+            #expect(ContinuousClock.now - started >= .milliseconds(600))
+            #expect(await session.summary.size == SessionSize(columns: 50, rows: 24))
+            await session.terminate()
+        }
+
+        /// A bash that runs a script has no line editor, also when the script
+        /// turns on bracketed paste. Its erase after a new size is not an
+        /// answer, so the screen takes the size at once, as a terminal does.
+        @Test func aScriptThatTurnsOnBracketedPasteGetsTheSizeAtOnce() async throws {
+            let start = String(repeating: "A", count: 39)
+            let script = """
+            stty raw -echo opost
+            trap 'printf "\\r\\033[KZ\\r\\nDONE\\r\\n"' WINCH
+            printf '\\033[?2004hREADY\\r\\n\(start) X\\r\\033[K'
+            while :; do sleep 0.05; done
+            """
+            let size = SessionSize(columns: 40, rows: 8)
+            let session = try makeSession("/bin/bash", ["-c", script], environment: ["PATH": "/usr/bin:/bin"], size: size)
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            #expect(try viewer.follow(until: start))
+            try await session.resize(to: SessionSize(columns: 80, rows: 8), from: viewer.connection, confirmsResize: true)
+            #expect(try viewer.follow(until: "DONE"))
+            #expect(viewer.sizes == [SessionSize(columns: 80, rows: 8)])
+            #expect(try await session.screenText(includeScrollback: false) == "READY\nZ\nDONE")
+            await session.terminate()
+        }
+
+        /// A size of zero changes nothing, so it must not replace a resize
+        /// that waits. The model of `specifications/ResizeWait.tla` found it.
+        @Test func aZeroSizeDuringTheWaitKeepsTheResizeThatWaits() async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try makeSilentShell(size: size, answerTimeLimit: .milliseconds(300))
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            #expect(try viewer.follow(until: "ready>"))
+            for (columns, confirms) in [(UInt16(60), true), (80, true), (0, false)] {
+                try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: confirms)
+            }
+            try viewer.follow(quiet: .milliseconds(1200))
+            #expect(viewer.sizes == [SessionSize(columns: 60, rows: 24), size])
+            #expect(await session.summary.size == size)
+            await session.terminate()
+        }
+
         /// zsh with `-i` and a script is interactive, but it runs the script
         /// and edits no line. A script that turns on bracketed paste must get
         /// the size at once, not after the time limit of a wait.
