@@ -51,6 +51,8 @@ public final class PseudoTerminal: @unchecked Sendable {
     private var writeSourceIsSuspended = true
     private var readSourceIsSuspended = false
     private var unconsumedBytes = 0
+    /// Every byte of output read so far.
+    private var readByteCount = 0
     private var sourcesStillUsingMaster = 2
     /// Input that has not gone to the terminal yet. See `InputBacklog`.
     private var input: InputBacklog
@@ -196,6 +198,18 @@ public final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
+    /// How many bytes of output the program has written so far: the bytes
+    /// read from its terminal, and the bytes that still wait there.
+    public var writtenOutputByteCount: Int {
+        queue.sync {
+            var waiting: Int32 = 0
+            // TIOCOUTQ on the master side counts the bytes that the program
+            // wrote and nobody read yet. FIONREAD there always reports zero.
+            if master < 0 || ioctl(master, TIOCOUTQ, &waiting) != 0 { waiting = 0 }
+            return readByteCount + Int(waiting)
+        }
+    }
+
     /// The program that reads the keys, such as `zsh` at a prompt or `vim`
     /// while it runs. Nil when the system does not say, or when the program
     /// has ended.
@@ -335,6 +349,7 @@ public final class PseudoTerminal: @unchecked Sendable {
             if count > 0 {
                 outputContinuation.yield(Array(buffer[0..<count]))
                 unconsumedBytes += count
+                readByteCount += count
                 if honoringBackpressure, unconsumedBytes >= Self.unconsumedHighMark, !readSourceIsSuspended {
                     readSource?.suspend()
                     readSourceIsSuspended = true

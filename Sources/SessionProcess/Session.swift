@@ -31,6 +31,8 @@ actor Session {
     /// milliseconds, so the limit only ends a wait for an answer that has
     /// another form.
     private let answerTimeLimit: Duration
+    /// The bytes of program output that the terminal model has parsed.
+    private var parsedByteCount = 0
     private var isFinished = false
     private var isEnding = false
     private var programExit: SessionExit?
@@ -308,6 +310,7 @@ actor Session {
     private func show(_ bytes: ArraySlice<UInt8>) {
         guard !bytes.isEmpty else { return }
         terminal.write(bytes)
+        parsedByteCount += bytes.count
         let message = ServerMessage.output(Data(bytes))
         for client in clients.values { client.send(message) }
     }
@@ -388,10 +391,12 @@ actor Session {
         let size = request.size
         if size.columns > 0, size.rows > 0, size.columns != summary.size.columns, let editor = waitingLineEditor() {
             try Terminal.validate(TerminalSize(size))
+            // The program wrote these bytes before it got the new size.
+            let earlierByteCount = pseudoTerminal.writtenOutputByteCount - parsedByteCount
             try pseudoTerminal.resize(to: PseudoTerminalSize(size))
             // A query of the size gets the size that the program has.
             terminal.reportedSize = TerminalSize(size)
-            let number = lineEditorWait.start(request, editor: editor, earlierByteCount: 0)
+            let number = lineEditorWait.start(request, editor: editor, earlierByteCount: earlierByteCount)
             Task { [weak self, answerTimeLimit] in
                 try? await Task.sleep(for: answerTimeLimit)
                 await self?.answerTimeLimitPassed(number)

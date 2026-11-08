@@ -368,6 +368,8 @@ func lines(_ text: String) -> [String] {
         let waiting = terminal.unconsumedByteCountForTesting
         #expect(waiting >= PseudoTerminal.unconsumedHighMark)
         #expect(waiting < PseudoTerminal.unconsumedHighMark + 1024 * 1024)
+        // The program waits on a full terminal, and its bytes there count as written.
+        #expect(terminal.writtenOutputByteCount > waiting)
 
         var received = 0
         for await chunk in terminal.output {
