@@ -116,6 +116,16 @@ private func makeRecordingTerminal() throws -> (Terminal, ReplyRecorder) {
         #expect(String(decoding: recorder.replies.dropFirst().first ?? [], as: UTF8.self) == "\u{1B}[6;16;8t")
     }
 
+    @Test func aReportedSizeReplacesTheGridInEverySizeAnswer() throws {
+        let (terminal, recorder) = try makeRecordingTerminal()
+        terminal.reportedSize = TerminalSize(columns: 60, rows: 24)
+        terminal.write("\u{1B}[18t\u{1B}[14t\u{1B}[15t")
+        #expect(recorder.text == "\u{1B}[8;24;60t\u{1B}[4;384;480t\u{1B}[5;384;480t")
+        terminal.reportedSize = nil
+        terminal.write("\u{1B}[18t")
+        #expect(String(decoding: recorder.replies.last ?? [], as: UTF8.self) == "\u{1B}[8;5;20t")
+    }
+
     @Test func sizeReportsFollowAResize() throws {
         let (terminal, recorder) = try makeRecordingTerminal()
         try terminal.resize(to: TerminalSize(columns: 100, rows: 40))

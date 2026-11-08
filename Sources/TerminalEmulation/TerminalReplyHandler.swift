@@ -133,9 +133,17 @@ extension Terminal {
         withExtendedLifetime(previous) {}
     }
 
+    /// The size that the answers to size queries report in place of the
+    /// grid, or nil for the grid. A copy of a screen that keeps an old size
+    /// for a while reports the size that the program already has.
+    public var reportedSize: TerminalSize? {
+        get { callbackBox.reportedSize }
+        set { callbackBox.reportedSize = newValue }
+    }
+
     /// Answers `CSI 15 t` from the nominal cell, like the other size queries.
     func answerScreenSizeQuery(for box: TerminalReplyBox) {
-        let grid = size
+        let grid = reportedSize ?? size
         let height = UInt32(grid.rows) * Self.nominalCellHeight
         let width = UInt32(grid.columns) * Self.nominalCellWidth
         box.handler(Array("\u{1B}[5;\(height);\(width)t".utf8))
@@ -192,13 +200,17 @@ extension Terminal {
 
     // Like device attributes, the size queries (and the in-band size reports
     // of mode 2048) are answered only when this callback fills in a size.
-    private static let sizeCallback: GhosttyTerminalSizeFn = { terminal, _, size in
+    private static let sizeCallback: GhosttyTerminalSizeFn = { terminal, userdata, size in
         guard let terminal, let size else { return false }
         var columns: UInt16 = 0
         var rows: UInt16 = 0
-        guard ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLS, &columns) == GHOSTTY_SUCCESS,
-              ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_ROWS, &rows) == GHOSTTY_SUCCESS
-        else { return false }
+        if let userdata, let reported = Unmanaged<TerminalCallbackBox>.fromOpaque(userdata).takeUnretainedValue().reportedSize {
+            (columns, rows) = (reported.columns, reported.rows)
+        } else {
+            guard ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_COLS, &columns) == GHOSTTY_SUCCESS,
+                  ghostty_terminal_get(terminal, GHOSTTY_TERMINAL_DATA_ROWS, &rows) == GHOSTTY_SUCCESS
+            else { return false }
+        }
         size.pointee = GhosttySizeReportSize(
             rows: rows,
             columns: columns,

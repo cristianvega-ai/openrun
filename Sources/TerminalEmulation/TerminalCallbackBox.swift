@@ -8,4 +8,6 @@ final class TerminalCallbackBox {
     var reply: TerminalReplyBox?
     /// The handler for the bell, the title and render holds.
     var events: TerminalEventHandler?
+    /// See `Terminal.reportedSize`.
+    var reportedSize: TerminalSize?
 }

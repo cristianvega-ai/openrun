@@ -142,6 +142,25 @@ extension SessionProcessIntegration {
             await session.terminate()
         }
 
+        /// The program has the new size during the wait, so a size query
+        /// gets that size, not the size of the session's screen.
+        @Test func aSizeQueryDuringTheWaitGetsTheSizeOfTheProgram() async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try makeSilentShell(size: size, answerTimeLimit: .seconds(10))
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            #expect(try viewer.follow(until: "ready>"))
+            try await session.resize(to: SessionSize(columns: 60, rows: 24), from: viewer.connection, confirmsResize: true)
+            let query = #"stty raw -echo; printf '\033[18t'; reply=$(dd bs=1 count=10 2>/dev/null); stty -raw echo; echo "REPLY=${reply:1}""#
+            try await session.type(Array((query + "\r").utf8))
+            #expect(try viewer.follow(until: "REPLY=["))
+            let text = try viewer.text()
+            #expect(text.contains("REPLY=[8;24;60t"), "\(text)")
+            #expect(viewer.sizes.isEmpty)
+            await session.terminate()
+        }
+
         /// A bash that runs a script has no line editor, also when the script
         /// turns on bracketed paste. Its erase after a new size is not an
         /// answer, so the screen takes the size at once, as a terminal does.

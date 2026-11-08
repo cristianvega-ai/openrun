@@ -389,6 +389,8 @@ actor Session {
         if size.columns > 0, size.rows > 0, size.columns != summary.size.columns, let editor = waitingLineEditor() {
             try Terminal.validate(TerminalSize(size))
             try pseudoTerminal.resize(to: PseudoTerminalSize(size))
+            // A query of the size gets the size that the program has.
+            terminal.reportedSize = TerminalSize(size)
             let number = lineEditorWait.start(request, editor: editor, earlierByteCount: 0)
             Task { [weak self, answerTimeLimit] in
                 try? await Task.sleep(for: answerTimeLimit)
@@ -422,6 +424,7 @@ actor Session {
     ///   from the output above it (see `Terminal.resize`).
     private func finishWait(keepsCursorAtLineStart: Bool) {
         guard let (finished, next) = lineEditorWait.finish() else { return }
+        terminal.reportedSize = nil
         if !finished.reportsItself { replyGate.close(false) }
         do {
             try terminal.resize(to: TerminalSize(finished.size), keepingCursorAtLineStart: keepsCursorAtLineStart)
