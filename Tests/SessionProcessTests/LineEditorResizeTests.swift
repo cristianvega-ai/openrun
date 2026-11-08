@@ -85,6 +85,40 @@ private func makeSession(_ executable: String, _ arguments: [String], environmen
 
 extension SessionProcessIntegration {
     @Suite struct LineEditorResizeTests {
+        /// zsh counts the rows of its input at the old width when it draws
+        /// it again. The output above the prompt must stay, and the prompt
+        /// must appear once, on the session's screen and on the viewer's.
+        /// Output without a line end puts the prompt on a row that continues
+        /// that output.
+        @Test func zshKeepsTheOutputAndOnePromptThroughManyWidths() async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try makeSession("/bin/zsh", ["-f", "-i"], environment: ["PATH": "/usr/bin:/bin", "PS1": "ready> ", "TERM": "xterm-256color"], size: size)
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            // The plain text leaves out the spaces at the end of a row.
+            #expect(try viewer.follow(until: "ready>"))
+            try await session.type(Array("printf 'output-before-resize\\n'\r".utf8))
+            #expect(try viewer.follow(until: "output-before-resize\nready>"))
+            try await session.type(Array("printf partial-output\r".utf8))
+            #expect(try viewer.follow(until: "partial-output%"))
+            try await session.type(Array(("echo " + String(repeating: "y", count: 150)).utf8))
+            #expect(try viewer.follow(until: String(repeating: "y", count: 70)))
+            try viewer.follow(quiet: .milliseconds(300))
+            let original = try viewer.text().replacingOccurrences(of: "\n", with: "")
+
+            // Every second resize comes while the one before it waits.
+            for (index, columns) in [50, 30, 70, 40, 90, 45, 80].enumerated() {
+                try await session.resize(to: SessionSize(columns: UInt16(columns), rows: 24), from: viewer.connection, confirmsResize: true)
+                if index.isMultiple(of: 2) { try viewer.follow(quiet: .milliseconds(150)) }
+            }
+            try viewer.follow(quiet: .milliseconds(800))
+            #expect(viewer.screen?.size == TerminalSize(columns: 80, rows: 24))
+            #expect(try viewer.text().replacingOccurrences(of: "\n", with: "") == original)
+            #expect(try await session.screenText(includeScrollback: true) == viewer.text())
+            await session.terminate()
+        }
+
         /// An interactive bash without its line editor never answers a new
         /// size. Its prompt turns on bracketed paste, so the session waits.
         /// The size applies after the time limit, and of the resizes that
