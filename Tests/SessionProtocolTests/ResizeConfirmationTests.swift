@@ -9,6 +9,9 @@ import Testing
     private enum OlderClientMessage: Codable, Equatable {
         case resize(SessionSize)
     }
+    private enum OlderSizeMessage: Codable, Equatable {
+        case sizeChanged(SessionSize)
+    }
 
     @Test func anOlderGreetingHasNoConfirmationCapability() throws {
         let (client, server) = try MessageConnection.makePair()
@@ -42,5 +45,14 @@ import Testing
         #expect(try ClientMessage(frame: frame) == message)
         let legacy = MessageFrame(kind: .control, payload: Data(#"{"resize":{"_0":{"columns":90,"rows":25}}}"#.utf8))
         #expect(try ClientMessage(frame: legacy) == .resize(size))
+    }
+
+    @Test func aSizeChangeAtALineStartRemainsReadableByAnOlderClient() throws {
+        let size = SessionSize(columns: 90, rows: 25)
+        let message = ServerMessage.sizeChanged(size, keepsCursorAtLineStart: true)
+        let frame = try message.frame()
+        #expect(try JSONDecoder().decode(OlderSizeMessage.self, from: frame.payload) == .sizeChanged(size))
+        #expect(try ServerMessage(frame: frame) == message)
+        #expect(try ServerMessage.sizeChanged(size).frame().payload == Data(#"{"sizeChanged":{"_0":{"columns":90,"rows":25}}}"#.utf8))
     }
 }

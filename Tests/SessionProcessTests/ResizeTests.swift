@@ -39,7 +39,7 @@ private final class WatchedConnection {
         var sizes: [SessionSize] = []
         var output = ""
         while !output.contains(text), let message = try connection.receive(ServerMessage.self) {
-            if case .sizeChanged(let size) = message { sizes.append(size) }
+            if case .sizeChanged(let size, _) = message { sizes.append(size) }
             if case .output(let bytes) = message { output += String(decoding: bytes, as: UTF8.self) }
         }
         #expect(output.contains(text), "the connection ended before \(text)")
@@ -151,7 +151,7 @@ extension SessionProcessIntegration {
                 try first.connection.send(ClientMessage.detach)
                 var announced: [SessionSize] = []
                 while let message = try first.connection.receive(ServerMessage.self) {
-                    if case .sizeChanged(let changed) = message { announced.append(changed) }
+                    if case .sizeChanged(let changed, _) = message { announced.append(changed) }
                 }
                 #expect(announced == [])
             }

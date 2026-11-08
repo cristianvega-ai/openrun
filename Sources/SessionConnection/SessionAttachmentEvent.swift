@@ -7,8 +7,9 @@ public enum SessionAttachmentEvent: Equatable, Sendable {
     /// Bytes that the program wrote, as the protocol carries them.
     case output(Data)
     /// Another client changed the size, or the session confirms a requested
-    /// resize. The output after it is for the new size.
-    case sizeChanged(SessionSize)
+    /// resize. The output after it is for the new size. See
+    /// `ServerMessage.sizeChanged` for `keepsCursorAtLineStart`.
+    case sizeChanged(SessionSize, keepsCursorAtLineStart: Bool = false)
     /// The program ended.
     case exited(SessionExit)
     /// The connection closed before the program ended: the session process

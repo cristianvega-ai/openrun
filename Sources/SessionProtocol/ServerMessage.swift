@@ -16,7 +16,13 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// Another client changed the size of the attached session with its
     /// `resize` or `attach`, or the session confirms the client's own resize.
     /// The `output` after it is for the new size.
-    case sizeChanged(SessionSize)
+    ///
+    /// `keepsCursorAtLineStart` is true when the size comes where a shell
+    /// has erased its lines. A client with a copy of the screen then resizes
+    /// it with `Terminal.resize(to:keepingCursorAtLineStart:)`, as the
+    /// session does. The field is optional, so it stays inside protocol
+    /// version 1.
+    case sizeChanged(SessionSize, keepsCursorAtLineStart: Bool? = nil)
     /// The text of a session's screen.
     case screen(text: String)
     /// The program ended. The connection closes after this message.

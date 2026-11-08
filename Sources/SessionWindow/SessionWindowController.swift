@@ -102,9 +102,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         case .output(let bytes):
             guard let view else { finish(); return }
             view.write(bytes, completion: finish)
-        case .sizeChanged(let size):
+        case .sizeChanged(let size, let keepsCursorAtLineStart):
             guard let view else { finish(); return }
-            view.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows), completion: finish)
+            view.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows), keepsCursorAtLineStart: keepsCursorAtLineStart, completion: finish)
         case .exited, .closed, .failed:
             let afterOutput: @MainActor @Sendable () -> Void = { [weak self] in
                 if let self, !self.isClosed {

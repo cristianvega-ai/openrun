@@ -320,7 +320,7 @@ private final class TracedAttachment: AttachedSession {
             let completion: @Sendable () -> Void = { completed.withLock { $0 += 1 }; finish() }
             switch event {
             case .output(let bytes): parser.append(bytes, completion: completion)
-            case .sizeChanged(let size):
+            case .sizeChanged(let size, _):
                 parser.append(size: TerminalSize(columns: size.columns, rows: size.rows), tellsDelegate: false, completion: completion)
             default: completion()
             }
