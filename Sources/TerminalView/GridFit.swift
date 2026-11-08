@@ -18,4 +18,13 @@ enum GridFit {
         }
         return TerminalSize(columns: count(size.width, cell.width), rows: count(size.height, cell.height))
     }
+
+    /// The size of a view in points that holds exactly `grid`: the opposite
+    /// of `grid(for:scale:cell:padding:)`.
+    static func size(holding grid: TerminalSize, scale: CGFloat, cell: (width: Int, height: Int), padding: Int) -> CGSize {
+        CGSize(
+            width: CGFloat(Int(grid.columns) * cell.width + 2 * padding) / scale,
+            height: CGFloat(Int(grid.rows) * cell.height + 2 * padding) / scale
+        )
+    }
 }

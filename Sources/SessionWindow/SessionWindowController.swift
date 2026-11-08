@@ -12,6 +12,13 @@ import TerminalView
 public final class SessionWindowController: NSObject, NSWindowDelegate, TerminalViewDelegate {
     /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
     static let contentSize = CGSize(width: 656, height: 388)
+    /// The smallest grid that the window can show (decision of 2026-11-08).
+    /// A shell's prompt and input must fit on the screen, or the shell draws
+    /// part of them into the scrollback, where nothing can clean them. With
+    /// 60 by 12, a command of 600 characters still kept its output and one
+    /// prompt through a drag to the minimum and back; 40 by 8 and 50 by 10
+    /// did not.
+    static let minimumGrid = TerminalSize(columns: 60, rows: 12)
     public let window: NSWindow
     /// Called once when the user closes the window or its program ends.
     public var onClose: (@MainActor () -> Void)?
@@ -40,6 +47,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         // The controller owns the window, so AppKit must not release it a second time.
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.contentMinSize = TerminalView.estimatedSize(holding: Self.minimumGrid, scale: window.backingScaleFactor)
         window.center()
     }
 
@@ -82,6 +90,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         view.waitsForSizeConfirmation = true
         view.delegate = self
         window.contentView = container(holding: view)
+        keepMinimumSize(of: view)
         window.makeFirstResponder(view)
         // Complete the snapshot fit before a later size from another client arrives.
         view.layoutSubtreeIfNeeded()
@@ -176,6 +185,41 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     public func terminalView(_ view: TerminalView, send bytes: [UInt8]) {
         guard !isClosed, !hasConnectionFailure, let attachment else { return }
         send { try attachment.send(input: Data(bytes)) }
+    }
+
+    public func terminalViewDidChangeCellSize(_ view: TerminalView) {
+        keepMinimumSize(of: view)
+    }
+
+    /// A window on a screen of another size can have another minimum.
+    public func windowDidChangeScreen(_ notification: Notification) {
+        if let view { keepMinimumSize(of: view) }
+    }
+
+    /// The window cannot become smaller than the minimum grid at the text size
+    /// of its view, or than its screen when that grid does not fit there
+    /// (decision of 2026-11-08). A user's drag stops there. A larger text size
+    /// can leave the window too small, so it grows, and it moves to stay on its
+    /// screen.
+    private func keepMinimumSize(of view: TerminalView) {
+        let screen = window.screen?.visibleFrame
+        var minimum = view.size(holding: Self.minimumGrid)
+        if let screen {
+            let room = window.contentRect(forFrameRect: screen).size
+            minimum = NSSize(width: min(minimum.width, room.width), height: min(minimum.height, room.height))
+        }
+        window.contentMinSize = minimum
+        let current = window.contentLayoutRect.size
+        guard current.width < minimum.width || current.height < minimum.height else { return }
+        let content = NSSize(width: max(current.width, minimum.width), height: max(current.height, minimum.height))
+        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content))
+        // The top left corner stays, as when the user drags the bottom right one.
+        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
+        if let screen {
+            frame.origin.x = max(screen.minX, min(frame.origin.x, screen.maxX - frame.width))
+            frame.origin.y = max(screen.minY, min(frame.origin.y, screen.maxY - frame.height))
+        }
+        window.setFrame(frame, display: true)
     }
 
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {

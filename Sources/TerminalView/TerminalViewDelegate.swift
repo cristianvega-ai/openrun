@@ -13,6 +13,10 @@ public protocol TerminalViewDelegate: AnyObject {
     /// The part of the grid that fits the view changed, even if the terminal size did not.
     func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize)
 
+    /// The cells have a new size, from a new text size or a screen with
+    /// another scale. The view fits its grid again after this call.
+    func terminalViewDidChangeCellSize(_ view: TerminalView)
+
     /// The program set a new title with OSC 0 or OSC 2. The owner shows it, or the folder of the session when the title is empty.
     func terminalView(_ view: TerminalView, didChangeTitle title: String)
 
@@ -41,5 +45,6 @@ public extension TerminalViewDelegate {
     }
     func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool { false }
     func terminalView(_ view: TerminalView, didChangeVisibleGridSize size: TerminalSize) {}
+    func terminalViewDidChangeCellSize(_ view: TerminalView) {}
     func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) {}
 }

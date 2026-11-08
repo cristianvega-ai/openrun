@@ -203,6 +203,19 @@ public final class TerminalView: NSView {
         return GridFit.grid(for: size, scale: scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: Int((8 * scale).rounded()))
     }
 
+    /// The size of a view that holds exactly `grid` at the standard text
+    /// size, for a window before its view exists.
+    public static func estimatedSize(holding grid: TerminalSize, scale: CGFloat) -> CGSize {
+        let fonts = FontSet(pointSize: FontSizeControl.standard, scale: scale)
+        return GridFit.size(holding: grid, scale: scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: Int((8 * scale).rounded()))
+    }
+
+    /// The size of this view that holds exactly `grid` at its text size.
+    public func size(holding grid: TerminalSize) -> CGSize {
+        let fonts = renderer.fonts
+        return GridFit.size(holding: grid, scale: fonts.scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: renderer.padding)
+    }
+
     /// The title that the program set with OSC 0 or OSC 2, or an empty text.
     public var title: String { terminal.title }
 
@@ -595,6 +608,8 @@ public final class TerminalView: NSView {
             logger.error("The renderer failed: \(String(describing: error), privacy: .private)")
             return
         }
+        // The owner can change the size of the view first, so the new grid fits it.
+        delegate?.terminalViewDidChangeCellSize(self)
         host.resize(to: bounds.size, scale: scale)
         fitGrid()
         schedule?.requestFrame()
