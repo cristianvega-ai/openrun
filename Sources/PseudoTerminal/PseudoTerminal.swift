@@ -196,6 +196,14 @@ public final class PseudoTerminal: @unchecked Sendable {
         }
     }
 
+    /// The program that reads the keys, such as `zsh` at a prompt or `vim`
+    /// while it runs. Nil when the system does not say, or when the program
+    /// has ended.
+    public var foregroundProgram: ForegroundProgram? {
+        // After the end, the identifier can belong to another process.
+        queue.sync { exit == nil ? ForegroundProgram.find(inSessionOf: processIdentifier) : nil }
+    }
+
     /// Tells the program its terminal has a new size. The kernel sends it
     /// SIGWINCH.
     public func resize(to size: PseudoTerminalSize) throws {
