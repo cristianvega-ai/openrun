@@ -106,4 +106,40 @@ private final class FollowingScreen {
         }
         #expect(try screen.unwrappedText() == "earlier output" + zsh.lines.joined().trimmingCharacters(in: .whitespaces))
     }
+
+    @Test func outputWithoutALineEndStaysAboveThePrompt() throws {
+        let screen = try FollowingScreen(columns: 40, rows: 10)
+        var zsh = FakeZsh(lines: ["prompt> " + String(repeating: "x", count: 30)])
+        // zsh's PROMPT_SP: the mark, spaces that wrap onto a new row, and a
+        // return to its first column, where the prompt then starts.
+        try screen.write("partial%" + String(repeating: " ", count: 39) + "\r \r" + zsh.draw(width: 40))
+        for width in Self.widths {
+            screen.resize(to: TerminalSize(columns: UInt16(width), rows: 10), editor: .zsh)
+            try screen.write(zsh.draw(width: width))
+        }
+        #expect(try screen.terminal.visibleText() == "partial%\n" + zsh.lines[0])
+    }
+
+    /// Only the answer to a new size counts. An erase in the output of a
+    /// command, before a prompt that has no erase, is not the start of it.
+    @Test func theOutputOfACommandStaysAboveTheNextPrompt() throws {
+        let screen = try FollowingScreen(columns: 40, rows: 10)
+        try screen.write("prompt> run\r\n\u{1b}[?2004l\u{1b}[Jline one\r\nline two\r\nnext> \u{1b}[?2004h")
+        screen.resize(to: TerminalSize(columns: 80, rows: 10), editor: .zsh)
+        try screen.write("\r\u{1b}[Jnext> ")
+        #expect(try screen.terminal.visibleText() == "prompt> run\nline one\nline two\nnext>")
+    }
+
+    @Test func readlineDrawsItsInputOnce() throws {
+        let screen = try FollowingScreen(columns: 40, rows: 10)
+        let line = "$ echo " + String(repeating: "y", count: 50)
+        try screen.write("earlier output\r\n" + line)
+        var rowsAbove = (line.count - 1) / 40
+        for width in Self.widths {
+            screen.resize(to: TerminalSize(columns: UInt16(width), rows: 10), editor: .readline)
+            try screen.write("\r\u{1b}[K" + String(repeating: "\r\u{1b}[A\u{1b}[K", count: rowsAbove) + "\r" + line)
+            rowsAbove = (line.count - 1) / width
+        }
+        #expect(try screen.unwrappedText() == "earlier output" + line)
+    }
 }
