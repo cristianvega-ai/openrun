@@ -145,7 +145,7 @@ actor Session {
     /// clients answer the same query twice. That limit is accepted for now.
     func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool, waitsForOutputRoom: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
-        while lineEditorWait.isWaiting { finishWait() }
+        while lineEditorWait.isWaiting { finishWait(keepsCursorAtLineStart: false) }
         let previousSize = summary.size
         defer { if summary.size != previousSize { announceSize(changedBy: ObjectIdentifier(client)) } }
         try apply(size)
@@ -271,7 +271,7 @@ actor Session {
                 var rest = bytes[...]
                 if let end = lineEditorWait.end(in: rest) {
                     show(rest[..<end.index])
-                    finishWait()
+                    finishWait(keepsCursorAtLineStart: end.erasedLines)
                     // A new wait can start here. The rest of these bytes came
                     // before its new size, so they cannot hold its answer.
                     rest = rest[end.index...]
@@ -355,15 +355,19 @@ actor Session {
     /// A client that draws the screen itself must lay out the output that
     /// follows for the new size. The message goes out before that output.
     /// The requester knows its own size and does not get it.
-    private func announceSize(changedBy requester: ObjectIdentifier?) {
+    private func announceSize(changedBy requester: ObjectIdentifier?, keepsCursorAtLineStart: Bool = false) {
         for (key, client) in clients where key != requester && clientsThatReceiveSizeChanges.contains(key) {
-            client.send(.sizeChanged(summary.size))
+            client.send(sizeChanged(keepsCursorAtLineStart: keepsCursorAtLineStart))
         }
     }
 
-    private func confirm(_ request: LineEditorWait.Request) {
+    private func confirm(_ request: LineEditorWait.Request, keepsCursorAtLineStart: Bool = false) {
         guard request.confirms, let requester = request.requester else { return }
-        clients[requester]?.send(.sizeChanged(summary.size))
+        clients[requester]?.send(sizeChanged(keepsCursorAtLineStart: keepsCursorAtLineStart))
+    }
+
+    private func sizeChanged(keepsCursorAtLineStart: Bool) -> ServerMessage {
+        .sizeChanged(summary.size, keepsCursorAtLineStart: keepsCursorAtLineStart ? true : nil)
     }
 
     /// The line editor that waits at the cursor. zsh and bash turn on
@@ -398,35 +402,39 @@ actor Session {
     }
 
     /// Tells the clients whose confirmed resize a newer one replaced.
-    private func sendOwedSizes() {
+    private func sendOwedSizes(keepsCursorAtLineStart: Bool = false) {
         for client in lineEditorWait.takeClientsOwedTheSize() {
-            clients[client]?.send(.sizeChanged(summary.size))
+            clients[client]?.send(sizeChanged(keepsCursorAtLineStart: keepsCursorAtLineStart))
         }
     }
 
     private func answerTimeLimitPassed(_ number: Int) {
         guard !isFinished, lineEditorWait.isWaiting, lineEditorWait.number == number else { return }
-        finishWait()
+        finishWait(keepsCursorAtLineStart: false)
     }
 
     /// Gives the terminal model the size that the program has, and tells the
     /// clients, in order with the output. Then the resize that came during
     /// the wait applies.
-    private func finishWait() {
+    ///
+    /// - Parameter keepsCursorAtLineStart: True where the shell has erased its
+    ///   lines. The model and the clients then keep the cursor's row apart
+    ///   from the output above it (see `Terminal.resize`).
+    private func finishWait(keepsCursorAtLineStart: Bool) {
         guard let (finished, next) = lineEditorWait.finish() else { return }
         if !finished.reportsItself { replyGate.close(false) }
         do {
-            try terminal.resize(to: TerminalSize(finished.size))
+            try terminal.resize(to: TerminalSize(finished.size), keepingCursorAtLineStart: keepsCursorAtLineStart)
             summary.size = finished.size
-            announceSize(changedBy: finished.requester)
+            announceSize(changedBy: finished.requester, keepsCursorAtLineStart: keepsCursorAtLineStart)
         } catch {
             // The size was checked, so only a lack of memory gets here. The
             // program goes back to the size of the model.
             try? pseudoTerminal.resize(to: PseudoTerminalSize(summary.size))
         }
         updateReplyGate()
-        confirm(finished)
-        guard let next else { return sendOwedSizes() }
+        confirm(finished, keepsCursorAtLineStart: keepsCursorAtLineStart)
+        guard let next else { return sendOwedSizes(keepsCursorAtLineStart: keepsCursorAtLineStart) }
         do {
             try change(by: next)
         } catch {
