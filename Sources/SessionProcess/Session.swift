@@ -224,8 +224,18 @@ actor Session {
             size: size, requester: ObjectIdentifier(requester), confirms: confirmsResize,
             reportsItself: relayingClients.contains(ObjectIdentifier(requester))
         )
-        // The editor answers one size at a time, so a waiting size applies first.
-        while lineEditorWait.isWaiting { finishWait() }
+        guard !lineEditorWait.isWaiting else {
+            // A size of zero changes nothing, as it does without a wait, so it
+            // must not replace a waiting resize.
+            guard size.columns > 0, size.rows > 0 else {
+                if confirmsResize { lineEditorWait.owe(ObjectIdentifier(requester)) }
+                return
+            }
+            // The request gets no answer later, so a refused size fails now.
+            try Terminal.validate(TerminalSize(size))
+            lineEditorWait.queue(request)
+            return
+        }
         try change(by: request)
     }
 
@@ -262,6 +272,8 @@ actor Session {
                 if let end = lineEditorWait.end(in: rest) {
                     show(rest[..<end.index])
                     finishWait()
+                    // A new wait can start here. The rest of these bytes came
+                    // before its new size, so they cannot hold its answer.
                     rest = rest[end.index...]
                 }
                 show(rest)
@@ -382,6 +394,14 @@ actor Session {
         }
         if try apply(size, requesterReportsSize: request.reportsItself) { announceSize(changedBy: request.requester) }
         confirm(request)
+        sendOwedSizes()
+    }
+
+    /// Tells the clients whose confirmed resize a newer one replaced.
+    private func sendOwedSizes() {
+        for client in lineEditorWait.takeClientsOwedTheSize() {
+            clients[client]?.send(.sizeChanged(summary.size))
+        }
     }
 
     private func answerTimeLimitPassed(_ number: Int) {
@@ -390,9 +410,10 @@ actor Session {
     }
 
     /// Gives the terminal model the size that the program has, and tells the
-    /// clients, in order with the output.
+    /// clients, in order with the output. Then the resize that came during
+    /// the wait applies.
     private func finishWait() {
-        guard let (finished, _) = lineEditorWait.finish() else { return }
+        guard let (finished, next) = lineEditorWait.finish() else { return }
         if !finished.reportsItself { replyGate.close(false) }
         do {
             try terminal.resize(to: TerminalSize(finished.size))
@@ -405,6 +426,15 @@ actor Session {
         }
         updateReplyGate()
         confirm(finished)
+        guard let next else { return sendOwedSizes() }
+        do {
+            try change(by: next)
+        } catch {
+            // The size of `next` was checked when it came. When the program's
+            // terminal refuses it now, the requester hears of the size in use.
+            confirm(next)
+            sendOwedSizes()
+        }
     }
 
     /// Resizes both copies of the terminal, or neither, and returns whether
