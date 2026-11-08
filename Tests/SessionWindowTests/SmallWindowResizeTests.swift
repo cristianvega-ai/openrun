@@ -25,6 +25,23 @@ import Testing
             prompt: "PROMPT=$'resize-test-two-line-header-abcdefghijklmnopqrstuvwxyz-0123456789-abcdefghijklmnop\\n%# '",
             keys: [("printf 'output-before-resize\\n'\r", "output-before-resize\nresize-test-")]
         ),
+        ShellState(
+            testDescription: "output without a line end and long input",
+            prompt: "PROMPT='resize-test-abcdefghijklmnopqrstuvwxyz0123456789 ~ %# '",
+            keys: [
+                ("printf 'output-before-resize\\n'\r", "output-before-resize\nresize-test-"),
+                ("printf partial-output\r", "partial-output%\nresize-test-"),
+                ("echo " + String(repeating: "y", count: 150), String(repeating: "y", count: 20)),
+            ]
+        ),
+        ShellState(
+            testDescription: "a command of 600 characters",
+            prompt: "PROMPT='resize-test-abcdefghijklmnopqrstuvwxyz0123456789 ~ %# '",
+            keys: [
+                ("printf 'output-before-resize\\n'\r", "output-before-resize\nresize-test-"),
+                ("echo " + String(repeating: "z", count: 595), String(repeating: "z", count: 20)),
+            ]
+        ),
     ]
 
     /// Starts a window on a session of zsh with the prompt of `state`.
