@@ -52,4 +52,21 @@ import Testing
         #expect(screen.insetBy(dx: -1, dy: -1).contains(controller.window.frame))
         #expect(try #require(view.visibleGridSize).columns < SessionWindowController.minimumGrid.columns)
     }
+
+    /// While the session has not applied the window's own smaller size, the
+    /// cells that do not fit are the window's old size, not another client's grid.
+    @Test func theWindowsOwnSmallerSizeHidesNothingWhileItWaits() async throws {
+        let size = TerminalView.estimatedGrid(for: SessionWindowController.contentSize, scale: NSScreen.main?.backingScaleFactor ?? 2)
+        let attachment = try FakeAttachment(size: size)
+        attachment.record.withLock { $0.confirmsSizes = false }
+        let (controller, _, _) = try await makeSmallestWindow(attachment)
+        defer { controller.window.close() }
+        await waitOnMainThread { !attachment.record.withLock { $0.confirmationRequests }.isEmpty }
+        #expect(controller.view?.gridSize == size)
+        #expect(controller.hiddenGridLabel.isHidden)
+        // A larger grid of another client still shows.
+        attachment.deliver(.sizeChanged(SessionSize(columns: size.columns + 10, rows: size.rows)))
+        await waitOnMainThread { !controller.hiddenGridLabel.isHidden }
+        #expect(controller.hiddenGridLabel.stringValue.hasSuffix("columns hidden"))
+    }
 }

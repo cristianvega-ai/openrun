@@ -38,6 +38,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     private var isClosed = false
     private var hasConnectionFailure = false
     private var folder = ""
+    /// The window asked for its own grid, and the session has applied no size
+    /// since. Until then, the part of the grid that does not fit is the old size
+    /// of this window, not the grid of another client.
+    private var waitsForOwnSize = false
 
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
     public init(start: SessionStart, socket: SocketLocation) {
@@ -156,7 +160,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
 
     private func showHiddenPart() {
         guard let view, let visible = view.visibleGridSize else { return }
-        hiddenGridLabel.show(grid: view.gridSize, visible: visible)
+        hiddenGridLabel.show(grid: waitsForOwnSize ? visible : view.gridSize, visible: visible)
     }
 
     /// The user uses this window now, so its size applies (decision of 2026-10-27).
@@ -223,6 +227,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
+        waitsForOwnSize = true
         showHiddenPart()
         guard !isClosed, !hasConnectionFailure, let attachment else { return }
         send { try attachment.send(size: SessionSize(columns: size.columns, rows: size.rows), requestsConfirmation: true) }
@@ -239,6 +244,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
     }
 
     public func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) {
+        waitsForOwnSize = false
         showHiddenPart()
     }
 
