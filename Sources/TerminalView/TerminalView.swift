@@ -89,8 +89,8 @@ public final class TerminalView: NSView {
         self.device = device
         host = MetalLayerHost(device: device)
         super.init(frame: .zero)
-        parser.onSize = { [weak self] size, tellsDelegate in
-            MainActor.assumeIsolated { self?.applySize(size, tellsDelegate: tellsDelegate) }
+        parser.onSize = { [weak self] size, tellsDelegate, keepsCursorAtLineStart in
+            MainActor.assumeIsolated { self?.applySize(size, tellsDelegate: tellsDelegate, keepsCursorAtLineStart: keepsCursorAtLineStart) }
         }
         wantsLayer = true
         focus.onChange = { [weak self] isKey in self?.windowKeyChanged(isKey) }
@@ -500,8 +500,9 @@ public final class TerminalView: NSView {
 
     /// Gives the terminal the size that another client set, and does not tell the delegate,
     /// so two clients never make each other change size again and again (decision of 2026-10-25).
-    public func followSessionSize(_ size: TerminalSize, completion: (@Sendable () -> Void)? = nil) {
-        resizeTerminal(to: size, tellsDelegate: false, completion: completion)
+    /// `keepsCursorAtLineStart` comes from the session (see `ServerMessage.sizeChanged`).
+    public func followSessionSize(_ size: TerminalSize, keepsCursorAtLineStart: Bool = false, completion: (@Sendable () -> Void)? = nil) {
+        resizeTerminal(to: size, tellsDelegate: false, keepsCursorAtLineStart: keepsCursorAtLineStart, completion: completion)
     }
 
     /// Requests the grid that fits the view when its window becomes key.
@@ -533,20 +534,20 @@ public final class TerminalView: NSView {
         delegate?.terminalView(self, didChangeVisibleGridSize: grid)
     }
 
-    private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool, completion: (@Sendable () -> Void)? = nil) {
+    private func resizeTerminal(to grid: TerminalSize, tellsDelegate: Bool, keepsCursorAtLineStart: Bool = false, completion: (@Sendable () -> Void)? = nil) {
         if parser.hasPendingOutput {
-            parser.append(size: grid, tellsDelegate: tellsDelegate, completion: completion)
+            parser.append(size: grid, tellsDelegate: tellsDelegate, keepsCursorAtLineStart: keepsCursorAtLineStart, completion: completion)
             scheduleParseTurn()
         } else {
-            applySize(grid, tellsDelegate: tellsDelegate)
+            applySize(grid, tellsDelegate: tellsDelegate, keepsCursorAtLineStart: keepsCursorAtLineStart)
             completion?()
         }
     }
 
-    private func applySize(_ grid: TerminalSize, tellsDelegate: Bool) {
+    private func applySize(_ grid: TerminalSize, tellsDelegate: Bool, keepsCursorAtLineStart: Bool = false) {
         guard grid != terminal.size else { return }
         do {
-            try terminal.resize(to: grid)
+            try terminal.resize(to: grid, keepingCursorAtLineStart: keepsCursorAtLineStart)
         } catch {
             logger.error("The grid change failed: \(String(describing: error), privacy: .private)")
             return

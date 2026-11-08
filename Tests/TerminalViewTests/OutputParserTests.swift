@@ -57,7 +57,7 @@ import Synchronization
         let terminal = try Terminal(size: TerminalSize(columns: 20, rows: 2), scrollbackLimit: 0)
         let parser = OutputParser()
         let order = Mutex<[String]>([])
-        parser.onSize = { _, _ in order.withLock { $0.append("applied") } }
+        parser.onSize = { _, _, _ in order.withLock { $0.append("applied") } }
         parser.append(size: TerminalSize(columns: 10, rows: 2), tellsDelegate: false) {
             order.withLock { $0.append("completed") }
         }
@@ -69,7 +69,7 @@ import Synchronization
         let terminal = try Terminal(size: TerminalSize(columns: 20, rows: 2), scrollbackLimit: 0)
         let parser = OutputParser()
         let finished = Mutex(0)
-        parser.onSize = { _, _ in parser.discard() }
+        parser.onSize = { _, _, _ in parser.discard() }
         parser.append(size: TerminalSize(columns: 10, rows: 2), tellsDelegate: false) { finished.withLock { $0 += 1 } }
         parser.append(Array("later".utf8)) { finished.withLock { $0 += 1 } }
         #expect(!parser.parse(into: terminal, budget: ParseBudget(limit: .seconds(60))))
@@ -87,7 +87,7 @@ import Synchronization
         parser.append(Array("jklm".utf8))
         parser.append(size: initial, tellsDelegate: true)
         var applied: [TerminalSize] = [], delegateFlags: [Bool] = []
-        parser.onSize = { size, tellsDelegate in
+        parser.onSize = { size, tellsDelegate, _ in
             try? terminal.resize(to: size)
             applied.append(size)
             delegateFlags.append(tellsDelegate)

@@ -11,7 +11,7 @@ import Testing
         }
         for number in 0..<2049 {
             if number == 1025 {
-                guard case .size(let grid, let tellsDelegate)? = queue.first else {
+                guard case .size(let grid, let tellsDelegate, _)? = queue.first else {
                     Issue.record("The size marker is missing.")
                     return
                 }

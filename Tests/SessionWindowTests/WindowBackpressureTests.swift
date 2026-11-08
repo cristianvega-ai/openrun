@@ -300,7 +300,7 @@ private final class TracedAttachment: AttachedSession {
         let terminal = try Terminal(size: initial, scrollbackLimit: 100)
         let reference = try Terminal(size: initial, scrollbackLimit: 100)
         var appliedSizes: [TerminalSize] = []
-        parser.onSize = { size, _ in try? terminal.resize(to: size); appliedSizes.append(size) }
+        parser.onSize = { size, _, _ in try? terminal.resize(to: size); appliedSizes.append(size) }
         let first = Data("ABCD".utf8)
         var events: [SessionAttachmentEvent] = [.output(first)]
         reference.write(first)
