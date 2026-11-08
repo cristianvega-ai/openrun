@@ -134,6 +134,9 @@ extension Terminal {
             try terminal.resize(to: TerminalSize(columns: 0, rows: 5))
         }
         #expect(terminal.size == TerminalSize(columns: 20, rows: 5))
+        // A caller can check the same size before anything else takes it.
+        #expect(throws: TerminalEmulationError.self) { try Terminal.validate(TerminalSize(columns: tooLarge, rows: 5)) }
+        try Terminal.validate(TerminalSize(columns: 20, rows: 5))
     }
 
     @Test func theLargestAllowedGridWorks() throws {

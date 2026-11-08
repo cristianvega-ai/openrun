@@ -181,6 +181,12 @@ public final class Terminal {
         }
     }
 
+    /// Throws when `resize(to:)` would refuse the size, so a caller can
+    /// check a size before anything else takes it.
+    public static func validate(_ size: TerminalSize) throws {
+        try validate(size, in: "Terminal.validate")
+    }
+
     // MARK: - Private
 
     /// Refuses sizes that libghostty-vt cannot hold or that no window has.
