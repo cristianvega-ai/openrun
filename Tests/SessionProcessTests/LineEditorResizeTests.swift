@@ -119,6 +119,30 @@ extension SessionProcessIntegration {
             await session.terminate()
         }
 
+        /// zsh writes its erase and its new lines together. When the erase
+        /// ends a wait, the resize that waited starts in the same output, so
+        /// the rest of it is older than that size. The session must skip it
+        /// once, and then see zsh's answer to that size.
+        @Test func theResizeThatWaitedGetsTheAnswerOfZsh() async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try makeSession("/bin/zsh", ["-f", "-i"], environment: ["PATH": "/usr/bin:/bin", "PS1": "ready> ", "TERM": "xterm-256color"],
+                                          size: size, answerTimeLimit: .seconds(20))
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            try await session.type(Array(("echo " + String(repeating: "y", count: 150)).utf8))
+            #expect(try viewer.follow(until: String(repeating: "y", count: 70)))
+            try viewer.follow(quiet: .milliseconds(300))
+            let started = ContinuousClock.now
+            for columns: UInt16 in [50, 30] {
+                try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: true)
+            }
+            while viewer.sizes.count < 2, ContinuousClock.now - started < .seconds(5) { try viewer.follow(quiet: .milliseconds(100)) }
+            #expect(viewer.sizes == [SessionSize(columns: 50, rows: 24), SessionSize(columns: 30, rows: 24)])
+            #expect(ContinuousClock.now - started < .seconds(5))
+            await session.terminate()
+        }
+
         /// An interactive bash without its line editor never answers a new
         /// size. Its prompt turns on bracketed paste, so the session waits.
         /// The size applies after the time limit, and of the resizes that

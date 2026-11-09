@@ -271,11 +271,12 @@ actor Session {
             // screen is about to disappear, and parsing could delay a shutdown.
             if !isEnding {
                 var rest = bytes[...]
-                if let end = lineEditorWait.end(in: rest) {
+                // A new wait can start in `finishWait`. It counts the rest of
+                // these bytes as older than its size, so they go through it
+                // too: it skips them once, and finds no answer in them.
+                while let end = lineEditorWait.end(in: rest) {
                     show(rest[..<end.index])
                     finishWait(keepsCursorAtLineStart: end.erasedLines)
-                    // A new wait can start here. The rest of these bytes came
-                    // before its new size, so they cannot hold its answer.
                     rest = rest[end.index...]
                 }
                 show(rest)
