@@ -432,13 +432,16 @@ actor Session {
         guard let (finished, next) = lineEditorWait.finish() else { return }
         terminal.reportedSize = nil
         if !finished.reportsItself { replyGate.close(false) }
+        var keepsCursorAtLineStart = keepsCursorAtLineStart
         do {
             try terminal.resize(to: TerminalSize(finished.size), keepingCursorAtLineStart: keepsCursorAtLineStart)
             summary.size = finished.size
             announceSize(changedBy: finished.requester, keepsCursorAtLineStart: keepsCursorAtLineStart)
         } catch {
             // The size was checked, so only a lack of memory gets here. The
-            // program goes back to the size of the model.
+            // program goes back to the size of the model. That size is not
+            // new, so the clients have no width to take with the rule.
+            keepsCursorAtLineStart = false
             try? pseudoTerminal.resize(to: PseudoTerminalSize(summary.size))
         }
         updateReplyGate()
