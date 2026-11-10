@@ -176,6 +176,11 @@ public final class MessageConnection: Sendable {
         }
     }
 
+    /// The program at the other end, read now. See `PeerProcess`.
+    public func peerProcess() throws -> PeerProcess {
+        try PeerProcess(ofSocket: descriptor)
+    }
+
     /// Ends both directions at once. A thread blocked in `receive` or `send`
     /// returns. The descriptor itself closes when the last reference goes
     /// away, so a thread that still uses it never meets a reused number.
