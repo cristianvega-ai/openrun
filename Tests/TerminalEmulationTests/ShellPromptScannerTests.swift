@@ -16,4 +16,18 @@ import Testing
         let found = Self.hits(in: [start + "ready> \u{1b}[K\u{1b}[?2004h"])
         #expect(found.map(\.event) == [.zshPromptStart] && found.first?.index == start.utf8.count)
     }
+
+    /// terminfo spells `sgr0` of xterm as `ESC ( B CSI m`.
+    @Test func findsTheStartAcrossPiecesAndOtherResets() {
+        let found = Self.hits(in: ["\u{1b}(B\u{1b}", "[m\u{1b}[27m\u{1b}[24m\u{1b}[", "0J"])
+        #expect(found.map(\.event) == [.zshPromptStart])
+        #expect(found.first?.piece == 2 && found.first?.index == 2)
+    }
+
+    /// zsh erases a completion list with a bare erase, fish erases after
+    /// `sgr0` alone, and a program can erase after one reset of its own.
+    @Test(arguments: ["\u{1b}[J", "\u{1b}[0m\u{1b}[J", "\u{1b}(B\u{1b}[m\u{1b}[J", "\u{1b}[27m\u{1b}[24m\u{1b}[1J", "\u{1b}[27m\u{1b}[24mx\u{1b}[J"])
+    func anEraseAfterOtherSequencesIsNoStart(_ output: String) {
+        #expect(Self.hits(in: [output]).isEmpty)
+    }
 }
