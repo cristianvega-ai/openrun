@@ -47,9 +47,10 @@ private final class FollowingViewer {
             }
             switch message {
             case .output(let bytes): screen?.write(bytes)
-            case .sizeChanged(let size, let keepsCursorAtLineStart):
+            case .sizeChanged(let size, let keepsCursorAtLineStart, let promptRows):
                 sizes.append(size)
-                try screen?.resize(to: TerminalSize(columns: size.columns, rows: size.rows), keeping: keepsCursorAtLineStart == true ? .cursorRow : .nothing)
+                let keeping: PromptKeeping = promptRows.map { .promptRows(aboveCursor: $0) } ?? (keepsCursorAtLineStart == true ? .cursorRow : .nothing)
+                try screen?.resize(to: TerminalSize(columns: size.columns, rows: size.rows), keeping: keeping)
             case nil: return false
             default: break
             }

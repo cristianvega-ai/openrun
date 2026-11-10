@@ -77,7 +77,7 @@ extension SessionProcessIntegration {
                     var afterConfirmation = ""
                     while !(beforeConfirmation + afterConfirmation).contains("after") {
                         switch try Self.next(on: first) {
-                        case .sizeChanged(let size, _): sizes.append(size)
+                        case .sizeChanged(let size, _, _): sizes.append(size)
                         case .output(let bytes):
                             let text = String(decoding: bytes, as: UTF8.self)
                             if sizes.contains(requested) { afterConfirmation += text } else { beforeConfirmation += text }
@@ -144,7 +144,7 @@ extension SessionProcessIntegration {
                         receivedOutput = true
                         ordered.write(bytes)
                         optimistic.write(bytes)
-                    case .sizeChanged(let size, _):
+                    case .sizeChanged(let size, _, _):
                         #expect(size == requested)
                         #expect(receivedOutput)
                         try ordered.resize(to: TerminalSize(columns: size.columns, rows: size.rows))

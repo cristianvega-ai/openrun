@@ -49,10 +49,11 @@ import Testing
 
     @Test func aSizeChangeAtALineStartRemainsReadableByAnOlderClient() throws {
         let size = SessionSize(columns: 90, rows: 25)
-        let message = ServerMessage.sizeChanged(size, keepsCursorAtLineStart: true)
-        let frame = try message.frame()
-        #expect(try JSONDecoder().decode(OlderSizeMessage.self, from: frame.payload) == .sizeChanged(size))
-        #expect(try ServerMessage(frame: frame) == message)
+        for message in [ServerMessage.sizeChanged(size, keepsCursorAtLineStart: true), .sizeChanged(size, promptRowsAboveCursor: 2)] {
+            let frame = try message.frame()
+            #expect(try JSONDecoder().decode(OlderSizeMessage.self, from: frame.payload) == .sizeChanged(size))
+            #expect(try ServerMessage(frame: frame) == message)
+        }
         #expect(try ServerMessage.sizeChanged(size).frame().payload == Data(#"{"sizeChanged":{"_0":{"columns":90,"rows":25}}}"#.utf8))
     }
 }

@@ -19,10 +19,12 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     ///
     /// `keepsCursorAtLineStart` is true when the size comes where a shell
     /// has erased its lines. A client with a copy of the screen then resizes
-    /// it with `Terminal.resize(to:keepingCursorAtLineStart:)`, as the
-    /// session does. The field is optional, so it stays inside protocol
-    /// version 1.
-    case sizeChanged(SessionSize, keepsCursorAtLineStart: Bool? = nil)
+    /// it with `Terminal.resize(to:keeping:)` and `.cursorRow`, as the
+    /// session does. `promptRowsAboveCursor` comes when the shell has not
+    /// answered the size in time: the client then resizes with
+    /// `.promptRows(aboveCursor:)` and this number. Both fields are optional,
+    /// so they stay inside protocol version 1.
+    case sizeChanged(SessionSize, keepsCursorAtLineStart: Bool? = nil, promptRowsAboveCursor: Int? = nil)
     /// The text of a session's screen.
     case screen(text: String)
     /// The program ended. The connection closes after this message.
