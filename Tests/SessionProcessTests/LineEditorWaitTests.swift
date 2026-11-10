@@ -93,3 +93,16 @@ private let zshPromptStart = "\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[J"
         #expect(end?.index == 2 + zshPromptStart.utf8.count && end?.erasedLines == true)
     }
 }
+
+extension LineEditorWaitTests {
+    /// After the time limit, the wait goes on until the late answer ends it.
+    @Test func aLateAnswerKeepsTheWaitUntilItEnds() {
+        var wait = LineEditorWait()
+        _ = wait.start(request(60, from: first), editor: .zsh, earlierByteCount: 0)
+        wait.noteLateAnswer()
+        #expect(wait.isWaiting && wait.answerIsLate)
+        _ = wait.finish()
+        _ = wait.start(request(50, from: first), editor: .zsh, earlierByteCount: 0)
+        #expect(wait.isWaiting && !wait.answerIsLate)
+    }
+}

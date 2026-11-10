@@ -7,7 +7,9 @@ import TerminalEmulation
 /// and each client that follows it, take the size where the editor has erased
 /// its lines (see `LineEditorAnswer`). A resize that comes before that waits,
 /// and a newer one replaces it. So the editor answers one size at a time, and
-/// its answer always counts rows at the width of the copy.
+/// its answer always counts rows at the width of the copy. At the time limit,
+/// the copy takes the size and keeps the rows of the prompt, and the wait goes
+/// on until the late answer.
 struct LineEditorWait {
     /// A resize from a client, with what the session owes that client.
     struct Request {
@@ -32,6 +34,9 @@ struct LineEditorWait {
     /// The clients whose confirmed resize a newer one replaced. They hear of
     /// the size that applies when the waits end.
     private var clientsOwedTheSize: Set<ObjectIdentifier> = []
+    /// The copy of the screen took the size at the time limit, and the
+    /// editor's answer is still due.
+    private(set) var answerIsLate = false
 
     var isWaiting: Bool { request != nil }
 
@@ -42,6 +47,7 @@ struct LineEditorWait {
         number += 1
         self.request = request
         answer = LineEditorAnswer(editor: editor)
+        answerIsLate = false
         self.earlierByteCount = max(0, earlierByteCount)
         return number
     }
@@ -60,6 +66,12 @@ struct LineEditorWait {
         clientsOwedTheSize.insert(client)
     }
 
+    /// Notes that the copy of the screen took the size before the answer.
+    /// The wait goes on, so a newer resize waits for the answer too.
+    mutating func noteLateAnswer() {
+        answerIsLate = true
+    }
+
     /// Keeps a resize for the end of the wait. It replaces an older one.
     mutating func queue(_ request: Request) {
         if let replaced = next, replaced.confirms, let client = replaced.requester {
@@ -73,7 +85,7 @@ struct LineEditorWait {
     /// Ends the wait, and returns its request and the resize that came during it.
     mutating func finish() -> (finished: Request, next: Request?)? {
         guard let request else { return nil }
-        defer { (self.request, answer, next) = (nil, nil, nil) }
+        defer { (self.request, answer, next, answerIsLate) = (nil, nil, nil, false) }
         return (request, next)
     }
 

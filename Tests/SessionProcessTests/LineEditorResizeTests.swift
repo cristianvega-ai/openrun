@@ -148,6 +148,46 @@ extension SessionProcessIntegration {
             await session.terminate()
         }
 
+        /// A shell that is busy with its prompt answers a second size only
+        /// after its late answer to the first, and that answer is for the
+        /// first size. This script draws as zsh does, 0.7 s after a size. A
+        /// newer size must wait for the late answer. Otherwise that answer
+        /// ends the newer wait, and the screen takes the newer width under a
+        /// prompt that the shell drew for the older one.
+        @Test func aNewerSizeWaitsForTheLateAnswerOfTheOlderOne() async throws {
+            let script = """
+            stty raw -echo
+            line="echo \(String(repeating: "y", count: 150))"
+            above=0
+            draw() {
+              printf '\\r'; [ $above -gt 0 ] && printf '\\033[%dA' $above
+              printf '\\033[0m\\033[27m\\033[24m\\033[Jready> %s' "$line"
+              above=$(( (7 + ${#line} - 1) / $1 ))
+            }
+            columns() { stty size | cut -d' ' -f2; }
+            printf 'output\\r\\n\\033[?2004h'; draw $(columns)
+            trap 'width=$(columns); sleep 0.7; draw $width' WINCH
+            while :; do sleep 0.05; done
+            """
+            let size = SessionSize(columns: 80, rows: 24)
+            let session = try makeSession("/bin/bash", ["-c", script], environment: ["PATH": "/usr/bin:/bin"], size: size, answerTimeLimit: .milliseconds(300))
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            #expect(try viewer.follow(until: String(repeating: "y", count: 70)))
+            try viewer.follow(quiet: .milliseconds(300))
+            let original = try viewer.text().replacingOccurrences(of: "\n", with: "")
+            for columns: UInt16 in [100, 30] {
+                try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: true)
+                try await Task.sleep(for: .milliseconds(100))
+            }
+            try viewer.follow(quiet: .milliseconds(2000))
+            #expect(viewer.sizes == [SessionSize(columns: 100, rows: 24), SessionSize(columns: 30, rows: 24)])
+            #expect(try viewer.text().replacingOccurrences(of: "\n", with: "") == original)
+            #expect(try await session.screenText(includeScrollback: true) == viewer.text())
+            await session.terminate()
+        }
+
         /// zsh writes its erase and its new lines together. When the erase
         /// ends a wait, the resize that waited starts in the same output, so
         /// the rest of it is older than that size. The session must skip it
@@ -174,8 +214,9 @@ extension SessionProcessIntegration {
 
         /// An interactive bash without its line editor never answers a new
         /// size. Its prompt turns on bracketed paste, so the session waits.
-        /// The size applies after the time limit, and of the resizes that
-        /// came meanwhile only the newest applies.
+        /// The size applies after the time limit. Its answer is still due, so
+        /// the resizes that came meanwhile wait four more time limits for it.
+        /// Of them, only the newest applies.
         @Test func aSizeWithoutAnAnswerAppliesAfterTheTimeLimit() async throws {
             let size = SessionSize(columns: 80, rows: 24)
             let session = try makeSilentShell(size: size, answerTimeLimit: .milliseconds(300))
@@ -188,9 +229,9 @@ extension SessionProcessIntegration {
             for columns: UInt16 in [60, 70, 50] {
                 try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: true)
             }
-            try viewer.follow(quiet: .milliseconds(900))
+            try viewer.follow(quiet: .milliseconds(1800))
             #expect(viewer.sizes == [SessionSize(columns: 60, rows: 24), SessionSize(columns: 50, rows: 24)])
-            #expect(ContinuousClock.now - started >= .milliseconds(600))
+            #expect(ContinuousClock.now - started >= .milliseconds(1800))
             #expect(await session.summary.size == SessionSize(columns: 50, rows: 24))
             await session.terminate()
         }
@@ -250,7 +291,7 @@ extension SessionProcessIntegration {
             for (columns, confirms) in [(UInt16(60), true), (80, true), (0, false)] {
                 try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: confirms)
             }
-            try viewer.follow(quiet: .milliseconds(1200))
+            try viewer.follow(quiet: .milliseconds(1800))
             #expect(viewer.sizes == [SessionSize(columns: 60, rows: 24), size])
             #expect(await session.summary.size == size)
             await session.terminate()

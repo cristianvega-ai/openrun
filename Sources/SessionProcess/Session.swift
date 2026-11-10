@@ -30,8 +30,8 @@ actor Session {
     /// A new size that waits for the answer of a shell's line editor.
     private var lineEditorWait = LineEditorWait()
     /// How long a new size waits for the answer. zsh and bash answer within
-    /// milliseconds, so the limit only ends a wait for an answer that has
-    /// another form.
+    /// milliseconds, unless the prompt runs a slow command. At the limit the
+    /// screen takes the size, and the wait goes on for four more limits.
     private let answerTimeLimit: Duration
     /// The bytes of program output that the terminal model has parsed.
     private var parsedByteCount = 0
@@ -429,9 +429,18 @@ actor Session {
         }
     }
 
+    /// The screen takes the size without the answer. The answer is still
+    /// due, and the shell draws it for this size. A newer size before it
+    /// would make that answer end the newer wait, at the wrong width. So
+    /// the wait goes on, for longer than a prompt with a slow command takes.
     private func answerTimeLimitPassed(_ number: Int) {
         guard !isFinished, lineEditorWait.isWaiting, lineEditorWait.number == number else { return }
-        finishWait(keeping: keepingWithoutAnswer())
+        guard lineEditorWait.answerIsLate else {
+            applyWaitingSize(keeping: keepingWithoutAnswer())
+            lineEditorWait.noteLateAnswer()
+            return scheduleTimeLimit(of: number, after: answerTimeLimit * 4)
+        }
+        finishWait(keeping: .nothing)
     }
 
     /// A size without the shell's answer keeps the rows of a prompt that the
@@ -441,13 +450,14 @@ actor Session {
     }
 
     /// Ends the wait. The terminal model takes the size that the program
-    /// has. Then the resize that came during the wait applies.
+    /// has, unless it took it at the time limit. Then the resize that came
+    /// during the wait applies.
     ///
     /// - Parameter keeping: What the model keeps of the prompt (see
     ///   `Terminal.resize`). The clients keep what the model kept.
     private func finishWait(keeping: PromptKeeping) {
         guard lineEditorWait.isWaiting else { return }
-        let kept = applyWaitingSize(keeping: keeping)
+        let kept = lineEditorWait.answerIsLate ? .nothing : applyWaitingSize(keeping: keeping)
         guard let (_, next) = lineEditorWait.finish() else { return }
         guard let next else { return sendOwedSizes(keeping: kept) }
         do {
