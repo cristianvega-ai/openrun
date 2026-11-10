@@ -9,14 +9,6 @@ import Testing
     }
 
     @Test(arguments: [
-        ["-zsh"], ["zsh"], ["zsh", "-l"], ["/bin/zsh", "-f", "-i"], ["zsh", "-o", "vi"], ["zsh", "--emulate", "zsh"],
-        ["zsh", "--"],
-    ])
-    func zshThatReadsItsTerminalHasItsEditor(arguments: [String]) {
-        #expect(Self.editor("zsh", arguments) == .zsh)
-    }
-
-    @Test(arguments: [
         ["-bash"], ["bash"], ["bash", "--login"], ["bash", "--rcfile", "/tmp/environment"], ["bash", "--noprofile", "-O", "extglob"],
     ])
     func bashThatReadsItsTerminalHasReadline(arguments: [String]) {
@@ -25,15 +17,17 @@ import Testing
 
     @Test(arguments: [
         ["bash", "-c", "printf x"], ["bash", "-ec", "true"], ["bash", "script.sh"], ["bash", "--", "script.sh"],
-        ["zsh", "-fc", "true"], ["zsh", "script"], ["zsh", "-o", "vi", "script"],
         // With -i the shell is interactive, but it runs the script and edits no line.
-        ["zsh", "-f", "-i", "script"], ["bash", "-i", "script.sh"],
+        ["bash", "-i", "script.sh"],
     ])
     func aShellWithACommandOrAScriptHasNoEditor(arguments: [String]) {
         #expect(Self.editor(arguments[0], arguments) == nil)
     }
 
+    /// zsh says in its output where its prompt starts, so its name gives no
+    /// editor.
     @Test func anotherProgramHasNoEditor() {
+        #expect(Self.editor("zsh", ["-zsh"]) == nil)
         #expect(Self.editor("fish", ["fish"]) == nil)
         #expect(Self.editor("claude", ["claude"]) == nil)
     }

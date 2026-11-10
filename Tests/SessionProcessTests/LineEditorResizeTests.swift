@@ -90,10 +90,12 @@ extension SessionProcessIntegration {
         /// it again. The output above the prompt must stay, and the prompt
         /// must appear once, on the session's screen and on the viewer's.
         /// Output without a line end puts the prompt on a row that continues
-        /// that output.
-        @Test func zshKeepsTheOutputAndOnePromptThroughManyWidths() async throws {
+        /// that output. Behind another program, as behind ssh, zsh is not in
+        /// the foreground, and only its output shows its prompt.
+        @Test(arguments: [["/bin/zsh", "-f", "-i"], ["/bin/bash", "-c", "PS1='ready> ' /bin/zsh -f -i +m; true"]])
+        func zshKeepsTheOutputAndOnePromptThroughManyWidths(command: [String]) async throws {
             let size = SessionSize(columns: 80, rows: 24)
-            let session = try makeSession("/bin/zsh", ["-f", "-i"], environment: ["PATH": "/usr/bin:/bin", "PS1": "ready> ", "TERM": "xterm-256color"], size: size)
+            let session = try makeSession(command[0], Array(command.dropFirst()), environment: ["PATH": "/usr/bin:/bin", "PS1": "ready> ", "TERM": "xterm-256color"], size: size)
             await session.start()
             let viewer = try FollowingViewer()
             try await viewer.attach(to: session, size: size)

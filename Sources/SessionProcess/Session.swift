@@ -18,6 +18,8 @@ actor Session {
     private(set) var summary: SessionSummary
     private let pseudoTerminal: PseudoTerminal
     private let terminal: Terminal
+    /// Writes the program's output to the terminal, and finds its prompts.
+    private let prompts: ShellPromptTracker
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     /// The attached clients that write raw output to a real terminal.
     private var relayingClients: Set<ObjectIdentifier> = []
@@ -61,6 +63,7 @@ actor Session {
         let gate = ReplyGate()
         replyGate = gate
         terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: Self.scrollbackLimit)
+        prompts = ShellPromptTracker(terminal: terminal)
         // The terminal answers queries such as "where is the cursor", unless a
         // client's real terminal answers them. A client's copy of the screen
         // has no handler, so the real terminal is the only other source.
@@ -310,7 +313,7 @@ actor Session {
     /// Parses program output and sends it to every client.
     private func show(_ bytes: ArraySlice<UInt8>) {
         guard !bytes.isEmpty else { return }
-        terminal.write(bytes)
+        prompts.write(bytes)
         parsedByteCount += bytes.count
         let message = ServerMessage.output(Data(bytes))
         for client in clients.values { client.send(message) }
@@ -374,14 +377,15 @@ actor Session {
         .sizeChanged(summary.size, keepsCursorAtLineStart: keepsCursorAtLineStart ? true : nil)
     }
 
-    /// The line editor that waits at the cursor. zsh and bash turn on
-    /// bracketed paste only while they edit a command line, and the program
-    /// that reads the keys must be such a shell itself: an agent or another
-    /// program in the foreground draws its own way.
+    /// The line editor that waits at the cursor: a shell whose prompt the
+    /// output shows, also behind ssh, or bash in the foreground. bash turns
+    /// on bracketed paste only while it edits a command line, and the program
+    /// that reads the keys must be bash itself: an agent or another program
+    /// in the foreground draws its own way.
     private func waitingLineEditor() -> LineEditor? {
-        guard !terminal.isAlternateScreenActive, terminal.isModeEnabled(.bracketedPaste),
-              let program = pseudoTerminal.foregroundProgram
-        else { return nil }
+        guard !terminal.isAlternateScreenActive else { return nil }
+        if let prompt = prompts.prompt { return prompt.editor }
+        guard terminal.isModeEnabled(.bracketedPaste), let program = pseudoTerminal.foregroundProgram else { return nil }
         return InteractiveShell.lineEditor(of: program)
     }
 
