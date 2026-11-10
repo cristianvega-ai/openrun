@@ -25,4 +25,30 @@ import Testing
     func otherOutputHasNoPrompt(_ output: String) throws {
         #expect(try Self.tracker(writing: output).prompt == nil)
     }
+
+    /// fish turns bracketed paste off and on while it draws its prompt.
+    /// Only its mark of a command ends the prompt.
+    @Test func aPromptMarkEndsAtTheMarkOfACommand() throws {
+        let tracker = try Self.tracker(writing: "out\u{1b}[?2004h\u{1b}]133;A\u{07}> ")
+        #expect(tracker.prompt == .init(editor: .markedPrompt, rowsAboveCursor: 0))
+        tracker.write(Array("\u{1b}[?2004l".utf8)[...])
+        #expect(tracker.prompt == nil)
+        tracker.write(Array("\u{1b}[?2004hls".utf8)[...])
+        #expect(tracker.prompt?.editor == .markedPrompt)
+        tracker.write(Array("\u{1b}]133;C\u{07}".utf8)[...])
+        #expect(tracker.prompt == nil)
+    }
+
+    /// After output without a line end, zsh's prompt starts on a row that
+    /// continues the output. A reflow joins that row to the output, and the
+    /// kept rows put the prompt below it again.
+    @Test func aResizeKeepsTheFirstRowOfThePrompt() throws {
+        let output = "partial%" + String(repeating: " ", count: 19) + "\r \r" + Self.zshPrompt + "typed"
+        for keeping in [PromptKeeping.cursorRow, .promptRows(aboveCursor: 1)] {
+            let tracker = try Self.tracker(columns: 20, rows: 8, writing: output)
+            if keeping == .cursorRow { tracker.write(Array("\r\u{1b}[A\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[J".utf8)[...]) }
+            #expect(try tracker.resize(to: TerminalSize(columns: 40, rows: 8), keeping: keeping) == keeping)
+            #expect(tracker.prompt?.rowsAboveCursor == (keeping == .cursorRow ? 0 : 1))
+        }
+    }
 }

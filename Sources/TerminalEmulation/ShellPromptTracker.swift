@@ -57,6 +57,20 @@ public final class ShellPromptTracker {
         terminal.write(bytes[written...])
     }
 
+    /// Resizes the terminal (see `Terminal.resize(to:keeping:)`). A reflow can
+    /// join the first row of the prompt to the row above it, so the prompt
+    /// starts where the kept rows put it.
+    @discardableResult
+    public func resize(to size: TerminalSize, keeping: PromptKeeping) throws -> PromptKeeping {
+        let kept = try terminal.resize(to: size, keeping: keeping)
+        switch kept {
+        case .nothing: break
+        case .cursorRow: if let editor { noteStart(editor: editor, rowsAboveCursor: 0) }
+        case .promptRows(let rows): if let editor { noteStart(editor: editor, rowsAboveCursor: rows) }
+        }
+        return kept
+    }
+
     /// zsh moves to the first column before it starts its prompt. Bytes like
     /// its start elsewhere are not a prompt.
     private func noteStart(editor: LineEditor, rowsAboveCursor rows: Int) {
