@@ -407,11 +407,7 @@ actor Session {
             try pseudoTerminal.resize(to: PseudoTerminalSize(size))
             // A query of the size gets the size that the program has.
             terminal.reportedSize = TerminalSize(size)
-            let number = lineEditorWait.start(request, editor: editor, earlierByteCount: earlierByteCount)
-            Task { [weak self, answerTimeLimit] in
-                try? await Task.sleep(for: answerTimeLimit)
-                await self?.answerTimeLimitPassed(number)
-            }
+            scheduleTimeLimit(of: lineEditorWait.start(request, editor: editor, earlierByteCount: earlierByteCount), after: answerTimeLimit)
             return
         }
         if try apply(size, requesterReportsSize: request.reportsItself) { announceSize(changedBy: request.requester) }
@@ -426,6 +422,13 @@ actor Session {
         }
     }
 
+    private func scheduleTimeLimit(of number: Int, after limit: Duration) {
+        Task { [weak self] in
+            try? await Task.sleep(for: limit)
+            await self?.answerTimeLimitPassed(number)
+        }
+    }
+
     private func answerTimeLimitPassed(_ number: Int) {
         guard !isFinished, lineEditorWait.isWaiting, lineEditorWait.number == number else { return }
         finishWait(keeping: keepingWithoutAnswer())
@@ -437,29 +440,15 @@ actor Session {
         prompts.prompt.map { .promptRows(aboveCursor: $0.rowsAboveCursor) } ?? .nothing
     }
 
-    /// Gives the terminal model the size that the program has, and tells the
-    /// clients, in order with the output. Then the resize that came during
-    /// the wait applies.
+    /// Ends the wait. The terminal model takes the size that the program
+    /// has. Then the resize that came during the wait applies.
     ///
     /// - Parameter keeping: What the model keeps of the prompt (see
     ///   `Terminal.resize`). The clients keep what the model kept.
     private func finishWait(keeping: PromptKeeping) {
-        guard let (finished, next) = lineEditorWait.finish() else { return }
-        terminal.reportedSize = nil
-        if !finished.reportsItself { replyGate.close(false) }
-        var kept = PromptKeeping.nothing
-        do {
-            kept = try prompts.resize(to: TerminalSize(finished.size), keeping: keeping)
-            summary.size = finished.size
-            announceSize(changedBy: finished.requester, keeping: kept)
-        } catch {
-            // The size was checked, so only a lack of memory gets here. The
-            // program goes back to the size of the model. That size is not
-            // new, so the clients have nothing to keep.
-            try? pseudoTerminal.resize(to: PseudoTerminalSize(summary.size))
-        }
-        updateReplyGate()
-        confirm(finished, keeping: kept)
+        guard lineEditorWait.isWaiting else { return }
+        let kept = applyWaitingSize(keeping: keeping)
+        guard let (_, next) = lineEditorWait.finish() else { return }
         guard let next else { return sendOwedSizes(keeping: kept) }
         do {
             try change(by: next)
@@ -469,6 +458,29 @@ actor Session {
             confirm(next)
             sendOwedSizes()
         }
+    }
+
+    /// Gives the terminal model the size that the program has, and tells the
+    /// clients, in order with the output. Returns what the model kept.
+    @discardableResult
+    private func applyWaitingSize(keeping: PromptKeeping) -> PromptKeeping {
+        guard let waiting = lineEditorWait.request else { return .nothing }
+        terminal.reportedSize = nil
+        if !waiting.reportsItself { replyGate.close(false) }
+        var kept = PromptKeeping.nothing
+        do {
+            kept = try prompts.resize(to: TerminalSize(waiting.size), keeping: keeping)
+            summary.size = waiting.size
+            announceSize(changedBy: waiting.requester, keeping: kept)
+        } catch {
+            // The size was checked, so only a lack of memory gets here. The
+            // program goes back to the size of the model. That size is not
+            // new, so the clients have nothing to keep.
+            try? pseudoTerminal.resize(to: PseudoTerminalSize(summary.size))
+        }
+        updateReplyGate()
+        confirm(waiting, keeping: kept)
+        return kept
     }
 
     /// Resizes both copies of the terminal, or neither, and returns whether
