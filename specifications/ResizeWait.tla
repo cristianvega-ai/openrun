@@ -49,17 +49,17 @@ Request(number, client, size, confirms, origin, previousSize) ==
   [number |-> number, client |-> client, size |-> size, confirms |-> confirms,
    origin |-> origin, previousSize |-> previousSize]
 Obligation(number, client) == [number |-> number, client |-> client]
-OutputOperation(number) == [kind |-> "output", number |-> number, size |-> 0, keeps |-> FALSE]
+OutputOperation(number) == [kind |-> "output", number |-> number, size |-> 0, keeps |-> "plain"]
 SizeOperation(size, keeps) == [kind |-> "size", number |-> 0, size |-> size, keeps |-> keeps]
 Message(kind, number, size, keeps, confirmation, snapshot) ==
   [kind |-> kind, number |-> number, size |-> size, keeps |-> keeps,
    confirmation |-> confirmation, snapshot |-> snapshot]
-OutputMessage(number) == Message("output", number, 0, FALSE, 0, <<>>)
+OutputMessage(number) == Message("output", number, 0, "plain", 0, <<>>)
 SizeMessage(size, keeps, confirmation) == Message("size", 0, size, keeps, confirmation, <<>>)
 SnapshotMessage(size, snapshot) == Message("snapshot", 0, size, FALSE, 0, snapshot)
 
-\* A trace records only the ordering and cursor rule of screen changes. It
-\* distinguishes a size change with the cursor rule from one without it.
+\* A trace records only the ordering of screen changes and what each size
+\* change keeps of the prompt: "plain", "cursorRow" or "promptRows".
 ResizedTrace(trace, previous, size, keeps) ==
   IF previous = size THEN trace ELSE Append(trace, SizeOperation(size, keeps))
 
@@ -135,7 +135,7 @@ SizeQueues(oldQueues, request, previous, size, keeps) ==
        ((client # request.client /\ previous # size) \/
         (client = request.client /\ request.confirms))
     THEN Append(oldQueues[client],
-      SizeMessage(size, IF SendCursorRule THEN keeps ELSE FALSE,
+      SizeMessage(size, IF SendCursorRule THEN keeps ELSE "plain",
                   IF client = request.client /\ request.confirms
                   THEN request.number ELSE 0))
     ELSE oldQueues[client]]
@@ -146,7 +146,7 @@ OwedQueues(oldQueues, clients, size, keeps) ==
   [client \in Clients |->
     IF client \in clients \cap attached
     THEN Append(oldQueues[client],
-      SizeMessage(size, IF SendCursorRule THEN keeps ELSE FALSE, requestCount))
+      SizeMessage(size, IF SendCursorRule THEN keeps ELSE "plain", requestCount))
     ELSE oldQueues[client]]
 
 WaitsForEditor(size) ==
@@ -185,7 +185,7 @@ RequestResize(client, size, confirms) ==
          beginsWait == valid /\ active = NoRequest /\ WaitsForEditor(size)
          immediate == valid /\ active = NoRequest /\ ~beginsWait
          early == beginsWait /\ ~KeepOldWidthWhileWaiting
-         sent == IF immediate \/ early THEN SizeQueues(queues, request, screenSize, size, FALSE) ELSE queues
+         sent == IF immediate \/ early THEN SizeQueues(queues, request, screenSize, size, "plain") ELSE queues
      IN /\ requestCount' = requestCount + 1
         /\ latestSize' = IF valid THEN size ELSE latestSize
         /\ latestValidRequestNumber' = IF valid THEN request.number ELSE latestValidRequestNumber
@@ -198,7 +198,7 @@ RequestResize(client, size, confirms) ==
         /\ owed' = IF active # NoRequest /\ ~ignored THEN newOwed ELSE owed
         /\ programSize' = IF beginsWait \/ immediate THEN size ELSE programSize
         /\ screenSize' = IF immediate \/ early THEN size ELSE screenSize
-        /\ screenTrace' = IF immediate \/ early THEN ResizedTrace(screenTrace, screenSize, size, FALSE) ELSE screenTrace
+        /\ screenTrace' = IF immediate \/ early THEN ResizedTrace(screenTrace, screenSize, size, "plain") ELSE screenTrace
         /\ queues' = sent
         /\ lastWaitNumber' = IF beginsWait THEN lastWaitNumber + 1 ELSE lastWaitNumber
         /\ scheduledTimeouts' = IF beginsWait THEN scheduledTimeouts \cup {lastWaitNumber + 1} ELSE scheduledTimeouts
@@ -211,8 +211,9 @@ RequestResize(client, size, confirms) ==
              previousTrace, ended>>
 
 \* The shell's erase is output at the old width. The session then sends the
-\* size marker. A later output step is at the new width. A timeout, an end of
-\* editing, or an attach uses a plain resize, without the cursor rule.
+\* size marker. A later output step is at the new width. A timeout or an
+\* attach comes before the answer, so it keeps the rows of the prompt. An end
+\* of editing uses a plain resize.
 ResolveWait(reason, includesErase, timeoutNumber) ==
   /\ ~ended /\ active # NoRequest
   /\ reason \in {"redraw", "bufferedErase", "timeout", "editingEnd", "attach"}
@@ -225,8 +226,8 @@ ResolveWait(reason, includesErase, timeoutNumber) ==
   /\ (reason # "timeout" \/ timeoutNumber \in scheduledTimeouts)
   /\ includesErase \in BOOLEAN
   /\ includesErase => (reason \in {"redraw", "bufferedErase"} /\ outputCount < OutputLimit)
-  /\ LET keeps == reason \in {"redraw", "bufferedErase"} \/
-                  (~BreakOnlyAfterErase /\ reason \notin {"redraw", "bufferedErase"})
+  /\ LET keeps == IF reason \in {"redraw", "bufferedErase"} \/ ~BreakOnlyAfterErase THEN "cursorRow"
+                  ELSE IF reason \in {"timeout", "attach"} THEN "promptRows" ELSE "plain"
          number == outputCount + 1
          beforeTrace == IF includesErase THEN Append(screenTrace, OutputOperation(number)) ELSE screenTrace
          beforeQueues == IF includesErase /\ SendEraseBeforeSize THEN OutputQueues(queues, number) ELSE queues
@@ -238,7 +239,7 @@ ResolveWait(reason, includesErase, timeoutNumber) ==
         /\ queues' = finalQueues
         /\ outputCount' = IF includesErase THEN number ELSE outputCount
         /\ wrongRedrawSize' = (wrongRedrawSize \/ (reason = "redraw" /\ screenSize # active.previousSize))
-        /\ wrongCursorRule' = (wrongCursorRule \/ (reason \notin {"redraw", "bufferedErase"} /\ keeps))
+        /\ wrongCursorRule' = (wrongCursorRule \/ (reason \notin {"redraw", "bufferedErase"} /\ keeps = "cursorRow"))
         /\ wrongRedrawAttribution' = (wrongRedrawAttribution \/ reason = "bufferedErase")
         /\ bufferedErase' = IF reason = "bufferedErase" THEN FALSE ELSE bufferedErase
         /\ wrongTimeout' = (wrongTimeout \/ (reason = "timeout" /\ timeoutNumber # lastWaitNumber))
@@ -263,13 +264,13 @@ StartPending ==
          waits == valid /\ WaitsForEditor(request.size)
          early == waits /\ ~KeepOldWidthWhileWaiting
          appliedSize == IF valid THEN request.size ELSE screenSize
-         sent == IF (waits /\ ~early) \/ ~valid THEN queues ELSE SizeQueues(queues, request, screenSize, request.size, FALSE)
+         sent == IF (waits /\ ~early) \/ ~valid THEN queues ELSE SizeQueues(queues, request, screenSize, request.size, "plain")
      IN /\ programSize' = IF valid THEN request.size ELSE programSize
         /\ screenSize' = IF waits /\ ~early THEN screenSize ELSE appliedSize
-        /\ screenTrace' = IF waits /\ ~early THEN screenTrace ELSE ResizedTrace(screenTrace, screenSize, appliedSize, FALSE)
+        /\ screenTrace' = IF waits /\ ~early THEN screenTrace ELSE ResizedTrace(screenTrace, screenSize, appliedSize, "plain")
         /\ active' = IF waits THEN request ELSE NoRequest
         /\ pending' = NoRequest
-        /\ queues' = IF waits THEN sent ELSE OwedQueues(sent, owed, appliedSize, FALSE)
+        /\ queues' = IF waits THEN sent ELSE OwedQueues(sent, owed, appliedSize, "plain")
         /\ owed' = IF waits THEN owed ELSE {}
         /\ lastWaitNumber' = IF waits THEN lastWaitNumber + 1 ELSE lastWaitNumber
         /\ scheduledTimeouts' = IF waits THEN scheduledTimeouts \cup {lastWaitNumber + 1} ELSE scheduledTimeouts
@@ -287,9 +288,9 @@ StartPending ==
 \* size that remains, and a pending request still takes its turn.
 FailWait ==
   /\ ~ended /\ active # NoRequest
-  /\ LET sent == SizeQueues(queues, active, screenSize, screenSize, FALSE)
+  /\ LET sent == SizeQueues(queues, active, screenSize, screenSize, "plain")
      IN /\ programSize' = IF RestoreProgramOnResizeFailure THEN screenSize ELSE programSize
-        /\ queues' = IF pending = NoRequest THEN OwedQueues(sent, owed, screenSize, FALSE) ELSE sent
+        /\ queues' = IF pending = NoRequest THEN OwedQueues(sent, owed, screenSize, "plain") ELSE sent
         /\ latestSize' = IF latestValidRequestNumber = active.number THEN screenSize ELSE latestSize
         /\ UNCHANGED latestValidRequestNumber
         /\ active' = NoRequest
@@ -465,7 +466,7 @@ ApplyAttach ==
   /\ programSize' = IF attachOutcome = "refused" THEN programSize ELSE attachSize
   /\ screenSize' = IF attachOutcome = "refused" THEN screenSize ELSE attachSize
   /\ screenTrace' = IF attachOutcome = "refused" THEN screenTrace
-       ELSE ResizedTrace(screenTrace, screenSize, attachSize, FALSE)
+       ELSE ResizedTrace(screenTrace, screenSize, attachSize, "plain")
   /\ attachPhase' = "capture"
   /\ UNCHANGED <<open, attached, following, clientSize, clientTrace, queues,
        mode, active, pending, owed, unanswered, requestCount, outputCount,
@@ -485,7 +486,7 @@ FinishAttach ==
            IF success /\ client = attaching
            THEN Append(queues[client], SnapshotMessage(screenSize, screenTrace))
            ELSE IF client \in attached /\ retained /\ changed
-           THEN Append(queues[client], SizeMessage(screenSize, FALSE, 0))
+           THEN Append(queues[client], SizeMessage(screenSize, "plain", 0))
            ELSE queues[client]]
      IN /\ programSize' = IF rollsBack THEN previousSize ELSE programSize
         /\ screenSize' = IF rollsBack THEN previousSize ELSE screenSize
