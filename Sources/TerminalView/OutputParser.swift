@@ -12,7 +12,7 @@ final class OutputParser {
     private var offset = 0
     private var isParsing = false
     private var discardsAfterParse = false
-    var onSize: ((TerminalSize, _ tellsDelegate: Bool, _ keepsCursorAtLineStart: Bool) -> Void)?
+    var onSize: ((TerminalSize, _ tellsDelegate: Bool, _ keeping: PromptKeeping) -> Void)?
 
     init(pieceSize: Int = 64 * 1024) {
         self.pieceSize = pieceSize
@@ -25,8 +25,8 @@ final class OutputParser {
     }
 
     /// Applies a size after all output that came before it.
-    func append(size: TerminalSize, tellsDelegate: Bool, keepsCursorAtLineStart: Bool = false, completion: (@Sendable () -> Void)? = nil) {
-        queue.append(.size(size, tellsDelegate: tellsDelegate, keepsCursorAtLineStart: keepsCursorAtLineStart), completion: completion)
+    func append(size: TerminalSize, tellsDelegate: Bool, keeping: PromptKeeping = .nothing, completion: (@Sendable () -> Void)? = nil) {
+        queue.append(.size(size, tellsDelegate: tellsDelegate, keeping: keeping), completion: completion)
     }
 
     /// A closed view releases its pending output and its admission slots.
@@ -51,9 +51,9 @@ final class OutputParser {
                 terminal.write(bytes[offset..<end])
                 offset = end
                 if offset == bytes.count { queue.removeFirst(); offset = 0 }
-            case .size(let size, let tellsDelegate, let keepsCursorAtLineStart):
+            case .size(let size, let tellsDelegate, let keeping):
                 guard let onSize else { preconditionFailure("The size has no handler.") }
-                onSize(size, tellsDelegate, keepsCursorAtLineStart)
+                onSize(size, tellsDelegate, keeping)
                 queue.removeFirst()
             }
         } while hasPendingOutput && !budget.isUsed && !discardsAfterParse

@@ -434,7 +434,7 @@ actor Session {
         if !finished.reportsItself { replyGate.close(false) }
         var keepsCursorAtLineStart = keepsCursorAtLineStart
         do {
-            try terminal.resize(to: TerminalSize(finished.size), keepingCursorAtLineStart: keepsCursorAtLineStart)
+            try terminal.resize(to: TerminalSize(finished.size), keeping: keepsCursorAtLineStart ? .cursorRow : .nothing)
             summary.size = finished.size
             announceSize(changedBy: finished.requester, keepsCursorAtLineStart: keepsCursorAtLineStart)
         } catch {

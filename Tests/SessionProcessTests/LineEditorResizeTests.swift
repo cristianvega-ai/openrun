@@ -49,7 +49,7 @@ private final class FollowingViewer {
             case .output(let bytes): screen?.write(bytes)
             case .sizeChanged(let size, let keepsCursorAtLineStart):
                 sizes.append(size)
-                try screen?.resize(to: TerminalSize(columns: size.columns, rows: size.rows), keepingCursorAtLineStart: keepsCursorAtLineStart == true)
+                try screen?.resize(to: TerminalSize(columns: size.columns, rows: size.rows), keeping: keepsCursorAtLineStart == true ? .cursorRow : .nothing)
             case nil: return false
             default: break
             }

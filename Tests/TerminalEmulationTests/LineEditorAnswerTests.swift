@@ -38,7 +38,7 @@ private final class FollowingScreen {
             return
         }
         terminal.write(bytes[..<end.index])
-        try terminal.resize(to: size, keepingCursorAtLineStart: end.erasedLines)
+        try terminal.resize(to: size, keeping: end.erasedLines ? .cursorRow : .nothing)
         waitingSize = nil
         terminal.write(bytes[end.index...])
     }

@@ -10,7 +10,7 @@ import Testing
     func aCursorAtTheStartOfABlankWrappedRowKeepsItsRow(columns: Int) throws {
         let terminal = try makeTerminal(columns: 40, rows: 10)
         terminal.write(Self.wrappedMark)
-        try terminal.resize(to: TerminalSize(columns: UInt16(columns), rows: 10), keepingCursorAtLineStart: true)
+        try terminal.resize(to: TerminalSize(columns: UInt16(columns), rows: 10), keeping: .cursorRow)
         #expect(terminal.cursorPosition.column == 0)
         terminal.write("prompt>")
         #expect(try terminal.visibleText().hasSuffix("\nprompt>"))
@@ -36,7 +36,7 @@ import Testing
         let terminal = try makeTerminal(columns: 40, rows: 10)
         terminal.write(output)
         let (before, cursor) = (try terminal.formatted(.virtualTerminalSequences), terminal.cursorPosition)
-        try terminal.resize(to: TerminalSize(columns: 60, rows: 10), keepingCursorAtLineStart: true)
+        try terminal.resize(to: TerminalSize(columns: 60, rows: 10), keeping: .cursorRow)
         // The wrap stays, so the cursor follows the wrapped line.
         #expect(terminal.cursorPosition.column != 0)
         try terminal.resize(to: TerminalSize(columns: 40, rows: 10))
@@ -47,7 +47,7 @@ import Testing
     @Test func aChangeOfRowsOnlyKeepsTheWrap() throws {
         let terminal = try makeTerminal(columns: 40, rows: 10)
         terminal.write(Self.wrappedMark)
-        try terminal.resize(to: TerminalSize(columns: 40, rows: 12), keepingCursorAtLineStart: true)
+        try terminal.resize(to: TerminalSize(columns: 40, rows: 12), keeping: .cursorRow)
         try terminal.resize(to: TerminalSize(columns: 60, rows: 12))
         #expect(terminal.cursorPosition.column != 0)
     }
