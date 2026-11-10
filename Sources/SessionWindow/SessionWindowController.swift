@@ -115,9 +115,10 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         case .output(let bytes):
             guard let view else { finish(); return }
             view.write(bytes, completion: finish)
-        case .sizeChanged(let size, let keepsCursorAtLineStart):
+        case .sizeChanged(let size, let keepsCursorAtLineStart, let promptRows):
             guard let view else { finish(); return }
-            view.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows), keeping: keepsCursorAtLineStart ? .cursorRow : .nothing, completion: finish)
+            let keeping: PromptKeeping = promptRows.map { .promptRows(aboveCursor: $0) } ?? (keepsCursorAtLineStart ? .cursorRow : .nothing)
+            view.followSessionSize(TerminalSize(columns: size.columns, rows: size.rows), keeping: keeping, completion: finish)
         case .exited, .closed, .failed:
             let afterOutput: @MainActor @Sendable () -> Void = { [weak self] in
                 if let self, !self.isClosed {

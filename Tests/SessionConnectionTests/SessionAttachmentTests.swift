@@ -93,10 +93,12 @@ import Testing
     @Test func theEventsComeInTheOrderOfTheSessionProcessAndNothingFollowsTheExit() async throws {
         let attachment = try Self.attach(answering: [
             .attached(Self.summary), .snapshot(Data()), .output(Data("a".utf8)), .sizeChanged(SessionSize(columns: 100, rows: 30)),
-            .output(Data("b".utf8)), .exited(.exited(status: 3)), .output(Data("after the exit".utf8)),
+            .sizeChanged(SessionSize(columns: 90, rows: 30), promptRowsAboveCursor: 2), .output(Data("b".utf8)), .exited(.exited(status: 3)),
+            .output(Data("after the exit".utf8)),
         ])
         #expect(await Self.events(of: attachment) == [
-            .output(Data("a".utf8)), .sizeChanged(SessionSize(columns: 100, rows: 30)), .output(Data("b".utf8)), .exited(.exited(status: 3)),
+            .output(Data("a".utf8)), .sizeChanged(SessionSize(columns: 100, rows: 30)), .sizeChanged(SessionSize(columns: 90, rows: 30), promptRowsAboveCursor: 2),
+            .output(Data("b".utf8)), .exited(.exited(status: 3)),
         ])
     }
 

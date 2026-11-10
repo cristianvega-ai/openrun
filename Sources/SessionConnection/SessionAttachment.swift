@@ -99,8 +99,8 @@ public final class SessionAttachment: Sendable {
             switch message {
             case .output(let bytes):
                 handler(.output(bytes))
-            case .sizeChanged(let size, let keepsCursorAtLineStart, _):
-                handler(.sizeChanged(size, keepsCursorAtLineStart: keepsCursorAtLineStart == true))
+            case .sizeChanged(let size, let keepsCursorAtLineStart, let promptRows):
+                handler(.sizeChanged(size, keepsCursorAtLineStart: keepsCursorAtLineStart == true, promptRowsAboveCursor: promptRows))
             case .exited(let exit):
                 handler(.exited(exit))
                 return

@@ -8,8 +8,8 @@ public enum SessionAttachmentEvent: Equatable, Sendable {
     case output(Data)
     /// Another client changed the size, or the session confirms a requested
     /// resize. The output after it is for the new size. See
-    /// `ServerMessage.sizeChanged` for `keepsCursorAtLineStart`.
-    case sizeChanged(SessionSize, keepsCursorAtLineStart: Bool = false)
+    /// `ServerMessage.sizeChanged` for the other fields.
+    case sizeChanged(SessionSize, keepsCursorAtLineStart: Bool = false, promptRowsAboveCursor: Int? = nil)
     /// The program ended.
     case exited(SessionExit)
     /// The connection closed before the program ended: the session process
