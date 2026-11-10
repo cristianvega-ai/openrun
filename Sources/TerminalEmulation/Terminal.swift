@@ -141,7 +141,7 @@ public final class Terminal {
     ///   size to do the same.
     public func resize(to size: TerminalSize, keeping: PromptKeeping = .nothing) throws {
         try Terminal.validate(size, in: "Terminal.resize")
-        if keeping == .cursorRow, size.columns != self.size.columns { keepCursorAtLineStart() }
+        let keepsCursorRow = keeping == .cursorRow && size.columns != self.size.columns && cursorStartsBlankRow
         // libghostty-vt takes the pixel size of one cell and keeps the pixel
         // size of the whole grid from it. It builds the resize report of
         // mode 2048 from that stored size, so a zero would report a window of
@@ -151,6 +151,7 @@ public final class Terminal {
             ghostty_terminal_resize(handle, size.columns, size.rows, Terminal.nominalCellWidth, Terminal.nominalCellHeight),
             from: "ghostty_terminal_resize"
         )
+        if keepsCursorRow, cursorPosition.column != 0 { write("\r\n") }
     }
 
     /// Formats the active screen.

@@ -1,30 +1,24 @@
 import GhosttyVt
 
 extension Terminal {
-    /// Ends the wrap of the row above the cursor, when the cursor is at the
-    /// start of a blank row that continues that row.
+    /// Whether the cursor is at the start of a blank row, where a line break
+    /// after a reflow can give it a row of its own again.
     ///
-    /// zsh's prompt can start on such a row: after output without a line end,
-    /// the mark of PROMPT_SP and its spaces wrap onto a new row. When zsh
-    /// answers a new size, it erases from the first column of that row. A
-    /// reflow would then join the blank row to the output above it and put
-    /// the cursor after that output, where zsh would draw its prompt. An
-    /// erase of the last cell of the row above ends the wrap, so the cursor
-    /// keeps a row of its own. Only a blank cell without style or link may
-    /// go, and the erase must leave it so: the erase fills the cell with the
-    /// background of the cursor's style.
+    /// zsh's prompt can start on a row that continues the output above it:
+    /// after output without a line end, the mark of PROMPT_SP and its spaces
+    /// wrap onto a new row. When zsh answers a new size, it erases from the
+    /// first column of that row. A reflow then joins the blank row to the
+    /// output, and the cursor stands after the output, where zsh would draw
+    /// its prompt. A line break after the reflow moves the cursor to a new
+    /// row and erases no cell. At the bottom, the new row takes the
+    /// background of the cursor's style, so that style must have none.
     ///
     /// Ordinary output keeps the reflow of libghostty-vt. Only a size that
     /// comes where a shell has erased its lines does this.
-    func keepCursorAtLineStart() {
+    var cursorStartsBlankRow: Bool {
         let cursor = cursorPosition
-        let row = Int(cursor.row)
-        let lastColumn = size.columns - 1
-        guard cursor.column == 0, row > 0, !isAlternateScreenActive, isAtVirtualTerminalGround, !isOriginModeEnabled,
-              !cursorStyleHasBackground, rowWraps(atActiveRow: row - 1), cellIsBlank(column: lastColumn, activeRow: row - 1),
-              (0...lastColumn).allSatisfy({ cellIsBlank(column: $0, activeRow: row) })
-        else { return }
-        write("\u{1b}[\(row);\(size.columns)H\u{1b}[K\u{1b}[\(row + 1);1H")
+        return cursor.column == 0 && !isAlternateScreenActive && isAtVirtualTerminalGround && !cursorStyleHasBackground
+            && (0..<size.columns).allSatisfy { cellIsBlank(column: $0, activeRow: Int(cursor.row)) }
     }
 
     /// Whether the parser is outside every escape sequence and character, so
@@ -33,14 +27,6 @@ extension Terminal {
         var ground = false
         _ = ghostty_terminal_get(handle, GHOSTTY_TERMINAL_DATA_VT_GROUND, &ground)
         return ground
-    }
-
-    /// Origin mode makes row numbers count from the top margin.
-    private var isOriginModeEnabled: Bool {
-        var configuration = GhosttyTerminalModeConfig()
-        configuration.mode = ghostty_mode_new(6, false)
-        guard ghostty_terminal_get(handle, GHOSTTY_TERMINAL_DATA_MODE, &configuration) == GHOSTTY_SUCCESS else { return true }
-        return configuration.value
     }
 
     private var cursorStyleHasBackground: Bool {
@@ -58,16 +44,6 @@ extension Terminal {
         reference.size = MemoryLayout<GhosttyGridRef>.size
         guard ghostty_terminal_grid_ref(handle, point, &reference) == GHOSTTY_SUCCESS else { return nil }
         return reference
-    }
-
-    private func rowWraps(atActiveRow row: Int) -> Bool {
-        guard var reference = reference(column: 0, activeRow: row) else { return false }
-        var gridRow: GhosttyRow = 0
-        var wraps = false
-        guard ghostty_grid_ref_row(&reference, &gridRow) == GHOSTTY_SUCCESS,
-              ghostty_row_get(gridRow, GHOSTTY_ROW_DATA_WRAP, &wraps) == GHOSTTY_SUCCESS
-        else { return false }
-        return wraps
     }
 
     /// Whether the cell holds nothing or a space, without style or link.

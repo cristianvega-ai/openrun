@@ -2,18 +2,24 @@ import Testing
 @testable import TerminalEmulation
 
 @Suite struct CursorLineStartTests {
-    /// Output without a line end, the mark of zsh's PROMPT_SP, and spaces that
-    /// wrap. zsh's erase leaves the cursor at the start of the blank row below.
-    private static let wrappedMark = "partial%" + String(repeating: " ", count: 39) + "\r \r\u{1b}[0m\u{1b}[J"
+    /// The mark of zsh's PROMPT_SP and its spaces after output without a line
+    /// end, and zsh's erase from the start of the row below.
+    private static func zshPrompt(after output: String) -> String {
+        output + "%" + String(repeating: " ", count: 39) + "\r \r\r\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[J"
+    }
 
-    @Test(arguments: [25, 60, 33])
-    func aCursorAtTheStartOfABlankWrappedRowKeepsItsRow(columns: Int) throws {
+    /// A wide character or a narrow one can fill the last cell before the
+    /// mark. The line break erases neither of them.
+    @Test(arguments: [("partial", 25), ("partial", 60), ("partial", 33), (String(repeating: "w", count: 38) + "\u{65E5}", 25),
+                      (String(repeating: "w", count: 38) + "\u{65E5}", 60), (String(repeating: "w", count: 39) + "Q", 60)])
+    func aCursorAtTheStartOfABlankWrappedRowKeepsItsRow(output: String, columns: Int) throws {
         let terminal = try makeTerminal(columns: 40, rows: 10)
-        terminal.write(Self.wrappedMark)
+        terminal.write(Self.zshPrompt(after: output))
         try terminal.resize(to: TerminalSize(columns: UInt16(columns), rows: 10), keeping: .cursorRow)
         #expect(terminal.cursorPosition.column == 0)
         terminal.write("prompt>")
-        #expect(try terminal.visibleText().hasSuffix("\nprompt>"))
+        let text = try terminal.visibleText()
+        #expect(text.hasSuffix("\nprompt>") && text.replacingOccurrences(of: "\n", with: "").hasPrefix(output), "\(text)")
     }
 
     /// Without the request, a resize keeps the reflow of libghostty-vt: the
@@ -27,26 +33,19 @@ import Testing
         #expect(try terminal.visibleText() == start + " Z")
     }
 
-    @Test(arguments: [
-        String(repeating: "a", count: 40) + "b\r\u{1b}[K",
-        String(repeating: "a", count: 39) + "\u{1b}[41m \u{1b}[0mb\r\u{1b}[K",
-        "partial%" + String(repeating: " ", count: 39) + "\r \r\u{1b}[J\u{1b}[41m",
-    ])
-    func aCellWithTextOrColorStaysAndSoDoesTheWrap(output: String) throws {
+    /// A row with text is not where a shell erased its lines, and a line
+    /// break at the bottom would color a new row with the cursor's style.
+    @Test(arguments: [String(repeating: "a", count: 40) + "b\r", zshPrompt(after: "partial") + "\u{1b}[41m"])
+    func aRowWithTextOrAColoredCursorFollowsTheReflow(output: String) throws {
         let terminal = try makeTerminal(columns: 40, rows: 10)
         terminal.write(output)
-        let (before, cursor) = (try terminal.formatted(.virtualTerminalSequences), terminal.cursorPosition)
         try terminal.resize(to: TerminalSize(columns: 60, rows: 10), keeping: .cursorRow)
-        // The wrap stays, so the cursor follows the wrapped line.
         #expect(terminal.cursorPosition.column != 0)
-        try terminal.resize(to: TerminalSize(columns: 40, rows: 10))
-        #expect(try terminal.formatted(.virtualTerminalSequences) == before)
-        #expect(terminal.cursorPosition == cursor)
     }
 
     @Test func aChangeOfRowsOnlyKeepsTheWrap() throws {
         let terminal = try makeTerminal(columns: 40, rows: 10)
-        terminal.write(Self.wrappedMark)
+        terminal.write(Self.zshPrompt(after: "partial"))
         try terminal.resize(to: TerminalSize(columns: 40, rows: 12), keeping: .cursorRow)
         try terminal.resize(to: TerminalSize(columns: 60, rows: 12))
         #expect(terminal.cursorPosition.column != 0)
