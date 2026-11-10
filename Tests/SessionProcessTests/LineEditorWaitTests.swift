@@ -2,6 +2,9 @@ import SessionProtocol
 @testable import SessionProcess
 import Testing
 
+/// The bytes with which zsh starts to draw its prompt.
+private let zshPromptStart = "\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[J"
+
 @Suite struct LineEditorWaitTests {
     private final class Client {}
     private let first = ObjectIdentifier(Client.self)
@@ -59,15 +62,15 @@ import Testing
         #expect(wait.takeClientsOwedTheSize() == [])
     }
 
-    /// Output that the program wrote before it got the size can hold an
-    /// erase too, such as one that removed a list of completions.
-    @Test func anEraseFromBeforeTheSizeIsNotTheAnswer() {
+    /// Output that the program wrote before it got the size can hold the
+    /// start of a prompt too, such as one for an older size.
+    @Test func aPromptStartFromBeforeTheSizeIsNotTheAnswer() {
         var wait = LineEditorWait()
-        let earlier = Array("\r\u{1b}[Jlist\u{1b}".utf8)
+        let earlier = Array(("\r" + zshPromptStart + "old\u{1b}").utf8)
         _ = wait.start(request(60, from: first), editor: .zsh, earlierByteCount: earlier.count)
         #expect(wait.end(in: Array(earlier.prefix(4))[...]) == nil)
         // The rest of the earlier sequence and the new answer, in one piece.
-        let piece = Array(earlier.dropFirst(4)) + Array("[J\r\u{1b}[Jprompt".utf8)
+        let piece = Array(earlier.dropFirst(4)) + Array(("[J\r" + zshPromptStart + "prompt").utf8)
         let end = wait.end(in: piece[...])
         #expect(end?.index == piece.count - "prompt".utf8.count && end?.erasedLines == true)
     }
@@ -82,11 +85,11 @@ import Testing
         #expect(wait.takeClientsOwedTheSize() == [first])
     }
 
-    @Test func theAnswerEndsAtTheEditorsErase() {
+    @Test func theAnswerEndsAtTheStartOfThePrompt() {
         var wait = LineEditorWait()
-        #expect(wait.end(in: Array("\u{1b}[J".utf8)[...]) == nil)
+        #expect(wait.end(in: Array(zshPromptStart.utf8)[...]) == nil)
         _ = wait.start(request(60, from: first), editor: .zsh, earlierByteCount: 0)
-        let end = wait.end(in: Array("x\r\u{1b}[Jprompt".utf8)[...])
-        #expect(end?.index == 5 && end?.erasedLines == true)
+        let end = wait.end(in: Array(("x\r" + zshPromptStart + "prompt").utf8)[...])
+        #expect(end?.index == 2 + zshPromptStart.utf8.count && end?.erasedLines == true)
     }
 }

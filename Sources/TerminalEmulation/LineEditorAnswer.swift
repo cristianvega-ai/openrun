@@ -9,8 +9,9 @@
 /// erase, and takes the new width just after it. The editor's erase then
 /// removes exactly its old lines, and nothing above them.
 ///
-/// The answer also ends when the editor stops editing (`CSI ? 2004 l`). The
-/// shell then runs a command, and the command writes for the new size.
+/// The answer also ends when the editor stops editing (`CSI ? 2004 l`, or
+/// `OSC 133 ; C` of a shell that marks its prompt). The shell then runs a
+/// command, and the command writes for the new size.
 ///
 /// Give it the program's output in order, until it returns an end.
 public struct LineEditorAnswer: Sendable {
@@ -24,7 +25,6 @@ public struct LineEditorAnswer: Sendable {
     }
 
     private static let editingEnd = Array("\u{1b}[?2004l".utf8)
-    private static let eraseBelow = [Array("\u{1b}[J".utf8), Array("\u{1b}[0J".utf8)]
     private static let lastRowErase = Array("\r\u{1b}[K".utf8)
     private static let rowAboveErases = [Array("\r\u{1b}[A\u{1b}[K".utf8), Array("\u{1b}[A\u{1b}[K".utf8)]
 
@@ -36,6 +36,8 @@ public struct LineEditorAnswer: Sendable {
     /// first erase. Readline erases its rows from the bottom up, so the
     /// answer ends only when a byte does not start another erase.
     private var bytesAfterErase: [UInt8]?
+    /// zsh and a shell with prompt marks answer with the start of a prompt.
+    private var promptScanner = ShellPromptScanner()
 
     public init(editor: LineEditor) {
         self.editor = editor
@@ -45,6 +47,18 @@ public struct LineEditorAnswer: Sendable {
     /// copy of the screen takes the new width there. Nil when the answer has
     /// not ended yet.
     public mutating func end(in bytes: ArraySlice<UInt8>) -> End? {
+        guard editor == .readline else {
+            for hit in promptScanner.hits(in: bytes) {
+                switch (hit.event, editor) {
+                // fish turns bracketed paste off and on while it draws, so
+                // only its mark of a command ends its editing.
+                case (.editingEnd, .zsh), (.commandStart, _): return End(index: hit.index, erasedLines: false)
+                case (.zshPromptStart, .zsh), (.markedPromptStart, .markedPrompt): return End(index: hit.index, erasedLines: true)
+                default: continue
+                }
+            }
+            return nil
+        }
         for index in bytes.indices {
             let byte = bytes[index]
             if var after = bytesAfterErase {
@@ -64,12 +78,7 @@ public struct LineEditorAnswer: Sendable {
             recentBytes.append(byte)
             if recentBytes.count > Self.editingEnd.count { recentBytes.removeFirst() }
             if endsRecentBytes(Self.editingEnd) { return End(index: index + 1, erasedLines: false) }
-            switch editor {
-            case .zsh:
-                if Self.eraseBelow.contains(where: endsRecentBytes) { return End(index: index + 1, erasedLines: true) }
-            case .readline:
-                if endsRecentBytes(Self.lastRowErase) { bytesAfterErase = [] }
-            }
+            if endsRecentBytes(Self.lastRowErase) { bytesAfterErase = [] }
         }
         return nil
     }

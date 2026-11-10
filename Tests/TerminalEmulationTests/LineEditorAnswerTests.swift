@@ -11,7 +11,7 @@ private struct FakeZsh {
     mutating func draw(width: Int) -> String {
         let up = cursorLine > 0 ? "\u{1b}[\(cursorLine)A" : ""
         cursorLine = lines.dropLast().reduce(0) { $0 + max(1, ($1.count + width - 1) / width) } + (lines.last!.count - 1) / width
-        return up + "\r\u{1b}[0m\u{1b}[J" + lines.joined(separator: "\r\n")
+        return up + "\r\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[J" + lines.joined(separator: "\r\n")
     }
 }
 
@@ -63,11 +63,14 @@ private final class FollowingScreen {
         return nil
     }
 
-    @Test func zshAnswersAfterItsEraseBelow() {
-        let answer = "\u{1b}[2A\r\u{1b}[0m\u{1b}[J"
+    /// zsh erases a completion list with a bare erase, so only the start of
+    /// its prompt ends its answer.
+    @Test func zshAnswersAtTheStartOfItsPrompt() {
+        let answer = "\u{1b}[2A\r\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[J"
         #expect(Self.end(of: [answer + "prompt> "], editor: .zsh)! == (0, answer.utf8.count, true))
-        #expect(Self.end(of: ["\u{1b}[A\r\u{1b}[", "0Jprompt> "], editor: .zsh)! == (1, 2, true))
-        #expect(Self.end(of: ["typed text\u{1b}[K"], editor: .zsh) == nil)
+        #expect(Self.end(of: ["\u{1b}[A\r\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[", "0Jprompt> "], editor: .zsh)! == (1, 2, true))
+        #expect(Self.end(of: ["typed text\u{1b}[K\r\n\u{1b}[Jlist"], editor: .zsh) == nil)
+        #expect(Self.end(of: [answer + "\u{1b}]133;A\u{07}"], editor: .markedPrompt)! == (0, answer.utf8.count + 8, true))
     }
 
     @Test func readlineAnswersAfterItsLastEraseOfARow() {
@@ -83,6 +86,7 @@ private final class FollowingScreen {
         for editor in [LineEditor.zsh, .readline] {
             #expect(Self.end(of: [typed + "\r\r\noutput"], editor: editor)! == (0, typed.utf8.count, false))
         }
+        #expect(Self.end(of: [typed + "\u{1b}[?2004hx\u{1b}]133;C\u{07}"], editor: .markedPrompt)! == (0, typed.utf8.count + 17, false))
     }
 
     @Test func aLongInputLineKeepsTheOutputAboveIt() throws {
@@ -126,7 +130,7 @@ private final class FollowingScreen {
         let screen = try FollowingScreen(columns: 40, rows: 10)
         try screen.write("prompt> run\r\n\u{1b}[?2004l\u{1b}[Jline one\r\nline two\r\nnext> \u{1b}[?2004h")
         screen.resize(to: TerminalSize(columns: 80, rows: 10), editor: .zsh)
-        try screen.write("\r\u{1b}[Jnext> ")
+        try screen.write("\r\u{1b}[0m\u{1b}[27m\u{1b}[24m\u{1b}[Jnext> ")
         #expect(try screen.terminal.visibleText() == "prompt> run\nline one\nline two\nnext>")
     }
 
