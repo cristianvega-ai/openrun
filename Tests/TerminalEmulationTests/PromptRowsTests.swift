@@ -24,7 +24,8 @@ import Testing
         terminal.write("out-1\r\nout-2\r\n" + Self.draw)
         var rowsUp = 1
         for columns in [50, 80, 30, 80, 100, 20, 80] {
-            try terminal.resize(to: TerminalSize(columns: UInt16(columns), rows: 10), keeping: .promptRows(aboveCursor: rowsUp))
+            let kept = try terminal.resize(to: TerminalSize(columns: UInt16(columns), rows: 10), keeping: .promptRows(aboveCursor: rowsUp))
+            #expect(kept == .promptRows(aboveCursor: rowsUp))
             terminal.write(Self.answer(rowsUp: rowsUp))
             rowsUp = (Self.line.count + columns - 1) / columns
             #expect(try terminal.visibleText() == Self.screen(columns: columns), "\(columns) columns")
@@ -47,7 +48,7 @@ import Testing
     func aPromptThatCannotBeErasedReflows(rowsUp: Int, style: String) throws {
         let terminal = try makeTerminal(columns: 80, rows: 10)
         terminal.write("out-1\r\nout-2\r\n" + Self.draw + style)
-        try terminal.resize(to: TerminalSize(columns: 30, rows: 10), keeping: .promptRows(aboveCursor: rowsUp))
+        #expect(try terminal.resize(to: TerminalSize(columns: 30, rows: 10), keeping: .promptRows(aboveCursor: rowsUp)) == .nothing)
         #expect(try terminal.visibleText().hasPrefix("out-1\nout-2\nL"))
     }
 }

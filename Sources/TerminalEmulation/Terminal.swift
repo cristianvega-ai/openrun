@@ -139,7 +139,10 @@ public final class Terminal {
     /// - Parameter keeping: What the screen keeps of a shell's prompt. The
     ///   session process decides, and tells each client that follows its
     ///   size to do the same.
-    public func resize(to size: TerminalSize, keeping: PromptKeeping = .nothing) throws {
+    /// - Returns: What the screen kept: the request, or `.nothing` when the
+    ///   width stays or the screen cannot erase the prompt rows.
+    @discardableResult
+    public func resize(to size: TerminalSize, keeping: PromptKeeping = .nothing) throws -> PromptKeeping {
         try Terminal.validate(size, in: "Terminal.resize")
         let changesWidth = size.columns != self.size.columns
         var promptRows: Int?
@@ -155,7 +158,9 @@ public final class Terminal {
             from: "ghostty_terminal_resize"
         )
         if keepsCursorRow, cursorPosition.column != 0 { write("\r\n") }
-        if let promptRows { write(String(repeating: "\n", count: promptRows)) }
+        guard let promptRows else { return changesWidth && keeping == .cursorRow ? .cursorRow : .nothing }
+        write(String(repeating: "\n", count: promptRows))
+        return .promptRows(aboveCursor: promptRows)
     }
 
     /// Formats the active screen.

@@ -46,7 +46,7 @@ import Testing
     @Test func aChangeOfRowsOnlyKeepsTheWrap() throws {
         let terminal = try makeTerminal(columns: 40, rows: 10)
         terminal.write(Self.zshPrompt(after: "partial"))
-        try terminal.resize(to: TerminalSize(columns: 40, rows: 12), keeping: .cursorRow)
+        #expect(try terminal.resize(to: TerminalSize(columns: 40, rows: 12), keeping: .cursorRow) == .nothing)
         try terminal.resize(to: TerminalSize(columns: 60, rows: 12))
         #expect(terminal.cursorPosition.column != 0)
     }
