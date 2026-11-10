@@ -21,12 +21,35 @@ extension Terminal {
             && (0..<size.columns).allSatisfy { cellIsBlank(column: $0, activeRow: Int(cursor.row)) }
     }
 
+    /// Erases a prompt that the shell has not drawn again after a new size,
+    /// from its first row down, and puts the cursor at the start of that row.
+    /// Returns false, and erases nothing, when the screen cannot take bytes.
+    ///
+    /// Blank rows do not reflow. So after the resize, the cursor can go the
+    /// same number of rows below that first row again, and the late answer of
+    /// the shell lands on the prompt. kitty keeps a prompt in this way.
+    func erasePrompt(rowsAboveCursor rows: Int) -> Bool {
+        let firstRow = Int(cursorPosition.row) - rows
+        guard rows >= 0, firstRow >= 0, !isAlternateScreenActive, isAtVirtualTerminalGround, !isOriginModeEnabled, !cursorStyleHasBackground
+        else { return false }
+        write("\u{1b}[\(firstRow + 1);1H\u{1b}[J")
+        return true
+    }
+
     /// Whether the parser is outside every escape sequence and character, so
     /// bytes of another source can go in without breaking one.
     private var isAtVirtualTerminalGround: Bool {
         var ground = false
         _ = ghostty_terminal_get(handle, GHOSTTY_TERMINAL_DATA_VT_GROUND, &ground)
         return ground
+    }
+
+    /// Origin mode makes row numbers count from the top margin.
+    private var isOriginModeEnabled: Bool {
+        var configuration = GhosttyTerminalModeConfig()
+        configuration.mode = ghostty_mode_new(6, false)
+        guard ghostty_terminal_get(handle, GHOSTTY_TERMINAL_DATA_MODE, &configuration) == GHOSTTY_SUCCESS else { return true }
+        return configuration.value
     }
 
     private var cursorStyleHasBackground: Bool {
