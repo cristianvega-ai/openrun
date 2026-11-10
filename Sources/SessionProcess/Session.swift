@@ -143,14 +143,15 @@ actor Session {
     /// both copies keep the new size, and the clients that asked hear of it.
     /// After a successful attach, the other clients that asked hear of a
     /// new size once. A resize that waits for a line editor applies before
-    /// the attach, without the answer, because the attach comes later.
+    /// the attach, without the answer, because the attach comes later. It
+    /// keeps the rows of the prompt, as at the time limit.
     ///
     /// A client that relays raw output has a real terminal that answers queries.
     /// While one is attached, the session process sends no replies. Two such
     /// clients answer the same query twice. That limit is accepted for now.
     func attach(_ client: ClientConnection, size: SessionSize, relaysRawOutput: Bool, receivesSizeChanges: Bool, waitsForOutputRoom: Bool) throws -> Attachment {
         guard !isFinished else { return .sessionEnded }
-        while lineEditorWait.isWaiting { finishWait(keepsCursorAtLineStart: false) }
+        while lineEditorWait.isWaiting { finishWait(keeping: keepingWithoutAnswer()) }
         let previousSize = summary.size
         defer { if summary.size != previousSize { announceSize(changedBy: ObjectIdentifier(client)) } }
         try apply(size)
@@ -279,7 +280,7 @@ actor Session {
                 // too: it skips them once, and finds no answer in them.
                 while let end = lineEditorWait.end(in: rest) {
                     show(rest[..<end.index])
-                    finishWait(keepsCursorAtLineStart: end.erasedLines)
+                    finishWait(keeping: end.erasedLines ? .cursorRow : .nothing)
                     rest = rest[end.index...]
                 }
                 show(rest)
@@ -362,19 +363,24 @@ actor Session {
     /// A client that draws the screen itself must lay out the output that
     /// follows for the new size. The message goes out before that output.
     /// The requester knows its own size and does not get it.
-    private func announceSize(changedBy requester: ObjectIdentifier?, keepsCursorAtLineStart: Bool = false) {
+    private func announceSize(changedBy requester: ObjectIdentifier?, keeping: PromptKeeping = .nothing) {
         for (key, client) in clients where key != requester && clientsThatReceiveSizeChanges.contains(key) {
-            client.send(sizeChanged(keepsCursorAtLineStart: keepsCursorAtLineStart))
+            client.send(sizeChanged(keeping: keeping))
         }
     }
 
-    private func confirm(_ request: LineEditorWait.Request, keepsCursorAtLineStart: Bool = false) {
+    private func confirm(_ request: LineEditorWait.Request, keeping: PromptKeeping = .nothing) {
         guard request.confirms, let requester = request.requester else { return }
-        clients[requester]?.send(sizeChanged(keepsCursorAtLineStart: keepsCursorAtLineStart))
+        clients[requester]?.send(sizeChanged(keeping: keeping))
     }
 
-    private func sizeChanged(keepsCursorAtLineStart: Bool) -> ServerMessage {
-        .sizeChanged(summary.size, keepsCursorAtLineStart: keepsCursorAtLineStart ? true : nil)
+    /// A client with a copy of the screen keeps what the session's screen kept.
+    private func sizeChanged(keeping: PromptKeeping) -> ServerMessage {
+        switch keeping {
+        case .nothing: .sizeChanged(summary.size)
+        case .cursorRow: .sizeChanged(summary.size, keepsCursorAtLineStart: true)
+        case .promptRows(let rows): .sizeChanged(summary.size, promptRowsAboveCursor: rows)
+        }
     }
 
     /// The line editor that waits at the cursor: a shell whose prompt the
@@ -414,43 +420,47 @@ actor Session {
     }
 
     /// Tells the clients whose confirmed resize a newer one replaced.
-    private func sendOwedSizes(keepsCursorAtLineStart: Bool = false) {
+    private func sendOwedSizes(keeping: PromptKeeping = .nothing) {
         for client in lineEditorWait.takeClientsOwedTheSize() {
-            clients[client]?.send(sizeChanged(keepsCursorAtLineStart: keepsCursorAtLineStart))
+            clients[client]?.send(sizeChanged(keeping: keeping))
         }
     }
 
     private func answerTimeLimitPassed(_ number: Int) {
         guard !isFinished, lineEditorWait.isWaiting, lineEditorWait.number == number else { return }
-        finishWait(keepsCursorAtLineStart: false)
+        finishWait(keeping: keepingWithoutAnswer())
+    }
+
+    /// A size without the shell's answer keeps the rows of a prompt that the
+    /// output shows, so the late answer lands on the prompt.
+    private func keepingWithoutAnswer() -> PromptKeeping {
+        prompts.prompt.map { .promptRows(aboveCursor: $0.rowsAboveCursor) } ?? .nothing
     }
 
     /// Gives the terminal model the size that the program has, and tells the
     /// clients, in order with the output. Then the resize that came during
     /// the wait applies.
     ///
-    /// - Parameter keepsCursorAtLineStart: True where the shell has erased its
-    ///   lines. The model and the clients then keep the cursor's row apart
-    ///   from the output above it (see `Terminal.resize`).
-    private func finishWait(keepsCursorAtLineStart: Bool) {
+    /// - Parameter keeping: What the model keeps of the prompt (see
+    ///   `Terminal.resize`). The clients keep what the model kept.
+    private func finishWait(keeping: PromptKeeping) {
         guard let (finished, next) = lineEditorWait.finish() else { return }
         terminal.reportedSize = nil
         if !finished.reportsItself { replyGate.close(false) }
-        var keepsCursorAtLineStart = keepsCursorAtLineStart
+        var kept = PromptKeeping.nothing
         do {
-            try terminal.resize(to: TerminalSize(finished.size), keeping: keepsCursorAtLineStart ? .cursorRow : .nothing)
+            kept = try prompts.resize(to: TerminalSize(finished.size), keeping: keeping)
             summary.size = finished.size
-            announceSize(changedBy: finished.requester, keepsCursorAtLineStart: keepsCursorAtLineStart)
+            announceSize(changedBy: finished.requester, keeping: kept)
         } catch {
             // The size was checked, so only a lack of memory gets here. The
             // program goes back to the size of the model. That size is not
-            // new, so the clients have no width to take with the rule.
-            keepsCursorAtLineStart = false
+            // new, so the clients have nothing to keep.
             try? pseudoTerminal.resize(to: PseudoTerminalSize(summary.size))
         }
         updateReplyGate()
-        confirm(finished, keepsCursorAtLineStart: keepsCursorAtLineStart)
-        guard let next else { return sendOwedSizes(keepsCursorAtLineStart: keepsCursorAtLineStart) }
+        confirm(finished, keeping: kept)
+        guard let next else { return sendOwedSizes(keeping: kept) }
         do {
             try change(by: next)
         } catch {

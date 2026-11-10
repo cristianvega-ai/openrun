@@ -122,6 +122,32 @@ extension SessionProcessIntegration {
             await session.terminate()
         }
 
+        /// zsh draws its prompt again only after it has expanded it, and a
+        /// command substitution in the prompt can take longer than the time
+        /// limit. The screens then keep the rows of the prompt, and the late
+        /// answer lands on them.
+        @Test func aSlowPromptLandsOnItsRowsAfterTheTimeLimit() async throws {
+            let size = SessionSize(columns: 80, rows: 24)
+            let environment = ["PATH": "/usr/bin:/bin", "PS1": "$(sleep 0.7)ready> ", "TERM": "xterm-256color"]
+            let session = try makeSession("/bin/zsh", ["-f", "-o", "promptsubst", "-i"], environment: environment, size: size, answerTimeLimit: .milliseconds(300))
+            await session.start()
+            let viewer = try FollowingViewer()
+            try await viewer.attach(to: session, size: size)
+            try await session.type(Array("printf 'output-before-resize\\n'\r".utf8))
+            #expect(try viewer.follow(until: "output-before-resize\nready>"))
+            try await session.type(Array(("echo " + String(repeating: "y", count: 150)).utf8))
+            #expect(try viewer.follow(until: String(repeating: "y", count: 70)))
+            try viewer.follow(quiet: .milliseconds(300))
+            let original = try viewer.text().replacingOccurrences(of: "\n", with: "")
+            for columns: UInt16 in [50, 100, 30] {
+                try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: true)
+                try viewer.follow(quiet: .milliseconds(1500))
+            }
+            #expect(try viewer.text().replacingOccurrences(of: "\n", with: "") == original)
+            #expect(try await session.screenText(includeScrollback: true) == viewer.text())
+            await session.terminate()
+        }
+
         /// zsh writes its erase and its new lines together. When the erase
         /// ends a wait, the resize that waited starts in the same output, so
         /// the rest of it is older than that size. The session must skip it
