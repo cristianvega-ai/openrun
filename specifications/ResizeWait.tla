@@ -35,6 +35,7 @@ EnableOutputResume == TRUE
 IgnoreZeroDuringWait == TRUE
 KeepOldWidthWhileWaiting == TRUE
 RestoreProgramOnResizeFailure == TRUE
+KeepLateWait == TRUE
 
 Clients == 1..ClientCount
 Sizes == [columns : 1..WidthCount, rows : 1..RowCount]
@@ -219,17 +220,18 @@ RequestResize(client, size, confirms) ==
 \* of editing uses a plain resize.
 ResolveWait(reason, includesErase, timeoutNumber) ==
   /\ ~ended /\ active # NoRequest
-  /\ reason \in {"redraw", "bufferedErase", "timeout", "editingEnd", "attach"}
+  /\ reason \in {"redraw", "bufferedErase", "lateAnswer", "timeout", "editingEnd", "attach"}
+  /\ ~active.late
   /\ IF reason = "attach" THEN attaching # 0 ELSE attaching = 0
-  /\ (reason \notin {"redraw", "bufferedErase"} \/ active.origin = "editor")
+  /\ (reason \notin {"redraw", "bufferedErase", "lateAnswer"} \/ active.origin = "editor")
   /\ (reason # "redraw" \/ ~bufferedErase)
   /\ (reason # "bufferedErase" \/ (bufferedErase /\ ~RejectBufferedErase))
   /\ (reason \in {"timeout", "attach"} \/ ~outputPaused)
   /\ (reason # "timeout" \/ EnableTimeout)
   /\ (reason # "timeout" \/ timeoutNumber \in scheduledTimeouts)
   /\ includesErase \in BOOLEAN
-  /\ includesErase => (reason \in {"redraw", "bufferedErase"} /\ outputCount < OutputLimit)
-  /\ LET keeps == IF reason \in {"redraw", "bufferedErase"} \/ ~BreakOnlyAfterErase THEN "cursorRow"
+  /\ includesErase => (reason \in {"redraw", "bufferedErase", "lateAnswer"} /\ outputCount < OutputLimit)
+  /\ LET keeps == IF reason \in {"redraw", "bufferedErase", "lateAnswer"} \/ ~BreakOnlyAfterErase THEN "cursorRow"
                   ELSE IF reason \in {"timeout", "attach"} THEN "promptRows" ELSE "plain"
          number == outputCount + 1
          beforeTrace == IF includesErase THEN Append(screenTrace, OutputOperation(number)) ELSE screenTrace
@@ -242,10 +244,10 @@ ResolveWait(reason, includesErase, timeoutNumber) ==
         /\ queues' = finalQueues
         /\ outputCount' = IF includesErase THEN number ELSE outputCount
         /\ wrongRedrawSize' = (wrongRedrawSize \/ (reason = "redraw" /\ screenSize # active.previousSize))
-        /\ wrongCursorRule' = (wrongCursorRule \/ (reason \notin {"redraw", "bufferedErase"} /\ keeps = "cursorRow"))
-        /\ wrongRedrawAttribution' = (wrongRedrawAttribution \/ reason = "bufferedErase")
+        /\ wrongCursorRule' = (wrongCursorRule \/ (reason \notin {"redraw", "bufferedErase", "lateAnswer"} /\ keeps = "cursorRow"))
+        /\ wrongRedrawAttribution' = (wrongRedrawAttribution \/ reason \in {"bufferedErase", "lateAnswer"})
         /\ bufferedErase' = IF reason = "bufferedErase" THEN FALSE ELSE bufferedErase
-        /\ UNCHANGED lateAnswer
+        /\ lateAnswer' = (reason = "timeout" \/ (lateAnswer /\ reason # "lateAnswer"))
         /\ wrongTimeout' = (wrongTimeout \/ (reason = "timeout" /\ timeoutNumber # lastWaitNumber))
         /\ scheduledTimeouts' = IF reason = "timeout" THEN scheduledTimeouts \ {timeoutNumber} ELSE scheduledTimeouts
         /\ UNCHANGED lastWaitNumber
@@ -289,9 +291,10 @@ StartPending ==
 
 \* A checked size can still fail when the session screen takes it. The
 \* program must return to the screen's old size. The requester hears the
-\* size that remains, and a pending request still takes its turn.
+\* size that remains, and a pending request still takes its turn. A late
+\* wait applies no size, so it cannot fail.
 FailWait ==
-  /\ ~ended /\ active # NoRequest
+  /\ ~ended /\ active # NoRequest /\ ~active.late
   /\ LET sent == SizeQueues(queues, active, screenSize, screenSize, "plain")
      IN /\ programSize' = IF RestoreProgramOnResizeFailure THEN screenSize ELSE programSize
         /\ queues' = IF pending = NoRequest THEN OwedQueues(sent, owed, screenSize, "plain") ELSE sent
@@ -534,6 +537,54 @@ EndProgram ==
        wrongRedrawSize, wrongCursorRule, latestSize, latestValidRequestNumber, attachCount, attaching,
        attachSize, attachOutcome, attachPhase, previousSize, previousTrace>>
 
+\* At the time limit the screen takes the size and keeps the prompt rows, as
+\* ResolveWait does. The answer is still due, and the shell draws it for this
+\* size, so the wait goes on and a newer request still waits for it.
+BeginLateWait(timeoutNumber) ==
+  /\ queues' = SizeQueues(queues, active, screenSize, active.size, "promptRows")
+  /\ screenTrace' = ResizedTrace(screenTrace, screenSize, active.size, "promptRows")
+  /\ screenSize' = active.size
+  /\ active' = [active EXCEPT !.late = TRUE]
+  /\ lateAnswer' = TRUE
+  /\ wrongTimeout' = (wrongTimeout \/ timeoutNumber # lastWaitNumber)
+  /\ UNCHANGED <<open, attached, following, programSize, clientSize, clientTrace,
+       mode, pending, owed, unanswered, requestCount, outputCount, queryCount,
+       wrongQuery, wrongRedrawSize, wrongCursorRule, latestSize, latestValidRequestNumber,
+       attachCount, attaching, attachSize, attachOutcome, attachPhase, previousSize,
+       previousTrace, ended, lastWaitNumber, scheduledTimeouts,
+       bufferedErase, wrongRedrawAttribution>>
+  /\ UNCHANGED outputFlowVariables
+
+\* The late answer, the end of editing, a second time limit or an attach ends
+\* the late wait. The screen has the size already. The model assumes that no
+\* answer comes after a second time limit or an attach.
+EndLateWait(reason, timeoutNumber) ==
+  /\ ~ended /\ active.late
+  /\ IF reason = "attach" THEN attaching # 0 ELSE attaching = 0
+  /\ (reason # "timeout" \/ timeoutNumber \in scheduledTimeouts)
+  /\ (reason \in {"timeout", "attach"} \/ ~outputPaused)
+  /\ queues' = IF pending = NoRequest THEN OwedQueues(queues, owed, active.size, "plain") ELSE queues
+  /\ owed' = IF pending = NoRequest THEN {} ELSE owed
+  /\ active' = NoRequest
+  /\ lateAnswer' = FALSE
+  /\ mode' = IF reason = "editingEnd" THEN "other" ELSE mode
+  /\ scheduledTimeouts' = IF reason = "timeout" THEN scheduledTimeouts \ {timeoutNumber} ELSE scheduledTimeouts
+  /\ wrongTimeout' = (wrongTimeout \/ (reason = "timeout" /\ timeoutNumber # lastWaitNumber))
+  /\ UNCHANGED <<open, attached, following, programSize, screenSize, screenTrace,
+       clientSize, clientTrace, pending, unanswered, requestCount, outputCount,
+       queryCount, wrongQuery, wrongRedrawSize, wrongCursorRule, latestSize,
+       latestValidRequestNumber, attachCount, attaching, attachSize, attachOutcome,
+       attachPhase, previousSize, previousTrace, ended, lastWaitNumber,
+       bufferedErase, wrongRedrawAttribution>>
+  /\ UNCHANGED outputFlowVariables
+
+\* Without the late wait, the late answer comes after a newer wait started,
+\* and ends that wait.
+ParseLateAnswer ==
+  /\ ~ended /\ attaching = 0 /\ lateAnswer /\ active # NoRequest /\ ~active.late
+  /\ ~bufferedErase /\ ~outputPaused
+  /\ ResolveWait("lateAnswer", outputCount < OutputLimit, 0)
+
 \* A timer can arrive after its own wait ended and a newer wait started.
 \* It is consumed but must not end that newer wait.
 Timeout(number) ==
@@ -547,15 +598,18 @@ Timeout(number) ==
                attaching, attachSize, attachOutcome, attachPhase, previousSize,
                previousTrace, ended, lastWaitNumber, wrongTimeout, bufferedErase,
                wrongRedrawAttribution, outputPaused, lastPauseOutput, lateAnswer>>
+     ELSE IF active.late THEN EndLateWait("timeout", number)
+     ELSE IF KeepLateWait THEN BeginLateWait(number)
      ELSE ResolveWait("timeout", FALSE, number)
 
 AnyTimeout == \E number \in 1..RequestLimit : Timeout(number)
-AttachWait == ResolveWait("attach", FALSE, 0)
+AttachWait == ResolveWait("attach", FALSE, 0) \/ EndLateWait("attach", 0)
 AttachProgress == AttachWait \/ ApplyAttach \/ FinishAttach
 
 Next == ProgramOutput \/ BufferOldErase \/ ParseBufferedErase \/ PauseOutput \/
   ResumeOutput \/ QuerySize \/
-  StartPending \/ FailWait \/ EndProgram \/ AnyTimeout
+  StartPending \/ FailWait \/ EndProgram \/ AnyTimeout \/ ParseLateAnswer
+  \/ EndLateWait("redraw", 0) \/ EndLateWait("editingEnd", 0)
   \/ ResolveWait("editingEnd", FALSE, 0)
   \/ (\E includesErase \in BOOLEAN : ResolveWait("redraw", includesErase, 0))
   \/ AttachProgress
