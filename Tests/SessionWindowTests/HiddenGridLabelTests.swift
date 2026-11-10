@@ -49,6 +49,26 @@ import Testing
         #expect(attachment.record.withLock { $0.confirmationRequests } == [SessionSize(columns: larger.columns, rows: larger.rows)])
     }
 
+    /// During a drag, the session confirms an older size of the window while
+    /// a newer one still waits. That older size is no grid of another client.
+    @Test func theConfirmationOfAnOlderRequestShowsNoLabel() async throws {
+        let attachment = try FakeAttachment(size: TerminalView.estimatedGrid(for: SessionWindowController.contentSize, scale: NSScreen.main?.backingScaleFactor ?? 2))
+        attachment.record.withLock { $0.confirmsSizes = false }
+        let controller = try makeWindowController(attachment)
+        defer { controller.window.close() }
+        await waitOnMainThread { controller.view?.visibleGridSize != nil }
+        let view = try #require(controller.view), own = try #require(view.visibleGridSize)
+        let older = TerminalSize(columns: own.columns + 7, rows: own.rows)
+        controller.terminalView(view, didChangeGridSize: older)
+        controller.terminalView(view, didChangeGridSize: own)
+        attachment.deliver(.sizeChanged(SessionSize(columns: older.columns, rows: older.rows)))
+        await waitOnMainThread { view.gridSize == older }
+        #expect(controller.hiddenGridLabel.isHidden)
+        attachment.deliver(.sizeChanged(SessionSize(columns: own.columns, rows: own.rows + 5)))
+        await waitOnMainThread { !controller.hiddenGridLabel.isHidden }
+        #expect(controller.hiddenGridLabel.stringValue == "5 rows hidden")
+    }
+
     @Test func aSizeThatArrivesAsReceivingStartsFollowsTheFirstLayout() async throws {
         let own = TerminalView.estimatedGrid(for: SessionWindowController.contentSize, scale: NSScreen.main?.backingScaleFactor ?? 2)
         let larger = SessionSize(columns: own.columns + 1, rows: own.rows + 2)
