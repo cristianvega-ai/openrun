@@ -691,6 +691,7 @@ UnconfirmedReplacementIsUnreachable ==
 OtherClientReplacementIsUnreachable ==
   ~(active # NoRequest /\ pending # NoRequest /\ \E client \in owed : client # pending.client)
 OutputPauseDuringWaitIsUnreachable == ~(outputPaused /\ active # NoRequest)
+LateWaitWithPendingIsUnreachable == ~(active.late /\ pending # NoRequest)
 ForegroundChangeDuringWaitIsUnreachable ==
   ~(active # NoRequest /\ mode # active.origin)
 
