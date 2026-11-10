@@ -183,6 +183,83 @@ Each row holds the date, the decision, and the reason.
 | 2026-11-08 | While an interactive zsh or bash edits a command line, a new width waits for the shell's answer. The program gets the size at once. The session's screen and the clients that follow it take the size where the shell has erased its old lines, and `sizeChanged` comes there with the optional field `keepsCursorAtLineStart`. A resize during the wait waits too, and only the newest one applies. Without an answer, the size applies after 500 ms. Shells stay unmodified, and output frames hold only the bytes of the program. | A shell counts the rows of its prompt at the old width. A screen that had already wrapped its text again at the new width gave the wrong count, so the shell erased earlier output or left parts of old prompts. A minimum window alone did not prevent this at ordinary sizes. |
 | 2026-11-09 | The session finds the start of a shell's prompt in the program's output: zsh's start sequence at the first column (the text attributes go off, and the screen below the cursor is erased), or `OSC 133 ; A` from a shell that marks its prompt. While the cursor is in such a prompt, a new width waits for the shell's answer, and the answer ends at the next start of the prompt. bash still gets the wait only as the foreground program. When no answer comes within 500 ms, or a client attaches first, the screen erases the prompt from its first row, takes the size, and puts the cursor as many rows below that row as before. `sizeChanged` then carries that number in the optional field `promptRowsAboveCursor`. The late answer is for that size, so a newer width waits for it too, for at most four more time limits (2 seconds). Where the shell has erased its lines, a cursor that the new width moves off the first column goes to the start of the next row, and no cell is erased. Shells stay unmodified. This replaces the detection, the time limit and the line-start rule of the decision of 2026-11-08. | A shell behind ssh, sudo or another terminal layer is not the foreground program, so it got no wait. A prompt slower than 500 ms, such as one with a version control status, answered after the time limit, and the original fault came back. The erase of the line-start rule could remove a wide character at the right edge. In the review of 2026-11-09, 19 of 20 probes were right with marks and 10 of 20 without them. zsh 5.9 through a real ssh was right in every probe with marks and wrong in every probe without them. Without the wait for the late answer, 11 of 48 fast drags with a prompt of 0.7 s lost output, because that answer ended the wait of the newer width. |
 
+## Proposed decisions of 2026-11-10
+
+These proposals change the direction of OpenRun after milestone 2. None of them is in force, and the decision log above holds until the owner approves a proposal. An approved proposal moves to the decision log with the date of the approval. A reviewer checked an earlier version of the plan, and these proposals take in that review.
+
+| Number | Proposal | Reason | Status |
+|---|---|---|---|
+| 1 | OpenRun is a native Mac app for work with coding agents. Each thread is a native chat with one agent, one account, and one model. A real terminal stays one action away, and plain terminal sessions remain. This replaces the version 1 scope of 2026-10-12, and it answers question 8 with option 3. | The goal is to make work with agents great, not to be a great terminal. The structured events of a chat also give question 7 and the iOS companion something to build on. | Proposed. The owner can first work for a week in Claude's desktop app or the Codex app. |
+| 2 | OpenRun answers an agent's permission request only with the user's answer, through a documented route. The prototype compares a `PreToolUse` hook, given with `--settings`, with the host route of `--permission-prompt-tool stdio`. The hook wins when it passes. Only the signed OpenRun.app can answer, and the session process checks the code signature of the program that answers. The `openrun` tool has no command that approves. A lost connection, a restart, or a time limit denies the request and never grants it. TLA+ checks these rules, with a control for each. For threads, this replaces "its permission prompts reach the user as alerts" of 2026-10-15. OpenRun still adds no command rules and has no MCP server. | The host route takes the role of the Agent SDK host, and Anthropic tells developers who use the Agent SDK to use API keys. Any program of the user can reach the socket, so a command that approves would let an agent approve its own request. | Held until the prototype reports. |
+| 3 | OpenRun keeps no lasting copy of a thread's events. The session process keeps a replay buffer with a size limit for a client that attaches. The chat takes earlier turns from the agent's own history. Before OpenRun keeps any lasting copy, the owner decides how long it stays and how the user deletes it. The encrypted snapshots of 2026-10-15 still apply to terminal sessions. | The agents keep the same conversations as plain text in their own folders, so an encrypted copy in OpenRun protects nothing. | Held until the prototype reports. |
+| 4 | OpenRun runs the agents that the user installs, and never bundles them. Its diagnostics name the agent versions that it was tested with, and it does not warn about other versions. Each adapter keeps every event as it arrives, and the chat shows an event of an unknown kind as a plain row. Tests use a fake agent made from recorded real runs. | Claude Code went from 2.1.300 to 2.1.322 in 26 days, so a version range goes stale fast. | Proposed. |
+| 5 | Before OpenRun starts Claude Code in threads, the owner decides whether Anthropic's condition for products that run Claude Code applies. If it applies, the owner agrees to the Commercial Terms for OpenRun. OpenRun already meets the other conditions: it runs the unmodified binary, keeps every sign-in method of it, and bills nothing on the user's behalf. | On 2026-11-10, Anthropic's legal page said that "preinstalling or running Claude Code in your products or services" requires the Commercial Terms. The same page lets a user sign in to the unmodified binary with their own subscription "where a platform hosts Claude Code". | Proposed. The owner also decides whether it applies to terminal sessions. |
+| 6 | Open in Terminal stops the headless agent, and then resumes the conversation in a terminal session. The way back ends that terminal session and resumes the headless agent. The chat shows the turns from the terminal as one folded block of that session's text. | `claude --bg --resume` starts a copy when the conversation already runs, and a copy splits the conversation in two. Without the block, the chat has a gap. | Proposed. The prototype checks it. |
+| 7 | Each account shows the age of its usage reading. Claude Code's headless `rate_limit_event` comes only after a request, when the figures change, so an idle account shows its last reading and when it came. Codex answers `account/rateLimits/read` at any time. A refresh that sends a request to Claude happens only when the user asks for it, never on a timer, and only after the owner checks it against the terms. The status line command of 2026-10-15 stays the source for terminal sessions. | The user picks an account by the usage left on it, and an old reading without its age looks current. A request spends the user's plan, and plan limits assume ordinary, individual use. | Proposed. The refresh on request stays open. |
+| 8 | When an account reaches its limit in a thread, the thread waits and shows the reset time. It also offers a new thread on another account. The first message of the new thread holds the text of the earlier thread, so the new agent can go on with the work. OpenRun never moves a conversation to another account. | A resume runs under the same account (2026-10-15), and each account keeps its own conversations. | Proposed. |
+| 9 | A thread can change to a stricter permission mode at any time. A mode that gives an agent more access changes only in the settings window. | It follows the rule of 2026-10-27 for settings that widen an agent's access. | Proposed. |
+| 10 | OpenRun does not use the Agent Client Protocol. This answers the rest of question 8. | Claude Code and Codex speak it only through adapters. Their own apps use their native protocols. | Proposed. |
+| 11 | Needs you shows only in the first pane. The filters of the second pane become All, In progress, and Finished. This changes the filters of 2026-10-26. | Each fact shows in one place only (2026-10-26). | Proposed. |
+| 12 | The second pane lists a project's plain terminal sessions with its threads. The third pane still splits, as decided on 2026-10-15. The terminal panel beside a chat keeps the minimum grid of 2026-11-08. When the chat and the panel do not fit side by side, the panel takes the whole third pane, and the chat is one click away. | The terminal stays the tool for git, tests, and servers. 60 columns of SF Mono at 13 points are about 470 points wide before padding. | Proposed. |
+| 13 | `AgentConversation` and the agent connections use no AppKit. They belong to the shared core of 2026-10-19, so the Linux app can use them. | The Linux app stays possible. | Proposed. |
+| 14 | OpenRun creates no worktrees until the owner decides, at the milestone 6 review at the latest. The Changes panel ships with that decision and not before, so no panel shows a folder's changes as the changes of one thread. One option: the panel takes each thread's own edits from its agent's tool events, with no worktree. A choice for worktrees reopens the "never" of 2026-10-15. | Two threads in one folder share one set of changes. A fixed date keeps the decision from moving to later. | Proposed. |
+| 15 | Version 1 is built in the seven milestones below. This replaces the six milestones of 2026-10-15. | A daily-use app comes with milestone 4, and it is a whole product if the chat waits. | Held until proposals 1 to 3 are decided. |
+
+### The prototype
+
+The prototype is throwaway code that stays off `main`. It runs for at most five working days and checks only the items below. Anything else that it finds goes on a list for later. The owner confirms the limits of items 1, 7, and 8 before the first run. The result of each item is written here.
+
+| Item | Pass | What a failure changes |
+|---|---|---|
+| 1. Approval through a hook | A `PreToolUse` hook, given with `--settings` to `claude -p`, holds a tool call for 10 minutes while the user decides. The tool runs only after an allow. A hook that crashes, ends early, or reaches its time limit leaves the tool call denied. | Item 2 runs. |
+| 2. Approval through the host route | The same test with `--permission-prompt-tool stdio`. | If items 1 and 2 both fail, or the owner declines the risk of item 2, threads stay terminal sessions. Milestone 4 is then the product, and the chat waits. |
+| 3. Codex approval | `codex app-server` asks before a command and before a file change, and runs nothing until the answer. A closed connection denies. | Codex threads stay terminal sessions. Claude Code goes ahead. |
+| 4. Usage | A live `claude -p` run on each of two accounts gives `rate_limit_event` with both windows, their usage, and their reset times. Codex answers `account/rateLimits/read` for each account. | Usage keeps the status line source of 2026-10-15. |
+| 5. Open in Terminal and back | The conversation keeps its identifier in both directions, no copy appears, and the chat shows the turns from the terminal. | Open in Terminal does not ship. The terminal panel stays a plain shell. |
+| 6. History | Each agent gives back the earlier turns of a conversation through a documented interface. | The chat shows only the turns since OpenRun started the thread, and proposal 3 goes back to the owner. |
+| 7. The cost of a thread | An idle headless agent uses at most 300 MB of memory, and a resume gives its first event within 5 seconds. | Milestone 3 sets a lower limit on threads that run at once. |
+| 8. Stop | A stop ends the turn within 2 seconds, and the next message works. | Stop ends the agent's process and resumes the conversation. |
+
+### Milestones
+
+| Milestone | Content |
+|---|---|
+| 2, the terminal view | Only the owner's checks remain. |
+| 3, conversations in the core | Claude Code threads, and a thin Codex adapter, so the event model does not fit only Claude Code. A thread resumes after the session process restarts. The approvals and the TLA+ model of proposal 2. A limit on sessions and threads. |
+| 4, the window | The three panes, with each thread shown as its agent's terminal screen. Plain shells and splits. Accounts and the usage left. The font and theme settings. The OSC 777 fallback for hooks. The owner can use the app every day from here. |
+| 5, the chat | The chat view, approvals in the chat, Needs you, notifications, Open in Terminal, and full Codex support. |
+| 6, changes and restart | The Changes and Browser panels, the decision on worktrees, and sessions and threads that come back after a Mac restart. |
+| 7, finish | Install Command-Line Tool, updates through Sparkle, and a signed download. What happens when the app updates while an older session process runs, unless milestone 3 settles it. |
+
+The rule of 2026-10-15 that asks the user first before one session types into or reads another is built before milestone 3, because its absence is a fault today.
+
+### Earlier promises that move
+
+| Decision | Promise | New place |
+|---|---|---|
+| 2026-10-15 | Sessions that come back after a Mac restart, in the restart milestone | Milestone 6 |
+| 2026-10-24 | A limit on the number of sessions and their memory, in milestone 4 | Milestone 3 |
+| 2026-10-24 | Milestone 5 decides what happens when the app updates while an older session process runs | Milestone 7, unless milestone 3 settles it |
+| 2026-10-26 | The three-pane window, the sessions list, splits, and the font and theme settings, in milestone 3 | Milestone 4 |
+| 2026-10-27 | Box, block, and Powerline characters drawn in code, and the folder of the foreground program, in milestone 3 | Milestone 4 |
+| 2026-10-27 | The OSC 777 fallback for hooks, in milestone 4 | Milestone 4 |
+| 2026-10-27 | A test of the one-second shutdown grace for Codex, in milestone 5 | Milestone 3 |
+| 2026-10-27 | Install Command-Line Tool, in milestone 6 | Milestone 7 |
+
+### Earlier decisions that change
+
+| Decision | Change |
+|---|---|
+| 2026-10-12, version 1 is the terminal | Proposal 1 replaces it. The Vision and Features sections change with it. |
+| 2026-10-15, the three panes hold projects, sessions, and one session | The second pane holds threads and terminal sessions, and the third pane shows a chat or a terminal session (proposals 1 and 12). |
+| 2026-10-15, permission prompts reach the user as alerts | Proposal 2 replaces it for threads. Terminal sessions keep the alerts. |
+| 2026-10-15, question 8 decides the Agent Client Protocol | Proposal 10 answers it. |
+| 2026-10-15, usage through the status line command | Threads use proposal 7. Terminal sessions keep the status line. |
+| 2026-10-15, OpenRun never creates git worktrees | It holds until proposal 14 is decided. |
+| 2026-10-15, six milestones | Proposal 15 replaces it. |
+| 2026-10-26, the filters of the second pane | Proposal 11 changes them. |
+| 2026-10-26, the three-pane window stays in milestone 3 | It moves to milestone 4 (proposal 15). |
+
 ## Graphite theme
 
 These are the colors of the Graphite theme (decision of 2026-10-26). Colors 0 to 15 are the palette that programs pick with escape codes. In both versions, colors 1 to 6 and 8 to 14 have a contrast of at least 4.5 to 1 against the background.
