@@ -44,10 +44,10 @@ Outcomes == {"success", "refused", "rollback", "rollbackFailure"}
 
 NoSize == [columns |-> 0, rows |-> 0]
 NoRequest == [number |-> 0, client |-> 0, size |-> NoSize, confirms |-> FALSE,
-              origin |-> "other", previousSize |-> NoSize]
+              origin |-> "other", previousSize |-> NoSize, late |-> FALSE]
 Request(number, client, size, confirms, origin, previousSize) ==
   [number |-> number, client |-> client, size |-> size, confirms |-> confirms,
-   origin |-> origin, previousSize |-> previousSize]
+   origin |-> origin, previousSize |-> previousSize, late |-> FALSE]
 Obligation(number, client) == [number |-> number, client |-> client]
 OutputOperation(number) == [kind |-> "output", number |-> number, size |-> 0, keeps |-> "plain"]
 SizeOperation(size, keeps) == [kind |-> "size", number |-> 0, size |-> size, keeps |-> keeps]
@@ -69,7 +69,7 @@ VARIABLES open, attached, following, programSize, screenSize, screenTrace,
           wrongRedrawSize, wrongCursorRule, latestSize, latestValidRequestNumber, attachCount,
           attaching, attachSize, attachOutcome, attachPhase, previousSize,
           previousTrace, ended, lastWaitNumber, scheduledTimeouts, wrongTimeout,
-          bufferedErase, wrongRedrawAttribution, outputPaused, lastPauseOutput
+          bufferedErase, wrongRedrawAttribution, outputPaused, lastPauseOutput, lateAnswer
 
 variables == <<open, attached, following, programSize, screenSize, screenTrace,
                clientSize, clientTrace, queues, mode, active, pending, owed,
@@ -77,10 +77,12 @@ variables == <<open, attached, following, programSize, screenSize, screenTrace,
                wrongRedrawSize, wrongCursorRule, latestSize, latestValidRequestNumber, attachCount,
                attaching, attachSize, attachOutcome, attachPhase, previousSize,
                previousTrace, ended, lastWaitNumber, scheduledTimeouts, wrongTimeout,
-               bufferedErase, wrongRedrawAttribution, outputPaused, lastPauseOutput>>
+               bufferedErase, wrongRedrawAttribution, outputPaused, lastPauseOutput, lateAnswer>>
 
 timingVariables == <<lastWaitNumber, scheduledTimeouts, wrongTimeout>>
-bufferVariables == <<bufferedErase, wrongRedrawAttribution>>
+\* lateAnswer: the shell still owes the answer to a size that passed its
+\* time limit. A newer wait must not take that answer as its own.
+bufferVariables == <<bufferedErase, wrongRedrawAttribution, lateAnswer>>
 outputFlowVariables == <<outputPaused, lastPauseOutput>>
 
 InitialState ==
@@ -119,6 +121,7 @@ InitialState ==
   /\ wrongTimeout = FALSE
   /\ bufferedErase = FALSE
   /\ wrongRedrawAttribution = FALSE
+  /\ lateAnswer = FALSE
   /\ outputPaused = FALSE
   /\ lastPauseOutput = 0
 
@@ -242,6 +245,7 @@ ResolveWait(reason, includesErase, timeoutNumber) ==
         /\ wrongCursorRule' = (wrongCursorRule \/ (reason \notin {"redraw", "bufferedErase"} /\ keeps = "cursorRow"))
         /\ wrongRedrawAttribution' = (wrongRedrawAttribution \/ reason = "bufferedErase")
         /\ bufferedErase' = IF reason = "bufferedErase" THEN FALSE ELSE bufferedErase
+        /\ UNCHANGED lateAnswer
         /\ wrongTimeout' = (wrongTimeout \/ (reason = "timeout" /\ timeoutNumber # lastWaitNumber))
         /\ scheduledTimeouts' = IF reason = "timeout" THEN scheduledTimeouts \ {timeoutNumber} ELSE scheduledTimeouts
         /\ UNCHANGED lastWaitNumber
@@ -330,7 +334,7 @@ BufferOldErase ==
        requestCount, outputCount, queryCount, wrongQuery, wrongRedrawSize,
        wrongCursorRule, latestSize, latestValidRequestNumber, attachCount, attaching, attachSize,
        attachOutcome, attachPhase, previousSize, previousTrace, ended,
-       lastWaitNumber, scheduledTimeouts, wrongTimeout, wrongRedrawAttribution>>
+       lastWaitNumber, scheduledTimeouts, wrongTimeout, wrongRedrawAttribution, lateAnswer>>
   /\ UNCHANGED outputFlowVariables
 
 ParseBufferedErase ==
@@ -347,7 +351,7 @@ ParseBufferedErase ==
                requestCount, queryCount, wrongQuery, wrongRedrawSize,
                wrongCursorRule, latestSize, latestValidRequestNumber, attachCount, attaching, attachSize,
                attachOutcome, attachPhase, previousSize, previousTrace, ended,
-               lastWaitNumber, scheduledTimeouts, wrongTimeout, wrongRedrawAttribution>>
+               lastWaitNumber, scheduledTimeouts, wrongTimeout, wrongRedrawAttribution, lateAnswer>>
           /\ UNCHANGED outputFlowVariables
 
 \* This is an over-approximation of output-room backpressure: after output,
@@ -364,7 +368,7 @@ PauseOutput ==
        wrongCursorRule, latestSize, latestValidRequestNumber, attachCount, attaching, attachSize,
        attachOutcome, attachPhase, previousSize, previousTrace, ended,
        lastWaitNumber, scheduledTimeouts, wrongTimeout, bufferedErase,
-       wrongRedrawAttribution>>
+       wrongRedrawAttribution, lateAnswer>>
 
 ResumeOutput ==
   /\ ~ended /\ EnableOutputResume /\ outputPaused
@@ -375,7 +379,7 @@ ResumeOutput ==
        wrongCursorRule, latestSize, latestValidRequestNumber, attachCount, attaching, attachSize,
        attachOutcome, attachPhase, previousSize, previousTrace, ended,
        lastWaitNumber, scheduledTimeouts, wrongTimeout, bufferedErase,
-       wrongRedrawAttribution, lastPauseOutput>>
+       wrongRedrawAttribution, lastPauseOutput, lateAnswer>>
 
 \* This model covers a headless session's size answer, not relay ownership.
 \* AttachSequence separately checks which terminal answers a query.
@@ -524,6 +528,7 @@ EndProgram ==
   /\ UNCHANGED lastPauseOutput
   /\ UNCHANGED <<lastWaitNumber, wrongTimeout>>
   /\ UNCHANGED wrongRedrawAttribution
+  /\ lateAnswer' = FALSE
   /\ UNCHANGED <<programSize, screenSize, screenTrace, clientSize, clientTrace,
        mode, requestCount, outputCount, queryCount, wrongQuery,
        wrongRedrawSize, wrongCursorRule, latestSize, latestValidRequestNumber, attachCount, attaching,
@@ -541,7 +546,7 @@ Timeout(number) ==
                wrongRedrawSize, wrongCursorRule, latestSize, latestValidRequestNumber, attachCount,
                attaching, attachSize, attachOutcome, attachPhase, previousSize,
                previousTrace, ended, lastWaitNumber, wrongTimeout, bufferedErase,
-               wrongRedrawAttribution, outputPaused, lastPauseOutput>>
+               wrongRedrawAttribution, outputPaused, lastPauseOutput, lateAnswer>>
      ELSE ResolveWait("timeout", FALSE, number)
 
 AnyTimeout == \E number \in 1..RequestLimit : Timeout(number)
@@ -591,6 +596,7 @@ StateTypes ==
   /\ lastWaitNumber \in 0..requestCount
   /\ scheduledTimeouts \subseteq 1..lastWaitNumber
   /\ lastPauseOutput \in 0..outputCount
+  /\ lateAnswer \in BOOLEAN
 
 ScreenCopiesAgree ==
   \A client \in following \cap attached :
