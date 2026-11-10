@@ -14,4 +14,11 @@ struct SequencePrefix: Sendable, Equatable {
         if count < 8 { bytes |= UInt64(byte) << (8 * count) }
         count += 1
     }
+
+    /// The first `length` bytes, when a semicolon or the end follows them.
+    func kind(length: Int) -> UInt64? {
+        let follower = (bytes >> (8 * UInt64(length))) & 0xff
+        guard count == length || (count > length && follower == UInt64(UInt8(ascii: ";"))) else { return nil }
+        return bytes & ((1 << (8 * UInt64(length))) - 1)
+    }
 }

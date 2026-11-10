@@ -30,4 +30,22 @@ import Testing
     func anEraseAfterOtherSequencesIsNoStart(_ output: String) {
         #expect(Self.hits(in: [output]).isEmpty)
     }
+
+    @Test func findsTheEndOfEditing() {
+        #expect(Self.hits(in: ["ls\u{1b}[?20", "04l\r\n"]).map { [$0.piece, $0.index] } == [[1, 3]])
+    }
+}
+
+extension ShellPromptScannerTests {
+    @Test func findsTheMarksOfASemanticPrompt() {
+        let found = Self.hits(in: ["\u{1b}]133;A\u{07}> ", "\u{1b}]133;A;cl=m;aid=7\u{1b}", "\\> ls\u{1b}]133;C;cmdline=" + String(repeating: "l", count: 300) + "\u{07}"])
+        #expect(found.map(\.event) == [.markedPromptStart, .markedPromptStart, .commandStart])
+        #expect(found.map(\.piece) == [0, 2, 2] && found.map(\.index) == [8, 1, 322])
+    }
+
+    /// Another command, or a command that an escape or a cancel ends early.
+    @Test(arguments: ["\u{1b}]133;AB\u{07}", "\u{1b}]1337;A\u{07}", "\u{1b}]133;A\u{1b}[m\u{07}", "\u{1b}]133;A\u{18}\u{07}", "\u{1b}]0;133;A\u{07}"])
+    func otherCommandsAreNoMarks(_ output: String) {
+        #expect(Self.hits(in: [output]).isEmpty)
+    }
 }
