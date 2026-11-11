@@ -8,6 +8,8 @@ import TerminalView
 public final class SessionPaneView: NSView {
     let hiddenGridLabel = HiddenGridLabel()
     private(set) var terminalView: TerminalView?
+    /// The controller shows a failure that waited for a window.
+    var windowChanged: (() -> Void)?
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -19,6 +21,11 @@ public final class SessionPaneView: NSView {
 
     required init?(coder: NSCoder) {
         fatalError("SessionPaneView does not come from a storyboard.")
+    }
+
+    public override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        windowChanged?()
     }
 
     /// A host can give the pane the keyboard focus before the attach ends.

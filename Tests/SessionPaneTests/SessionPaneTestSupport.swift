@@ -30,10 +30,12 @@ final class RecordingHost: SessionPaneDelegate {
     var titles: [String] = []
     var minimumSizeReports = 0
     var ends = 0
+    var failures: [String] = []
 
     func sessionPane(_ pane: SessionPaneController, didChangeTitle title: String) { titles.append(title) }
     func sessionPaneDidChangeMinimumSize(_ pane: SessionPaneController) { minimumSizeReports += 1 }
     func sessionPaneDidEnd(_ pane: SessionPaneController) { ends += 1 }
+    func sessionPane(_ pane: SessionPaneController, didFailWithMessage message: String) { failures.append(message) }
 }
 
 extension TerminalView {

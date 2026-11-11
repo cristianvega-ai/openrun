@@ -13,4 +13,8 @@ public protocol SessionPaneDelegate: AnyObject {
     /// The program ended, or the connection failed and the user saw why.
     /// The host removes the pane and calls `close()`.
     func sessionPaneDidEnd(_ pane: SessionPaneController)
+    /// The connection failed while the pane had no window to show the
+    /// failure in. The host can show the message, such as in the row of the
+    /// session. The pane shows it when it next gets a window, and then ends.
+    func sessionPane(_ pane: SessionPaneController, didFailWithMessage message: String)
 }

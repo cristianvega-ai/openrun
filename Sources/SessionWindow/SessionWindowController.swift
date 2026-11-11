@@ -57,6 +57,9 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, SessionP
         window.close()
     }
 
+    /// The pane is always in this window, so it shows each failure itself.
+    public func sessionPane(_ pane: SessionPaneController, didFailWithMessage message: String) {}
+
     public func sessionPaneDidChangeMinimumSize(_ pane: SessionPaneController) {
         keepMinimumSize()
     }

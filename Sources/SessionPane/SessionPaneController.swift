@@ -41,6 +41,9 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     private var pendingKeyTakeover = false
     private var isClosed = false
     private var hasConnectionFailure = false
+    /// A connection failure that came while the pane had no window. The
+    /// pane shows it when it next gets a window, and then ends.
+    private var unshownFailure: String?
     private var folder = ""
     /// The grids that the pane asked for and the session has not applied
     /// yet, oldest first. Until then, the part of the grid that does not fit is
@@ -52,6 +55,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     public init(start: SessionStart, socket: SocketLocation) {
         (self.start, self.socket) = (start, socket)
         super.init()
+        paneView.windowChanged = { [weak self] in self?.showUnshownFailure() }
     }
 
     /// The scale of the screen that the pane shows on, or of the main screen before it shows.
@@ -140,11 +144,26 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         guard !isClosed, !hasConnectionFailure else { return }
         hasConnectionFailure = true
         if let attachment { work.shutdown(attachment) }
+        guard window != nil else {
+            unshownFailure = detail
+            delegate?.sessionPane(self, didFailWithMessage: detail)
+            return
+        }
+        showFailure(detail)
+    }
+
+    private func showFailure(_ detail: String) {
         Task { [weak self] in
             guard let self, !isClosed else { return }
             if let window { _ = await ask(.connectionFailure(detail), window) }
             if !isClosed { delegate?.sessionPaneDidEnd(self) }
         }
+    }
+
+    private func showUnshownFailure() {
+        guard let detail = unshownFailure, window != nil else { return }
+        unshownFailure = nil
+        showFailure(detail)
     }
 
     private func showHiddenPart() {
