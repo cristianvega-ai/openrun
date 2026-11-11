@@ -73,9 +73,6 @@ public actor CodexAppServer {
         let open = threads
         threads = [:]
         earlyLines = []
-        for state in open.values {
-            await state.send([.processEnded(end)], line: nil)
-            state.channel.finish()
-        }
+        for state in open.values { state.channel.finish(with: ConversationEvent(.processEnded(end))) }
     }
 }
