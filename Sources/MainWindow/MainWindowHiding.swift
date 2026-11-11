@@ -74,16 +74,25 @@ extension MainWindowController: NSMenuItemValidation {
         paneResizeEnded()
     }
 
-    /// The traffic lights sit in the top row of the first visible pane, so
-    /// that row keeps room for them, with the button of the lists after them.
-    /// The rows follow the layout, which has the final state of an animation.
+    /// The button of the lists goes to the first row of the final layout. A
+    /// constraint to the window, not a fixed inset, keeps the controls clear of
+    /// the traffic lights, so they move with their pane in an animation.
     func updateTopRowSpaces() {
-        let lights = isInFullScreen ? 16 : paneWindow.trafficLightsSpace
         let rows = [layout.projectsHidden ? nil : projectsList.topRow, layout.sessionsHidden ? nil : sessionsList.topRow, contentPane.topRow]
         let first = rows.compactMap { $0 }[0]
-        for row in [projectsList.topRow, sessionsList.topRow, contentPane.topRow] {
-            row.leadingSpace = row === first ? lights : row === contentPane.topRow ? contentPane.content?.textInset ?? 16 : 16
+        if lightsClearances.isEmpty, let root = paneWindow.contentView {
+            lightsClearances = [projectsList.topRow, sessionsList.topRow, contentPane.topRow].map { row in
+                let clearance = row.leadingItems.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor)
+                // A pane that slides away can be too narrow for the clearance.
+                // Then the clearance gives way to the layout of the split view.
+                clearance.priority = .init(450)
+                clearance.isActive = true
+                return clearance
+            }
         }
+        lightsClearances.forEach { $0.constant = isInFullScreen ? 0 : paneWindow.trafficLightsSpace }
+        for row in [projectsList.topRow, sessionsList.topRow] { row.leadingSpace = 16 }
+        contentPane.topRow.leadingSpace = contentPane.content?.textInset ?? 16
         listsButton.removeFromSuperview()
         first.leadingItems.insertArrangedSubview(listsButton, at: 0)
         let label = layout.projectsHidden ? "Show Projects" : "Hide Projects"

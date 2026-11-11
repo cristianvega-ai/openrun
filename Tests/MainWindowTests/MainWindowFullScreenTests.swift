@@ -15,13 +15,13 @@ import Testing
         controller.reducesMotion = { true }
         let lights = controller.paneWindow.trafficLightsSpace
         post(NSWindow.willEnterFullScreenNotification, controller)
-        #expect(controller.projectsList.topRow.leadingSpace == 16)
+        #expect(leadingRoom(of: controller.projectsList.topRow, in: controller) == 16)
         controller.toggleProjectsList(nil)
-        #expect(controller.sessionsList.topRow.leadingSpace == 16)
+        #expect(leadingRoom(of: controller.sessionsList.topRow, in: controller) == 16)
         post(NSWindow.willExitFullScreenNotification, controller)
-        #expect(controller.sessionsList.topRow.leadingSpace == lights)
+        #expect(leadingRoom(of: controller.sessionsList.topRow, in: controller) == lights)
         post(NSWindow.willEnterFullScreenNotification, controller)
         controller.windowDidFailToEnterFullScreen(controller.window)
-        #expect(controller.sessionsList.topRow.leadingSpace == lights)
+        #expect(leadingRoom(of: controller.sessionsList.topRow, in: controller) == lights)
     }
 }

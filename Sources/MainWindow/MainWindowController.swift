@@ -27,6 +27,8 @@ public final class MainWindowController: NSObject {
     var isInFullScreen = false
     /// A check of the minimum size waits for a later turn of the main queue.
     var isMinimumCheckWaiting = false
+    /// The constraints that keep the controls of each top row clear of the traffic lights.
+    var lightsClearances: [NSLayoutConstraint] = []
     /// The constraints that keep each list at its chosen width where there is room.
     var chosenWidths: [NSLayoutConstraint] = []
     var widthsAtDragStart: (projects: CGFloat, sessions: CGFloat) = (0, 0)

@@ -9,18 +9,18 @@ import Testing
         let controller = makeMainWindow(defaults: defaults)
         controller.reducesMotion = { true }
         let lights = controller.paneWindow.trafficLightsSpace
-        #expect(controller.projectsList.topRow.leadingSpace == lights && controller.sessionsList.topRow.leadingSpace == 16)
+        #expect(leadingRoom(of: controller.projectsList.topRow, in: controller) == lights && leadingRoom(of: controller.sessionsList.topRow, in: controller) == 16)
         controller.toggleProjectsList(nil)
-        #expect(controller.projectsItem.isCollapsed && controller.sessionsList.topRow.leadingSpace == lights)
+        #expect(controller.projectsItem.isCollapsed && leadingRoom(of: controller.sessionsList.topRow, in: controller) == lights)
         controller.toggleSessionsList(nil)
-        #expect(controller.sessionsItem.isCollapsed && controller.contentPane.topRow.leadingSpace == lights)
+        #expect(controller.sessionsItem.isCollapsed && leadingRoom(of: controller.contentPane.topRow, in: controller) == lights)
         controller.window.close()
         let next = makeMainWindow(defaults: defaults)
         defer { next.window.close() }
-        #expect(next.projectsItem.isCollapsed && next.sessionsItem.isCollapsed && next.contentPane.topRow.leadingSpace == lights)
+        #expect(next.projectsItem.isCollapsed && next.sessionsItem.isCollapsed && leadingRoom(of: next.contentPane.topRow, in: next) == lights)
         next.reducesMotion = { true }
         next.toggleProjectsList(nil)
-        #expect(!next.projectsItem.isCollapsed && next.contentPane.topRow.leadingSpace == 16 && !PaneLayout.load(from: defaults).projectsHidden)
+        #expect(!next.projectsItem.isCollapsed && leadingRoom(of: next.contentPane.topRow, in: next) == 16 && !PaneLayout.load(from: defaults).projectsHidden)
     }
 
     /// A list hides only through its button, its menu command and its key.

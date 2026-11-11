@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import PaneAppearance
 import Testing
 @testable import MainWindow
 
@@ -42,9 +43,12 @@ func dragSessionsEdge(of controller: MainWindowController, by distance: CGFloat)
 @MainActor
 func expectedMinimumWidth(of controller: MainWindowController, content: CGFloat) -> CGFloat {
     let divider = controller.splitController.splitView.dividerThickness
+    // The first visible list keeps the room of the traffic lights in its top row.
+    let lights = controller.paneWindow.trafficLightsSpace - 16
+    let (projects, sessions) = (!controller.projectsItem.isCollapsed, !controller.sessionsItem.isCollapsed)
     var width = content
-    if !controller.projectsItem.isCollapsed { width += max(160, controller.projectsList.topRow.fittingSize.width) + divider }
-    if !controller.sessionsItem.isCollapsed { width += max(240, controller.sessionsList.topRow.fittingSize.width) + divider }
+    if projects { width += max(160, controller.projectsList.topRow.fittingSize.width + lights) + divider }
+    if sessions { width += max(240, controller.sessionsList.topRow.fittingSize.width + (projects ? 0 : lights)) + divider }
     return width
 }
 
@@ -61,4 +65,12 @@ extension Trait where Self == ConditionTrait {
     static var needsLiveDisplay: Self {
         .enabled("An animation of AppKit needs a display that is awake and not locked") { displayIsLive() }
     }
+}
+
+/// The room before the controls of a top row, from the left edge of its
+/// pane. The first visible row keeps the room of the traffic lights.
+@MainActor
+func leadingRoom(of row: PaneTopRow, in controller: MainWindowController) -> CGFloat {
+    controller.window.layoutIfNeeded()
+    return row.leadingItems.frame.minX
 }
