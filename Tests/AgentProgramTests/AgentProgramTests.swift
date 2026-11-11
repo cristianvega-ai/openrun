@@ -35,6 +35,18 @@ func runs(_ processIdentifier: pid_t) -> Bool {
 }
 
 @Suite struct AgentProgramTests {
+    @Test func aProgramTakesInputAndGivesOutputAndItsStatus() async throws {
+        let program = try startProgram("cat")
+        try await program.write(Array("hello\n".utf8))
+        try await program.write([])
+        program.closeInput()
+        #expect(String(decoding: await readAll(program), as: UTF8.self) == "hello\n")
+        #expect(await program.waitForExit() == .exited(status: 0))
+        // The program was reaped: no zombie is left.
+        #expect(waitpid(program.processIdentifier, nil, WNOHANG) == -1)
+        await #expect(throws: AgentProgramError.programEnded) { try await program.write([1]) }
+    }
+
     @Test func theStatusAndTheSignalOfTheEndCome() async throws {
         let program = try startProgram("sh", ["-c", "exit 3"])
         #expect(await program.waitForExit() == .exited(status: 3))
