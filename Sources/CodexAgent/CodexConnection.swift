@@ -4,14 +4,16 @@ import AgentConversation
 /// with their answers, and the lines that the app-server starts.
 ///
 /// One task reads the output. It gives each answer to its request, and
-/// each other line to the receiver, one at a time and in order. Every
-/// request that waits fails when the output ends.
+/// each other line to the receiver, one at a time and in order. A request
+/// fails when its time limit passes, and every request that waits fails
+/// when the output ends.
 actor CodexConnection {
     typealias Receiver = @Sendable (CodexMessageReader.Incoming) async -> Void
 
     struct Waiting {
         var method: String
         var continuation: CheckedContinuation<JSONValue, any Error>
+        var timer: Task<Void, Never>
     }
 
     let transport: any CodexTransport
@@ -50,15 +52,26 @@ actor CodexConnection {
     }
 
     /// Sends a request and waits for its answer.
-    func request(_ method: String, _ parameters: JSONValue) async throws -> JSONValue {
+    func request(_ method: String, _ parameters: JSONValue, timeLimit: Duration) async throws -> JSONValue {
         guard !hasEnded else { throw CodexRequestError.connectionEnded }
         let identifier = nextIdentifier
         nextIdentifier += 1
         let line = try CodexOutgoingLine.request(.number(identifier), method: method, parameters: parameters)
         return try await withCheckedThrowingContinuation { continuation in
-            waiting[identifier] = Waiting(method: method, continuation: continuation)
+            let timer = Task { [weak self] in
+                guard (try? await Task.sleep(for: timeLimit)) != nil else { return }
+                await self?.finish(identifier, with: .failure(CodexRequestError.timedOut(method: method)))
+            }
+            waiting[identifier] = Waiting(method: method, continuation: continuation, timer: timer)
             lines.yield(line)
         }
+    }
+
+    /// Sends a notification, or the answer or refusal of a request of the
+    /// app-server. A line after the end goes nowhere.
+    func send(_ line: [UInt8]) {
+        guard !hasEnded else { return }
+        lines.yield(line)
     }
 
     /// Gives an answer to its request. Returns false for any other line.
@@ -76,6 +89,7 @@ actor CodexConnection {
 
     private func finish(_ identifier: Int, with result: Result<JSONValue, any Error>) {
         guard let request = waiting.removeValue(forKey: identifier) else { return }
+        request.timer.cancel()
         request.continuation.resume(with: result)
     }
 
