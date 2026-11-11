@@ -15,6 +15,24 @@ import Testing
         #expect(!events.contains { if case .unknown = $0 { true } else { false } })
     }
 
+    @Test func aDeclinedCommandIsARefusalOfTheUser() throws {
+        let declined = "exec-00000000-0000-7000-8000-000000000007"
+        let events = try CodexFixture(name: "command-declined").events
+        #expect(events.contains(.toolCallRefused(ToolCallRefusal(
+            identifier: declined, toolName: "commandExecution", reason: .user, message: "The user declined it in OpenRun."))))
+        #expect(!events.contains { if case .toolCallResult = $0 { true } else { false } })
+    }
+
+    @Test func aCommandThatOpenRunDeclinedSaysWhy() {
+        var mapper = CodexEventMapper()
+        mapper.noteDecline(of: "c", reason: .unanswered)
+        let item = JSONValue.object(["type": .string("commandExecution"), "id": .string("c"), "status": .string("declined")])
+        #expect(mapper.events(method: "item/completed", parameters: .object(["item": item])) == [.toolCallRefused(ToolCallRefusal(
+            identifier: "c", toolName: "commandExecution", reason: .unanswered,
+            message: "No one answered the request in time, so OpenRun declined it."))])
+        #expect(mapper.declineReasons.isEmpty)
+    }
+
     @Test func aCommandThatFailsIsAnError() {
         var mapper = CodexEventMapper()
         let item = JSONValue.object(["type": .string("commandExecution"), "id": .string("c"), "status": .string("failed"),
