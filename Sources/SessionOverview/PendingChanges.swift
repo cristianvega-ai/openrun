@@ -14,6 +14,7 @@ final class PendingChanges: Sendable {
         var events: [SessionChangeReceiver.Event] = []
         /// Where the change of each session waits.
         var sessionPlaces: [UUID: Int] = [:]
+        var threadPlaces: [UUID: Int] = [:]
         var projectsPlace: Int?
         var settingsPlace: Int?
     }
@@ -29,6 +30,7 @@ final class PendingChanges: Sendable {
             let place: Int?
             switch event {
             case .sessionChanged(let summary): place = state.sessionPlaces[summary.identifier]
+            case .threadChanged(let thread): place = state.threadPlaces[thread.identifier]
             case .projects: place = state.projectsPlace
             case .settings: place = state.settingsPlace
             default: place = nil
@@ -39,12 +41,15 @@ final class PendingChanges: Sendable {
             }
             switch event {
             case .sessionChanged(let summary): state.sessionPlaces[summary.identifier] = state.events.count
+            case .threadChanged(let thread): state.threadPlaces[thread.identifier] = state.events.count
             case .projects: state.projectsPlace = state.events.count
             case .settings: state.settingsPlace = state.events.count
             // A change that waits is older than a new list or an end, so
             // a later change must come after them.
             case .sessions: state.sessionPlaces = [:]
+            case .threads: state.threadPlaces = [:]
             case .sessionEnded(let identifier): state.sessionPlaces[identifier] = nil
+            case .threadEnded(let identifier): state.threadPlaces[identifier] = nil
             case .closed, .failed: break
             }
             state.events.append(event)

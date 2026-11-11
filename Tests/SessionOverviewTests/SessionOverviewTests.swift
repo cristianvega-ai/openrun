@@ -41,6 +41,23 @@ import Testing
         #expect(overview.settingText(named: "theme") == nil)
     }
 
+    @Test func theThreadsFollowTheirListTheirChangesAndTheirEnds() {
+        func thread(_ title: String?) -> ThreadSummary {
+            ThreadSummary(identifier: UUID(), agent: "claude-code", folder: "/work", model: "opus", permissionMode: "default", title: title,
+                          createdAt: Date(timeIntervalSince1970: 0), lastActivityAt: Date(timeIntervalSince1970: 0))
+        }
+        let first = thread(nil), second = thread("Notes")
+        var overview = SessionOverview()
+        overview.apply(.threads([first]))
+        overview.apply(.threadChanged(second))
+        var changed = first
+        changed.state = "inProgress"
+        overview.apply(.threadChanged(changed))
+        #expect(overview.threads == [changed, second] && overview.thread(first.identifier)?.state == "inProgress")
+        overview.apply(.threadEnded(first.identifier))
+        #expect(overview.threads == [second] && overview.thread(first.identifier) == nil)
+    }
+
     @Test func theEndOfAConnectionKeepsTheLastFacts() {
         var overview = SessionOverview(sessions: [Self.summary()])
         let before = overview

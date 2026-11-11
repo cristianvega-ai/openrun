@@ -12,9 +12,15 @@ public struct SessionOverview: Equatable, Sendable {
     /// know come last.
     public private(set) var projects: [ProjectSummary]
     public private(set) var settings: [SettingSummary]
+    /// The agent threads, oldest first.
+    public private(set) var threads: [ThreadSummary]
 
-    public init(sessions: [SessionSummary] = [], projects: [ProjectSummary] = [], settings: [SettingSummary] = []) {
-        (self.sessions, self.projects, self.settings) = (sessions, projects, settings)
+    public init(sessions: [SessionSummary] = [], projects: [ProjectSummary] = [], settings: [SettingSummary] = [], threads: [ThreadSummary] = []) {
+        (self.sessions, self.projects, self.settings, self.threads) = (sessions, projects, settings, threads)
+    }
+
+    public func thread(_ identifier: UUID) -> ThreadSummary? {
+        threads.first { $0.identifier == identifier }
     }
 
     public func session(_ identifier: UUID) -> SessionSummary? {
@@ -45,6 +51,16 @@ public struct SessionOverview: Equatable, Sendable {
             projects = list
         case .settings(let list):
             settings = list
+        case .threads(let list):
+            threads = list
+        case .threadChanged(let thread):
+            if let index = threads.firstIndex(where: { $0.identifier == thread.identifier }) {
+                threads[index] = thread
+            } else {
+                threads.append(thread)
+            }
+        case .threadEnded(let identifier):
+            threads.removeAll { $0.identifier == identifier }
         case .closed, .failed:
             break
         }

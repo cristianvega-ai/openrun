@@ -22,6 +22,13 @@ public final class SessionChangeReceiver: Sendable {
         case projects([ProjectSummary])
         /// Every setting, as `SessionClient.settings()` gives them.
         case settings([SettingSummary])
+        /// Every agent thread, oldest first, once after the settings, from
+        /// a session process that keeps threads.
+        case threads([ThreadSummary])
+        /// A new thread, or new facts of a thread.
+        case threadChanged(ThreadSummary)
+        /// The thread closed and left the list.
+        case threadEnded(UUID)
         case closed
         case failed(SessionConnectionError)
     }
@@ -36,8 +43,12 @@ public final class SessionChangeReceiver: Sendable {
     }
 
     /// Asks for the changes, and returns once the present list is there.
-    static func open(on connection: MessageConnection) throws -> SessionChangeReceiver {
-        try SessionConnectionError.wrapping { try connection.send(ClientMessage.receiveSessionChanges()) }
+    ///
+    /// - Parameter includesThreads: Asks for the agent threads too. Only a
+    ///   session process with the capability `threads` knows them.
+    static func open(on connection: MessageConnection, includesThreads: Bool = false) throws -> SessionChangeReceiver {
+        let request = ClientMessage.receiveSessionChanges(includesThreads: includesThreads ? true : nil)
+        try SessionConnectionError.wrapping { try connection.send(request) }
         switch try SessionConnectionError.wrapping({ try connection.receive(ServerMessage.self) }) {
         case .sessionList(let list): return SessionChangeReceiver(connection: connection, initialList: list)
         case .failure(let failure): throw SessionConnectionError.requestFailed(failure)
@@ -72,6 +83,9 @@ public final class SessionChangeReceiver: Sendable {
                 case .sessionEnded(let identifier): handler(.sessionEnded(identifier))
                 case .projectList(let projects): handler(.projects(projects))
                 case .settingList(let settings): handler(.settings(settings))
+                case .threadList(let threads): handler(.threads(threads))
+                case .threadChanged(let thread): handler(.threadChanged(thread))
+                case .threadEnded(let identifier): handler(.threadEnded(identifier))
                 case .failure(let failure): return handler(.failed(.requestFailed(failure)))
                 case nil: return handler(.closed)
                 default: continue
@@ -88,6 +102,6 @@ extension SessionClient {
     /// takes no more requests. Check `capabilities.sessionChanges` first: an
     /// older session process refuses the request.
     public func receiveSessionChanges() throws -> SessionChangeReceiver {
-        try SessionChangeReceiver.open(on: connection)
+        try SessionChangeReceiver.open(on: connection, includesThreads: capabilities.threads)
     }
 }
