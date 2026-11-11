@@ -26,6 +26,9 @@ public struct MarkdownInlineParser {
             case "\\": escape(at: index, end, style, link)
             case "`": codeSpan(at: index, end, style, link)
             case "*", "_", "~": emphasis(at: index, end, style, link)
+            case "[": self.link(at: index, textStart: index + 1, end, style, link)
+            case "!" where index + 1 < end && characters[index + 1] == "[":
+                self.link(at: index, textStart: index + 2, end, style, link)
             default: nil
             }
             if let next {

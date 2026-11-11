@@ -40,4 +40,19 @@ struct MarkdownInlineTests {
         #expect(spans("**a** b", streaming: true) == [MarkdownSpan("a", style: .bold), MarkdownSpan(" b")])
         #expect(spans("a *", streaming: true) == [MarkdownSpan("a *")])
     }
+
+    @Test func linksAreDataWithTheirText() {
+        #expect(spans("see [the **docs**](https://example.com/a_(b) \"Title\") now") == [
+            MarkdownSpan("see "), MarkdownSpan("the ", link: "https://example.com/a_(b)"),
+            MarkdownSpan("docs", style: .bold, link: "https://example.com/a_(b)"), MarkdownSpan(" now"),
+        ])
+        #expect(spans("![a picture](image.png) [b](<c d>)") == [MarkdownSpan("a picture", link: "image.png"), MarkdownSpan(" "), MarkdownSpan("b", link: "c d")])
+        #expect(spans("[1] and [a](b and") == [MarkdownSpan("[1] and [a](b and")])
+    }
+
+    @Test func aLinkThatHasNotClosedAtTheEndOfAStreamShowsAsALink() {
+        #expect(spans("see [the do", streaming: true) == [MarkdownSpan("see "), MarkdownSpan("the do", link: "")])
+        #expect(spans("see [the docs](https://exa", streaming: true) == [MarkdownSpan("see "), MarkdownSpan("the docs", link: "")])
+        #expect(spans("array[0", streaming: true) == [MarkdownSpan("array[0")])
+    }
 }
