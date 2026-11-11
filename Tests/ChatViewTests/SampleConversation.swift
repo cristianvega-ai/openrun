@@ -79,7 +79,35 @@ enum SampleConversation {
         ]
     }
 
+    /// A second turn whose command fails and whose turn then fails.
+    static var failedTurn: [ConversationEvent] {
+        [
+            Events.user("2", "Run the tests of the row builder."),
+            Events.tool("b2", "Bash", ["command": "swift test --filter TranscriptRowBuilderTests"]),
+            Events.result("b2", testOutput, isError: true, exitCode: 1),
+            Events.text("a4", "One test failed: `aLongMessageKeepsItsKeys`. The keys change when a message passes 24 blocks."),
+            Events.turnEnd(.failed, error: "API Error: the service is overloaded. Try again in a few seconds."),
+        ]
+    }
+
+    /// A third turn that waits for the user to allow a command.
+    static var waitingTurn: [ConversationEvent] {
+        [
+            Events.user("3", "Commit the change when the tests pass."),
+            Events.tool("b3", "Bash", ["command": "git add Sources/ChatView && git commit -m \"Show that earlier items exist\""]),
+            Events.permission("p2", "Bash", ["command": "git add Sources/ChatView && git commit -m \"Show that earlier items exist\""], call: "b3"),
+        ]
+    }
+
+    /// A third turn whose answer streams in the middle of a code block.
+    static var streamingTurn: [ConversationEvent] {
+        [
+            Events.user("3", "Show me the new test."),
+            Events.delta("a5", "Here is the test:\n\n```swift\n@Test func earlierItemsShowAtTheTop() {\n    let transcript = Transcript(\n"),
+        ]
+    }
+
     static var transcript: Transcript {
-        Transcript(events: firstTurn)
+        Transcript(events: firstTurn + failedTurn + waitingTurn)
     }
 }
