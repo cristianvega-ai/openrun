@@ -53,6 +53,16 @@ actor ProjectKeeper {
         return (list, version)
     }
 
+    func rename(identifier: UUID, to name: String?) throws -> (list: ProjectList, version: Int) {
+        try change { try $0.rename(identifier: identifier, to: name) }
+        return (list, version)
+    }
+
+    func move(identifier: UUID, to place: Int) throws -> (list: ProjectList, version: Int) {
+        try change { try $0.move(identifier: identifier, to: place) }
+        return (list, version)
+    }
+
     /// Makes the change on a copy, saves the copy, and only then keeps it.
     ///
     /// - Throws: `ProjectListError` for a change that the list refuses, or
