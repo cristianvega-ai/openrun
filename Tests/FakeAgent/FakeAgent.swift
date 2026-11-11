@@ -11,6 +11,8 @@ import Foundation
 /// - `FAKE_AGENT_MODE`: one of the cases of `Mode`. The default is `replay`.
 /// - `FAKE_AGENT_PAUSE`: the milliseconds between two lines of output.
 /// - `FAKE_AGENT_FLOOD_BYTES`: the size of the flood. The default is 8 MiB.
+/// - `FAKE_AGENT_PERMISSION_REQUEST`: the file that the hook of the mode
+///   `askPermission` gets on its standard input.
 struct FakeAgent {
     enum Mode: String {
         /// Each user message plays a recorded turn.
@@ -29,6 +31,10 @@ struct FakeAgent {
         case crash
         /// Many megabytes of text deltas come after the first one.
         case flood
+        /// Before the end of the turn, the permission hook of the settings
+        /// runs, as Claude Code runs it for a call that needs the user. A
+        /// line of the kind `fake_hook` then tells the decision.
+        case askPermission
     }
 
     static let floodLineBytes = 64 * 1024
@@ -60,14 +66,14 @@ struct FakeAgent {
             guard let turn = try? FakeAgentTurn(file: file, conversationIdentifier: identifier, userMessage: message) else {
                 return fail("a turn cannot be read")
             }
-            if let status = play(turn, mode: mode, conversationIdentifier: identifier) { return status }
+            if let status = play(turn, mode: mode, conversationIdentifier: identifier, hook: parsed.hook) { return status }
         }
         return 0
     }
 
     /// Writes the turn with the special case of `mode`. Returns the exit
     /// status when the program must end after the turn.
-    func play(_ turn: FakeAgentTurn, mode: Mode, conversationIdentifier: String) -> Int32? {
+    func play(_ turn: FakeAgentTurn, mode: Mode, conversationIdentifier: String, hook: [String] = []) -> Int32? {
         let end = turn.resultIndex
         var flooded = false
         for (index, line) in turn.lines.enumerated() {
@@ -81,6 +87,9 @@ struct FakeAgent {
                 return 1
             }
             if index == end / 2, mode == .crash { kill(getpid(), SIGKILL) }
+            if index == end, mode == .askPermission {
+                write(#"{"type":"fake_hook","decision":"\#(FakeAgentHook.decision(of: hook, conversationIdentifier: conversationIdentifier, environment: environment))"}"#)
+            }
             write(line)
             if mode == .flood, !flooded, line.contains(#""text_delta""#) {
                 flood(conversationIdentifier: conversationIdentifier)
