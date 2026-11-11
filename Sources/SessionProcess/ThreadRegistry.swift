@@ -64,8 +64,14 @@ actor ThreadRegistry {
         guard version > settingsVersion else { return }
         (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
         for thread in slots.setLimit(processLimit) { await runners[thread]?.sendNextMessage() }
-        // The menus of each thread offer the modes up to the one of the setting.
-        for record in list.threads { publish(record.identifier) }
+        // The setting is the widest mode of every thread, so a thread with a wider one comes down to it.
+        for record in list.threads {
+            if Self.offeredModes(upTo: permissionMode).contains(record.permissionMode) {
+                publish(record.identifier)
+            } else {
+                try? await change(record.identifier, model: nil, permissionMode: permissionMode)
+            }
+        }
     }
 
     /// The permission modes that a thread can take: each mode up to the

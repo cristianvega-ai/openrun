@@ -20,8 +20,8 @@ extension ThreadRegistry {
         guard let resolved = realpath(folder, nil) else { throw ThreadRequestError.folderDoesNotExist }
         defer { free(resolved) }
         let realFolder = String(cString: resolved)
-        let record = ThreadRecord(
-            agent: .claudeCode, folder: realFolder, model: model ?? defaultModel, permissionMode: permissionMode ?? defaultPermissionMode, name: name)
+        let mode = try offered(permissionMode ?? defaultPermissionMode)
+        let record = ThreadRecord(agent: .claudeCode, folder: realFolder, model: model ?? defaultModel, permissionMode: mode, name: name)
         let previous = list
         try list.add(record)
         try save(restoring: previous)
@@ -29,6 +29,27 @@ extension ThreadRegistry {
         summaries[record.identifier] = summary
         changes?.threadChanged(summary)
         return summary
+    }
+
+    /// The mode, when a thread can take it. A wider mode than the one of
+    /// the setting changes only in the settings window (proposal 9).
+    private func offered(_ mode: String) throws -> String {
+        let offered = Self.offeredModes(upTo: defaultPermissionMode)
+        guard offered.contains(mode) else { throw ThreadRequestError.permissionModeNotOffered(offered: offered) }
+        return mode
+    }
+
+    /// Changes the model, the permission mode, or both. The agent takes
+    /// them at its next start.
+    func change(_ identifier: UUID, model: String?, permissionMode: String?) async throws {
+        let mode = try permissionMode.map(offered)
+        let previous = list
+        try list.update(identifier) { record in
+            (record.model, record.permissionMode) = (model ?? record.model, mode ?? record.permissionMode)
+        }
+        try save(restoring: previous)
+        if let record = list.thread(identifier) { await runners[identifier]?.setLaunchFacts(model: record.model, permissionMode: record.permissionMode) }
+        publish(identifier)
     }
 
     func rename(_ identifier: UUID, to name: String?) async throws {

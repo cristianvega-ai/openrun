@@ -24,6 +24,9 @@ extension SessionServer {
             case .renameThread(let identifier, let name):
                 try await threads.rename(identifier, to: name)
                 return .acknowledged
+            case .changeThread(let identifier, let model, let permissionMode):
+                try await threads.change(identifier, model: model, permissionMode: permissionMode)
+                return .acknowledged
             case .closeThread(let identifier):
                 try await threads.close(identifier)
                 return .acknowledged

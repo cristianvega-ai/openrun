@@ -193,6 +193,12 @@ public struct SessionClient: Sendable {
         try requestAcknowledgement(.renameThread(identifier: identifier, name: name), named: "thread rename")
     }
 
+    /// Changes the model, the permission mode, or both. The mode must be
+    /// one of `permissionModes` of the summary of the thread.
+    public func changeThread(_ identifier: UUID, model: String? = nil, permissionMode: String? = nil) throws {
+        try requestAcknowledgement(.changeThread(identifier: identifier, model: model, permissionMode: permissionMode), named: "thread change")
+    }
+
     public func closeThread(_ identifier: UUID) throws {
         try requestAcknowledgement(.closeThread(identifier: identifier), named: "thread close")
     }

@@ -121,6 +121,11 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Gives a thread a name, or removes it with `nil` or an empty name.
     /// Answer: `acknowledged`.
     case renameThread(identifier: UUID, name: String?)
+    /// Changes the model, the permission mode, or both. The agent takes
+    /// them at its next start, which comes at once when no turn runs and
+    /// else after the turn. A mode outside `permissionModes` of the
+    /// summary gets a failure. Answer: `acknowledged`.
+    case changeThread(identifier: UUID, model: String? = nil, permissionMode: String? = nil)
     /// Ends the process of the thread and removes its record. The history
     /// of the agent stays where the agent keeps it. Answer: `acknowledged`.
     case closeThread(identifier: UUID)
@@ -205,6 +210,7 @@ extension ClientMessage {
         case .createThread: "createThread"
         case .listThreads: "listThreads"
         case .renameThread: "renameThread"
+        case .changeThread: "changeThread"
         case .closeThread: "closeThread"
         case .attachThread: "attachThread"
         case .sendThreadMessage: "sendThreadMessage"

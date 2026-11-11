@@ -13,6 +13,8 @@ import Testing
              #"{"createThread":{"agent":"claude-code","folder":"\/w","model":"opus","name":"Notes","permissionMode":"plan"}}"#),
             (ClientMessage.listThreads, #"{"listThreads":{}}"#),
             (ClientMessage.renameThread(identifier: identifier, name: nil), #"{"renameThread":{"identifier":\#(name)}}"#),
+            (ClientMessage.changeThread(identifier: identifier, permissionMode: "plan"), #"{"changeThread":{"identifier":\#(name),"permissionMode":"plan"}}"#),
+            (ClientMessage.changeThread(identifier: identifier, model: "sonnet"), #"{"changeThread":{"identifier":\#(name),"model":"sonnet"}}"#),
             (ClientMessage.closeThread(identifier: identifier), #"{"closeThread":{"identifier":\#(name)}}"#),
             (ClientMessage.attachThread(identifier: identifier), #"{"attachThread":{"identifier":\#(name)}}"#),
             (ClientMessage.sendThreadMessage(identifier: identifier, text: "Go on."), #"{"sendThreadMessage":{"identifier":\#(name),"text":"Go on."}}"#),
