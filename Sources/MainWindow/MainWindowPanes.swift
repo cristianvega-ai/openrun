@@ -4,7 +4,10 @@ import PaneAppearance
 /// The three panes in their split view, their widths, and the shadows between them.
 extension MainWindowController {
     func configurePanes() {
-        splitController.splitView = PaneSplitView()
+        let splitView = PaneSplitView()
+        splitView.dragStarted = { [weak self] in self?.contentPane.beginPaneResize() }
+        splitView.dragEnded = { [weak self] in self?.contentPane.endPaneResize() }
+        splitController.splitView = splitView
         splitController.splitView.isVertical = true
         splitController.splitView.dividerStyle = .thin
         (projectsItem.minimumThickness, projectsItem.maximumThickness) = (PaneLayout.projectsWidths.lowerBound, PaneLayout.projectsWidths.upperBound)
