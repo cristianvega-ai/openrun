@@ -55,6 +55,7 @@ final class Workspace: NSObject {
         panes = SessionPanes { SessionPaneController(start: .runningSession($0), socket: socket) }
         super.init()
         window.sessionsList.arrange(filter: SessionsFilter(rawValue: layout.filter) ?? .all, order: SessionsOrder(rawValue: layout.order) ?? .manual)
+        window.sessionsList.delegate = self
         connection.overviewChanged = { [weak self] in self?.overviewChanged(from: $0) }
     }
 
