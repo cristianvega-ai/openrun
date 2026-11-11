@@ -123,7 +123,7 @@ extension ClientMessage: FramedMessage {
             if case .input = self {
                 throw SessionProtocolError.malformedFrame(reason: "input must be a raw frame")
             }
-        case .output, .snapshot:
+        case .output, .snapshot, .threadEvent:
             throw SessionProtocolError.unexpectedMessage(description: "a server frame arrived at the server")
         }
     }

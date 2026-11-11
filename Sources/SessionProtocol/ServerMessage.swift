@@ -56,6 +56,12 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// on a connection that asked with `receiveSessionChanges`, the whole
     /// new list after each change.
     case settingList([SettingSummary])
+
+    // Agent threads. Only a client that asked for threads gets these.
+
+    /// One event of the thread that the connection is attached to, as the
+    /// JSON of a conversation event. It travels as a raw frame.
+    case threadEvent(Data)
 }
 
 extension ServerMessage: FramedMessage {
@@ -65,6 +71,8 @@ extension ServerMessage: FramedMessage {
             MessageFrame(kind: .output, payload: bytes)
         case .snapshot(let bytes):
             MessageFrame(kind: .snapshot, payload: bytes)
+        case .threadEvent(let event):
+            MessageFrame(kind: .threadEvent, payload: event)
         default:
             MessageFrame(kind: .control, payload: try JSONEncoder.messages.encode(self))
         }
@@ -76,11 +84,15 @@ extension ServerMessage: FramedMessage {
             self = .output(frame.payload)
         case .snapshot:
             self = .snapshot(frame.payload)
+        case .threadEvent:
+            self = .threadEvent(frame.payload)
         case .control:
             self = try JSONDecoder.messages.decodeControlMessage(ServerMessage.self, from: frame.payload)
             switch self {
             case .output, .snapshot:
                 throw SessionProtocolError.malformedFrame(reason: "terminal bytes must be a raw frame")
+            case .threadEvent:
+                throw SessionProtocolError.malformedFrame(reason: "an event of a thread must be a raw frame")
             default:
                 break
             }
@@ -114,6 +126,7 @@ extension ServerMessage {
         case .projectList: "projectList"
         case .projectAdded: "projectAdded"
         case .settingList: "settingList"
+        case .threadEvent: "threadEvent"
         }
     }
 }

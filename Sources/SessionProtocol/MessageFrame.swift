@@ -23,6 +23,10 @@ public struct MessageFrame: Equatable, Sendable {
         case input = 3
         /// A terminal snapshot. Server to client.
         case snapshot = 4
+        /// One event of an agent thread, as JSON, from the session process
+        /// to a client that attached to the thread. The protocol does not
+        /// read it, so it needs no type of the agent modules.
+        case threadEvent = 5
     }
 
     /// The version of the protocol. Both sides send it in their first

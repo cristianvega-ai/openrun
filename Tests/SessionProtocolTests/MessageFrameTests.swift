@@ -247,8 +247,9 @@ import Testing
         #expect(try MessageFrame(body: Data([2, 0xAA])).kind == .output)
         #expect(try MessageFrame(body: Data([3, 0xAA])).kind == .input)
         #expect(try MessageFrame(body: Data([4, 0xAA])).kind == .snapshot)
+        #expect(try MessageFrame(body: Data([5, 0xAA])).kind == .threadEvent)
         #expect(throws: SessionProtocolError.self) { try MessageFrame(body: Data([0, 0xAA])) }
-        #expect(throws: SessionProtocolError.self) { try MessageFrame(body: Data([5, 0xAA])) }
+        #expect(throws: SessionProtocolError.self) { try MessageFrame(body: Data([6, 0xAA])) }
     }
 
     @Test func theLengthIsBigEndianAndCountsTheKindAndThePayload() throws {

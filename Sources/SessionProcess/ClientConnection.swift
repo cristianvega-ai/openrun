@@ -348,7 +348,7 @@ final class ClientConnection: Sendable {
     private static func countedByteCount(of frame: MessageFrame) -> Int {
         switch frame.kind {
         case .control: MessageFrame.lengthFieldSize + 1 + frame.payload.count
-        case .output, .snapshot, .input: frame.payload.count
+        case .output, .snapshot, .input, .threadEvent: frame.payload.count
         }
     }
 
