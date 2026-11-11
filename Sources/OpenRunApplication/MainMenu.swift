@@ -42,6 +42,7 @@ enum MainMenu {
     private static func addFileMenu(to menu: NSMenu, target: OpenRunApplication) {
         let file = submenu("File", in: menu), workspace = target.workspace
         file.addItem(item("New Session", #selector(Workspace.newSession(_:)), "n", target: workspace))
+        file.addItem(item("New Thread", #selector(Workspace.newThread(_:)), "t", target: workspace))
         let commands = submenu("New Session With", in: file)
         commands.delegate = workspace
         file.addItem(.separator())

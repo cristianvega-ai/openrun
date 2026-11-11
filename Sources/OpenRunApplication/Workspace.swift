@@ -48,8 +48,8 @@ final class Workspace: NSObject {
     var activateApplication: () -> Void = { NSApp.activate() }
     /// Whether the window is key and the keyboard focus is in the third pane.
     var isContentActive = false
-    /// A session that the user asked for. Its row takes the selection
-    /// and the keyboard focus when the feed brings the session.
+    /// A session or a thread that the user asked for. Its row takes the
+    /// selection and the keyboard focus when the feed brings it.
     var sessionToSelect: UUID?
     /// A project that takes the selection of the first pane when the feed
     /// brings it: one that the user added, or the kept one at the start.
@@ -74,6 +74,8 @@ final class Workspace: NSObject {
     lazy var showFailure: (String, String) -> Void = { [weak self] in self?.showFailureSheet(title: $0, message: $1) }
     /// Asks before a close and gives the answer. Tests set it.
     lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
+    /// Asks before the close of a thread with this title. Tests set it.
+    lazy var confirmCloseOfThread: (String, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeCloseOfThread($0, then: $1) }
     /// Asks for the folders of new projects. Tests set it.
     lazy var chooseProjectFolders: (@escaping ([URL]) -> Void) -> Void = { [weak self] in self?.chooseFoldersInPanel(then: $0) }
 

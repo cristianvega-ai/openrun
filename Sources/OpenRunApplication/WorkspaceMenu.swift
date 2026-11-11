@@ -6,6 +6,10 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         newSession()
     }
 
+    @objc func newThread(_ sender: Any?) {
+        newThread()
+    }
+
     /// The item holds the shown name of a new-session command of the settings.
     @objc func newSessionWithCommand(_ sender: NSMenuItem) {
         newSession(commandNamed: sender.representedObject as? String)
@@ -34,6 +38,7 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
         case #selector(newSession(_:)), #selector(newSessionWithCommand(_:)): connection.status == .connected
+        case #selector(newThread(_:)): connection.status == .connected && connection.hasThreadList
         case #selector(closeSession(_:)): window.window.isVisible && layout.selectedRow != nil
         case #selector(renameSession(_:)): window.window.isVisible && window.sessionsList.selection != nil
         case #selector(selectNextSession(_:)), #selector(selectPreviousSession(_:)): !window.sessionsList.shownIdentifiers.isEmpty

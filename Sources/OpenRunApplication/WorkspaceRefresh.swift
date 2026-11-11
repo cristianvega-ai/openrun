@@ -53,7 +53,9 @@ extension Workspace {
         layout.selectedEntry = entry.layoutEntry
         // The login shell is "New Terminal", and each other command of the settings has an item of its own.
         let commands = settings.newSessionCommands.filter { !$0.commandLine.isEmpty }.map(\.name)
-        window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry), terminalCommands: commands))
+        // A thread is a chat with Claude Code. An older session process keeps no threads.
+        let agents = connection.hasThreadList ? [ThreadRowFacts.agentName("claude-code")] : []
+        window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry), agents: agents, terminalCommands: commands))
         window.sessionsList.select(layout.selectedRow)
         showSelectedRow()
         // The third pane has the title of its row, so the user reads one

@@ -17,14 +17,15 @@ extension Workspace: SessionsListDelegate {
 
     func sessionsList(_ list: SessionsListController, didRequest request: NewSessionRequest) {
         switch request {
-        // A thread with an agent is a chat, which a later version brings.
-        // Until then the agent runs in a terminal.
-        case .thread(let name), .terminal(let name?): newSession(commandNamed: name)
-        case .terminal(nil): newSession()
+        case .thread: newThread()
+        case .terminal(let name): newSession(commandNamed: name)
         }
     }
 
     func sessionsList(_ list: SessionsListController, didRename identifier: UUID, to name: String) {
+        if let thread = layout.row(identifier)?.pane.leadingThread {
+            return perform("The thread could not get its name") { try $0.renameThread(thread, to: name) }
+        }
         // The name belongs to the first session of the row, so `openrun list` shows it too.
         guard let session = layout.row(identifier)?.pane.sessions.first else { return }
         perform("The session could not get its name") { try $0.rename(session: session, to: name) }

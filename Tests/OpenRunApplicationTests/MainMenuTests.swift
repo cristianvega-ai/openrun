@@ -26,26 +26,26 @@ import Testing
         func items(_ title: String) throws -> [NSMenuItem] { try #require(menu.item(withTitle: title)?.submenu).items }
         func key(_ item: NSMenuItem) -> String { (item.keyEquivalentModifierMask.contains(.shift) ? "shift-" : "") + item.keyEquivalent }
         let file = try items("File"), session = try items("Session")
-        #expect(file.map(\.title) == ["New Session", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Register Session Process Again"])
-        #expect(file.map(key) == ["n", "", "", "w", "shift-w", "", "", ""])
-        #expect(file[0].target === workspace && file[3].target === workspace && file[4].target == nil && file[7].target === application)
+        #expect(file.map(\.title) == ["New Session", "New Thread", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Register Session Process Again"])
+        #expect(file.map(key) == ["n", "t", "", "", "w", "shift-w", "", "", ""])
+        #expect(file[0].target === workspace && file[1].target === workspace && file[4].target === workspace && file[5].target == nil && file[8].target === application)
         #expect(session.map(\.title) == ["Rename…", "", "Next Session", "Previous Session"] && session.map(key) == ["", "", "shift-]", "shift-["])
         #expect(try items("View").map(\.title) == ["Hide Projects", "Hide Sessions", "Move Focus to Next Pane", "Move Focus to Previous Pane", "", "Make Text Bigger", "Make Text Smaller", "Reset Text Size"])
         #expect(try items("Edit").map(\.action) == [Selector(("copy:")), Selector(("paste:")), Selector(("selectAll:"))])
         // This application has a nondefault socket and no setup of its own, so
         // the item is off. Do not send its action: it would register the real launch agent.
-        #expect(!application.validateMenuItem(file[7]))
+        #expect(!application.validateMenuItem(file[8]))
 
         // Each session command is on only when it can act.
-        #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[3]) && !workspace.validateMenuItem(session[2]))
+        #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[1]) && !workspace.validateMenuItem(file[4]) && !workspace.validateMenuItem(session[2]))
         workspace.showsSessionAtStart = false
         application.applicationDidFinishLaunching(launch)
         let shell = try test.createShell()
         #expect(await waitUntil { test.shownRows == [shell] })
-        #expect(workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[3]) && !workspace.validateMenuItem(session[0]))
+        #expect(workspace.validateMenuItem(file[0]) && workspace.validateMenuItem(file[1]) && !workspace.validateMenuItem(file[4]) && !workspace.validateMenuItem(session[0]))
         workspace.select(row: shell)
-        #expect(workspace.validateMenuItem(file[3]) && workspace.validateMenuItem(session[0]) && workspace.validateMenuItem(session[2]))
-        let commands = try #require(file[1].submenu)
+        #expect(workspace.validateMenuItem(file[4]) && workspace.validateMenuItem(session[0]) && workspace.validateMenuItem(session[2]))
+        let commands = try #require(file[2].submenu)
         workspace.menuNeedsUpdate(commands)
         #expect(commands.items.map(\.title) == ["Claude Code", "Codex"] && commands.items.allSatisfy { $0.target === workspace })
     }

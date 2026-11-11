@@ -41,4 +41,37 @@ extension Workspace {
             }
         }
     }
+
+    /// Makes a thread with Claude Code in the folder of the selected
+    /// project, or in the home folder. Its row takes the selection and
+    /// the focus when the feed brings it.
+    func newThread() {
+        let folder = selectedProjectFolder ?? home
+        requests.perform({ try $0.createThread(agent: "claude-code", folder: folder).identifier }, then: { [weak self] result in
+            switch result {
+            case .success(let thread): self?.select(newSession: thread)
+            case .failure(let failure): self?.showFailure("The thread could not start", failure.message)
+            }
+        })
+    }
+
+    /// Closes a thread after a question. Its record goes away, and the
+    /// conversation stays in the history of the agent.
+    func closeThread(_ thread: UUID) {
+        let title = connection.overview.thread(thread).map(ThreadRowFacts.title(of:)) ?? ThreadRowFacts.untitled
+        confirmCloseOfThread(title) { [weak self] agreed in
+            if agreed { self?.perform("The thread could not close") { try $0.closeThread(thread) } }
+        }
+    }
+
+    /// Asks before the close of a thread. The first button keeps it.
+    func askBeforeCloseOfThread(_ title: String, then answer: @escaping (Bool) -> Void) {
+        let alert = NSAlert()
+        alert.messageText = "Close the thread “\(title)”?"
+        alert.informativeText = "OpenRun ends its agent and removes it from the list. The conversation stays in the history of the agent."
+        alert.addButton(withTitle: "Cancel")
+        alert.addButton(withTitle: "Close Thread")
+        guard window.window.isVisible else { return answer(ModalAlert.runStandardModal(alert) == .alertSecondButtonReturn) }
+        alert.beginSheetModal(for: window.window) { answer($0 == .alertSecondButtonReturn) }
+    }
 }
