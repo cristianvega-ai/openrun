@@ -15,15 +15,18 @@ public struct SessionProcess: Sendable {
     /// Set for the launch agent only. A process that was started by hand
     /// runs until it gets a signal.
     let idleExit: IdleExit?
+    /// The program that may receive and answer approval questions.
+    let answererRequirement: AnswererRequirement
 
     public init(socketLocation: SocketLocation) {
-        self.init(socketLocation: socketLocation, machServiceName: nil, idleExit: nil)
+        self.init(socketLocation: socketLocation, machServiceName: nil, idleExit: nil, answererRequirement: .ofThisProcess())
     }
 
-    init(socketLocation: SocketLocation, machServiceName: String?, idleExit: IdleExit?) {
+    init(socketLocation: SocketLocation, machServiceName: String?, idleExit: IdleExit?, answererRequirement: AnswererRequirement = .ofThisProcess()) {
         self.socketLocation = socketLocation
         self.machServiceName = machServiceName
         self.idleExit = idleExit
+        self.answererRequirement = answererRequirement
     }
 
     /// Serves clients until SIGTERM, SIGINT or SIGHUP arrives, or until the
@@ -34,7 +37,7 @@ public struct SessionProcess: Sendable {
         // Signal handling starts first, so a signal that arrives while the
         // socket opens is not lost.
         let signals = ShutdownSignals()
-        let server = try SessionServer(location: socketLocation)
+        let server = try SessionServer(location: socketLocation, answererRequirement: answererRequirement)
         await server.start()
         SessionLog.write("Listening on ", detail: socketLocation.path)
         let wakeService = machServiceName.flatMap(startWakeService)
@@ -77,6 +80,7 @@ public struct SessionProcess: Sendable {
     /// Returns the exit code of the process.
     public static func runFromCommandLine(arguments: [String], environment: [String: String]) async -> Int32 {
         var socketFlag: String?
+        var answererRequirement = AnswererRequirement.ofThisProcess()
         var isLaunchAgent = false
         var remaining = arguments[...]
         while let argument = remaining.popFirst() {
@@ -84,6 +88,9 @@ public struct SessionProcess: Sendable {
             case "--socket":
                 guard let path = remaining.popFirst() else { return usageError("--socket needs a path.") }
                 socketFlag = path
+            case "--answerer-requirement":
+                guard let text = remaining.popFirst() else { return usageError("--answerer-requirement needs a code requirement.") }
+                answererRequirement = AnswererRequirement(text: text)
             case LaunchAgentNames.launchAgentFlag:
                 isLaunchAgent = true
             case "--help":
@@ -100,7 +107,7 @@ public struct SessionProcess: Sendable {
             let location = try SocketLocation.resolve(flag: socketFlag, environment: isLaunchAgent ? [:] : environment)
             let machServiceName = isLaunchAgent ? LaunchAgentNames.machServiceName(in: environment) : nil
             let idleExit = isLaunchAgent ? IdleExit(environment: environment) : nil
-            try await SessionProcess(socketLocation: location, machServiceName: machServiceName, idleExit: idleExit).run()
+            try await SessionProcess(socketLocation: location, machServiceName: machServiceName, idleExit: idleExit, answererRequirement: answererRequirement).run()
             return 0
         } catch {
             SessionLog.write("", detail: "\(error)")
@@ -109,7 +116,7 @@ public struct SessionProcess: Sendable {
     }
 
     private static let usage = """
-        Usage: openrun-session [--socket PATH] [--launch-agent]
+        Usage: openrun-session [--socket PATH] [--answerer-requirement REQUIREMENT] [--launch-agent]
 
         Runs the OpenRun session process in the foreground and logs to standard error.
         The socket is PATH, or OPENRUN_SOCKET, or ~/Library/Application Support/OpenRun/session.socket.
@@ -117,6 +124,8 @@ public struct SessionProcess: Sendable {
         and other users must not be able to write to it.
         launchd gives --launch-agent: the process then answers wake requests, and it
         ends after 30 seconds with no session and no client.
+        Only a program that meets REQUIREMENT, in the code requirement language, receives
+        and answers approval questions. The default is OpenRun.app of the team of this program.
         """
 
     private static func usageError(_ message: String) -> Int32 {

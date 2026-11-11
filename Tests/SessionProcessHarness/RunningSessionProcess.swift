@@ -103,6 +103,7 @@ public final class RunningSessionProcess: @unchecked Sendable {
         waitUntilReady: Bool = true,
         descriptorLimit: Int? = nil,
         readyTimeout: TimeInterval = 15,
+        arguments: [String] = [],
         didStart: (pid_t) -> Void = { _ in }
     ) throws {
         ownsDirectory = directory == nil
@@ -120,10 +121,10 @@ public final class RunningSessionProcess: @unchecked Sendable {
         FileManager.default.createFile(atPath: logFile.path, contents: nil)
         if let descriptorLimit {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", "ulimit -n \(descriptorLimit) && exec \"$0\" \"$@\"", Self.sessionExecutable.path, "--socket", socketPath]
+            process.arguments = ["-c", "ulimit -n \(descriptorLimit) && exec \"$0\" \"$@\"", Self.sessionExecutable.path, "--socket", socketPath] + arguments
         } else {
             process.executableURL = Self.sessionExecutable
-            process.arguments = ["--socket", socketPath]
+            process.arguments = ["--socket", socketPath] + arguments
         }
         process.standardError = try FileHandle(forWritingTo: logFile)
         process.standardOutput = FileHandle.nullDevice
@@ -144,8 +145,8 @@ public final class RunningSessionProcess: @unchecked Sendable {
 
     /// Runs a test body with a session process, and stops the process after
     /// the body, even when the body throws.
-    public static func run<Result: Sendable>(_ body: (RunningSessionProcess) async throws -> Result) async throws -> Result {
-        let running = try RunningSessionProcess()
+    public static func run<Result: Sendable>(arguments: [String] = [], _ body: (RunningSessionProcess) async throws -> Result) async throws -> Result {
+        let running = try RunningSessionProcess(arguments: arguments)
         do {
             let result = try await body(running)
             running.stop()

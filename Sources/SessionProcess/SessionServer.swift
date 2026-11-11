@@ -6,6 +6,8 @@ import TerminalEmulation
 actor SessionServer {
     private let listener: SocketListener
     private let registry: SessionRegistry
+    private let questions = ApprovalQuestions()
+    private let answererRequirement: AnswererRequirement
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -14,7 +16,8 @@ actor SessionServer {
     private var isClosed = false
 
     /// Starts listening. Throws when another session process already does.
-    init(location: SocketLocation) throws {
+    init(location: SocketLocation, answererRequirement: AnswererRequirement = AnswererRequirement(text: nil)) throws {
+        self.answererRequirement = answererRequirement
         listener = try SocketListener(location: location)
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
@@ -248,9 +251,18 @@ actor SessionServer {
                 client.markHandled(received)
                 break messages
             case .receiveApprovalQuestions:
-                client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This session process asks no approval questions yet.")))
-            case .answerApprovalQuestion:
-                break
+                // The app, signed and outside every session, is the only
+                // program that can answer (ApprovalQuestion.tla).
+                guard await registry.place(of: peer) == .outsideEverySession,
+                      answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)
+                else {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "Only OpenRun.app receives approval questions.")))
+                    break
+                }
+                client.send(.acknowledged)
+                await questions.addAnswerer(owner) { client.send($0) }
+            case .answerApprovalQuestion(let identifier, let allows):
+                await questions.answer(identifier, allows: allows, from: owner)
             }
             client.markHandled(received)
         }
@@ -259,6 +271,7 @@ actor SessionServer {
             await attachedSession.detach(client)
             attachedSession.withdrawTypedInput(from: owner)
         }
+        await questions.removeAnswerer(owner)
         client.closeAfterSending()
     }
 
