@@ -801,6 +801,7 @@ Everything on the socket is a sequence of frames.
 | output | 2 | server to client | Bytes that the program wrote |
 | input | 3 | client to server | Bytes for the program to read |
 | snapshot | 4 | server to client | A `TerminalSnapshot` |
+| threadEvent | 5 | server to client | One event of an agent thread, a `ConversationEvent` as JSON |
 
 Control messages are JSON because they are small, rare and easy to read. Terminal bytes are raw because they are frequent and large.
 
@@ -836,7 +837,7 @@ Client to server:
 | `detach` | none | the connection closes |
 | `receiveApprovalQuestions` | none | `acknowledged`, then `approvalQuestion` and `approvalQuestionEnded` for as long as the connection stays open. A `failure` with reason `invalidRequest` when the program is not the signed app outside every session |
 | `answerApprovalQuestion` | `identifier`, `allows` | none. Only a connection that holds the question can answer it, and only while it waits |
-| `receiveSessionChanges` | none | `sessionList`, oldest first. A session process that offers projects and settings then sends `projectList` and `settingList`. Then `sessionChanged`, `sessionEnded`, `projectList` and `settingList` follow, in the order of the changes, for as long as the connection stays open. An attached connection gets a `failure` with reason `invalidRequest`. After it, every message other than `detach` gets a `failure` with reason `invalidRequest`, and the connection stays open |
+| `receiveSessionChanges` | `includesThreads` (optional) | `sessionList`, oldest first. A session process that offers projects and settings then sends `projectList` and `settingList`. Then `sessionChanged`, `sessionEnded`, `projectList` and `settingList` follow, in the order of the changes, for as long as the connection stays open. An attached connection gets a `failure` with reason `invalidRequest`. After it, every message other than `detach` gets a `failure` with reason `invalidRequest`, and the connection stays open |
 | `renameSession` | `identifier`, `name` (absent or empty removes the name) | `acknowledged`. A name with a control character or more than 500 Unicode scalars gets a `failure` with reason `invalidRequest` |
 | `raiseSessionAlert` | `identifier`, `text` | `acknowledged`. The alert has the source `notifyCommand`. The session process removes control characters from the text and keeps at most 500 scalars |
 | `clearSessionAlert` | `identifier` | `acknowledged` |
@@ -847,6 +848,15 @@ Client to server:
 | `moveProject` | `identifier`, `place` (0 is the first) | `acknowledged`. A place outside the list gets a `failure` |
 | `listSettings` | none | `settingList` |
 | `changeSetting` | `name`, `text` | `acknowledged`. An unknown name, a value that is not valid, and a protected setting from a caller that may not change it get a `failure` with reason `invalidRequest` and the message of `SettingError`. See "Projects and settings" |
+| `createThread` | `agent` (`claude-code`), `folder`, and optional `model`, `permissionMode` and `name` | `threadCreated`. A `failure` with reason `invalidRequest` for an agent that this build does not run, a folder that does not exist, or a list that is full |
+| `listThreads` | none | `threadList` |
+| `renameThread` | `identifier`, `name` (absent or empty removes the name) | `acknowledged` |
+| `closeThread` | `identifier` | `acknowledged`, after the agent of the thread ended and its record went away |
+| `attachThread` | `identifier` | `threadAttached`, then the kept events as `threadEvent` frames, then `threadReplayComplete`, then each new event. The connection stays open for `sendThreadMessage`, `stopThread`, `answerToolPermission` and `detach`. A second `attachThread` on it gets a `failure`, and so does a request of the threads on a connection that is attached to a session |
+| `sendThreadMessage` | `identifier`, `text`, `images` (optional, each with `mediaType` and `data`) | `threadMessageSent` with the identifier of the message, which its events carry. A `failure` when 16 messages wait already |
+| `stopThread` | `identifier` | `acknowledged`, also when no turn runs |
+| `requestToolPermission` | `request`: what the agent gave its permission hook, as it came | `toolPermissionAnswer`, when the user answered or the request ended. A `failure` for a program that no agent of a thread started |
+| `answerToolPermission` | `thread`, `request`, `allows`, `message` (optional) | `acknowledged`. A `failure` for a program that is not the signed app, and for a request that does not wait any more |
 
 Server to client:
 
@@ -870,10 +880,20 @@ Server to client:
 | `projectList` | `_0` is every project: the projects with a folder in their order, then the projects without a folder on this Mac. A project holds `identifier`, `name` (absent when the user gave none) and `folder` (absent when this Mac does not know it) |
 | `projectAdded` | `_0` is the new project |
 | `settingList` | `_0` is every setting in the order of `SettingName`, each with `name`, `text` and `isProtected`. `text` is the form that `changeSetting` takes back |
+| `threadCreated` | `_0` is a thread summary |
+| `threadList` | `_0` is every thread, oldest first |
+| `threadAttached` | `_0` is a thread summary |
+| `threadEvent` | the event, as a threadEvent frame |
+| `threadReplayComplete` | `hasEarlierEvents`: whether the thread had events that it keeps no more. The events before this message are the kept ones, and each later event is new |
+| `threadMessageSent` | `identifier` of the message |
+| `threadChanged` | `_0` is a thread summary: a new thread, or a thread with new facts |
+| `threadEnded` | `identifier` of a thread that closed and left the list. A connection that is attached to the thread gets it too |
+| `toolPermissionAnswer` | `allows`, `message` (optional): the answer for the permission hook |
 
 A session summary holds `identifier`, `folder`, `command` (a list), `size` and `createdAt` (seconds since 1970).
 It can also hold the facts of the session: `name`, `title`, `currentFolder`, `branch`, `foregroundProgram`, `isInProgress`, `lastOutputAt`, `lastInputAt` (seconds since 1970), `alert` and `projectIdentifier`. An alert holds `text`, `raisedAt` and `source` (`bell`, `terminalNotification` or `notifyCommand`). A fact that is not known is absent. See "Facts of a session".
 A size holds `columns` and `rows`, each 0 to 65,535.
+A thread summary holds `identifier`, `agent`, `folder`, `model`, `permissionMode`, `createdAt`, `lastActivityAt`, `state` (`idle`, `inProgress`, `needsUser`, `finishedTurn` or `failed`), `isProcessRunning` and `waitingMessageCount`. It can also hold `name`, `title`, `accountName` and `projectIdentifier`. A client must take a `state` that it does not know, because a later build can add one.
 
 A control frame from a client that the session process cannot decode gets a `failure` with reason `invalidRequest`, and then the connection closes. Examples are text that is not JSON, a name that is no message of the protocol, a missing field, a field of the wrong type, keys in a control frame, and a value out of range, such as a size of 999999 or -1. The message names the problem in the words of the protocol, such as `A frame is malformed: the field resize._0.rows holds a value that is out of range or in the wrong form.` It never quotes the request, which can hold escape sequences. The first frame gets the same answer in place of `hello`. A frame that breaks the framing (a zero length, a length above the limit, or an unknown kind) closes the connection without an answer, because the bytes after it cannot be read as frames. A frame of a kind that only the server sends also closes the connection without an answer, as before. Other clients notice nothing.
 JSON that nests more than 512 levels counts as JSON that cannot be read. The decoder stops at that depth at once, so a frame of 64 MiB of nested arrays costs the memory of the frame and no stack.
@@ -911,6 +931,15 @@ Examples of control payloads:
 {"listSettings":{}}
 {"changeSetting":{"name":"font-size","text":"14"}}
 {"settingList":{"_0":[{"isProtected":false,"name":"font-size","text":"14"},{"isProtected":true,"name":"session-limit","text":"100"}]}}
+{"receiveSessionChanges":{"includesThreads":true}}
+{"createThread":{"agent":"claude-code","folder":"\/work\/app","model":"opus","name":"Notes","permissionMode":"plan"}}
+{"attachThread":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}
+{"sendThreadMessage":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","text":"Go on."}}
+{"threadReplayComplete":{"hasEarlierEvents":true}}
+{"threadMessageSent":{"identifier":"3F2A9C1E-0000-4000-8000-000000000002"}}
+{"requestToolPermission":{"request":"e30="}}
+{"answerToolPermission":{"allows":true,"request":"p1","thread":"3F2A9C1E-0000-4000-8000-000000000001"}}
+{"toolPermissionAnswer":{"allows":false,"message":"No."}}
 ```
 
 The encoder of the protocol writes a slash as `\/`. A decoder reads `\/` and `/` the same.
@@ -946,11 +975,14 @@ The messages of the session changes and the facts are additions too, and so are 
 
 The messages of the projects and the settings, and `projectIdentifier` of a summary, are additions in the same way. The server's `hello` holds `capabilities.projectsAndSettings` as `true`. A missing field means `false`. An older session process answers the new requests with a `failure`, and sends no `projectList` or `settingList` on the feed. So they stay inside protocol version 1.
 
+The messages of the agent threads and the frame kind `threadEvent` are additions too. The server's `hello` holds `capabilities.threads` as `true`. A missing field means `false`, and an older session process answers the new requests with a `failure`. Only a connection that sent `attachThread` gets a `threadEvent` frame, and only a watcher that sent `includesThreads` as `true` gets `threadList`, `threadChanged` and `threadEnded`. An older client sends neither and reads no new message. So they stay inside protocol version 1.
+
 ### A conversation
 
 1. The client connects and sends `hello`. The server answers `hello`.
 2. A request that needs one answer (`createSession`, `listSessions`, `readScreen`, `sendText`, `killSession`, `renameSession`, `raiseSessionAlert`, `clearSessionAlert`, and the requests of the projects and the settings) gets its answer. The client may send the next request or close.
 3. `attach` starts a longer conversation. See the next section.
+4. `attachThread` starts the conversation of an agent thread: the summary, the kept events, `threadReplayComplete`, and then each new event, until `detach` or the close of the thread.
 
 Between the connection and step 1, the client checks the folder of the socket and the user of the session process, and the session process checks the user of the client. See "The folder of the socket" and "The user at the other end" in "Process model".
 
