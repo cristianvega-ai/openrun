@@ -80,4 +80,18 @@ struct MarkdownBlockTests {
         #expect(blocks.map(\.kind) == [.paragraph("Quoted\nlazy line"), .listItem(.bullet, text: "item"), .paragraph("Out"), .paragraph("again")])
         #expect(blocks.map(\.quoteDepth) == [1, 1, 0, 1])
     }
+
+    @Test func aLongParagraphIsCutIntoPartsThatCanParseAgain() {
+        let lines = (1...100).map { "Line \($0)" }
+        var parser = MarkdownBlockParser(lines: lines.map { $0[...] }, isComplete: true)
+        parser.run()
+        #expect(parser.blocks.map(\.continuesParagraph) == [false, true, true])
+        #expect(parser.blocks.map { if case .paragraph(let text) = $0.kind { text } else { "" } } == [
+            lines[0..<40].joined(separator: "\n"), lines[40..<80].joined(separator: "\n"), lines[80...].joined(separator: "\n"),
+        ])
+        #expect(parser.restartPoints.map(\.lineIndex) == [0, 40, 80])
+        var again = MarkdownBlockParser(lines: lines[80...].map { $0[...] }, isComplete: true, continuesParagraph: true)
+        again.run()
+        #expect(again.blocks == [parser.blocks[2]])
+    }
 }

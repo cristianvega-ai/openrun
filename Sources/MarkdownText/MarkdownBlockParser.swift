@@ -5,6 +5,11 @@
 /// is final. So text that streams in changes only the last blocks, and a
 /// parse can start again at the start of a block at the top level.
 struct MarkdownBlockParser {
+    /// The most lines and bytes of one paragraph block. A longer paragraph
+    /// goes on in a new block, so that a growing one costs little.
+    static let paragraphLineLimit = 40
+    static let paragraphByteLimit = 4096
+
     let lines: [Substring]
     /// Whether no more text can come after the last line.
     let isComplete: Bool
@@ -12,12 +17,15 @@ struct MarkdownBlockParser {
     let quoteDepth: Int
     var index = 0
     var blocks: [MarkdownBlock] = []
+    var restartPoints: [MarkdownRestartPoint] = []
+    private var startsInParagraph: Bool
 
-    init(lines: [Substring], isComplete: Bool, listDepth: Int = 0, quoteDepth: Int = 0) {
+    init(lines: [Substring], isComplete: Bool, listDepth: Int = 0, quoteDepth: Int = 0, continuesParagraph: Bool = false) {
         self.lines = lines
         self.isComplete = isComplete
         self.listDepth = listDepth
         self.quoteDepth = quoteDepth
+        startsInParagraph = continuesParagraph
     }
 
     /// The blocks of `lines`, for a container inside the text.
@@ -34,6 +42,13 @@ struct MarkdownBlockParser {
                 index += 1
                 continue
             }
+            if startsInParagraph {
+                startsInParagraph = false
+                restartPoints.append(MarkdownRestartPoint(lineIndex: index, blockIndex: blocks.count, continuesParagraph: true))
+                parseParagraph(continuing: true)
+                continue
+            }
+            restartPoints.append(MarkdownRestartPoint(lineIndex: index, blockIndex: blocks.count, continuesParagraph: false))
             if let fence = MarkdownFence(line) {
                 parseCode(fence)
             } else if let heading = MarkdownLine.heading(line) {
@@ -49,7 +64,7 @@ struct MarkdownBlockParser {
             } else if let table = tableStart() {
                 parseTable(table)
             } else {
-                parseParagraph()
+                parseParagraph(continuing: false)
             }
         }
     }
