@@ -25,6 +25,9 @@ final class SessionCellView: NSTableCellView {
         identifier = Self.identifier
         (imageView, textField) = (icon, title)
         icon.contentTintColor = PaneColor.quietText
+        // The image starts at the edge of its view, 16 points in, where the
+        // title of the list starts.
+        icon.imageAlignment = .alignLeft
         icon.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 13, weight: .regular)
         (title.font, title.textColor, title.lineBreakMode) = (.systemFont(ofSize: NSFont.systemFontSize), PaneColor.text, .byTruncatingTail)
         (secondLine.font, secondLine.textColor, secondLine.lineBreakMode) = (.systemFont(ofSize: NSFont.smallSystemFontSize), PaneColor.quietText, .byTruncatingTail)
@@ -45,7 +48,7 @@ final class SessionCellView: NSTableCellView {
             addSubview(view)
         }
         NSLayoutConstraint.activate([
-            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 18),
+            icon.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16),
             icon.widthAnchor.constraint(equalToConstant: 18),
             icon.centerYAnchor.constraint(equalTo: title.centerYAnchor),
             title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),

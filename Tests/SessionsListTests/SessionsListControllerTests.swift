@@ -25,6 +25,16 @@ import Testing
         #expect(zip(cells, (0..<4).map { list.cell(at: $0) }).allSatisfy { $0 === $1 })
     }
 
+    /// The title of the list starts where the icons of the rows start.
+    @Test func theTitleLinesUpWithTheIconsOfTheRows() throws {
+        let (list, _, window, _) = makeSessionsList()
+        defer { window.close() }
+        let cell = try #require(list.cell(at: 0))
+        let title = list.titleLabel.superview!.convert(list.titleLabel.alignmentRect(forFrame: list.titleLabel.frame), to: list.view)
+        #expect(cell.icon.imageAlignment == .alignLeft)
+        #expect(cell.convert(cell.icon.frame, to: list.view).minX == title.minX)
+    }
+
     @Test func theHostHearsOfASelectionByTheUserAndOfARowThatGoesAway() {
         let (list, host, window, identifiers) = makeSessionsList()
         defer { window.close() }
