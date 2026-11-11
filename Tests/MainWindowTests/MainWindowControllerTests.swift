@@ -12,6 +12,8 @@ import Testing
         #expect(controller.sessionsShadow.frame.maxX == sessions.minX && controller.contentShadow.frame.maxX == content.minX)
         #expect(!controller.sessionsShadow.isHidden && !controller.contentShadow.isHidden)
         #expect(controller.sessionsShadow.superview === controller.window.contentView)
+        // The place for the content is the third pane below its top row.
+        #expect(controller.contentAreaSize == CGSize(width: content.width, height: 700 - controller.contentPane.topRow.frame.height))
     }
 
     @Test func theWindowOpensWithTheWidthsThatTheUserLeft() {

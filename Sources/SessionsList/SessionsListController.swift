@@ -64,6 +64,10 @@ public final class SessionsListController: NSObject {
         rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].identifier : nil
     }
 
+    /// The rows that the list shows now, in their order, after the filter
+    /// and the order. A host finds the neighbor of a row with it.
+    public var shownIdentifiers: [UUID] { rows.map(\.identifier) }
+
     /// Shows new content. Only the rows that changed update, and the
     /// selection stays on its row while the list shows the row.
     public func show(_ content: SessionsListContent) {

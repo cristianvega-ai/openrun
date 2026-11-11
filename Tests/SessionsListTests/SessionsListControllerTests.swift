@@ -11,6 +11,7 @@ import Testing
         #expect(list.shownTitles == ["Write the tests", "zsh", "logs"] && list.table.numberOfRows == 3)
         list.arrange(filter: .inProgress, order: .name)
         #expect(list.shownTitles == ["Repair the resize"] && host.selections.isEmpty)
+        #expect(list.shownIdentifiers == list.content.rows.filter(\.isInProgress).map(\.identifier))
     }
 
     /// A new alert changes the text of one row, in the view that it already has.

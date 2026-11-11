@@ -75,6 +75,10 @@ public final class MainWindowController: NSObject {
         updateTopRowSpaces()
     }
 
+    /// The size of the place for the content of the third pane. A host
+    /// starts a new session with the grid that fits it.
+    public var contentAreaSize: CGSize { contentPane.contentArea.frame.size }
+
     public func updateContentTitle(_ title: String) {
         contentPane.updateTitle(title)
     }
