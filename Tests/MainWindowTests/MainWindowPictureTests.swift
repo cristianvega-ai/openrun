@@ -1,16 +1,16 @@
 import AppKit
-import PaneAppearance
-import ProjectsList
+@testable import PaneAppearance
+@testable import ProjectsList
 import SessionPane
 import SessionProcessHarness
 import SessionProtocol
-import SessionsList
+@testable import SessionsList
 import Testing
 @testable import MainWindow
 
 /// Opt in with OPENRUN_RENDER_OUTPUT, a folder, to save pictures of the main
-/// window: light and dark with a real session, the empty states, a narrow
-/// window, and the first pane hidden.
+/// window: light and dark with a real session, with Increase Contrast, with
+/// legacy scrollers, the empty states, a narrow window, and the first pane hidden.
 @MainActor @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil))
 struct MainWindowPictureTests {
     @Test func picturesOfTheMainWindow() async throws {
@@ -44,12 +44,23 @@ struct MainWindowPictureTests {
         _ = try process.runCommand(["send", identifier, "--enter", "printf 'swift test\\n\\033[32m✔\\033[0m Test run with 412 tests passed\\n'"])
         controller.focusContent()
         await turns(seconds: 1.5)
-        for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
+        let appearances: [(String, NSAppearance.Name, Bool)] = [("light", .aqua, false), ("dark", .darkAqua, false),
+            ("contrast-light", .aqua, true), ("contrast-dark", .darkAqua, true)]
+        for (name, appearance, increasesContrast) in appearances {
+            PaneColor.contrastSetting.withLock { $0 = increasesContrast }
+            // A new appearance makes each view take the colors again.
+            controller.window.appearance = NSAppearance(named: appearance == .aqua ? .darkAqua : .aqua)
             controller.window.appearance = NSAppearance(named: appearance)
             await turns(seconds: 0.6)
             try capture(controller.window, to: output.appendingPathComponent("main-\(name).png"))
         }
+        PaneColor.contrastSetting.withLock { $0 = nil }
         controller.window.appearance = NSAppearance(named: .aqua)
+        // A Mac with a mouse can ask for legacy scrollers, which AppKit sets on each scroll view.
+        (controller.projectsList.scroll.scrollerStyle, controller.sessionsList.scroll.scrollerStyle) = (.legacy, .legacy)
+        controller.window.setContentSize(NSSize(width: 1_100, height: 420))
+        await turns(seconds: 0.6)
+        try capture(controller.window, to: output.appendingPathComponent("main-legacy-scrollers.png"))
         controller.window.setContentSize(controller.window.contentMinSize)
         await turns(seconds: 0.6)
         try capture(controller.window, to: output.appendingPathComponent("main-narrow.png"))

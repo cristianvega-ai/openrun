@@ -1,4 +1,5 @@
 import AppKit
+import os
 import TerminalEmulation
 import TerminalTheme
 
@@ -33,7 +34,13 @@ public enum PaneColor {
         return colors
     }
 
+    /// A fixed Increase Contrast setting in place of the system's. The
+    /// pictures of the window set it, because AppKit gives no appearance
+    /// with Increase Contrast to a program.
+    nonisolated static let contrastSetting = OSAllocatedUnfairLock<Bool?>(initialState: nil)
+
     nonisolated static func isContrastIncreased(for appearance: NSAppearance) -> Bool {
+        if let setting = contrastSetting.withLock({ $0 }) { return setting }
         let names: [NSAppearance.Name] = [.aqua, .darkAqua, .accessibilityHighContrastAqua, .accessibilityHighContrastDarkAqua]
         let match = appearance.bestMatch(from: names)
         return match == .accessibilityHighContrastAqua || match == .accessibilityHighContrastDarkAqua
