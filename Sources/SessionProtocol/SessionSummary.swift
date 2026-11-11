@@ -32,6 +32,11 @@ public struct SessionSummary: Codable, Equatable, Sendable {
     /// The time of the last input that a client typed or sent.
     public var lastInputAt: Date?
     public var alert: SessionAlert?
+    /// The project that the session belongs to: the project whose folder
+    /// holds the folder that the program started in, with its symbolic
+    /// links resolved, and the deepest one when several do. `nil` means "No
+    /// Project" (decision of 2026-11-10).
+    public var projectIdentifier: UUID?
 
     /// The most Unicode scalars of a text that a program or a client chose,
     /// such as a title, a name or the text of an alert. A program could
