@@ -24,6 +24,27 @@ public struct ProjectList: Hashable, Sendable {
         projects.first { $0.identifier == identifier }
     }
 
+    /// The project of a session that started in `folder`: the project whose
+    /// folder holds it, and the deepest one when several do. `nil` means
+    /// that the session shows under "No Project".
+    ///
+    /// Names compare whole, so `/work/app` does not hold
+    /// `/work/application`. The folder should be the real path that the
+    /// system gives, or a path from `ProjectFolderPath.resolve`, because
+    /// this reads no file and does not follow symbolic links. A relative
+    /// folder belongs to no project.
+    public func project(holding folder: String) -> Project? {
+        guard folder.hasPrefix("/") else { return nil }
+        let target = ProjectFolderPath.components(of: folder)
+        var best: (project: Project, depth: Int)?
+        for project in projects {
+            let candidate = ProjectFolderPath.components(of: project.folder)
+            guard ProjectFolderPath.holds(candidate, target), candidate.count > best?.depth ?? -1 else { continue }
+            best = (project, candidate.count)
+        }
+        return best?.project
+    }
+
     /// Adds a folder at the end of the list.
     ///
     /// The folder must exist and be a folder now. A folder that the user
