@@ -13,6 +13,7 @@ extension ClaudeCodeLineDecoder {
         if type == "message_start" {
             streamMessage = event["message"]?["id"]?.string ?? line["api_message_id"]?.string
             streamToolCalls = [:]
+            streamBlocks = []
             return status
         }
         let message = line["api_message_id"]?.string ?? streamMessage ?? ""
@@ -21,12 +22,14 @@ extension ClaudeCodeLineDecoder {
         switch type {
         case "content_block_start":
             let block = event["content_block"] ?? .null
+            // A stream without `message_start` must not grow the tables.
+            if streamBlocks.count >= 1_024 { streamBlocks = [] }
+            streamBlocks.append((index, Self.blockKind(block["type"]?.string)))
             switch block["type"]?.string {
             case "thinking", "redacted_thinking":
                 return [.thinking(Thinking(itemIdentifier: item, isComplete: false))]
             case "tool_use":
                 guard let identifier = block["id"]?.string else { return status }
-                // A stream without `message_start` must not grow the table.
                 if streamToolCalls.count >= 1_024 { streamToolCalls = [:] }
                 streamToolCalls[index] = identifier
                 return [.toolCallStarted(ToolCallStart(identifier: identifier, name: block["name"]?.string ?? ""))]

@@ -10,6 +10,10 @@ struct ClaudeCodeLineDecoder: Sendable {
     var streamMessage: String?
     /// The tool call of each block of the message that streams now.
     var streamToolCalls: [Int: String] = [:]
+    /// The blocks of the message that streams now that wait for their
+    /// complete line: the index and the kind of each, in order. The index
+    /// can skip a number, such as for thinking that the agent does not show.
+    var streamBlocks: [(index: Int, kind: String)] = []
     /// The message of the last `assistant` line, and how many of its blocks
     /// came. Each line holds one block, in the order of the blocks.
     var assistantMessage: String?
@@ -52,7 +56,13 @@ struct ClaudeCodeLineDecoder: Sendable {
         }
         var events: [ConversationEventKind] = []
         for block in blocks {
-            guard let event = ClaudeCodeContent.assistantEvent(block, itemIdentifier: "\(identifier):\(assistantBlockCount)") else { return nil }
+            // The complete block takes the identifier of its streamed pieces.
+            var index = assistantBlockCount
+            let kind = Self.blockKind(block["type"]?.string)
+            if identifier == streamMessage, let place = streamBlocks.firstIndex(where: { $0.kind == kind }) {
+                index = streamBlocks.remove(at: place).index
+            }
+            guard let event = ClaudeCodeContent.assistantEvent(block, itemIdentifier: "\(identifier):\(index)") else { return nil }
             events.append(event)
             assistantBlockCount += 1
         }
@@ -77,6 +87,10 @@ struct ClaudeCodeLineDecoder: Sendable {
         }
         let details = results.count == 1 ? line["tool_use_result"] : nil
         return results.flatMap { ClaudeCodeContent.toolResultEvents($0, details: details) }
+    }
+
+    static func blockKind(_ type: String?) -> String {
+        type == "redacted_thinking" ? "thinking" : type ?? ""
     }
 
     static func turnEnd(_ line: JSONValue) -> TurnEnd {
