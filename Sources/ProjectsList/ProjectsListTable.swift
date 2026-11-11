@@ -9,6 +9,7 @@ extension ProjectsListController: NSTableViewDataSource, NSTableViewDelegate {
         table.renameSelected = { [weak self] in self?.renameSelectedProject() }
         table.removeSelected = { [weak self] in self?.removeSelectedProject() }
         table.menu = contextMenu()
+        configureDragging()
         scroll.documentView = table
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true

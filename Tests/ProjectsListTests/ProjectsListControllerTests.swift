@@ -52,4 +52,14 @@ import Testing
         list.addButton.performClick(nil)
         #expect(host.newProjectRequests == 1 && list.topRow.trailingItems.arrangedSubviews.contains(list.addButton))
     }
+
+    @Test func aDraggedProjectMovesAtOnceAndTheHostHearsOfIt() {
+        let (list, host, window, identifiers) = makeProjectsList()
+        defer { window.close() }
+        #expect(list.moveProject(row: 2, dropRow: 5))
+        #expect(list.content.projects.map(\.identifier) == [identifiers[1], identifiers[2], identifiers[0]])
+        #expect(list.cell(at: 4)?.name.stringValue == "openrun")
+        #expect(host.moves.count == 1 && host.moves.first?.0 == identifiers[0] && host.moves.first?.1 == 2)
+        #expect(!list.moveProject(row: 1, dropRow: 3) && !list.moveProject(row: 3, dropRow: 3))
+    }
 }
