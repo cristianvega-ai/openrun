@@ -92,5 +92,8 @@ extension ChatViewController: TranscriptRowActions {
         delegate?.chatViewController(self, openLink: target)
     }
 
-    func toggle(_ part: String, in row: TranscriptRowView) {}
+    func toggle(_ part: String, in row: TranscriptRowView) {
+        if context.openedParts.remove(part) == nil { context.openedParts.insert(part) }
+        scrollView.keepInPlace(row.row.key)
+    }
 }

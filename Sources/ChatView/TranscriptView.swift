@@ -19,6 +19,8 @@ import AppKit
     private(set) var isTiling = false
     /// Whether the view keeps the newest row in sight.
     var isFollowingBottom = true
+    /// A row whose top stays where it is on the screen at the next tile.
+    private var pinnedAnchor: RowLayout.Anchor?
 
     override var isFlipped: Bool { true }
 
@@ -52,6 +54,15 @@ import AppKit
         tile()
     }
 
+    /// Shows a row again after the user opened or closed a part of it. The
+    /// top of the row stays where it is on the screen, so what the user
+    /// reads does not move.
+    func keepInPlace(_ key: String) {
+        guard let index = rowLayout.index(of: key), let clip = enclosingScrollView?.contentView else { return }
+        pinnedAnchor = RowLayout.Anchor(key: key, offset: clip.bounds.minY - rowLayout.top(of: index))
+        setRows(rows, changed: [key])
+    }
+
     /// Measures the rows near the screen, sets the height of the document,
     /// keeps the place of what the user reads, and places the views.
     func tile() {
@@ -65,7 +76,8 @@ import AppKit
             rowLayout.forgetMeasurements()
         }
         let viewport = clip.bounds.height
-        let anchor = isFollowingBottom ? nil : rowLayout.anchor(at: clip.bounds.minY)
+        let anchor = pinnedAnchor ?? (isFollowingBottom ? nil : rowLayout.anchor(at: clip.bounds.minY))
+        pinnedAnchor = nil
         let origin = rowLayout.settle(keeping: anchor, viewport: viewport, bottomPadding: RowSpacing.bottom) { index in
             spacings[index] + rowViews.view(for: rows[index], context: context, in: self).height(forWidth: width)
         }

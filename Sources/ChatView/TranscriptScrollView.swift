@@ -32,6 +32,19 @@ import AppKit
         transcriptView.frame.height - contentView.bounds.maxY
     }
 
+    /// Goes to the newest row and follows it again.
+    func scrollToNewest() {
+        setFollowing(true)
+        transcriptView.tile()
+    }
+
+    /// Shows a row again after the user opened or closed a part of it,
+    /// and stops the follow when the bottom went out of sight.
+    func keepInPlace(_ key: String) {
+        transcriptView.keepInPlace(key)
+        setFollowing(distanceFromBottom <= Self.bottomTolerance)
+    }
+
     override func layout() {
         super.layout()
         transcriptView.tile()
