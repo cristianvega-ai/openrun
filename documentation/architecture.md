@@ -207,7 +207,7 @@ The controlling descriptor is closed once, when the program has ended and the la
 
 ### SessionProtocol
 
-This module holds the messages, the frame format, the connection, and the socket location with the check of its folder. `FolderAccessControlList`, an internal type, reads the access control list of the folder for that check. The next sections describe them.
+This module holds the messages, the frame format, the connection, and the socket location with the check of its folder. `FolderAccessControlList`, an internal type, reads the access control list of the folder for that check. `PeerProcess` reads the program at the other end of a connection: its process identifier, its terminal session and its audit token. `ApprovalQuestion` is the question of "Requests on another session". The next sections describe them.
 
 ### SessionConnection
 
@@ -220,6 +220,7 @@ The client side of the socket, for the command-line tool and the window of the a
 - `send(input:)`, `send(size:)` and `detach()` work from any thread. A size send can request an ordered confirmation. A failure of such a request reaches the attachment handler as an error. `shutdown()` ends the connection and wakes the receiving thread.
 - `SessionConnectionError` names each failure. Its text names no command or option of a client, so `CommandLineToolError(_:)` gives each error the words of the tool, such as "choose a socket with --socket".
 - A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. On the default socket, `SessionClient(location:)` first sends one wake to the launch agent and connects again. A connection that closes before `hello` leads to the same wake, because a launch agent that ends at its idle exit closes such a connection. A wake that fails gives `wakeFailed` with the `SessionWakeFailure`. Tests pass their own wake to `SessionClient(location:wake:)`.
+- `SessionClient.receiveApprovalQuestions` turns the connection into an `ApprovalQuestionReceiver`. Its thread hands each question, the end of each question, and last `closed` or `failed` to a handler. `answer(_:allows:)` sends the user's answer from any thread.
 - `SessionClient(location:helloTimeLimit:)` gives each `hello` a time limit. A `hello` that takes longer throws `protocolFailure(.timedOut)` and sends no wake. The other initializers keep no limit, so `openrun` and the windows wait as long as the session process takes. Only the setup of the app passes a limit.
 
 ### SessionWindow
@@ -238,6 +239,7 @@ The title comes from the terminal's title, or the session folder when the title 
 
 `ApplicationArguments` chooses the socket from `--socket`, then `OPENRUN_SOCKET`, then the default path. The app runs `LaunchAgentSetup` off the main thread for the default socket. Its questions go through `ModalAlert`, which starts the modal loop from a run loop block. The session list alert of `SessionListPanel` does the same when no window is visible, and it is a sheet on a visible window. A modal loop never runs inside a Swift concurrency job or a block of the main dispatch queue, because such a block holds the main queue until the alert closes. The blocks that deliver the output of attached windows would wait, the relay would fill, and the session would close the connection of the window. A nondefault socket skips registration and wake, so a development session process must already listen there. Once setup is ready, the app opens a login shell in the home folder. Reopening the app with no windows opens another. `WindowList` keeps each controller until its window closes. Quitting closes the windows and detaches their sessions.
 `MainMenu` makes the native app, File, Edit, View and Window menus. File opens a new session or the session picker; these actions stay disabled until setup is ready. File > Retry Session Process runs the setup again. It is on only when setup has not succeeded and does not run. File > Register Session Process Again is on except while setup runs. It is also off for a nondefault socket, which has no launch agent, and its action does nothing there. Copy, paste and text-size actions reach the focused view through the responder chain.
+Once setup is ready, `ApprovalQuestionConnection` opens the connection for approval questions. It connects again after the session process ends, with a wait that doubles from one second up to 30 seconds, and it stops after a refusal. `ApprovalQuestionAlerts` shows one question at a time, from a run loop block as `ModalAlert` does, and closes the alert of a question that ends. `ApprovalQuestionWords` holds the words: the first button denies, and each control character of typed text shows as a sign, such as ⏎ for Return.
 
 ### SessionProcess
 
@@ -247,7 +249,10 @@ The title comes from the terminal's title, or the session folder when the title 
 |---|---|
 | `SocketListener` | Checks the folder, takes the lock of the socket, checks for a live process, replaces a stale socket only while the path still holds the socket it checked, creates the socket with mode 0600, and accepts connections of the same user. At most 64 accepted connections, the length of its listen queue, wait for the server to take them, and it closes each one past that at once. After a failed accept it waits before it tries again. At shutdown it removes the socket file only when the file is still its own |
 | `SocketListener.SocketLock` | The lock file next to the socket, held for the life of the process, so that two processes that start together cannot both pass the checks. It uses only a regular file of the user, opened without following a symbolic link, and sets its mode to 0600 |
-| `SessionServer` | An actor. Refuses clients past the limit, reads each client's messages and answers them. A client keeps its place until its socket is closed |
+| `SessionServer` | An actor. Refuses clients past the limit, reads each client's messages and answers them. A client keeps its place until its socket is closed. It asks the user before a request on another session |
+| `CallerPlace` | Where the program of a client runs: in a session, outside every session, or unknown. See "Requests on another session" |
+| `AnswererRequirement` | The code requirement that a program must meet to receive and answer approval questions |
+| `ApprovalQuestions` | An actor. The questions that wait, and the connections of the app that hold them |
 | `ClientConnection` | One client. A thread reads from it, and a serial queue writes to it. It ends the connection when a deadline or a limit is missed, answers a request that it cannot decode, tells the server when the client has left, and closes the socket once neither the thread nor the queue uses it |
 | `ReadAhead` | Holds the reading thread of a client while the frames that were read and not handled are too many. Keeps room for one small control frame, so a client can detach while its input waits |
 | `ConnectionLimits` | Every limit and deadline of a client, in one place. See "Limits and deadlines of a client" |
@@ -266,6 +271,17 @@ Each line goes to standard error and to the unified log, with the subsystem `ai.
 `CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects with `SessionClient` of `SessionConnection`, and runs one command. It turns a `SessionConnectionError` into a `CommandLineToolError` with the words of the tool.
 `NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand` and `KillCommand` hold the commands. `RawTerminalMode` switches the terminal to raw mode and back.
 `openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them through `SessionAttachment`. `AttachSignals` turns signals into requests for the writer.
+
+## Requests on another session
+
+A program acts freely on its own session. Before a program in one session types into, reads, attaches to or kills another session, the session process asks the user (decisions of 2026-10-15 and 2026-11-10). A program outside every session, such as Terminal, ssh or the app, acts freely.
+
+- **The caller.** `SocketListener` reads the `PeerProcess` of each connection when it accepts it, before it reads a message: `LOCAL_PEERPID`, `LOCAL_PEERTOKEN`, and `getsid` of that process. The program of a session leads its terminal session, so `SessionRegistry.place(of:)` finds the session whose program has the number of the caller's terminal session. A caller that ended before the check has no terminal session. It counts as unknown, and its request is refused, because it could have run in any session.
+- **The question.** `SessionServer` sends an `ApprovalQuestion` through `ApprovalQuestions` to each connection of the app, and the request waits. The request goes on only after an answer that allows it. A question ends at the answer, at its time limit of two minutes, when the connection of the caller closes, or when no connection of the app holds it. A later answer changes nothing. The refusal is a `failure` with reason `invalidRequest`, and its message says why.
+- **The answerer.** Only a program outside every session that meets `AnswererRequirement` receives questions. The default requirement is OpenRun.app (`ai.cristianvega.openrun`) signed by the team of the session process, checked with `SecCodeCopyGuestWithAttributes` and the audit token. A build with no team, such as an ad hoc one, accepts no program, so each request on another session is refused. `openrun` has no command that answers. `openrun-session --answerer-requirement` sets another requirement, which the tests use to name their own code hash.
+- **The model.** `specifications/ApprovalQuestion.tla` models these steps. Its seven controls remove the signature check, the identifier in the answer, the end of a question at its answer, the withdrawal when the caller leaves, the refusal of an unknown caller, the end when no answerer is left, and the time limit.
+- **What the rule does not stop.** A program that starts a terminal session of its own, with `setsid`, a tmux server or `launchctl`, counts as outside every session. So does a background process of a session whose program has ended. The rule stops an agent that uses `openrun` plainly. OpenRun is not a security layer against a program that works around it (decision of 2026-10-15). The process identifier can name a later process only after about 100,000 others (see `TerminalSessionProcesses`).
+- **The idle exit.** The connection of the app for questions is a client. So the session process does not end at its idle exit while the app runs.
 
 ## Process model
 
@@ -390,6 +406,8 @@ Client to server:
 | `input` | the bytes, as an input frame | none |
 | `resize` | `_0` is the size, `requestsConfirmation` is optional | A new size goes to the other attached clients that asked for it, as `sizeChanged`. While a shell edits a line, it goes where the shell's output starts to use the new width (see "Attach sequence"). When the client requests confirmation, it also gets its own `sizeChanged`, even when the size did not change. A refused confirmation request gets a `failure`, and the connection closes. Without confirmation, there is no answer; a refused size changes nothing |
 | `detach` | none | the connection closes |
+| `receiveApprovalQuestions` | none | `acknowledged`, then `approvalQuestion` and `approvalQuestionEnded` for as long as the connection stays open. A `failure` with reason `invalidRequest` when the program is not the signed app outside every session |
+| `answerApprovalQuestion` | `identifier`, `allows` | none. Only a connection that holds the question can answer it, and only while it waits |
 
 Server to client:
 
@@ -406,6 +424,8 @@ Server to client:
 | `exited` | `_0` is `{"exited":{"status":N}}` or `{"signaled":{"signal":N}}` |
 | `acknowledged` | none |
 | `failure` | `_0` holds `reason` (`incompatibleProtocol`, `unknownSession`, `launchFailed` or `invalidRequest`) and `message` |
+| `approvalQuestion` | `_0` holds `identifier`, `askingSession`, `targetSession` (session summaries) and `request`: `type` with `start` and `characterCount`, or `read`, `attach` or `kill`. `start` holds at most 500 characters |
+| `approvalQuestionEnded` | `identifier`. Every connection that holds the question receives it when the question ends |
 
 A session summary holds `identifier`, `folder`, `command` (a list), `size` and `createdAt` (seconds since 1970).
 A size holds `columns` and `rows`, each 0 to 65,535.
@@ -454,6 +474,8 @@ The resize model describes the intended behavior. It assumes the implementation 
 The model gives each counted server message one unit. `ApplicationCapacity` bounds the relay to `LocalEventLimit` events and `LocalByteLimit` bytes, and one larger frame may enter an empty relay. `ReceiverCapacity` lets the receiver hold one more frame. Each client attaches once. The two-client run allows three outputs and two resizes; the three-client run allows one output and one resize. Each has two sizes, two server units, two relay events and two relay bytes. It treats each output frame as one piece and omits failed attaches, failed sizes, queries and input. It does not prove an unbounded refinement or a time limit.
 
 The identifier is a UUID. In JSON it is the usual upper case text. People and environment variables see it in lower case.
+
+The four messages of approval questions are additions, and only a client that asks with `receiveApprovalQuestions` receives a question. So they stay inside protocol version 1.
 
 ### A conversation
 
