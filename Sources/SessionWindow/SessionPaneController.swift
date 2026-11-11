@@ -30,7 +30,9 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     private let relay = AttachmentRelay()
     private(set) var attachment: (any AttachedSession)?
     private(set) var view: TerminalView?
-    let hiddenGridLabel = HiddenGridLabel()
+    /// The view that a host puts in its layout.
+    public let paneView = SessionPaneView()
+    var hiddenGridLabel: HiddenGridLabel { paneView.hiddenGridLabel }
     var ask: @MainActor (UserQuestion, NSWindow) async -> Bool = { await $0.ask(in: $1) }
     var isWindowKey: @MainActor (NSWindow) -> Bool = { $0.isKeyWindow }
     private var isAttaching = false
@@ -52,6 +54,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         // The controller owns the window, so AppKit must not release it a second time.
         window.isReleasedWhenClosed = false
         window.delegate = self
+        window.contentView = paneView
         window.contentMinSize = TerminalView.estimatedSize(holding: Self.minimumGrid, scale: window.backingScaleFactor)
         window.center()
     }
@@ -94,9 +97,8 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         // (decision of 2026-10-25).
         view.waitsForSizeConfirmation = true
         view.delegate = self
-        window.contentView = container(holding: view)
+        paneView.show(view)
         keepMinimumSize(of: view)
-        window.makeFirstResponder(view)
         // Complete the snapshot fit before a later size from another client arrives.
         view.layoutSubtreeIfNeeded()
         // A key event during the attach must follow any earlier foreign size.
@@ -145,19 +147,6 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
             _ = await ask(.connectionFailure(detail), window)
             if !isClosed { window.close() }
         }
-    }
-
-    /// The view fills the window, and the label of the hidden part lies over its bottom right corner.
-    private func container(holding view: TerminalView) -> NSView {
-        let container = NSView(frame: NSRect(origin: .zero, size: window.contentLayoutRect.size))
-        view.frame = container.bounds
-        view.autoresizingMask = [.width, .height]
-        hiddenGridLabel.translatesAutoresizingMaskIntoConstraints = false
-        container.addSubview(view)
-        container.addSubview(hiddenGridLabel)
-        hiddenGridLabel.trailingAnchor.constraint(equalTo: container.trailingAnchor, constant: -16).isActive = true
-        hiddenGridLabel.bottomAnchor.constraint(equalTo: container.bottomAnchor, constant: -8).isActive = true
-        return container
     }
 
     private func showHiddenPart() {
