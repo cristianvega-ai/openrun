@@ -58,6 +58,23 @@ public struct ProjectList: Hashable, Sendable {
         projects.remove(at: try index(of: identifier))
     }
 
+    /// Gives a project a name, or takes its name away with `nil` or an
+    /// empty name, so the folder's name shows again.
+    public mutating func rename(identifier: UUID, to name: String?) throws {
+        let index = try index(of: identifier)
+        projects[index].name = try Project.validName(name)
+    }
+
+    /// Moves a project so that it has the place `place` in the new order.
+    /// The first place is 0, and the last is `projects.count - 1`.
+    public mutating func move(identifier: UUID, to place: Int) throws {
+        let index = try index(of: identifier)
+        guard projects.indices.contains(place) else {
+            throw ProjectListError.placeOutOfRange(place: place, count: projects.count)
+        }
+        projects.insert(projects.remove(at: index), at: place)
+    }
+
     private func index(of identifier: UUID) throws -> Int {
         guard let index = projects.firstIndex(where: { $0.identifier == identifier }) else {
             throw ProjectListError.unknownProject(identifier)
