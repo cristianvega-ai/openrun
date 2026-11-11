@@ -344,7 +344,10 @@ private final class TracedAttachment: AttachedSession {
         #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
         #expect(parser.parse(into: terminal, budget: ParseBudget(limit: .zero)))
         #expect(completed.withLock { $0 == 0 } && returned.withLock { $0 == 3 })
-        let deadline = ContinuousClock.now + .seconds(10)
+        // About 1100 events pass from the sender thread, one hand-off at a
+        // time, and each wait sleeps 1 ms. A busy Mac makes each sleep much
+        // longer, and it did only 701 of the 1000 sizes in 10 seconds.
+        let deadline = ContinuousClock.now + .seconds(60)
         while completed.withLock({ $0 < sent.count }) && ContinuousClock.now < deadline {
             if parser.hasPendingOutput { _ = parser.parse(into: terminal, budget: ParseBudget(limit: .zero)) }
             else { try await Task.sleep(for: .milliseconds(1)) }
