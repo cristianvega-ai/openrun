@@ -24,4 +24,18 @@ import Testing
         #expect(cell.secondLine.stringValue == "Approve the edit?" && cell.icon.image != nil)
         #expect(cell.accessibilityLabel() == "Repair the resize, Approve the edit?, needs you")
     }
+
+    /// A long folder loses its start, so the model and the branch stay whole.
+    @Test func aLongFolderLosesItsStartFirst() {
+        let cell = SessionCellView()
+        cell.show(SessionsListRow(SessionRowDisplay(identifier: UUID(), title: "Repair", folder: "~/Projects/openrun/Sources/TerminalRendering/Atlas",
+                                                    branch: "main", kind: .agentThread(agent: "Codex", model: "Opus", account: nil),
+                                                    lastActivity: now, startTime: now), now: now))
+        cell.layoutSubtreeIfNeeded()
+        #expect(cell.modelLabel.stringValue == "Opus · " && cell.branchLabel.stringValue == " · main")
+        #expect(cell.folderLabel.lineBreakMode == .byTruncatingHead && !cell.place.isHidden && cell.secondLine.isHidden)
+        #expect(cell.folderLabel.frame.width < cell.folderLabel.intrinsicContentSize.width)
+        #expect(cell.branchLabel.frame.width >= cell.branchLabel.intrinsicContentSize.width)
+        #expect(cell.place.frame.maxX <= cell.bounds.maxX - 18)
+    }
 }
