@@ -33,3 +33,24 @@ import Testing
         #expect(hover.update(modifiers: .command, at: cell(2), textChanged: true) && hover.link == nil)
     }
 }
+
+@MainActor @Suite struct LinkHoverOfViewTests {
+    @Test func commandOverAnAddressUnderlinesItAndShowsAHand() throws {
+        let view = try TerminalView()
+        view.frame = NSRect(x: 0, y: 0, width: 600, height: 300)
+        view.layoutSubtreeIfNeeded()
+        view.terminal.write("go https://a.b/c")
+        let location = view.pointerLocation
+        // The middle of the cell in column 6 of the first row, in the points of the view.
+        let point = CGPoint(x: location.padding + 6.5 * location.cellSize.width, y: view.bounds.height - location.padding - location.cellSize.height / 2)
+        view.updateLinkHover(modifiers: [], at: point)
+        #expect(view.renderer.underlinedRuns.isEmpty && view.pointerCursor != .pointingHand)
+        view.updateLinkHover(modifiers: .command, at: point)
+        #expect(view.renderer.underlinedRuns == [ViewportCellRun(row: 0, columns: 3..<16)] && view.pointerCursor == .pointingHand)
+        // A new text size keeps the underline in the new renderer.
+        view.increaseFontSize(nil)
+        #expect(view.renderer.underlinedRuns == [ViewportCellRun(row: 0, columns: 3..<16)])
+        view.updateLinkHover(modifiers: .command, at: nil)
+        #expect(view.renderer.underlinedRuns.isEmpty && view.pointerCursor != .pointingHand)
+    }
+}

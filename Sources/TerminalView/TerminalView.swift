@@ -20,6 +20,7 @@ public final class TerminalView: NSView {
     let focus = FocusInput()
     let selection: SelectionInput
     let links: LinkClick
+    let linkHover: LinkHover
     let scroll = ScrollInput()
     let scrollBar: OverlayScrollBar
     /// The time and the timers of the input. A test gives a clock that it moves.
@@ -96,6 +97,7 @@ public final class TerminalView: NSView {
         pointer = try PointerInput(terminal: terminal)
         selection = try SelectionInput(terminal: terminal)
         links = LinkClick(terminal: terminal)
+        linkHover = LinkHover(terminal: terminal)
         scrollBar = OverlayScrollBar(clock: clock)
         self.clock = clock
         let fonts = FontSet(pointSize: FontSizeControl.standard, scale: NSScreen.main?.backingScaleFactor ?? 2)
@@ -119,7 +121,7 @@ public final class TerminalView: NSView {
             self?.requestFrame()
         }
         // A mouse motion with no button comes only through a tracking area.
-        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
+        addTrackingArea(NSTrackingArea(rect: .zero, options: [.mouseMoved, .mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self, userInfo: nil))
         blink = CursorBlink(clock: clock) { [weak self] isShown in
             self?.renderer.isCursorShown = isShown
             self?.requestFrame()
@@ -182,6 +184,7 @@ public final class TerminalView: NSView {
             window?.invalidateCursorRects(for: self)
         }
         schedule?.requestFrame()
+        if linkHover.isActive { updateLinkHover(modifiers: NSEvent.modifierFlags, at: mouseLocation, textChanged: true) }
         if hasMore {
             scheduleParseTurn()
         } else {
@@ -282,7 +285,8 @@ public final class TerminalView: NSView {
     public override var acceptsFirstResponder: Bool { true }
 
     /// The mouse cursor is the shape that the program asked for. It starts as the text cursor.
-    var pointerCursor: NSCursor { PointerShapeCursor.cursor(for: pointerShape) }
+    /// It is a pointing hand while Command is down over a link.
+    var pointerCursor: NSCursor { linkHover.isOverLink ? .pointingHand : PointerShapeCursor.cursor(for: pointerShape) }
 
     public override func resetCursorRects() {
         addCursorRect(bounds, cursor: pointerCursor)
@@ -322,7 +326,29 @@ public final class TerminalView: NSView {
         requestFrame()
     }
 
-    public override func mouseMoved(with event: NSEvent) { report(.motion, nil, event) }
+    public override func mouseMoved(with event: NSEvent) {
+        updateLinkHover(modifiers: event.modifierFlags, at: point(of: event))
+        report(.motion, nil, event)
+    }
+
+    public override func mouseExited(with event: NSEvent) {
+        updateLinkHover(modifiers: [], at: nil)
+    }
+
+    /// The pointer in the coordinates of the view, or `nil` without a window.
+    private var mouseLocation: CGPoint? {
+        window.map { convert($0.mouseLocationOutsideOfEventStream, from: nil) }
+    }
+
+    /// Underlines the plain address under the pointer while Command is down, and shows a hand over a link.
+    func updateLinkHover(modifiers: NSEvent.ModifierFlags, at point: CGPoint?, textChanged: Bool = false) {
+        let cell = point.flatMap { bounds.contains($0) ? pointerLocation.cell(of: $0) : nil }
+        guard linkHover.update(modifiers: modifiers, at: cell, textChanged: textChanged) else { return }
+        renderer.underlinedRuns = linkHover.link?.runs ?? []
+        window?.invalidateCursorRects(for: self)
+        if cell != nil { pointerCursor.set() }
+        requestFrame()
+    }
 
     public override func rightMouseDown(with event: NSEvent) {
         if !report(.press, .right, event) { super.rightMouseDown(with: event) }
@@ -371,6 +397,7 @@ public final class TerminalView: NSView {
         switch action {
         case .viewport(let rows)?:
             terminal.scrollViewport(.byRows(rows))
+            if linkHover.isActive { updateLinkHover(modifiers: event.modifierFlags, at: point(of: event), textChanged: true) }
             scrollBar.reveal()
             requestFrame()
         case .wheelReports(let button, let count)?:
@@ -388,6 +415,7 @@ public final class TerminalView: NSView {
     }
 
     public override func flagsChanged(with event: NSEvent) {
+        updateLinkHover(modifiers: event.modifierFlags, at: mouseLocation)
         sendTyped(keyboard.bytes(forFlagsChanged: event))
     }
 
@@ -690,7 +718,7 @@ public final class TerminalView: NSView {
             let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale, fontName: fontName)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
             (new.isFocused, new.markedText, new.isCursorShown, new.isFlashing) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown, renderer.isFlashing)
-            new.markedTextSelection = renderer.markedTextSelection
+            (new.markedTextSelection, new.underlinedRuns) = (renderer.markedTextSelection, renderer.underlinedRuns)
             renderer = new
         } catch {
             logger.error("The renderer failed: \(String(describing: error), privacy: .private)")
