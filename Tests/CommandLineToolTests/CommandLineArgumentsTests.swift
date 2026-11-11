@@ -71,6 +71,12 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(usageMessage("project", "remove", "") != nil && usageMessage("project", "rename") != nil)
         #expect(usageMessage("project", "remove", "x", "--name", "y")?.contains("--name does not belong to project remove") == true)
         #expect(usageMessage("list", "--name", "y")?.contains("--name does not belong to list") == true)
+        #expect(try parse("settings", "list").command == .settings(.list))
+        #expect(try parse("settings", "get", "font-size").command == .settings(.get(name: "font-size")))
+        #expect(try parse("settings", "set", "font-name", "SF", "Mono").command == .settings(.set(name: "font-name", text: "SF Mono")))
+        #expect(try parse("settings", "set", "theme", "--", "-dark").command == .settings(.set(name: "theme", text: "-dark")))
+        #expect(usageMessage("settings") != nil && usageMessage("settings", "get") != nil && usageMessage("settings", "set", "theme") != nil)
+        #expect(usageMessage("settings", "list", "--json")?.contains("--json does not belong to settings") == true)
         #expect(try parse("--help").command == .help)
     }
 

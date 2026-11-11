@@ -12,5 +12,6 @@ enum ToolCommand: Equatable {
     case notify(identifier: String?, text: String)
     case projectList(printsJSON: Bool)
     case projectChange(ProjectChangeCommand.Change)
+    case settings(SettingsCommand.Action)
     case help
 }

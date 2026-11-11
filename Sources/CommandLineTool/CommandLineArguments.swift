@@ -135,6 +135,9 @@ struct CommandLineArguments: Equatable {
         case "project":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
             command = try Self.projectCommand(rest + (afterSeparator ?? []), printsJSON: printsJSON, name: projectName)
+        case "settings":
+            try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
+            command = try Self.settingsCommand(rest + (afterSeparator ?? []))
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -174,6 +177,27 @@ struct CommandLineArguments: Equatable {
         }
     }
 
+    /// The words after `settings`. The value of `set` is the rest of the
+    /// words, joined by spaces, as the text of `send`.
+    private static func settingsCommand(_ words: [String]) throws -> ToolCommand {
+        let rest = Array(words.dropFirst())
+        switch words.first {
+        case "list":
+            guard rest.isEmpty else { throw CommandLineToolError.usage("settings list takes no arguments.") }
+            return .settings(.list)
+        case "get":
+            guard rest.count == 1, let name = rest.first else { throw CommandLineToolError.usage("settings get needs one setting name.") }
+            return .settings(.get(name: name))
+        case "set":
+            guard rest.count >= 2 else { throw CommandLineToolError.usage("settings set needs a setting name and a value.") }
+            return .settings(.set(name: rest[0], text: rest.dropFirst().joined(separator: " ")))
+        case let action?:
+            throw CommandLineToolError.usage("Unknown settings command \(action).")
+        case nil:
+            throw CommandLineToolError.usage("settings needs list, get or set.")
+        }
+    }
+
     private static func value(of option: String, from remaining: inout ArraySlice<String>) throws -> String {
         guard let value = remaining.popFirst() else {
             throw CommandLineToolError.usage("\(option) needs a value.")
@@ -195,7 +219,7 @@ struct CommandLineArguments: Equatable {
         if word.isEmpty { throw CommandLineToolError.usage("The session identifier is empty.") }
     }
 
-    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "project", "help"]
+    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "project", "settings", "help"]
 
     /// Whether the command is `notify`, also when the arguments are wrong.
     static func namesNotify(_ arguments: [String]) -> Bool {

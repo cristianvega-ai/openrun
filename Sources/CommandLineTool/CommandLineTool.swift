@@ -64,6 +64,8 @@ public enum CommandLineTool {
             write(try ProjectListCommand(printsJSON: printsJSON).run(location: location), to: .standardOutput)
         case .projectChange(let change):
             write(try ProjectChangeCommand(change: change).run(location: location), to: .standardOutput)
+        case .settings(let action):
+            write(try SettingsCommand(action: action).run(location: location), to: .standardOutput)
         case .notify, .help:
             break
         }
