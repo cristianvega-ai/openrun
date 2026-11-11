@@ -48,6 +48,9 @@ let package = Package(
         // The folders that the user adds as projects, and the project of a session.
         .target(name: "Projects", dependencies: ["DataStorage", "UntrustedText"]),
         .testTarget(name: "ProjectsTests", dependencies: ["Projects", "DataStorage"]),
+        // What the main window keeps between two runs of the app: the rows
+        // of the sessions list, their splits, and the selection.
+        .target(name: "WindowLayout", dependencies: ["DataStorage"]),
         // The typed settings, their text forms for the tool, and the rule
         // for protected settings.
         .target(name: "Settings", dependencies: ["DataStorage", "UntrustedText"]),
