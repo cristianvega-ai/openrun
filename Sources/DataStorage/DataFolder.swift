@@ -90,7 +90,13 @@ public struct DataFolder: Equatable, Sendable {
     /// Writes a document as readable JSON, with its keys in order and one
     /// key on each line, and replaces its file in one step with mode 0600.
     /// Call `create` first.
+    ///
+    /// The file that is there is read first. When this build cannot read
+    /// it, it is set aside first. When it cannot be read or set aside, the
+    /// write throws and the file stays as it was. So no caller can replace
+    /// data that it did not read, also after a load that failed.
     public func write<Document: DataDocument>(_ document: Document) throws {
+        _ = try read(Document.self)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         guard var data = try? encoder.encode(FormattedDocument(document: document)) else {
@@ -113,8 +119,7 @@ public struct DataFolder: Equatable, Sendable {
     /// and never written over.
     ///
     /// - Throws: `DataStorageError` when the file exists but the system
-    ///   cannot read or move it. The caller must then not write the file,
-    ///   or it would replace data that it did not read.
+    ///   cannot read or move it. A later `write` then throws too.
     public func read<Document: DataDocument>(_ type: Document.Type) throws -> DataReadResult<Document> {
         let path = path(of: Document.file)
         var status = stat()

@@ -14,8 +14,8 @@ public struct SettingsStore: Sendable {
     /// their values.
     ///
     /// - Throws: `DataStorageError` when the file exists but the system
-    ///   cannot read or move it. Do not save then, or the save replaces
-    ///   settings that the load did not read.
+    ///   cannot read or move it. A save then throws too, so it never
+    ///   replaces settings that the load did not read.
     public func load() throws -> LoadedSettings {
         let result = try dataFolder.read(SettingsDocument.self)
         var setAsidePath: String?

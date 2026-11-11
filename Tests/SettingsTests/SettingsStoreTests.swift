@@ -1,4 +1,5 @@
 import DataStorage
+import Darwin
 import Foundation
 import Settings
 import Testing
@@ -86,5 +87,15 @@ import Testing
         let path = try #require(loaded.setAsidePath)
         #expect(try String(contentsOfFile: path, encoding: .utf8) == #"{"format": 1, "settings": {"font-size": 2"#)
         #expect(!FileManager.default.fileExists(atPath: folder.path(of: .settings)))
+    }
+
+    /// The reproduction of the review: a load that fails and a save after it.
+    @Test func aSaveAfterAFailedLoadChangesNothing() throws {
+        try writeFile("garbage")
+        #expect(chmod(folder.path, 0o500) == 0)
+        defer { chmod(folder.path, 0o700) }
+        #expect(throws: DataStorageError.self) { try store.load() }
+        #expect(throws: DataStorageError.self) { try store.save(SettingValues()) }
+        #expect(try String(contentsOfFile: folder.path(of: .settings), encoding: .utf8) == "garbage")
     }
 }

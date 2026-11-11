@@ -32,7 +32,7 @@ public struct ProjectStore: Sendable {
     /// list starts without what it held.
     ///
     /// - Throws: `DataStorageError` when a file exists but the system cannot
-    ///   read or move it. Do not save the list then, or the save replaces
+    ///   read or move it. A save then throws too, so it never replaces
     ///   projects that the load did not read.
     public func load() throws -> LoadedProjects {
         let projects = try dataFolder.read(ProjectsDocument.self)
