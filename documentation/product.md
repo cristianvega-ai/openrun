@@ -215,6 +215,8 @@ Each row holds the date, the decision, and the reason.
 | 2026-11-10 | The session process reads the environment of the login shell with `SHELL -l -i -c`, as a terminal window starts the shell. Standard input is closed, and the shell gets 10 seconds and 1 MiB of output. The variables `_`, `PWD`, `OLDPWD` and `SHLVL` are left out. When the shell fails, the session process uses its own environment. An agent of a thread never gets the variables that mark a run inside Claude Code, such as `CLAUDECODE` and `CLAUDE_CODE_MESSAGING_*`, and `CLAUDE_CONFIG_DIR` stays. This fills in the row of this date on the environment of an agent. | An interactive login shell reads the same files as a terminal window, so the agent finds the same programs. A profile can print text or wait for input, so markers, the closed input and the limits keep a bad profile from stopping the session process. Claude Code treats a process with those variables as a run inside another run. |
 | 2026-11-10 | A thread of Claude Code offers the permission modes `default`, `acceptEdits`, `plan`, `dontAsk` and `auto`. OpenRun never starts Claude Code in `bypassPermissions`. | That mode skips every question, so the user could not answer any request through OpenRun. |
 | 2026-11-10 | When the user stops a turn while a tool runs, the chat shows the tool call as failed, with the text that Claude Code gives, and the turn as stopped. | Claude Code reports the call as a result with an error. The chat shows what the agent reports and adds nothing. |
+| 2026-11-10 | A row of the second pane shows one mark at the end of its title line: a dot in the attention color when it needs the user, a small turning arc when it is in progress, or else a quiet age of its last activity, such as "now", "5m", "3h", "2d" or "6w". A row that needs the user shows the alert in place of its second line, in the color of the title. The second line of a thread names the agent, the model and the account before the folder and branch. A row that needs the user stays in the filter of its progress. Return on a row moves the keyboard focus to its content. The context menu of a row has Rename and Close, and Close has no key equivalent. An empty list says which filter is empty and offers the choices of the new-session button. | The alert is what the user must read first, and one mark keeps the title line calm. The age replaces the stale filter (proposal 11). Close ends the work of a row, so a key press alone must not do it. |
+| 2026-11-10 | The first pane is 160 to 360 points wide, 210 at first, and the second pane is 240 to 520, 300 at first. "All Sessions" shows no count, because "Needs You" under it shows the same number. Control-Command-1 and Control-Command-2 hide and show the first and the second pane, and Control-Tab and Control-Shift-Tab move the keyboard focus between the visible panes. The third pane with no content is at least 360 by 240 points and says "No Session Selected". | Each fact shows in one place only (2026-10-26). Control-Tab moves between tabs in other Mac apps, and the panes take the place of tabs here. |
 
 ## Proposed decisions of 2026-11-10
 
@@ -319,6 +321,10 @@ These are the colors of the Graphite theme (decision of 2026-10-26). Colors 0 to
 | Text | `#1e2022` | `#e6eef4` |
 | Cursor | `#1e2022` | `#e6eef4` |
 | Selection | `#dfe6ee` | `#3a4147` |
+| Quiet list text | `#5f6368` | `#a0a6ab` |
+| Row selection | `#dfe6ee` | `#363b40` |
+| Row selection, window not key | `#e3e6ea` | `#303438` |
+| Attention mark | `#b8364b` | `#f08f9b` |
 | 0 black | `#1e2022` | `#2e3134` |
 | 1 red | `#b8364b` | `#e87382` |
 | 2 green | `#327339` | `#9fcb8b` |
