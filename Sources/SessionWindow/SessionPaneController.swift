@@ -9,7 +9,7 @@ import TerminalView
 /// the view, and keys and sizes go to the session. A close detaches, and
 /// the session goes on.
 @MainActor
-public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalViewDelegate {
+public final class SessionPaneController: NSObject, TerminalViewDelegate {
     /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
     static let contentSize = CGSize(width: 656, height: 388)
     /// The smallest grid that the window can show (decision of 2026-11-08).
@@ -43,7 +43,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     var isWindowKey: @MainActor (NSWindow) -> Bool = { $0.isKeyWindow }
     private var isAttaching = false
     private var pendingKeyTakeover = false
-    private var isClosed = false
+    private(set) var isClosed = false
     private var hasConnectionFailure = false
     private var folder = ""
     /// The grids that the window asked for and the session has not applied
@@ -64,12 +64,6 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         window.contentMinSize = minimumSize
         window.center()
         delegate = self
-    }
-
-    /// Shows the window and attaches with the grid that its view will have.
-    public func showWindow() {
-        window.makeKeyAndOrderFront(nil)
-        attach()
     }
 
     /// The scale of the screen that the pane shows on, or of the main screen before it shows.
@@ -168,16 +162,6 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     private func showHiddenPart() {
         guard let view, let visible = view.visibleGridSize else { return }
         hiddenGridLabel.show(grid: ownSizeRequests.isEmpty ? view.gridSize : visible, visible: visible)
-    }
-
-    public func windowDidBecomeKey(_ notification: Notification) { activate() }
-
-    public func windowDidResignKey(_ notification: Notification) { deactivate() }
-
-    public func windowWillClose(_ notification: Notification) {
-        guard !isClosed else { return }
-        close()
-        onClose?()
     }
 
     /// The host calls this when its window becomes key while the pane has

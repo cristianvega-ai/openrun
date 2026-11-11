@@ -5,7 +5,23 @@ import AppKit
 public typealias SessionWindowController = SessionPaneController
 
 /// What the window does when its pane reports.
-extension SessionPaneController: SessionPaneDelegate {
+extension SessionPaneController: NSWindowDelegate, SessionPaneDelegate {
+    /// Shows the window and attaches with the grid that its view will have.
+    public func showWindow() {
+        window.makeKeyAndOrderFront(nil)
+        attach()
+    }
+
+    public func windowDidBecomeKey(_ notification: Notification) { activate() }
+
+    public func windowDidResignKey(_ notification: Notification) { deactivate() }
+
+    public func windowWillClose(_ notification: Notification) {
+        guard !isClosed else { return }
+        close()
+        onClose?()
+    }
+
     public func sessionPane(_ pane: SessionPaneController, didChangeTitle title: String) {
         window.title = title
     }
