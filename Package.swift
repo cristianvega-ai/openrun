@@ -41,7 +41,7 @@ let package = Package(
         .testTarget(name: "UntrustedTextTests", dependencies: ["UntrustedText"]),
         // Where OpenRun keeps its data as readable JSON, and the safe write
         // and read of each file.
-        .target(name: "DataStorage"),
+        .target(name: "DataStorage", dependencies: ["UntrustedText"]),
         .testTarget(name: "DataStorageTests", dependencies: ["DataStorage", "SessionProtocol"]),
         // The folders that the user adds as projects, and the project of a session.
         .target(name: "Projects", dependencies: ["DataStorage", "UntrustedText"]),

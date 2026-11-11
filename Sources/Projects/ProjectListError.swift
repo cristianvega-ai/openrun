@@ -1,6 +1,10 @@
 import Foundation
+import UntrustedText
 
 /// A change to the project list was refused. Nothing changed.
+///
+/// A path comes from a client, such as an agent that runs `openrun project
+/// add`, so each message shows it through `QuotedText`.
 public enum ProjectListError: Error, Equatable, Sendable, CustomStringConvertible {
     /// A relative path came with no current folder to start from.
     case relativeFolder(path: String)
@@ -17,10 +21,10 @@ public enum ProjectListError: Error, Equatable, Sendable, CustomStringConvertibl
 
     public var description: String {
         switch self {
-        case .relativeFolder(let path): "The folder \(path) is relative, and no current folder was given."
-        case .folderDoesNotExist(let path): "The folder \(path) does not exist."
-        case .notAFolder(let path): "\(path) is not a folder."
-        case .duplicateFolder(let path, _): "The folder \(path) is already a project."
+        case .relativeFolder(let path): "The folder \(QuotedText.quoted(path)) is relative, and no current folder was given."
+        case .folderDoesNotExist(let path): "The folder \(QuotedText.quoted(path)) does not exist."
+        case .notAFolder(let path): "\(QuotedText.quoted(path)) is not a folder."
+        case .duplicateFolder(let path, _): "The folder \(QuotedText.quoted(path)) is already a project."
         case .unknownProject(let identifier): "No project has the identifier \(identifier.uuidString)."
         case .invalidName: "A project name has at most \(Project.nameLengthLimit) characters and no control characters."
         case .placeOutOfRange(let place, let count): "The place \(place) is outside the list of \(count) projects."

@@ -21,3 +21,12 @@ import Testing
         #expect(folder.path(of: .settings) == "/data/OpenRun/settings.json")
     }
 }
+
+@Suite struct DataStorageErrorTests {
+    @Test func aPathInAMessageHasNoControlCharacter() {
+        for error in [DataStorageError.notAFolder(path: "/a\u{1B}[2J"), .folderNotCreated(path: "/a\u{1B}[2J")] {
+            #expect(!error.description.contains("\u{1B}"))
+            #expect(error.description.contains(#""/a\u{1B}[2J""#))
+        }
+    }
+}
