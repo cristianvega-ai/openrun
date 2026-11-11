@@ -21,6 +21,9 @@ final class SessionChangeFeed: Sendable {
         var projects: [ProjectSummary]?
         /// Nil until the keeper of the settings gives its first list.
         var settings: [SettingSummary]?
+        /// Nil until the registry of the threads gives its first list.
+        /// Oldest first.
+        var threads: [ThreadSummary]?
         var watchers: [ObjectIdentifier: Send] = [:]
     }
 
@@ -68,6 +71,30 @@ final class SessionChangeFeed: Sendable {
         }
     }
 
+    /// Keeps the list of the threads at the start of the session process.
+    func replaceThreads(_ threads: [ThreadSummary]) {
+        state.withLock { $0.threads = threads }
+    }
+
+    /// Keeps a new thread, or the new facts of a thread, and tells every watcher.
+    func threadChanged(_ summary: ThreadSummary) {
+        state.withLock { state in
+            if let index = state.threads?.firstIndex(where: { $0.identifier == summary.identifier }) {
+                state.threads?[index] = summary
+            } else {
+                state.threads = (state.threads ?? []) + [summary]
+            }
+            for send in state.watchers.values { send(.threadChanged(summary)) }
+        }
+    }
+
+    func threadEnded(_ identifier: UUID) {
+        state.withLock { state in
+            state.threads?.removeAll { $0.identifier == identifier }
+            for send in state.watchers.values { send(.threadEnded(identifier: identifier)) }
+        }
+    }
+
     /// Sends the present list, oldest first, then the projects and the
     /// settings, and then each change of any of them, in the order of the
     /// changes (decision of 2026-11-10).
@@ -76,6 +103,7 @@ final class SessionChangeFeed: Sendable {
             send(.sessionList(state.summaries.values.sorted { $0.createdAt < $1.createdAt }))
             if let projects = state.projects { send(.projectList(projects)) }
             if let settings = state.settings { send(.settingList(settings)) }
+            if let threads = state.threads { send(.threadList(threads)) }
             state.watchers[key] = send
         }
     }

@@ -29,6 +29,11 @@ extension ThreadRunner {
         return identifier
     }
 
+    /// The user gave the thread a new name, which the registry saved.
+    func setName(_ name: String?) {
+        record.name = name
+    }
+
     /// Gives the next message that waits to the agent, when no turn runs.
     func sendNextMessage() async {
         guard activeMessage == nil, !isClosed, let message = waitingMessages.first else { return }
