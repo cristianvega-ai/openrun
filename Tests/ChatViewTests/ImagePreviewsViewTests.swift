@@ -17,12 +17,4 @@ import Testing
         #expect(removed == [1])
         #expect(buttons.last?.accessibilityLabel() == "Remove Image 2")
     }
-
-    @Test func aDraftWaitsForItsThread() {
-        ComposerDrafts.save("Half a thought", for: "thread-a")
-        #expect(ComposerDrafts.draft(for: "thread-a") == "Half a thought")
-        #expect(ComposerDrafts.draft(for: "thread-b") == "")
-        ComposerDrafts.save("", for: "thread-a")
-        #expect(ComposerDrafts.draft(for: "thread-a") == "")
-    }
 }

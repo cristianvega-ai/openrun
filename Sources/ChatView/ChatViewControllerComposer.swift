@@ -6,7 +6,7 @@ extension ChatViewController {
     public var focusView: NSView { composer.textView }
 
     func connectComposer() {
-        composer.textView.string = ComposerDrafts.draft(for: facts.threadIdentifier)
+        composer.textView.string = ComposerDrafts.shared.draft(for: facts.threadIdentifier).text
         composer.show(facts, palette: context.palette)
         composer.sendAction = { [weak self] message in
             guard let self else { return }
@@ -40,15 +40,15 @@ extension ChatViewController {
         // chat of a thread at any time.
         composer.textChanged = { [weak self] text in
             guard let self else { return }
-            ComposerDrafts.save(text, for: facts.threadIdentifier)
+            ComposerDrafts.shared.save(ComposerDrafts.Draft(text: text), for: facts.threadIdentifier)
         }
     }
 
     /// Keeps the draft of the thread that the chat leaves, and shows the
     /// draft of the new one.
     func switchDraft(from oldThread: String) {
-        ComposerDrafts.save(composer.textView.string, for: oldThread)
-        composer.textView.string = ComposerDrafts.draft(for: facts.threadIdentifier)
+        ComposerDrafts.shared.save(ComposerDrafts.Draft(text: composer.textView.string), for: oldThread)
+        composer.textView.string = ComposerDrafts.shared.draft(for: facts.threadIdentifier).text
     }
 
     func layoutChat() {
