@@ -42,16 +42,17 @@ A module uses another module only through its public types.
 | `TerminalRendering` | Draws a terminal with Metal and CoreText: fonts, glyph textures, shaders, rows, cursor, selection and marked text | `TerminalRenderer`, `FontSet`, `FrameStatistics`, `RenderTarget`, `OffscreenTarget`, `DrawableTarget`, `RenderingError`, `ViewportCellRun` |
 | `TerminalView` | The AppKit view that shows one terminal and handles its input, selection and scrollback | `TerminalView`, `TerminalViewDelegate`, `OptionKeyRule`, `AppearanceThemes` |
 | `PseudoTerminal` | Runs one program on a new pseudo terminal, and names the program in its foreground, its folder and its terminal mode | `PseudoTerminal`, `ForegroundProgram`, `ForegroundState`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
-| `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `ProjectSummary`, `SettingSummary`, `SessionAlert`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
-| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, the attach conversation, the session changes, and the requests of the projects and the settings | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionChangeReceiver`, `SessionIdentifierMatch`, `SessionConnectionError` |
+| `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `ProjectSummary`, `SettingSummary`, `ThreadSummary`, `ThreadImage`, `SessionAlert`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
+| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, the attach conversation, the session changes, the requests of the projects and the settings, and the conversation of an agent thread | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `ThreadAttachment`, `SessionChangeReceiver`, `SessionIdentifierMatch`, `SessionConnectionError` |
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
 | `UntrustedText` | The rule for a name that a client or a file gives, and the escape of such text in a message, a log or a terminal | `PlainName`, `QuotedText`, `PrintableText` |
 | `DataStorage` | The data folder: its location, its files, and the safe write and read of a JSON document | `DataFolder`, `DataFile`, `DataFileScope`, `DataDocument`, `DataReadResult`, `DataStorageError` |
 | `Projects` | The folders that the user adds as projects, their order and names, and the project of a session's start folder | `Project`, `ProjectWithoutFolder`, `ProjectList`, `ProjectFolderPath`, `ProjectStore`, `LoadedProjects`, `ProjectListError` |
 | `Settings` | The settings of version 1: their names, kinds, defaults and text forms, the rule for protected settings, and their file | `SettingName`, `SettingValues`, `SettingRequester`, `OptionKeyBehavior`, `LinkDestination`, `NewSessionCommand`, `SettingsStore`, `LoadedSettings`, `SettingError` |
+| `AgentThreads` | The record of each agent thread, the list of the records with its rules, and their file | `ThreadRecord`, `ThreadAgent`, `ThreadAccount`, `ThreadList`, `ThreadListError`, `ThreadStore` |
 | `GitBranch` | Reads the git branch of a folder from the files of git, with no git program | `GitBranch` |
-| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent, and the one owner of the projects and the settings | `SessionProcess`, `SessionProcessError` |
-| `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
+| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent, the one owner of the projects and the settings, and the agent threads with the processes of their agents | `SessionProcess`, `SessionProcessError` |
+| `CommandLineTool` | The `openrun` commands, and the permission hook of an agent thread | `CommandLineTool` |
 | `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneContent`, `SessionPaneDelegate`, `SessionStart` |
 | `SessionWindow` | One window around one session pane, and a session picker | `SessionWindowController`, `SessionList` |
 | `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, the selected row and the scroll view of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView`, `OverlayScrollView` |
@@ -59,11 +60,11 @@ A module uses another module only through its public types.
 | `ProjectsList` | The first pane of the main window: All Sessions, Needs You, the projects and No Project | `ProjectsListController`, `ProjectsListDelegate`, `ProjectsListContent`, `ProjectDisplay`, `ProjectsListEntry` |
 | `SessionsList` | The second pane of the main window: the threads with agents and the terminal sessions as vertical tabs | `SessionsListController`, `SessionsListDelegate`, `SessionsListContent`, `SessionRowDisplay`, `SessionKind`, `SessionsFilter`, `SessionsOrder`, `NewSessionRequest` |
 | `MainWindow` | The main window: the three panes as stacked sheets, their widths, the content of the third pane, and the focus between the panes | `MainWindowController`, `MainWindowDelegate`, `PaneContent`, `ContentPaneController`, `PaneLayout` |
-| `SessionOverview` | What the session process holds, kept live for the app: the sessions, the projects and the settings from the feed, and the sender of the requests of the app | `SessionOverview`, `SessionOverviewConnection`, `ConnectionStatus`, `SessionRequests`, `SessionRequestFailure` |
+| `SessionOverview` | What the session process holds, kept live for the app: the sessions, the projects, the settings and the agent threads from the feed, and the sender of the requests of the app | `SessionOverview`, `SessionOverviewConnection`, `ConnectionStatus`, `SessionRequests`, `SessionRequestFailure` |
 | `WindowLayout` | What the main window keeps between two runs of the app in `layout.json`: the rows of the sessions list with their splits, the selection, the filter and the order | `WindowLayout`, `LayoutRow`, `LayoutPane`, `LayoutSplit`, `LayoutEntry`, `WindowLayoutStore` |
-| `ListContent` | What the two lists show, made from the facts of the session process and the layout | `ListContent`, `SessionRowFacts`, `RowNeighbor` |
+| `ListContent` | What the two lists show, made from the facts of the session process and the layout | `ListContent`, `SessionRowFacts`, `ThreadRowFacts`, `RowNeighbor` |
 | `AlertNotifications` | The notifications of macOS for sessions that need the user, behind a type that tests replace | `AlertNotification`, `AlertNotifier`, `SystemAlertNotifier` |
-| `OpenRunApplication` | The app: the setup of the launch agent, the host that joins the main window with the session process, and the menus | `OpenRunApplication` |
+| `OpenRunApplication` | The app: the setup of the launch agent, the host that joins the main window with the session process, the chat panes of the threads, and the menus | `OpenRunApplication` |
 | `AgentConversation` | The model of an agent thread: the events of every agent, the transcript that a chat shows, and the state of the thread | `ConversationEvent`, `ConversationEventKind`, `SourceLine`, `Transcript`, `TranscriptItem`, `TranscriptItemContent`, `TranscriptChange`, `TranscriptLimits`, `ThreadState`, `AgentMessage`, `AgentStart`, `AgentStatus`, `AgentText`, `AgentTextDelta`, `BoundedText`, `FileChange`, `JSONValue`, `LineSplitter`, `MessageImage`, `Notice`, `PermissionEnd`, `PermissionRequest`, `PermissionRequestItem`, `ProcessEnd`, `TaskEnd`, `TaskItem`, `TaskMessage`, `TaskStart`, `Thinking`, `TokenUsage`, `ToolCallInput`, `ToolCallInputDelta`, `ToolCallItem`, `ToolCallOutput`, `ToolCallRefusal`, `ToolCallResult`, `ToolCallStart`, `TurnEnd`, `TurnStart`, `UnknownLine`, `UsageReading`, `UsageWindow`, `UserMessage` |
 | `ClaudeCodeAgent` | Claude Code in a thread: its command line and environment, the user message line, the decoder of its output, its permission hook, and its history | `ClaudeCodeEnvironment`, `ClaudeCodeHistoryLocation`, `ClaudeCodeHistoryReader`, `ClaudeCodeLaunch`, `ClaudeCodeLaunchError`, `ClaudeCodeOutputDecoder`, `ClaudeCodePermissionHookAnswer`, `ClaudeCodePermissionHookError`, `ClaudeCodePermissionHookRequest`, `ClaudeCodePermissionMode`, `ClaudeCodeToolCallMatcher`, `ClaudeCodeUserMessage`, `ClaudeCodeUserMessageError` |
 | `AgentProgram` | Runs an agent program on pipes in a process group of its own, with flow control, and reads the environment of the user's login shell | `AgentProgram`, `AgentProgramError`, `AgentProgramLaunch`, `LoginShellEnvironment` |
@@ -83,6 +84,7 @@ openrun             -> CommandLineTool -> SessionConnection -> SessionProtocol
                                        -> SessionProtocol
                                        -> TerminalEmulation -> libghostty-vt
                                        -> Projects, Settings, UntrustedText
+                                       -> ClaudeCodeAgent
 openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> SessionLaunch
                                        -> PseudoTerminal
@@ -90,15 +92,19 @@ openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> TerminalTheme -> TerminalEmulation
                                        -> TerminalEmulation -> libghostty-vt
                                        -> Projects, Settings, DataStorage, UntrustedText
+                                       -> AgentThreads -> DataStorage, UntrustedText
+                                       -> ClaudeCodeAgent, AgentProgram, AgentConversation
 openrun-application -> OpenRunApplication -> MainWindow, ProjectsList, SessionsList
                                           -> SessionPane -> TerminalView
                                           -> SessionOverview -> SessionConnection
                                           -> WindowLayout -> DataStorage
                                           -> ListContent -> SessionOverview, WindowLayout, ProjectsList, SessionsList
                                           -> AlertNotifications
+                                          -> ChatView, AgentConversation
                                           -> Settings, PseudoTerminal
                                           -> SessionConnection
                                           -> SessionLaunch
+SessionConnection -> AgentConversation
 SessionWindow     -> SessionPane -> TerminalView
 MainWindow        -> ProjectsList -> PaneAppearance -> TerminalTheme
                                   -> ListUpdates
@@ -123,9 +129,10 @@ ChatView          -> AgentConversation
 The session process owns the projects and the settings. Every client reads and changes them through the socket. The tool uses `Projects` only for `ProjectFolderPath`, to find the project of a folder that the user typed, and `Settings` only for the message about an unknown name.
 `SessionProtocol` does not use `Projects` or `Settings`. It has its own plain types, `ProjectSummary` and `SettingSummary`, so a client needs no other module to read them.
 `UntrustedText`, `DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
-No program uses `AgentConversation`, `ClaudeCodeAgent`, `CodexAgent` and `AgentProgram` yet. The session process will join them.
+The session process runs Claude Code in the threads through `AgentConversation`, `ClaudeCodeAgent`, `AgentProgram` and `AgentThreads`. No program uses `CodexAgent` yet.
+`SessionConnection` uses `AgentConversation` only for the events of a thread, which it decodes for the app. The tool uses `ClaudeCodeAgent` only for the request and the answer of the permission hook.
 `AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. `CodexAgent` starts its app-server through `AgentProgram`, and uses only `ProgramExit` of `PseudoTerminal`. None of the four uses AppKit (proposal 13 of 2026-11-10).
-No program uses `ChatView` yet. The main window will show it in the third pane.
+`OpenRunApplication` puts `ChatView` in the third pane.
 
 `SessionPane` and `SessionWindow` also use `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `Settings` only for the typed values of the settings, and `PseudoTerminal` only for the login shell of the user. No program uses `SessionWindow` any more: the main window took its place, and the module goes away when its tests have moved to the pane. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color. `MainWindow` also uses `PaneAppearance`, and `PaneAppearance` uses `TerminalEmulation` for the colors. No app module uses `MainWindow` yet: the app still opens one `SessionWindow` for each session. `MainWindow` does not use `SessionPane`: a host gives the third pane any view, such as `paneView` of a `SessionPaneController`.
 
@@ -349,13 +356,14 @@ Once setup is ready, `ApprovalQuestionConnection` opens the connection for appro
 
 #### The host of the main window
 
-`Workspace` joins `MainWindowController` with the session process. It owns a `SessionOverviewConnection`, a `SessionRequests`, the `WindowLayout` with its store, and `SessionPanes`. Its data folder is the folder of its socket, so an app on a temporary socket never touches the data of the user.
+`Workspace` joins `MainWindowController` with the session process. It owns a `SessionOverviewConnection`, a `SessionRequests`, the `WindowLayout` with its store, `SessionPanes` and `ThreadPanes`. Its data folder is the folder of its socket, so an app on a temporary socket never touches the data of the user.
 
 - **Content.** After each batch of changes of the feed, the host brings the rows in step with the sessions (`WindowLayout.follow`), makes a `ListContent`, and gives the two lists their content. Before the first list of the sessions it keeps the kept rows. When the selected session ended, the row that took its place in the list gets the selection (`RowNeighbor`). It saves the layout when it changed.
 - **The third pane.** `ShownContent` is what the pane shows: nothing, the pane of the first session of the selected row, or a `PaneNotice`. A new pane attaches after the window laid it out, because it estimates its grid from its size. The content takes the keyboard focus when the content before it had the focus, or when the user asked for the session. A row that leaves the list through the filter keeps its place in the third pane.
 - **Panes.** `SessionPanes` keeps the pane of each row that the user saw, at most eight, so a switch back is instant. Each pane holds a connection and a terminal with its scrollback, and eight leave most of the 64 clients of the session process free. Past the limit, the pane that the window showed longest ago closes. A pane outside a window sends no size and draws nothing. A close of the window closes every pane.
 - **Notices.** While the app does not hear the session process and no row shows, the pane says so, and the connection comes back by itself (after 0.5 s, then twice as long each time, up to 10 s). The pane of a session that lost its connection ends after the user saw why. Its row then shows a notice with Connect Again, so a failure that stays does not show again and again. A session whose program ended shows nothing until the feed removes its row.
 - **Sessions.** A new session goes to the session process as a request (`NewSessionLaunch`): the login shell, or a command of the settings as `exec COMMAND` in an interactive login shell, in the folder of the selected project or the home folder, with the grid of the third pane and the environment of the app. Its row takes the selection and the focus when the feed brings it. When the first list of the feed holds no session, the host starts a login shell. A close of a row ends its sessions, after a question when the program that reads the keys is not a shell (`CloseQuestion`). A name goes to the first session of the row, so `openrun list` shows it. A move, the filter and the order go to the layout.
+- **Threads.** The row of a thread shows its chat. `ThreadPaneController` joins one `ChatViewController` with one `ThreadAttachment`: it applies the events to a `Transcript` in batches on the main thread (`ThreadEventBatches`), and it sends what the user does in the chat to the thread. `ThreadPanes` keeps the chats that the user saw, at most eight, as `SessionPanes` does. File > New Thread (Command-T) and the menu of the new-session button make a thread with Claude Code in the folder of the selected project. A name of the row goes to the thread. A close asks first, because it ends the agent. An agent that starts to wait for an answer of the user gives a notification, unless the user looks at its chat. A session process of an older build sends no list of the threads, and the window then offers no thread.
 - **Projects.** The session process owns the projects, so an add (from a folder panel or a drop), a name, a move and a removal go there as requests, and the first pane shows the change when the feed brings it.
 - **Alerts.** An alert ends when the user selects its session, and at once for the session in view: the session of the third pane while the window is key and the focus is in that pane. That session shows no mark. A new alert of any other session gives a notification of macOS through `AlertNotifier`, unless the setting `notifications` is off. An alert that ended takes its notification away, and an opened notification selects the row. The Dock icon shows the number of rows that need the user.
 - **Settings.** `LiveSettings` makes the typed values from the texts of the feed. Each pane gets the font, its size, the Option key rule and the scrollback limit at its start and at each change, also a pane that the window does not show. `ask-before-unsafe-paste` turns the paste question of each pane on and off. The theme stays Graphite.
@@ -405,6 +413,11 @@ Once setup is ready, `ApprovalQuestionConnection` opens the connection for appro
 | `DataSaveFailure` | The message of a save that failed |
 | `Session` | An actor. One program, one `Terminal`, the attached clients, and the facts of the session |
 | `SessionChangeFeed` | The latest summary of each session, the projects, the settings, and the connections that watch them. It sends each change under one lock, so every watcher gets the same order |
+| `ThreadRegistry` | An actor on a serial queue of its own. The records of the agent threads, which it keeps in `threads.json`, and the runner of each thread in use. See "Threads in the session process" |
+| `ThreadRunner` | An actor. One thread in use: the process of its agent, its transcript, the events that it keeps, the messages that wait, the permission requests, and the attached clients |
+| `ThreadEventBuffer` | The newest events of a thread, at most 4 MiB, for a client that attaches |
+| `AgentLaunchProvider` | How an agent starts: its program, the environment of the login shell of the user, read once, and the permission hook |
+| `ProcessAncestry` | Finds the agent of a thread among the parents of a process, for the rule on who may use the threads |
 | `SessionActivity` | Decides whether a session is in progress, and whether a bell raises the alert |
 | `TerminalEvents` | Keeps the bell, the title and the notifications that the terminal reported during one write |
 | `InteractiveShell` | Tells a shell that reads commands from the terminal from a shell that runs a command or a script |
@@ -419,7 +432,7 @@ Each line goes to standard error and to the unified log, with the subsystem `ai.
 ### CommandLineTool
 
 `CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects with `SessionClient` of `SessionConnection`, and runs one command. It turns a `SessionConnectionError` into a `CommandLineToolError` with the words of the tool.
-`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand`, `KillCommand`, `RenameCommand`, `NotifyCommand`, `ProjectListCommand`, `ProjectChangeCommand` and `SettingsCommand` hold the commands. `ProjectMatch` finds the project that the user typed. `ListedSession` is the shape of one session in `openrun list --json`. `RawTerminalMode` switches the terminal to raw mode and back.
+`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand`, `KillCommand`, `RenameCommand`, `NotifyCommand`, `ProjectListCommand`, `ProjectChangeCommand` and `SettingsCommand` hold the commands. `PermissionRequestCommand` is the permission hook of an agent thread (see "The permission requests of a thread"). It is not in the usage text, because only an agent runs it. `ProjectMatch` finds the project that the user typed. `ListedSession` is the shape of one session in `openrun list --json`. `RawTerminalMode` switches the terminal to raw mode and back.
 `openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them through `SessionAttachment`. `AttachSignals` turns signals into requests for the writer.
 
 ## Requests on another session
@@ -542,8 +555,8 @@ A write uses the socket's send timeout (`SO_SNDTIMEO`) for its deadline, because
 ## Agent threads
 
 An agent thread is a chat with one agent, one account and one model (proposal 1 of 2026-11-10).
-Four modules hold the parts that the session process will join: `AgentConversation`, the model; `ClaudeCodeAgent`, the adapter of Claude Code; `CodexAgent`, the adapter of Codex; and `AgentProgram`, the process on pipes.
-No program uses them yet.
+Five modules hold the parts: `AgentConversation`, the model; `ClaudeCodeAgent`, the adapter of Claude Code; `CodexAgent`, the adapter of Codex; `AgentProgram`, the process on pipes; and `AgentThreads`, the records.
+The session process joins them for Claude Code (see "Threads in the session process"), and the app shows a thread as a chat. Codex does not run in a thread yet.
 
 ### The event model
 
@@ -663,6 +676,32 @@ Special steps play an answer that never comes, the end of the connection while a
 After the last step, each request gets an empty answer, and the end of its input ends the fake.
 The tests in `CodexAgentTests` run it through `AgentProgram`, the server and a transcript. Faster tests play the same fixtures on a transport in memory.
 The fixtures come from real runs of Codex 0.167.0, with everything that describes the owner removed. `FixturePrivacyTests` scans them too. Its rules for Codex allow only the made-up forms of the identifiers of reasoning items, credits and commands, and only the made-up date of a rollout file.
+
+### Threads in the session process
+
+The session process owns the threads, as it owns the sessions, so the agent of a thread goes on while no window shows it.
+
+- **Records.** `ThreadList` of `AgentThreads` holds one `ThreadRecord` for each thread: the agent, the identifier of its conversation in the history of the agent, the account, the folder, the model, the permission mode, the name and the title. `ThreadRegistry` keeps the list in `threads.json`, at most 1,000 threads, and keeps a change only after its save. The folder of a new thread must exist. The registry keeps its real path (`realpath`), so the folder matches the folder of its project. A thread that names no model or permission mode gets `opus` and `default`.
+- **The runner.** A thread comes into use with its first message or its first attach. `ThreadRunner`, an actor, then holds its `Transcript`, its `ThreadEventBuffer` and its clients. The agent starts with the first message, through `ClaudeCodeLaunch` and `AgentProgram`, in the folder of the thread. The first start gives the agent the identifier of the conversation, and each later start resumes it.
+- **The start of an agent.** `AgentLaunchProvider` reads the environment of the login shell of the user once for each start of the session process, at the first need, because launchd gives the session process a short one. It finds `claude` in the `PATH` of that environment and never logs the environment. The agent also gets `OPENRUN_THREAD`, the identifier of its thread. `--agent-program PROGRAM` names another program, and `--own-environment-for-agents` gives the agents the environment of the session process. The tests use both for the fake agent.
+- **Messages.** A message goes to the standard input of the agent as one line. While a turn runs, a message waits in the runner, and the next one goes out when the turn ends. At most 16 messages wait. The start of the first message becomes the title of the thread.
+- **Events.** Each line of the output becomes events (`ClaudeCodeOutputDecoder`). The runner gives each event to the transcript, to the buffer, and to each attached client as JSON in a `threadEvent` frame. Only this actor touches the three, so a client that attaches gets the kept events and then each later event, with no gap and no repeat. The agent waits in its own write while the runner has not dealt with a chunk.
+- **The buffer.** `ThreadEventBuffer` holds at most 4 MiB of events for each thread. Whole turns go first, the oldest first, so the events that stay start at the start of a turn and give a transcript with no half item. OpenRun keeps no lasting copy of the events (proposal 3).
+- **Stop and end.** A stop sends SIGINT. Claude Code then ends its turn and its process, and the next message resumes the conversation. The messages that waited do not go out, and a notice in the chat says how many. A process that does not end in 5 seconds gets SIGTERM and then SIGKILL. The end of a process gives a `processEnded` event with its status and the end of its standard error. The close of a thread ends its process and removes its record. The conversation stays in the history of the agent.
+- **The lists.** The registry gives the `ThreadSummary` of each thread to `SessionChangeFeed`: the facts of the record, the state of the transcript (`idle`, `inProgress`, `needsUser`, `finishedTurn` or `failed`), whether the process runs, the count of the messages that wait, and the project of the folder. Only a watcher that asked with `includesThreads` gets them.
+- **Who may use the threads.** Only a program outside every session and every thread may send a request of the threads (decision of 2026-11-10), so an agent cannot drive another agent without the user. `ProcessAncestry` finds the agent of a thread among the parents of the caller.
+
+### The permission requests of a thread
+
+Claude Code starts with a `PermissionRequest` hook, `openrun permission-request`, which blocks the tool when the hook fails (`ClaudeCodeLaunch`). The route follows proposal 2.
+
+1. The agent wants a permission and runs the hook. `PermissionRequestCommand` sends the request of the agent to the session process as `requestToolPermission`.
+2. The session process takes the request only from a program that the agent of a thread started. It finds the thread from the parents of the caller, never from a field of the request.
+3. The runner emits a `permissionRequested` event, the state of the thread becomes `needsUser`, and the request waits, at most 24 hours.
+4. The app shows the request in the chat. Its answer goes as `answerToolPermission`. The session process takes it only from the signed OpenRun.app outside every session and every thread, as for an approval question.
+5. The hook gets `toolPermissionAnswer` and prints the decision for the agent.
+
+A stop, the end of the agent, the close of the thread, the time limit, and the end of the connection of the hook all end the request with a denial. The hook exits with 0 and a denial on every failure of its own, so no failure grants. The `openrun` tool has no command that answers.
 
 ### Chat view
 
