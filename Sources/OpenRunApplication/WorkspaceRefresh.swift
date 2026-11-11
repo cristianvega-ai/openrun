@@ -14,6 +14,7 @@ extension Workspace {
         let (shownRows, selectedBefore) = (window.sessionsList.shownIdentifiers, layout.selectedRow)
         // Before the first list, no session is known, and the kept rows stay.
         if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
+        if overview.settings != previous.settings { settings = LiveSettings.values(from: overview.settings) }
         for session in previous.sessions where overview.session(session.identifier) == nil {
             panes.close(session.identifier)
             if shownSession == session.identifier { shownSession = nil }
@@ -36,7 +37,9 @@ extension Workspace {
         // The first pane goes to "All Sessions" when its project went away.
         let entry = window.projectsList.selection
         layout.selectedEntry = entry.layoutEntry
-        window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry)))
+        // The login shell is "New Terminal", and each other command of the settings has an item of its own.
+        let commands = settings.newSessionCommands.filter { !$0.commandLine.isEmpty }.map(\.name)
+        window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry), terminalCommands: commands))
         window.sessionsList.select(layout.selectedRow)
         showSelectedRow()
         if layout != savedLayout {
