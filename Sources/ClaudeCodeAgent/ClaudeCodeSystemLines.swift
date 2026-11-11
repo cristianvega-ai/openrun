@@ -17,7 +17,13 @@ extension ClaudeCodeLineDecoder {
             return [.thinking(Thinking(estimatedTokens: line["estimated_tokens"]?.integer, isComplete: false))]
         case "permission_denied":
             let reasons: [String: ToolCallRefusal.Reason] = ["hook": .user, "rule": .rule, "mode": .mode]
-            let reason = line["decision_reason_type"]?.string.map { reasons[$0] ?? .other } ?? .unanswered
+            var reason = line["decision_reason_type"]?.string.map { reasons[$0] ?? .other } ?? .unanswered
+            // A hook that crashed, or gave no answer, is refused with the
+            // same type as a hook that denied. Claude Code then names the
+            // hook command in brackets and says that it failed. The
+            // structured fields of the result are the same for both.
+            let decision = line["decision_reason"]?.string ?? ""
+            if reason == .user, decision.hasPrefix("["), decision.contains("]: failed") { reason = .unanswered }
             return [.toolCallRefused(ToolCallRefusal(
                 identifier: line["tool_use_id"]?.string, toolName: line["tool_name"]?.string ?? "",
                 reason: reason, message: line["message"]?.string ?? line["decision_reason"]?.string ?? ""))]
