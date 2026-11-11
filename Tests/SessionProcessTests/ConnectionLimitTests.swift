@@ -43,6 +43,21 @@ private func isClosedBySessionProcess(_ descriptor: Int32) -> Bool {
     return poll(&entry, 1, 0) > 0 && entry.revents & Int16(POLLHUP) != 0
 }
 
+/// The state of a process as `ps` shows it, such as "S" for a process that
+/// sleeps and "R" for one that runs or waits for a processor.
+private func processState(of processIdentifier: Int32) -> String? {
+    let lister = Process()
+    lister.executableURL = URL(fileURLWithPath: "/bin/ps")
+    lister.arguments = ["-o", "stat=", "-p", "\(processIdentifier)"]
+    let pipe = Pipe()
+    lister.standardOutput = pipe
+    lister.standardError = FileHandle.nullDevice
+    guard (try? lister.run()) != nil else { return nil }
+    let output = pipe.fileHandleForReading.readDataToEndOfFile()
+    lister.waitUntilExit()
+    return String(decoding: output, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+}
+
 private func writeAll(_ bytes: [UInt8], to descriptor: Int32) -> Bool {
     bytes.withUnsafeBytes { Darwin.write(descriptor, $0.baseAddress, $0.count) == $0.count }
 }
@@ -306,25 +321,47 @@ extension SessionProcessIntegration {
         @Test(.tags(.takesEverySlot)) func shutdownWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
                 // The program ignores the hang-up of the shutdown, and the session kills it
-                // after 1 second. It ends its output before that only when the session reads
-                // again. The large snapshot keeps the client waiting for 30 seconds, and the
-                // program does not end, so only the wake of the shutdown makes the session read.
-                let finished = process.directory.appendingPathComponent("finished")
+                // after 1 second. The large snapshot keeps the client waiting for 30 seconds,
+                // so only the wake of the shutdown makes the session read the program's
+                // output again before the kill. The program counts the chunks it wrote, in a
+                // file that it replaces whole, so a kill never leaves it empty. The
+                // test once waited for all of its output, which a busy Mac did not write
+                // within the second.
+                let progress = process.directory.appendingPathComponent("progress")
                 let size = SessionSize(columns: 240, rows: 50)
-                let program = #"$SIG{HUP} = 'IGNORE'; print "x" x 65536 for 1 .. 256; open(my $done, '>', '\#(finished.path)'); close $done;"#
+                let program = #"$SIG{HUP} = 'IGNORE'; for my $count (1 .. 256) { print "x" x 65536; open(my $file, '>', '\#(progress.path).new'); print $file "$$ $count"; close $file; rename('\#(progress.path).new', '\#(progress.path)'); }"#
                 let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: program)
                 let stalled = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { stalled.connection.shutdown() }
                 try #require(stalled.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
+                let written = { ((try? String(contentsOf: progress, encoding: .utf8)) ?? "").split(separator: " ").compactMap { Int32($0) } }
+                let writtenChunks = { Int(written().last ?? 0) }
+                // A program that a busy Mac did not run also writes nothing, but
+                // it is not asleep in a write.
+                let programSleeps = { () -> Bool in
+                    guard let program = written().first, let state = processState(of: program) else { return false }
+                    return state.hasPrefix("S") || state.hasPrefix("I")
+                }
                 FileManager.default.createFile(atPath: go.path, contents: Data())
-                try await Task.sleep(for: .seconds(2))
+                // The session waits once the client's queue holds 7 MiB, 112 chunks.
+                // The client takes a byte now and then, so the write stall limit of
+                // 10 seconds does not end it while a busy Mac fills the queue.
+                _ = fcntl(stalled.descriptor, F_SETFL, O_NONBLOCK)
+                var chunksAtTheStop = 0, unchangedSince = ContinuousClock.now
+                try #require(await eventually(timeout: .seconds(60)) {
+                    var byte: UInt8 = 0
+                    _ = Darwin.read(stalled.descriptor, &byte, 1)
+                    let chunks = writtenChunks()
+                    if chunks != chunksAtTheStop { (chunksAtTheStop, unchangedSince) = (chunks, .now) }
+                    return chunks >= ConnectionLimits.outputHighMark / 65536 && ContinuousClock.now - unchangedSince >= .seconds(1) && programSleeps()
+                }, "The program must stop in its output before the shutdown.")
                 let start = ContinuousClock.now
                 process.send(signal: SIGTERM)
-                let exit = await process.waitForExit(timeout: 6)
-                print("full-viewer-shutdown: exit \(String(describing: exit)) after \(ContinuousClock.now - start)")
+                // Without the wake, the session process waits for the 30 seconds of grace.
+                let exit = await process.waitForExit(timeout: 20)
+                print("full-viewer-shutdown: exit \(String(describing: exit)) after \(ContinuousClock.now - start); chunks \(chunksAtTheStop) then \(writtenChunks())")
                 #expect(exit != nil)
-                #expect(ContinuousClock.now - start < .seconds(6))
-                #expect(FileManager.default.fileExists(atPath: finished.path), "The session killed the program while it waited for room.")
+                #expect(writtenChunks() > chunksAtTheStop, "The session killed the program while it waited for room.")
             }
         }
         @Test(.tags(.takesEverySlot)) func aLargeSnapshotCanBeRestoredWhileOutputWaits() async throws {
