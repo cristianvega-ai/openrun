@@ -9,4 +9,6 @@ public protocol SessionsListDelegate: AnyObject {
     func sessionsList(_ list: SessionsListController, didSelect identifier: UUID?)
     /// The user pressed Return on a row. The keyboard focus goes to its content.
     func sessionsList(_ list: SessionsListController, didOpen identifier: UUID)
+    /// The user chose a filter or an order. The host keeps them for the next start.
+    func sessionsList(_ list: SessionsListController, didChange filter: SessionsFilter, order: SessionsOrder)
 }

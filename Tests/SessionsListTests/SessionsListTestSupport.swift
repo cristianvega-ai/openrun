@@ -6,9 +6,11 @@ import AppKit
 final class RecordingSessionsHost: SessionsListDelegate {
     var selections: [UUID?] = []
     var opens: [UUID] = []
+    var arrangements: [(SessionsFilter, SessionsOrder)] = []
 
     func sessionsList(_ list: SessionsListController, didSelect identifier: UUID?) { selections.append(identifier) }
     func sessionsList(_ list: SessionsListController, didOpen identifier: UUID) { opens.append(identifier) }
+    func sessionsList(_ list: SessionsListController, didChange filter: SessionsFilter, order: SessionsOrder) { arrangements.append((filter, order)) }
 }
 
 /// A second pane in a window, with four rows: a thread in progress, a

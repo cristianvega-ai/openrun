@@ -15,6 +15,9 @@ public final class SessionsListController: NSObject {
     public internal(set) var content = SessionsListContent()
     public internal(set) var filter = SessionsFilter.all
     public internal(set) var order = SessionsOrder.manual
+    let titleLabel = NSTextField(labelWithString: "")
+    let filterLabel = NSTextField(labelWithString: "")
+    let arrangementButton: NSButton
     let table = SessionsTableView()
     let scroll = NSScrollView()
     var rows: [SessionsListRow] = []
@@ -24,7 +27,10 @@ public final class SessionsListController: NSObject {
     var isShowingChanges = false
 
     public override init() {
+        arrangementButton = PaneButton.make(symbol: "line.3.horizontal.decrease", label: "Filter and Order", target: nil, action: nil)
         super.init()
+        (arrangementButton.target, arrangementButton.action) = (self, #selector(showArrangementMenu))
+        configureTopRow()
         configureTable()
         layOut()
     }
@@ -62,6 +68,7 @@ public final class SessionsListController: NSObject {
 
     /// Makes the rows again from the content, the filter, the order and the time.
     func update() {
+        updateTopRow()
         let selected = selection
         let newRows = order.arranged(content.rows.filter(filter.includes)).map { SessionsListRow($0, now: now()) }
         let changes = RowChanges(from: rows, to: newRows) { $0.identifier }
