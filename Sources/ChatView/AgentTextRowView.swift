@@ -25,6 +25,8 @@ final class AgentTextRowView: TranscriptRowView {
         textView.show(context.text(ofBlocks: blocks, in: item))
     }
 
+    override var searchableTextView: NSTextView? { textView }
+
     override func height(forWidth width: CGFloat) -> CGFloat {
         textView.fittingHeight(forWidth: ChatColumn.frame(inWidth: width).width)
     }

@@ -40,6 +40,16 @@ import AppKit
         transcriptView.tile()
     }
 
+    /// Scrolls a row to a third of the way down the screen and returns its
+    /// view, as for a match of Find.
+    func reveal(_ key: String) -> TranscriptRowView? {
+        guard let top = transcriptView.top(ofRow: key) else { return nil }
+        let maximum = max(0, transcriptView.frame.height - contentView.bounds.height)
+        contentView.scroll(to: NSPoint(x: 0, y: min(maximum, max(0, top - contentView.bounds.height / 3))))
+        reflectScrolledClipView(contentView)
+        return transcriptView.rowViews.views[key]
+    }
+
     /// Shows a row again after the user opened or closed a part of it,
     /// and stops the follow when the bottom went out of sight.
     func keepInPlace(_ key: String) {

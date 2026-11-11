@@ -39,6 +39,8 @@ final class UserMessageRowView: TranscriptRowView {
         bubble.alphaValue = message.isAccepted ? 1 : 0.6
     }
 
+    override var searchableTextView: NSTextView? { textView }
+
     override func height(forWidth width: CGFloat) -> CGFloat {
         let maximum = (ChatColumn.frame(inWidth: width).width * 0.8).rounded() - 2 * Self.padding.width
         let height = textView.fittingHeight(forWidth: maximum)

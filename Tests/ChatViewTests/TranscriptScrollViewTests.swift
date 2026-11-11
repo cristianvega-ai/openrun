@@ -59,4 +59,11 @@ import Testing
         #expect(scrollView.transcriptView.isFollowingBottom)
         #expect(scrollView.distanceFromBottom == 0)
     }
+
+    @Test func aRevealedRowStandsAThirdDownTheScreen() {
+        let view = scrollView.reveal("user:10")
+        #expect(view?.searchableTextView?.string == "Message 10")
+        #expect(!scrollView.transcriptView.isFollowingBottom)
+        #expect(scrollView.reveal("user:none") == nil)
+    }
 }

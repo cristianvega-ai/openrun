@@ -17,6 +17,9 @@ import AppKit
         self.context = context
     }
 
+    /// The text view in which Find shows a match, if the row has one.
+    var searchableTextView: NSTextView? { nil }
+
     /// The height of the content at `width`, without the space above.
     func height(forWidth width: CGFloat) -> CGFloat {
         0

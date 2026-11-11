@@ -49,6 +49,8 @@ final class CodeBlockRowView: TranscriptRowView {
         setAccessibilityLabel(name.map { "Code in \($0)" } ?? "Code")
     }
 
+    override var searchableTextView: NSTextView? { textView }
+
     override func height(forWidth width: CGFloat) -> CGFloat {
         textView.fittingHeight(forWidth: .greatestFiniteMagnitude) + Self.headerHeight + Self.padding
     }

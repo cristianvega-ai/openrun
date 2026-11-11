@@ -63,6 +63,11 @@ import AppKit
         setRows(rows, changed: [key])
     }
 
+    /// The top of a row in the document, or nil when no row has the key.
+    func top(ofRow key: String) -> CGFloat? {
+        rowLayout.index(of: key).map { rowLayout.top(of: $0) }
+    }
+
     /// Measures the rows near the screen, sets the height of the document,
     /// keeps the place of what the user reads, and places the views.
     func tile() {
