@@ -2,7 +2,7 @@
 /// decode, and accepts only strict JSON (RFC 8259).
 ///
 /// Foundation's decoder also takes text that is not JSON, such as a raw
-/// tab in a string or the escape `\q`. A value that this build keeps as
+/// tab in a string, the escape `\q` or the number `01`. A value that this build keeps as
 /// text goes back into the file, so it must be valid there. The scanner
 /// does not check UTF-8; `ObjectMembers` checks the whole text.
 struct DocumentTextScanner {
@@ -83,11 +83,50 @@ struct DocumentTextScanner {
                 if depth == 0 { return bytes[start..<position] }
             }
             return nil
-        default:
-            let ends: Set<UInt8> = [UInt8(ascii: ","), UInt8(ascii: "}"), UInt8(ascii: "]"), 0x20, 0x09, 0x0A, 0x0D]
-            while position < bytes.count, !ends.contains(bytes[position]) { position += 1 }
-            return position > start ? bytes[start..<position] : nil
+        case UInt8(ascii: "t"): return takeWord("true") ? bytes[start..<position] : nil
+        case UInt8(ascii: "f"): return takeWord("false") ? bytes[start..<position] : nil
+        case UInt8(ascii: "n"): return takeWord("null") ? bytes[start..<position] : nil
+        default: return takeNumber() ? bytes[start..<position] : nil
         }
+    }
+
+    private mutating func takeWord(_ word: String) -> Bool {
+        let expected = Array(word.utf8)
+        guard bytes[position...].starts(with: expected) else { return false }
+        position += expected.count
+        return true
+    }
+
+    /// `-`, then `0` or a digit 1 to 9 with more digits, then a fraction
+    /// and an exponent that each can be left out. So `01`, `.5`, `+1` and
+    /// `1.` fail.
+    private mutating func takeNumber() -> Bool {
+        if next(is: "-") { position += 1 }
+        if next(is: "0") {
+            position += 1
+        } else if takeDigits() == 0 {
+            return false
+        }
+        if next(is: ".") {
+            position += 1
+            guard takeDigits() > 0 else { return false }
+        }
+        if next(is: "e") || next(is: "E") {
+            position += 1
+            if next(is: "+") || next(is: "-") { position += 1 }
+            guard takeDigits() > 0 else { return false }
+        }
+        return true
+    }
+
+    private mutating func takeDigits() -> Int {
+        let start = position
+        while position < bytes.count, (UInt8(ascii: "0")...UInt8(ascii: "9")).contains(bytes[position]) { position += 1 }
+        return position - start
+    }
+
+    private func next(is character: Unicode.Scalar) -> Bool {
+        position < bytes.count && bytes[position] == UInt8(ascii: character)
     }
 
     private mutating func skipSpace() {

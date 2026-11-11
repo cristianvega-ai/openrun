@@ -38,6 +38,7 @@ import Testing
     /// into the file, so each one must fail here.
     @Test(arguments: [
         "\"a\tb\"", "\"a\nb\"", #""\q""#, #""\u12""#, #""\u12G4""#, "\"open",
+        "01", "tru", "nul", "1.", "-", "1e", "1e+", ".5", "+1", "NaN", "Infinity", "0x1",
     ])
     func textThatIsNotStrictJSONFails(text: String) {
         #expect(!Self.isValid(text))
