@@ -4,12 +4,12 @@ import SessionProtocol
 import TerminalEmulation
 import TerminalView
 
-/// One window that shows one session. The window attaches off the main
-/// thread and makes its view from the snapshot. Then the output of the
-/// session goes to the view, and keys and sizes go to the session. Closing
-/// the window detaches, and the session goes on.
+/// One session in a view. It attaches off the main thread and makes its
+/// terminal view from the snapshot. Then the output of the session goes to
+/// the view, and keys and sizes go to the session. A close detaches, and
+/// the session goes on.
 @MainActor
-public final class SessionWindowController: NSObject, NSWindowDelegate, TerminalViewDelegate {
+public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalViewDelegate {
     /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
     static let contentSize = CGSize(width: 656, height: 388)
     /// The smallest grid that the window can show (decision of 2026-11-08).
@@ -281,3 +281,7 @@ public final class SessionWindowController: NSObject, NSWindowDelegate, Terminal
         return !isClosed && agreed
     }
 }
+
+/// The pane still owns its window. The next changes give the window a
+/// controller of its own around the pane.
+public typealias SessionWindowController = SessionPaneController
