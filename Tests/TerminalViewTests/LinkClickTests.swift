@@ -27,6 +27,22 @@ import Testing
         #expect(opener.targets == [URL(string: "https://example.com/docs")] && !click.isActive)
     }
 
+    @Test func aCommandClickOpensAPlainAddressAtOnceAndTheOscLinkWins() throws {
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 5), scrollbackLimit: 0)
+        terminal.write("read https://example.com/plain. \u{1B}]8;;https://a.b/x\u{07}https://c.d\u{1B}]8;;\u{07}")
+        let click = LinkClick(terminal: terminal), opener = RecordingLinkOpener()
+        click.opener = opener
+        #expect(!click.press(modifiers: [], at: cell(8)) && !click.press(modifiers: .command, at: cell(1)))
+        #expect(click.press(modifiers: .command, at: cell(8)))
+        click.release(at: cell(20))
+        #expect(click.press(modifiers: .command, at: cell(34)))
+        click.release(at: cell(35))
+        // A release away from the address opens nothing.
+        #expect(click.press(modifiers: .command, at: cell(8)))
+        click.release(at: cell(2))
+        #expect(opener.targets == [URL(string: "https://example.com/plain"), URL(string: "https://a.b/x")])
+    }
+
     @Test func otherSchemesWaitForYesAndInvalidAddressesAreRejected() async throws {
         let address = "file:///tmp/example"
         let (click, opener) = try makeClick(address: address)
