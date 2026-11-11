@@ -26,13 +26,19 @@ actor ProjectKeeper {
     /// - Parameter changes: Gets the list now and after each change, in
     ///   the step of the change, so the watchers get the changes in order.
     init(store: ProjectStore, changes: SessionChangeFeed? = nil) {
+        self.init(store: store, list: Self.load(from: store), changes: changes)
+    }
+
+    /// Starts from a list that `load(from:)` gave, so the caller can hand
+    /// the same list to the registry before any change.
+    init(store: ProjectStore, list: ProjectList, changes: SessionChangeFeed?) {
         self.store = store
         self.changes = changes
-        list = Self.load(from: store)
+        self.list = list
         changes?.replaceProjects(Self.summaries(of: list))
     }
 
-    private static func load(from store: ProjectStore) -> ProjectList {
+    static func load(from store: ProjectStore) -> ProjectList {
         do {
             let loaded = try store.load()
             for path in loaded.setAsidePaths {

@@ -1,4 +1,5 @@
 import Foundation
+import Projects
 import PseudoTerminal
 import SessionProtocol
 
@@ -19,8 +20,19 @@ actor SessionRegistry {
     /// The terminal sessions of the sessions that ended, while a process of
     /// them can still live, such as a job that the program left behind.
     private var endedTerminalSessions: Set<pid_t> = []
+    /// The newest list of the projects that the keeper gave, and its version.
+    private var projects: ProjectList
+    private var projectsVersion = 0
+    /// The folder that each session started in, with its symbolic links
+    /// resolved once, at the start. The system gives the real path of a
+    /// folder, and so does the list of the projects.
+    private var startFolders: [UUID: String] = [:]
 
-    init(socketPath: String, helperSearchPath: HelperSearchPath, changes: SessionChangeFeed? = nil, sessionLimit: Int = defaultSessionLimit) {
+    init(
+        socketPath: String, helperSearchPath: HelperSearchPath, changes: SessionChangeFeed? = nil, projects: ProjectList = ProjectList(),
+        sessionLimit: Int = defaultSessionLimit
+    ) {
+        self.projects = projects
         self.sessionLimit = sessionLimit
         self.socketPath = socketPath
         self.helperSearchPath = helperSearchPath
@@ -61,16 +73,42 @@ actor SessionRegistry {
             shownCommand = [shell.path]
         }
 
-        let summary = SessionSummary(identifier: identifier, folder: folder, command: shownCommand, size: size, createdAt: Date())
+        var summary = SessionSummary(identifier: identifier, folder: folder, command: shownCommand, size: size, createdAt: Date())
+        let startFolder = Self.realPath(of: folder)
+        summary.projectIdentifier = projects.project(holding: startFolder)?.identifier
         let session = try Session(summary: summary, launch: launch, changes: changes) { [self] identifier in
             await remove(identifier)
         }
         sessions[identifier] = session
+        startFolders[identifier] = startFolder
         await session.start()
         return await session.summary
     }
 
     var isEmpty: Bool { sessions.isEmpty }
+
+    /// The path with its symbolic links resolved, or the path itself when
+    /// the system cannot resolve it.
+    private static func realPath(of folder: String) -> String {
+        guard let resolved = realpath(folder, nil) else { return folder }
+        defer { free(resolved) }
+        return String(cString: resolved)
+    }
+
+    /// Takes a newer list of the projects, and gives each session the
+    /// project that its start folder belongs to now. A session whose
+    /// project changed tells its watchers. An older list is ignored, so the
+    /// order in which the lists arrive does not matter.
+    func updateProjects(_ list: ProjectList, version: Int) async {
+        guard version > projectsVersion else { return }
+        (projects, projectsVersion) = (list, version)
+        for (identifier, session) in sessions {
+            // A newer list can come while this one waits for a session, so
+            // each session gets the project of the newest list.
+            let project = startFolders[identifier].flatMap { projects.project(holding: $0)?.identifier }
+            _ = await session.update { $0.projectIdentifier = project }
+        }
+    }
 
     func session(for identifier: UUID) -> Session? {
         sessions[identifier]
@@ -113,6 +151,7 @@ actor SessionRegistry {
 
     private func remove(_ identifier: UUID) {
         guard let session = sessions.removeValue(forKey: identifier) else { return }
+        startFolders[identifier] = nil
         endedTerminalSessions.insert(session.programProcessIdentifier)
         forgetFreeTerminalSessions()
     }

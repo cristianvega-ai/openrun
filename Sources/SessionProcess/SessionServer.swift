@@ -31,11 +31,13 @@ actor SessionServer {
         // The lock of the socket is taken, so no other session process on
         // this socket reads or writes the files now.
         let dataFolder = dataFolder ?? DataFolder(path: location.folder)
-        projects = ProjectKeeper(store: ProjectStore(dataFolder: dataFolder), changes: changes)
+        let projectStore = ProjectStore(dataFolder: dataFolder)
+        let loadedProjects = ProjectKeeper.load(from: projectStore)
+        projects = ProjectKeeper(store: projectStore, list: loadedProjects, changes: changes)
         settings = SettingKeeper(store: SettingsStore(dataFolder: dataFolder), changes: changes)
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
-        registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes)
+        registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes, projects: loadedProjects)
     }
 
     func start() {
@@ -419,7 +421,9 @@ actor SessionServer {
     /// change types into no session and reads none (decision of 2026-11-10).
     private func changeProjects(_ change: () async throws -> (answer: ServerMessage, list: ProjectList, version: Int)) async -> ServerMessage {
         do {
-            return try await change().answer
+            let (answer, list, version) = try await change()
+            await registry.updateProjects(list, version: version)
+            return answer
         } catch {
             return Self.refusal("\(error)")
         }
