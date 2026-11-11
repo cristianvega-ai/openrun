@@ -30,6 +30,10 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     private let relay = AttachmentRelay()
     private(set) var attachment: (any AttachedSession)?
     private(set) var view: TerminalView?
+    /// The terminal view, once the attach brought the snapshot.
+    public var terminalView: TerminalView? { view }
+    /// The program's title, or the session folder when there is no title.
+    public private(set) var title = ""
     /// The view that a host puts in its layout.
     public let paneView = SessionPaneView()
     var hiddenGridLabel: HiddenGridLabel { paneView.hiddenGridLabel }
@@ -55,14 +59,23 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         window.isReleasedWhenClosed = false
         window.delegate = self
         window.contentView = paneView
-        window.contentMinSize = TerminalView.estimatedSize(holding: Self.minimumGrid, scale: window.backingScaleFactor)
+        window.contentMinSize = minimumSize
         window.center()
     }
 
     /// Shows the window and attaches with the grid that its view will have.
     public func showWindow() {
         window.makeKeyAndOrderFront(nil)
-        let grid = TerminalView.estimatedGrid(for: window.contentLayoutRect.size, scale: window.backingScaleFactor)
+        attach()
+    }
+
+    /// The scale of the screen that the pane shows on, or of the main screen before it shows.
+    private var scale: CGFloat { paneView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2 }
+
+    /// Attaches with the grid that the terminal view will have at the
+    /// present size of the pane, so the host lays the pane out first.
+    public func attach() {
+        let grid = TerminalView.estimatedGrid(for: paneView.bounds.size, scale: scale)
         let (start, socket, connect) = (start, socket, connect)
         isAttaching = true
         work.run({ try connect(start, socket, SessionSize(columns: grid.columns, rows: grid.rows)) }) { [weak self] result in
@@ -154,22 +167,36 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         hiddenGridLabel.show(grid: ownSizeRequests.isEmpty ? view.gridSize : visible, visible: visible)
     }
 
-    /// The user uses this window now, so its size applies (decision of 2026-10-27).
-    public func windowDidBecomeKey(_ notification: Notification) {
+    public func windowDidBecomeKey(_ notification: Notification) { activate() }
+
+    public func windowDidResignKey(_ notification: Notification) { deactivate() }
+
+    public func windowWillClose(_ notification: Notification) {
+        guard !isClosed else { return }
+        close()
+        onClose?()
+    }
+
+    /// The host calls this when its window becomes key while the pane has
+    /// the keyboard focus. The user uses this pane now, so its size applies
+    /// (decision of 2026-10-27).
+    public func activate() {
         if let view { view.takeBackGridSize() } else if isAttaching { pendingKeyTakeover = true }
     }
 
-    public func windowDidResignKey(_ notification: Notification) {
+    /// The window stopped being key, or the focus left the pane.
+    public func deactivate() {
         pendingKeyTakeover = false
     }
 
-    public func windowWillClose(_ notification: Notification) {
+    /// Detaches, and the session goes on. The host calls this once it
+    /// removes the pane, also after the end of the session.
+    public func close() {
         guard !isClosed else { return }
         isClosed = true
         relay.cancel()
         view?.discardPendingOutput()
         if let attachment { detach(attachment) }
-        onClose?()
     }
 
     /// A blocked send cannot hold the window open.
@@ -198,7 +225,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     /// screen.
     private func keepMinimumSize(of view: TerminalView) {
         let screen = window.screen?.visibleFrame
-        var minimum = view.size(holding: Self.minimumGrid)
+        var minimum = minimumSize
         if let screen {
             let room = window.contentRect(forFrameRect: screen).size
             minimum = NSSize(width: min(minimum.width, room.width), height: min(minimum.height, room.height))
@@ -215,6 +242,13 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
             frame.origin.y = max(screen.minY, min(frame.origin.y, screen.maxY - frame.height))
         }
         window.setFrame(frame, display: true)
+    }
+
+    /// The size that holds the smallest grid at the text size of the pane
+    /// (decision of 2026-11-08). The host keeps its window at least this
+    /// large where the screen has room.
+    public var minimumSize: CGSize {
+        view?.size(holding: Self.minimumGrid) ?? TerminalView.estimatedSize(holding: Self.minimumGrid, scale: scale)
     }
 
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
@@ -247,7 +281,8 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     }
 
     public func terminalView(_ view: TerminalView, didChangeTitle title: String) {
-        window.title = title.isEmpty ? folder : title
+        self.title = title.isEmpty ? folder : title
+        window.title = self.title
     }
 
     public func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool {
