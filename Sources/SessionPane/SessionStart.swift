@@ -1,6 +1,5 @@
 import Foundation
 import SessionConnection
-import SessionPane
 import SessionProtocol
 
 /// What a window shows: a new session, or a session that runs.
