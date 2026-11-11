@@ -549,10 +549,17 @@ extension SessionProcessIntegration {
                 let reader = FloodReader(active.connection)
                 reader.start()
                 let start = ContinuousClock.now
-                let advanced = await eventually(timeout: .seconds(1)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
-                print("detach-wake: advanced \(advanced) after \(ContinuousClock.now - start)")
+                // Without the wake, no output comes for 2 seconds. A busy Mac took
+                // more than a second to parse 1 MiB, so the time limit is on the
+                // first output, and the amount has a long time.
+                let resumed = await eventually(timeout: .seconds(1)) { reader.state.withLock { $0.byteCount > 0 || $0.isDone } }
+                let firstOutput = ContinuousClock.now - start
+                let advanced = await eventually(timeout: .seconds(30)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
+                print("detach-wake: first output after \(firstOutput); advanced \(advanced) after \(ContinuousClock.now - start)")
+                #expect(resumed, "The detach must wake the session at once.")
                 try active.connection.send(ClientMessage.input(Data([3])))
-                let stopped = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.isDone } }
+                // The output that waits for the client comes before the exit status.
+                let stopped = await eventually(timeout: .seconds(30)) { reader.state.withLock { $0.isDone } }
                 let result = reader.state.withLock { $0 }
                 #expect(advanced && result.byteCount > 1024 * 1024)
                 #expect(stopped && result.exit == .signaled(signal: SIGINT))
