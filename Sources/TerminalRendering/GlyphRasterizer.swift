@@ -26,6 +26,7 @@ struct GlyphRasterizer {
     /// The bitmap of a glyph, or `nil` for one that draws nothing, such as a space.
     func bitmap(for key: GlyphKey) -> Bitmap? {
         if key == .curlyUnderline { return curlyUnderline() }
+        if let drawn = DrawnGlyph.bitmap(for: key, cellWidth: fonts.cellWidth, cellHeight: fonts.cellHeight) { return drawn }
         let attributes: [NSAttributedString.Key: Any] = [
             NSAttributedString.Key(kCTFontAttributeName as String): fonts.font(for: key.face),
             NSAttributedString.Key(kCTForegroundColorFromContextAttributeName as String): true,
