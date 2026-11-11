@@ -1,55 +1,53 @@
 import AppKit
+import SessionProcessHarness
+import SessionPane
 import SessionProtocol
-@testable import SessionPane
 import Testing
 @testable import OpenRunApplication
 
 @MainActor @Suite(.serialized) struct MainMenuTests {
-    @Test func theMenuHasTheWindowAndTextActions() throws {
-        _ = NSApplication.shared
-        let oldWindowsMenu = NSApp.windowsMenu
+    private let launch = Notification(name: NSApplication.didFinishLaunchingNotification)
+
+    /// An application on the session process of a test workspace.
+    private func makeApplication(_ test: TestWorkspace) -> OpenRunApplication {
+        // An empty start file keeps the login shell of the first session quiet.
+        FileManager.default.createFile(atPath: test.process.directory.appendingPathComponent(".zshrc").path, contents: Data())
+        return OpenRunApplication(socket: test.workspace.socket, workspace: test.workspace)
+    }
+
+    @Test func theMenuHasTheSessionTheWindowAndTheTextCommands() async throws {
+        let oldWindowsMenu = NSApplication.shared.windowsMenu
         defer { NSApp.windowsMenu = oldWindowsMenu }
-        let socket = try SocketLocation(path: NSTemporaryDirectory() + "openrun-menu-test.socket")
-        let defaultsName = "OpenRunTests-\(UUID().uuidString)"
-        let defaults = try #require(UserDefaults(suiteName: defaultsName))
-        defer { defaults.removePersistentDomain(forName: defaultsName) }
-        let application = OpenRunApplication(socket: socket, workspace: TestWorkspace.makeHost(socket: socket, defaults: defaults))
+        let test = try TestWorkspace()
+        defer { test.stop() }
+        let application = makeApplication(test), workspace = test.workspace
         let menu = MainMenu.make(target: application)
         #expect(menu.items.map(\.title) == ["OpenRun", "File", "Edit", "View", "Session", "Window"])
-        let session = try #require(menu.item(withTitle: "Session")?.submenu)
-        #expect(session.items.map(\.title) == ["Rename…", "", "Next Session", "Previous Session"])
-        #expect(session.items.allSatisfy { $0.isSeparatorItem || $0.target === application.workspace })
-        let file = try #require(menu.item(withTitle: "File")?.submenu)
-        let edit = try #require(menu.item(withTitle: "Edit")?.submenu)
-        let view = try #require(menu.item(withTitle: "View")?.submenu)
-        let newSession = try #require(file.item(withTitle: "New Session")), closeSession = try #require(file.item(withTitle: "Close Session"))
-        #expect(newSession.keyEquivalent == "n" && newSession.target === application.workspace)
-        // Command-W ends the work of a row, so the window closes with Shift.
-        #expect(closeSession.keyEquivalent == "w" && closeSession.keyEquivalentModifierMask == .command && closeSession.target === application.workspace)
-        #expect(file.item(withTitle: "Close Window")?.keyEquivalentModifierMask == [.command, .shift])
-        #expect(file.item(withTitle: "New Session With")?.submenu?.delegate === application.workspace)
-        let titles = file.items.map(\.title)
-        #expect(titles.firstIndex(of: "Register Session Process Again") == (titles.firstIndex(of: "Retry Session Process") ?? -2) + 1)
-        let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
-        #expect(registerAgain.action == #selector(OpenRunApplication.registerSessionProcessAgain(_:)) && registerAgain.target === application)
-        // This application has a nondefault socket and no injected setup, so
-        // the item is off. Do not send its action here: without the rule, it
-        // would register the real launch agent.
-        #expect(!application.validateMenuItem(registerAgain))
-        #expect(edit.item(withTitle: "Copy")?.action == Selector(("copy:")))
-        #expect(edit.item(withTitle: "Paste")?.action == Selector(("paste:")))
-        #expect(edit.item(withTitle: "Select All")?.action == Selector(("selectAll:")) && edit.item(withTitle: "Select All")?.keyEquivalent == "a")
-        for (title, action, key) in [
-            ("Make Text Bigger", "increaseFontSize:", "="),
-            ("Make Text Smaller", "decreaseFontSize:", "-"),
-            ("Reset Text Size", "resetFontSize:", "0")
-        ] {
-            let item = try #require(view.item(withTitle: title))
-            #expect(item.action == Selector(action) && item.keyEquivalent == key)
-            #expect(item.keyEquivalentModifierMask == .command && item.target == nil)
-        }
-        // No session process answers on this socket, so no session can start.
-        #expect(!application.workspace.validateMenuItem(newSession) && !application.workspace.validateMenuItem(closeSession))
+        func items(_ title: String) throws -> [NSMenuItem] { try #require(menu.item(withTitle: title)?.submenu).items }
+        func key(_ item: NSMenuItem) -> String { (item.keyEquivalentModifierMask.contains(.shift) ? "shift-" : "") + item.keyEquivalent }
+        let file = try items("File"), session = try items("Session")
+        #expect(file.map(\.title) == ["New Session", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Register Session Process Again"])
+        #expect(file.map(key) == ["n", "", "", "w", "shift-w", "", "", ""])
+        #expect(file[0].target === workspace && file[3].target === workspace && file[4].target == nil && file[7].target === application)
+        #expect(session.map(\.title) == ["Rename…", "", "Next Session", "Previous Session"] && session.map(key) == ["", "", "shift-]", "shift-["])
+        #expect(try items("View").map(\.title) == ["Hide Projects", "Hide Sessions", "Move Focus to Next Pane", "Move Focus to Previous Pane", "", "Make Text Bigger", "Make Text Smaller", "Reset Text Size"])
+        #expect(try items("Edit").map(\.action) == [Selector(("copy:")), Selector(("paste:")), Selector(("selectAll:"))])
+        // This application has a nondefault socket and no setup of its own, so
+        // the item is off. Do not send its action: it would register the real launch agent.
+        #expect(!application.validateMenuItem(file[7]))
+
+        // Each session command is on only when it can act.
+        #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[3]) && !workspace.validateMenuItem(session[2]))
+        workspace.opensFirstSession = false
+        application.applicationDidFinishLaunching(launch)
+        let shell = try test.createShell()
+        #expect(await waitUntil { test.shownRows == [shell] })
+        #expect(workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[3]) && !workspace.validateMenuItem(session[0]))
+        workspace.select(row: shell)
+        #expect(workspace.validateMenuItem(file[3]) && workspace.validateMenuItem(session[0]) && workspace.validateMenuItem(session[2]))
+        let commands = try #require(file[1].submenu)
+        workspace.menuNeedsUpdate(commands)
+        #expect(commands.items.map(\.title) == ["Claude Code", "Codex"] && commands.items.allSatisfy { $0.target === workspace })
     }
 
     @Test func theStandardNewSessionUsesTheHomeFolder() {
