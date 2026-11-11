@@ -5,7 +5,7 @@ import AppKit
 ///
 /// It draws its colors itself, so a dynamic color follows a change of the
 /// appearance with no extra step.
-final class RoundedBoxView: NSView {
+class RoundedBoxView: NSView {
     var fillColor: NSColor = .clear { didSet { needsDisplay = true } }
     var borderColor: NSColor? { didSet { needsDisplay = true } }
     var borderWidth: CGFloat = 1 { didSet { needsDisplay = true } }

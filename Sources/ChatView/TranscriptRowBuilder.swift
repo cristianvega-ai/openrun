@@ -80,14 +80,17 @@ struct TranscriptRowBuilder {
     }
 
     /// The tool calls that another row shows: a call that changed a file
-    /// shows as its file change, and a call that started a sub-agent shows
-    /// as its task.
+    /// shows as its file change, a call that started a sub-agent shows as
+    /// its task, and a call that the user did not allow shows as its
+    /// permission request.
     static func toolCallsShownElsewhere(in items: [TranscriptItem]) -> Set<String> {
         var hidden = Set<String>()
         for item in items {
             switch item.content {
             case .fileChange(let change): change.toolCallIdentifier.map { hidden.insert("tool:" + $0) }
             case .task(let task): (task.start?.toolCallIdentifier ?? task.end?.toolCallIdentifier).map { hidden.insert("tool:" + $0) }
+            case .permissionRequest(let permission) where permission.end?.outcome != .allowed:
+                permission.request.toolCallIdentifier.map { hidden.insert("tool:" + $0) }
             default: break
             }
         }

@@ -27,6 +27,14 @@ struct TranscriptRowBuilderTests {
         ])
     }
 
+    @Test func aCallThatWaitsForTheUserShowsOnlyAsItsRequest() {
+        let call = TestEvents.tool("b1", "Bash", ["command": "ls"])
+        let request = TestEvents.permission("p1", "Bash", ["command": "ls"], call: "b1")
+        #expect(kinds([call, request]) == [.permissionRequest(item: "permission:p1")])
+        let allowed = [call, request, TestEvents.permissionEnd("p1", .allowed)]
+        #expect(kinds(allowed) == [.toolCalls(items: ["tool:b1"]), .permissionRequest(item: "permission:p1"), .activity])
+    }
+
     @Test func onlyTurnsThatDidNotEndWellHaveARow() {
         let events = [TestEvents.user("1", "Hi"), TestEvents.turnEnd(), TestEvents.user("2", "Again"), TestEvents.turnEnd(.stopped)]
         #expect(kinds(events, earlier: true) == [.earlierItems, .userMessage(item: "user:1"), .userMessage(item: "user:2"), .turnEnd(item: "turn:4")])
