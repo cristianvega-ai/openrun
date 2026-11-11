@@ -153,13 +153,13 @@ let package = Package(
         // One window for one session pane, and the picker of running sessions.
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
-        // The app. In milestone 2 it registers the launch agent at its start.
+        // The app: the setup of the launch agent, the host of the main window, and the menus.
         .target(name: "OpenRunApplication", dependencies: [
-            "SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "SessionWindow", "MainWindow", "ProjectsList", "SessionsList",
+            "SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "MainWindow", "ProjectsList", "SessionsList",
             "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "TerminalView", "PaneAppearance",
             "AlertNotifications",
         ]),
-        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionWindow", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "AlertNotifications"]),
+        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "AlertNotifications"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
         .testTarget(
             name: "PseudoTerminalTests",
