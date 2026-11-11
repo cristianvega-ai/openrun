@@ -111,8 +111,12 @@ func makeWindowController(_ attachment: FakeAttachment?, folder: String = "/tmp/
 /// Lets the main thread work until `condition` is true or `seconds` have passed.
 /// The view parses output in turns of the run loop, and the window gets events
 /// through the main queue, which runs only while the test waits.
+///
+/// The wait ends as soon as the condition holds, so the default is long. Other
+/// tests of this bundle hold the main thread for seconds, and on a busy Mac a
+/// default of 5 seconds ended waits for events that came later.
 @MainActor
-func waitOnMainThread(seconds: Double = 5, until condition: () -> Bool) async {
+func waitOnMainThread(seconds: Double = 30, until condition: () -> Bool) async {
     let end = Date().addingTimeInterval(seconds)
     while !condition(), Date() < end {
         runLoopTurn()
