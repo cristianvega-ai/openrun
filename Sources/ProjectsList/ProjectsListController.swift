@@ -34,6 +34,34 @@ public final class ProjectsListController: NSObject {
         rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].entry : .allSessions
     }
 
+    /// Shows new content. Only the rows that changed update, and the
+    /// selection stays on its entry, or goes to "All Sessions" when its
+    /// project went away.
+    public func show(_ content: ProjectsListContent) {
+        let selected = selection
+        let newRows = ProjectsListRow.rows(for: content)
+        let changes = RowChanges(from: rows, to: newRows) { $0.entry }
+        (self.content, rows) = (content, newRows)
+        isShowingChanges = true
+        defer { isShowingChanges = false }
+        changes.apply(to: table) { index in
+            (table.view(atColumn: 0, row: index, makeIfNecessary: false) as? ProjectCellView)?.show(rows[index])
+        }
+        if selection != selected {
+            select(rows.contains { $0.entry == selected } ? selected : .allSessions)
+            if selection != selected { delegate?.projectsList(self, didSelect: selection) }
+        }
+    }
+
+    /// Selects an entry without a report to the delegate.
+    public func select(_ entry: ProjectsListEntry) {
+        guard let index = rows.firstIndex(where: { $0.entry == entry }) else { return }
+        isShowingChanges = true
+        table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        isShowingChanges = false
+        table.scrollRowToVisible(index)
+    }
+
     private func layOut() {
         topRow.translatesAutoresizingMaskIntoConstraints = false
         scroll.translatesAutoresizingMaskIntoConstraints = false
