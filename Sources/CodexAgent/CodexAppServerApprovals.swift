@@ -54,8 +54,8 @@ extension CodexAppServer {
     /// Codex withdrew a request, such as after an interrupt. No answer
     /// goes, and the request ends without one.
     func approvalResolved(_ parameters: JSONValue, thread: String) async {
-        guard let request = parameters["requestId"].flatMap(CodexRequestIdentifier.init) else { return }
-        guard let identifier = approvals.first(where: { $0.value.thread == thread && $0.value.request == request })?.key else { return }
+        guard let request = parameters["requestId"] else { return }
+        guard let identifier = approvals.first(where: { $0.value.thread == thread && $0.value.request.isNamed(by: request) })?.key else { return }
         await endApproval(identifier, decision: nil, outcome: .cancelled, reason: .other, message: "Codex withdrew the request.")
     }
 

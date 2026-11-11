@@ -43,6 +43,16 @@ struct CodexRequestIdentifier: Sendable, Hashable, CustomStringConvertible {
     /// The whole number of one of OpenRun's own requests.
     var number: Int? { Int(token) }
 
+    /// Whether a decoded value, such as the `requestId` of a notification,
+    /// names this request. A number above 2^53 is as near as a `Double` is.
+    func isNamed(by value: JSONValue) -> Bool {
+        switch value {
+        case .number(let number): Double(token) == number
+        case .string(let text): token.hasPrefix("\"") && description == text
+        default: false
+        }
+    }
+
     var description: String {
         (try? JSONDecoder().decode(String.self, from: Data(token.utf8))) ?? token
     }
