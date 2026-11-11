@@ -27,11 +27,16 @@ final class PermissionRequestRowView: StackRowView {
         box.show(words, agentName: context.agentName, isAnswered: context.answeredRequests.contains(requestIdentifier), palette: context.palette)
         box.answerAction = { [weak self] answer in self?.answer(answer) }
         setParts([Part(view: box)])
-        if context.announcedRequests.insert(requestIdentifier).inserted {
-            NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
-                .announcement: words.title, .priority: NSAccessibilityPriorityLevel.high.rawValue,
-            ])
-        }
+    }
+
+    /// Tells VoiceOver of a new request once, also when its row is far from
+    /// the screen and has no view.
+    static func announce(_ item: PermissionRequestItem, context: TranscriptRowContext) {
+        guard item.isWaiting, context.announcedRequests.insert(item.request.identifier).inserted else { return }
+        let title = PermissionRequestWords(item, agentName: context.agentName).title
+        NSAccessibility.post(element: NSApp as Any, notification: .announcementRequested, userInfo: [
+            .announcement: title, .priority: NSAccessibilityPriorityLevel.high.rawValue,
+        ])
     }
 
     static func outcome(of item: PermissionRequestItem) -> String {

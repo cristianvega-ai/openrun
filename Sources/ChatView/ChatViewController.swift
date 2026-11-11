@@ -92,6 +92,11 @@ import AppKit
         // The row of activity tells whether the agent thinks, which no item
         // names, so it shows again on each change.
         transcriptView.setRows(rows, changed: Set(changedRows.map(\.key) + ["activity"]))
+        for row in changedRows {
+            if case .permissionRequest(let item)? = row.items.first.flatMap(context.item) {
+                PermissionRequestRowView.announce(item, context: context)
+            }
+        }
         composer.setBusy(transcript.state == .inProgress || transcript.state == .needsUser)
         showThreadState()
     }

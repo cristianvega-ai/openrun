@@ -85,4 +85,19 @@ import Testing
         controller.terminalButton.performClick(nil)
         #expect(delegate.requests == ["return", "terminal"])
     }
+
+    @Test func aNewRequestIsAnnouncedOnceAlsoWhenItsRowHasNoView() {
+        controller.view.frame.size = NSSize(width: 600, height: 400)
+        var transcript = Transcript(events: (0..<80).map { TestEvents.user("\($0)", "Message \($0)") })
+        controller.show(transcript)
+        controller.view.layoutSubtreeIfNeeded()
+        controller.scrollView.contentView.scroll(to: .zero)
+        let request = transcript.apply(TestEvents.permission("p1", "Bash", ["command": "make"]))
+        controller.update(transcript, change: request)
+        #expect(controller.transcriptView.rowViews.views.values.allSatisfy { !($0 is PermissionRequestRowView) })
+        #expect(controller.context.announcedRequests == ["p1"])
+        let change = transcript.apply(TestEvents.permissionEnd("p1", .allowed))
+        controller.update(transcript, change: change)
+        #expect(controller.context.announcedRequests == ["p1"])
+    }
 }
