@@ -126,7 +126,7 @@ let package = Package(
         ),
         .target(
             name: "CommandLineTool",
-            dependencies: ["SessionConnection", "TerminalEmulation", "SessionProtocol", "UntrustedText", "Projects", "Settings"]
+            dependencies: ["SessionConnection", "TerminalEmulation", "SessionProtocol", "UntrustedText", "Projects", "Settings", "ClaudeCodeAgent"]
         ),
         .executableTarget(
             name: "openrun",

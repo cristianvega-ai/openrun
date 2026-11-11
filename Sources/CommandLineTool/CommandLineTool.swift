@@ -12,6 +12,14 @@ public enum CommandLineTool {
     ///   session's program, when it ended while attached. `notify` never
     ///   exits with 2, because a hook of Claude Code then blocks the action.
     public static func run(arguments: [String], environment: [String: String]) -> Int32 {
+        // The hook of an agent thread. It writes only its answer, and it
+        // always exits with 0: the agent reads another status as a failed
+        // hook, and its standard error goes to the model.
+        if arguments == ["permission-request"] {
+            let request = FileHandle.standardInput.readDataToEndOfFile()
+            FileHandle.standardOutput.write(PermissionRequestCommand.answer(to: request, environment: environment))
+            return 0
+        }
         do {
             let parsed = try CommandLineArguments(arguments)
             if parsed.command == .help {
