@@ -51,6 +51,7 @@ extension ThreadRunner {
             (activeMessage, record.hasConversation, record.lastActivityAt) = (nil, true, Date())
         }
         if turnEnded || transcript.state != stateBefore { await changed(self) }
+        if turnEnded { await sendNextMessage() }
     }
 
     /// The process ended: by a stop, at the quiet time, by itself, or
@@ -66,6 +67,7 @@ extension ThreadRunner {
         emit(.processEnded(ProcessEnd(exitStatus: status, signal: signal, wasRequested: endWasRequested, standardErrorText: errorText.isEmpty ? nil : errorText)))
         activeMessage = nil
         await changed(self)
+        await sendNextMessage()
     }
 
     /// Ends a process that the thread does not need now. The agent ends
