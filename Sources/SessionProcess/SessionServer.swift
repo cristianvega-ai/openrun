@@ -9,7 +9,7 @@ import TerminalEmulation
 /// Accepts clients and answers their requests.
 actor SessionServer {
     private let listener: SocketListener
-    private let registry: SessionRegistry
+    let registry: SessionRegistry
     private let questions = ApprovalQuestions()
     private let changes = SessionChangeFeed()
     private let answererRequirement: AnswererRequirement
@@ -151,6 +151,7 @@ actor SessionServer {
     private func serve(_ client: ClientConnection, peer: PeerProcess) async {
         let owner = ObjectIdentifier(client)
         var attachedSession: Session?
+        var attachedThread: ThreadRunner?
         var isWatching = false
 
         messages: for await received in client.messages {
@@ -347,12 +348,16 @@ actor SessionServer {
             case .changeSetting(let name, let text):
                 client.send(await changeSetting(name, to: text, for: peer))
             case .createThread, .listThreads, .renameThread, .closeThread, .attachThread, .sendThreadMessage, .stopThread:
-                // The capability `threads` is off until the threads are here.
-                client.send(Self.refusal("This session process does not keep agent threads yet."))
+                guard attachedSession == nil else {
+                    client.send(Self.refusal("This connection is attached to a session."))
+                    break
+                }
+                if let answer = await answer(threadRequest: received.message, from: client, peer: peer, attached: &attachedThread) { client.send(answer) }
             }
             client.markHandled(received)
         }
 
+        await attachedThread?.detach(owner)
         if let attachedSession {
             await attachedSession.detach(client)
             attachedSession.withdrawTypedInput(from: owner)
@@ -473,7 +478,7 @@ actor SessionServer {
     }
 
     /// The reason is an existing one, so protocol version 1 does not change.
-    private static func refusal(_ message: String) -> ServerMessage {
+    static func refusal(_ message: String) -> ServerMessage {
         .failure(SessionFailure(reason: .invalidRequest, message: message))
     }
 
