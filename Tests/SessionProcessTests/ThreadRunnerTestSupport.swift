@@ -53,6 +53,11 @@ final class ThreadDeliveries: Sendable {
         deliveries.withLock { $0 }.firstIndex { if case .replayComplete = $0 { true } else { false } }
     }
 
+    /// What the mark of the complete replay says about earlier events, or nil before the mark.
+    var hasEarlierEvents: Bool? {
+        deliveries.withLock { $0 }.lazy.compactMap { if case .replayComplete(let hasEarlier) = $0 { hasEarlier } else { nil } }.first
+    }
+
     var isClosed: Bool {
         deliveries.withLock { $0 }.contains { if case .closed = $0 { true } else { false } }
     }

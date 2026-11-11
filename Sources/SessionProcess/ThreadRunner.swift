@@ -36,6 +36,10 @@ actor ThreadRunner {
     }
 
     var record: ThreadRecord
+    /// Whether the conversation had turns before this runner came into
+    /// use, such as before a restart of the session process. The history
+    /// of the agent holds them, and the events of this runner do not.
+    let hadConversationAtStart: Bool
     var transcript = Transcript()
     var buffer: ThreadEventBuffer
     var listeners: [ObjectIdentifier: Listener] = [:]
@@ -79,7 +83,7 @@ actor ThreadRunner {
         takeProcessSlot: @escaping @Sendable (UUID) async -> ProcessSlotAnswer = { _ in .granted },
         changed: @escaping @Sendable (ThreadRunner) async -> Void = { _ in }
     ) {
-        self.record = record
+        (self.record, hadConversationAtStart) = (record, record.hasConversation)
         buffer = ThreadEventBuffer(byteLimit: bufferByteLimit)
         (self.quietTime, self.launchSettings, self.takeProcessSlot, self.changed) = (quietTime, launchSettings, takeProcessSlot, changed)
     }
@@ -114,7 +118,7 @@ actor ThreadRunner {
     func attach(_ key: ObjectIdentifier, listener: @escaping Listener) {
         guard !isClosed else { return listener(.closed) }
         for entry in buffer.entries { listener(.event(entry.data)) }
-        listener(.replayComplete(hasEarlierEvents: buffer.hasEarlierEvents))
+        listener(.replayComplete(hasEarlierEvents: buffer.hasEarlierEvents || hadConversationAtStart))
         listeners[key] = listener
     }
 

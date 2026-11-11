@@ -6,6 +6,17 @@ import Testing
 @testable import SessionProcess
 
 @Suite struct ThreadRunnerTests {
+    /// After a restart of the session process a runner keeps no events,
+    /// and the history of the agent holds the turns of the conversation.
+    @Test func aRunnerOfAConversationWithTurnsTellsThatEarlierTurnsExist() async {
+        var record = FakeAgentSettings.record()
+        let (new, old) = (ThreadDeliveries(), ThreadDeliveries())
+        await ThreadRunner(record: record) { FakeAgentSettings.make() }.attach(ObjectIdentifier(new), listener: new.listener)
+        record.hasConversation = true
+        await ThreadRunner(record: record) { FakeAgentSettings.make() }.attach(ObjectIdentifier(old), listener: old.listener)
+        #expect(new.hasEarlierEvents == false && old.hasEarlierEvents == true)
+    }
+
     @Test func aMessageRunsATurnToItsEndAndTheThreadKeepsTheConversation() async throws {
         let runner = ThreadRunner(record: FakeAgentSettings.record()) { FakeAgentSettings.make() }
         let identifier = try await runner.send(text: "Reply with the single word ok.")
