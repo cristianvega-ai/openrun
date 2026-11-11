@@ -15,6 +15,10 @@ public final class ContentPaneController {
     let titleLabel = NSTextField(labelWithString: "")
     let emptyLabel = NSTextField(labelWithString: "No Session Selected")
     public private(set) var content: PaneContent?
+    /// The constraint that gives the content the width of the pane, and the
+    /// one that holds the width while the panes change their widths.
+    private var contentTrailing, heldWidth: NSLayoutConstraint?
+    private var resizeDepth = 0
     /// The window keeps room for the new minimum size.
     var minimumSizeChanged: (() -> Void)?
 
@@ -42,6 +46,7 @@ public final class ContentPaneController {
     /// Shows the content in place of the one before it, or the empty state.
     func show(_ content: PaneContent?) {
         self.content?.view.removeFromSuperview()
+        (contentTrailing, heldWidth) = (nil, nil)
         self.content?.topRowItems.forEach { $0.removeFromSuperview() }
         self.content = content
         emptyLabel.isHidden = content != nil
@@ -49,10 +54,36 @@ public final class ContentPaneController {
         if let content {
             content.view.translatesAutoresizingMaskIntoConstraints = false
             contentArea.addSubview(content.view)
-            NSLayoutConstraint.activate(Self.fill(content.view, below: nil, in: contentArea))
+            let constraints = Self.fill(content.view, below: nil, in: contentArea)
+            NSLayoutConstraint.activate(constraints)
+            contentTrailing = constraints[2]
+            if resizeDepth > 0 { holdWidth() }
             content.topRowItems.forEach(topRow.trailingItems.addArrangedSubview)
         }
         minimumSizeChanged?()
+    }
+
+    /// The panes start to change their widths in an animation or a drag. The content
+    /// keeps its width until the end, so a session gets one size, not one for each step.
+    func beginPaneResize() {
+        resizeDepth += 1
+        holdWidth()
+    }
+
+    /// The change ends. The content gets the final width in one layout.
+    func endPaneResize() {
+        resizeDepth = max(resizeDepth - 1, 0)
+        guard resizeDepth == 0 else { return }
+        heldWidth?.isActive = false
+        contentTrailing?.isActive = true
+        heldWidth = nil
+    }
+
+    private func holdWidth() {
+        guard let view = content?.view, heldWidth == nil else { return }
+        contentTrailing?.isActive = false
+        heldWidth = view.widthAnchor.constraint(equalToConstant: contentArea.frame.width)
+        heldWidth?.isActive = true
     }
 
     func updateTitle(_ title: String) {

@@ -40,11 +40,12 @@ extension MainWindowController: NSMenuItemValidation {
         if reducesMotion() {
             item.isCollapsed = collapsed
         } else {
-            NSAnimationContext.runAnimationGroup { context in
+            contentPane.beginPaneResize()
+            NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.25
                 context.allowsImplicitAnimation = true
                 item.animator().isCollapsed = collapsed
-            }
+            }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.contentPane.endPaneResize() } })
         }
         (layout.projectsHidden, layout.sessionsHidden) = (projectsItem.isCollapsed, sessionsItem.isCollapsed)
         layout.save(to: defaults)

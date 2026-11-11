@@ -50,6 +50,8 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     /// an old size of this pane, not the grid of another client. During a
     /// drag, the session confirms an older grid while newer ones still wait.
     private var ownSizeRequests: [TerminalSize] = []
+    /// The number of size requests that the pane sent. Tests read it.
+    private(set) var sentSizeRequests = 0
 
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
     public init(start: SessionStart, socket: SocketLocation) {
@@ -218,6 +220,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         ownSizeRequests.append(size)
         showHiddenPart()
         guard !isClosed, !hasConnectionFailure, let attachment else { return }
+        sentSizeRequests += 1
         send { try attachment.send(size: SessionSize(columns: size.columns, rows: size.rows), requestsConfirmation: true) }
     }
 
