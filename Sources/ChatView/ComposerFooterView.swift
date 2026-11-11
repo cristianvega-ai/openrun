@@ -10,7 +10,6 @@ final class ComposerFooterView: NSView {
 
     override init(frame: NSRect) {
         super.init(frame: frame)
-        placeLabel.lineBreakMode = .byTruncatingHead
         for view in [modelButton, modeButton, placeLabel] { addSubview(view) }
     }
 
@@ -36,6 +35,12 @@ final class ComposerFooterView: NSView {
             }
             text.append(NSAttributedString(string: value, attributes: attributes))
         }
+        // A long folder loses its middle, so its symbol, its last name and
+        // the branch stay. Attributed text takes the rule from its own
+        // paragraph style, and not from the label.
+        let paragraph = NSMutableParagraphStyle()
+        paragraph.lineBreakMode = .byTruncatingMiddle
+        text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
         placeLabel.attributedStringValue = text
         placeLabel.setAccessibilityLabel([facts.folder.map { "Folder \($0)" }, facts.branch.map { "branch \($0)" }].compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
