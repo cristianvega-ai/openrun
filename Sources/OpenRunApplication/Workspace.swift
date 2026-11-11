@@ -3,6 +3,7 @@ import DataStorage
 import ListContent
 import MainWindow
 import ProjectsList
+import PseudoTerminal
 import SessionOverview
 import SessionPane
 import SessionProtocol
@@ -36,8 +37,17 @@ final class Workspace: NSObject {
     /// The lists report a selection while they take new content, and that
     /// is no choice of the user.
     var isRefreshing = false
-    /// The home folder, which the rows show as `~`. Tests set it.
+    /// The home folder, which the rows show as `~`, and where a session
+    /// outside every project starts. Tests set it.
     var home = NSHomeDirectory()
+    /// The environment and the shell of a new session. Tests set them,
+    /// so no test reads the start files of the user.
+    var sessionEnvironment = ProcessInfo.processInfo.environment
+    var loginShell = LoginShell.current()
+    /// Shows a failure of a request, with a title and the reason. Tests set it.
+    lazy var showFailure: (String, String) -> Void = { [weak self] in self?.showFailureSheet(title: $0, message: $1) }
+    /// Asks before a close and gives the answer. Tests set it.
+    lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
 
     /// - Parameters:
     ///   - defaults: Where the window keeps the widths of its panes.
