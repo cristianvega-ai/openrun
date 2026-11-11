@@ -46,4 +46,40 @@ struct ToolCallSummary: Equatable {
         }
     }
 
+    /// One line for a run of calls, such as "Read 2 files, searched 2 times".
+    static func title(ofRun calls: [ToolCallItem]) -> String {
+        var counts: [(verb: String, one: String, many: String, count: Int)] = []
+        for call in calls {
+            let kind: (String, String, String) = switch call.name {
+            case "Read": ("read", "file", "files")
+            case "Edit", "MultiEdit", "NotebookEdit", "Write": ("edited", "file", "files")
+            case "Grep", "Glob", "WebSearch": ("searched", "time", "times")
+            case "Bash": ("ran", "command", "commands")
+            case "WebFetch": ("read", "web page", "web pages")
+            default: ("used", "tool", "tools")
+            }
+            if let index = counts.firstIndex(where: { $0.verb == kind.0 && $0.one == kind.1 }) {
+                counts[index].count += 1
+            } else {
+                counts.append((kind.0, kind.1, kind.2, 1))
+            }
+        }
+        let parts = counts.map { "\($0.verb) \($0.count) \($0.count == 1 ? $0.one : $0.many)" }
+        let text = parts.joined(separator: ", ")
+        return text.prefix(1).uppercased() + text.dropFirst()
+    }
+
+    /// The input and the first 12 lines of the output of a call, with
+    /// the count of the other lines.
+    static func detail(of call: ToolCallItem, subject: String?) -> [(text: String, note: String?)] {
+        var parts: [(text: String, note: String?)] = [(subject ?? call.inputText, nil)]
+        let output = BoundedLines(call.output, lineLimit: 12)
+        if !output.text.isEmpty {
+            let isCut = call.outputByteCount > call.output.utf8.count
+            let hidden = output.hiddenLineCount == 1 ? "1 more line" : "\(output.hiddenLineCount) more lines"
+            let note = output.hiddenLineCount > 0 ? hidden + (isCut ? " and more output" : "") : isCut ? "More output was not kept" : nil
+            parts.append((String(output.text), note))
+        }
+        return parts
+    }
 }
