@@ -111,6 +111,17 @@ extension Terminal {
         #expect(terminal.scrollbackLimit == 10)
     }
 
+    @Test func aLowerScrollbackLimitRemovesLinesNearTheScreenOnlyWithMoreOutput() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 5, scrollbackLimit: 100_000)
+        terminal.write(String(repeating: "line\r\n", count: 477))
+        let before = terminal.scrollbackLineCount
+        try terminal.setScrollbackLimit(0)
+        #expect(terminal.scrollbackLineCount == before)
+        terminal.write(String(repeating: "more\r\n", count: 20_000))
+        // Whole pages go, so about one page of lines stays above the limit.
+        #expect(terminal.scrollbackLineCount < before + 4_000)
+    }
+
     @Test func scrollbackLimitsFromZeroToTheMaximumAreAccepted() throws {
         _ = try makeTerminal(scrollbackLimit: 0)
         _ = try makeTerminal(scrollbackLimit: Terminal.maximumScrollbackLines)

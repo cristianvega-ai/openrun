@@ -483,7 +483,8 @@ public final class TerminalView: NSView {
     }
 
     /// The most lines of scrollback that the local terminal keeps, from zero to
-    /// one million. A lower limit drops the oldest lines at once; the screen stays.
+    /// one million. The screen stays. A lower limit removes old lines in whole pages, some
+    /// only when more output comes, as `Terminal.setScrollbackLimit(_:)` describes.
     public var scrollbackLimit: Int {
         get { terminal.scrollbackLimit }
         set {

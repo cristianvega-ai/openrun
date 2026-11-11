@@ -37,8 +37,9 @@ public final class Terminal {
     ///   - size: The grid size. Both values must be greater than zero and
     ///     at most `maximumGridDimension`.
     ///   - scrollbackLimit: The most lines of scrollback to keep, from zero to
-    ///     `maximumScrollbackLines`. libghostty-vt prunes whole pages, so the
-    ///     terminal can keep somewhat more lines.
+    ///     `maximumScrollbackLines`. libghostty-vt removes only whole pages, so
+    ///     the terminal can keep up to about one page more. A page holds more
+    ///     rows when the grid is narrow: about 2,200 at 20 columns.
     /// - Throws: `TerminalEmulationError` when a value is out of range.
     public convenience init(size: TerminalSize, scrollbackLimit: Int) throws {
         try Terminal.validate(size, in: "Terminal.init")
@@ -220,8 +221,9 @@ public final class Terminal {
     }
 
     /// Changes the most lines of scrollback, from zero to `maximumScrollbackLines`.
-    /// A lower limit removes the oldest lines at once, in whole pages, as
-    /// `init(size:scrollbackLimit:)` describes. The screen does not change.
+    /// A lower limit can remove some old pages at once, but the lines in the
+    /// pages near the screen stay until more output comes. With 477 lines of
+    /// scrollback, a limit of 0 keeps all 477. The screen does not change.
     public func setScrollbackLimit(_ lines: Int) throws {
         guard (0...Terminal.maximumScrollbackLines).contains(lines) else {
             throw TerminalEmulationError.invalidValue(in: "Terminal.setScrollbackLimit")
