@@ -61,12 +61,15 @@ public struct Transcript: Sendable, Hashable {
         case .processEnded(let end): applyProcessEnd(end, &change)
         case .toolCallStarted, .toolCallInputDelta, .toolCallInput, .toolCallOutput, .toolCallResult, .toolCallRefused, .fileChange:
             applyToolCallEvent(event.kind, &change)
+        case .permissionRequested, .permissionEnded, .taskStarted, .taskMessage, .taskEnded:
+            applyRequestEvent(event.kind, &change)
         case .usage(let reading): usage = reading
         case .notice(let notice): insertNotice(notice.level, notice.text, &change)
         case .unknown(var line):
             line.text = BoundedText.prefix(of: line.text, byteLimit: limits.detailByteLimit)
             insert("unknown:\(eventCount)", .unknown(line), &change)
-        default: break
+        case .turnStarted, .agentStatus:
+            break
         }
         updateState(after: event.kind)
         change.removed = storage.trim(to: limits)
