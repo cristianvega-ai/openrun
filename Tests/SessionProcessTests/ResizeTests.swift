@@ -122,7 +122,9 @@ extension SessionProcessIntegration {
                 let identifier = try process.createSession(program: program)
                 #expect(await process.waitForScreen(of: identifier, containing: "ready"))
                 let session = try #require(UUID(uuidString: identifier))
-                let first = try WatchedConnection(socketPath: process.socketPath)
+                // The limit covers the whole test, which follows 32 MiB of output.
+                // That took 25 seconds on a busy Mac, close to the usual 30.
+                let first = try WatchedConnection(socketPath: process.socketPath, limit: 300)
                 let size = SessionSize(columns: 80, rows: 24)
                 guard case .attached = try first.request(.attach(identifier: session, size: size, receivesSizeChanges: true)),
                       case .snapshot(let snapshot) = try first.connection.receive(ServerMessage.self) else {
