@@ -126,7 +126,7 @@ let package = Package(
         ),
         .target(
             name: "CommandLineTool",
-            dependencies: ["SessionConnection", "TerminalEmulation", "SessionProtocol", "UntrustedText", "Projects", "Settings", "ClaudeCodeAgent"]
+            dependencies: ["SessionConnection", "TerminalEmulation", "SessionProtocol", "UntrustedText", "Projects", "Settings", "ClaudeCodeAgent", "AgentConversation"]
         ),
         .executableTarget(
             name: "openrun",
@@ -187,7 +187,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CommandLineToolTests",
-            dependencies: ["SessionProcessHarness", "CommandLineTool", "SessionConnection", "PseudoTerminal"]
+            dependencies: ["SessionProcessHarness", "CommandLineTool", "SessionConnection", "PseudoTerminal", "AgentConversation"]
         ),
     ],
     swiftLanguageModes: [.v6]
