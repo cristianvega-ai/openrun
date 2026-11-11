@@ -95,14 +95,24 @@ public struct DataFolder: Equatable, Sendable {
     /// it, it is set aside first. When it cannot be read or set aside, the
     /// write throws and the file stays as it was. So no caller can replace
     /// data that it did not read, also after a load that failed.
+    ///
+    /// A key at the top of the file that this build does not know, from a
+    /// later build or the user, stays with the exact text of its value.
     public func write<Document: DataDocument>(_ document: Document) throws {
-        _ = try read(Document.self)
+        let (current, currentText) = try readFile(Document.self)
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
         guard var data = try? encoder.encode(FormattedDocument(document: document)) else {
             throw DataStorageError.documentNotEncoded(file: Document.file.name)
         }
         data.append(UInt8(ascii: "\n"))
+        if case .document = current, let currentText, let kept = ObjectMembers(parsing: currentText),
+           var members = ObjectMembers(parsing: data) {
+            for (key, value) in kept.values where !Document.knownKeys.contains(key) && members[key] == nil {
+                members[key] = value
+            }
+            data = members.rendered()
+        }
         try AtomicFileWriter.write(data, to: path(of: Document.file))
     }
 
@@ -121,14 +131,22 @@ public struct DataFolder: Equatable, Sendable {
     /// - Throws: `DataStorageError` when the file exists but the system
     ///   cannot read or move it. A later `write` then throws too.
     public func read<Document: DataDocument>(_ type: Document.Type) throws -> DataReadResult<Document> {
+        try readFile(type).result
+    }
+
+    /// The result of a read, and the text of the file when it holds a
+    /// document.
+    private func readFile<Document: DataDocument>(
+        _ type: Document.Type
+    ) throws -> (result: DataReadResult<Document>, text: Data?) {
         let path = path(of: Document.file)
         var status = stat()
         guard stat(path, &status) == 0 else {
-            if errno == ENOENT { return .missing }
+            if errno == ENOENT { return (.missing, nil) }
             throw DataStorageError.failure(of: "stat")
         }
         guard (status.st_mode & S_IFMT) == S_IFREG, status.st_size <= Self.fileSizeLimit else {
-            return .setAside(path: try UnreadableFile.setAside(path))
+            return (.setAside(path: try UnreadableFile.setAside(path)), nil)
         }
         guard let data = FileManager.default.contents(atPath: path) else {
             throw DataStorageError.failure(of: "read")
@@ -136,12 +154,12 @@ public struct DataFolder: Equatable, Sendable {
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(FormatHeader.self, from: data),
               (1...Document.format).contains(header.format) else {
-            return .setAside(path: try UnreadableFile.setAside(path))
+            return (.setAside(path: try UnreadableFile.setAside(path)), nil)
         }
         decoder.userInfo[Self.formatKey] = header.format
         guard let document = try? decoder.decode(Document.self, from: data) else {
-            return .setAside(path: try UnreadableFile.setAside(path))
+            return (.setAside(path: try UnreadableFile.setAside(path)), nil)
         }
-        return .document(document)
+        return (.document(document), data)
     }
 }

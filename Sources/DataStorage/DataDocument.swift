@@ -11,4 +11,9 @@ public protocol DataDocument: Codable, Sendable {
     /// when the meaning of a field changes, and keep the decode of each
     /// older format.
     static var format: Int { get }
+    /// The keys at the top of the file that this build reads and writes,
+    /// apart from `format`. A write keeps every other key of the file as it
+    /// is, so a key of a later build is not lost. A known key that the
+    /// document leaves out, such as a setting at its default, goes away.
+    static var knownKeys: Set<String> { get }
 }

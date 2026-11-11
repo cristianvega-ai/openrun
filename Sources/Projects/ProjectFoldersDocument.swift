@@ -5,6 +5,7 @@ import DataStorage
 struct ProjectFoldersDocument: DataDocument {
     static let file = DataFile.projectFolders
     static let format = 1
+    static let knownKeys: Set<String> = ["folders"]
 
     /// The keys are the identifiers in the form of `UUID.uuidString`.
     var folders: [String: String]

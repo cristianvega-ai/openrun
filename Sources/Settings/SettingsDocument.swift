@@ -6,6 +6,7 @@ import DataStorage
 struct SettingsDocument: DataDocument {
     static let file = DataFile.settings
     static let format = 1
+    static let knownKeys: Set<String> = ["settings"]
 
     var settings: [String: StoredValue]
 }
