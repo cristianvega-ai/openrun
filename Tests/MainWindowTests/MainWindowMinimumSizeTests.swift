@@ -23,4 +23,17 @@ import Testing
         #expect(controller.window.contentMinSize.width == expected && controller.window.contentLayoutRect.width >= expected)
         #expect(controller.contentItem.minimumThickness == 800)
     }
+
+    /// A program that sets a size below the minimum gets the minimum. The
+    /// content fills the whole window, under the top row, so the size of
+    /// the window and the minimum have one base.
+    @Test func aSizeBelowTheMinimumComesBackToTheMinimum() {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        let minimum = controller.window.contentMinSize
+        controller.window.setContentSize(NSSize(width: 10, height: 10))
+        #expect(controller.window.frame.size == minimum)
+        controller.window.setFrame(NSRect(x: 100, y: 100, width: 300, height: 100), display: false)
+        #expect(controller.window.frame.size == minimum)
+    }
 }

@@ -18,7 +18,9 @@ extension MainWindowController: NSWindowDelegate {
             minimum = NSSize(width: min(minimum.width, room.width), height: min(minimum.height, room.height))
         }
         paneWindow.contentMinSize = minimum
-        let current = paneWindow.contentLayoutRect.size
+        // The content view fills the whole window, under the top row too, as
+        // the minimum does. The layout rect leaves out the top row.
+        let current = paneWindow.contentRect(forFrameRect: paneWindow.frame).size
         guard current.width < minimum.width || current.height < minimum.height else { return }
         let size = NSSize(width: max(current.width, minimum.width), height: max(current.height, minimum.height))
         var frame = paneWindow.frameRect(forContentRect: NSRect(origin: .zero, size: size))
@@ -29,6 +31,11 @@ extension MainWindowController: NSWindowDelegate {
             frame.origin.y = max(screen.minY, min(frame.origin.y, screen.maxY - frame.height))
         }
         paneWindow.setFrame(frame, display: true)
+    }
+
+    /// A program can set a size below the minimum, which AppKit allows.
+    public func windowDidResize(_ notification: Notification) {
+        keepMinimumSize()
     }
 
     /// A window on a screen of another size can have another minimum.
