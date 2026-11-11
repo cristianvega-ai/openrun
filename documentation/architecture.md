@@ -47,7 +47,7 @@ A module uses another module only through its public types.
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
 | `UntrustedText` | The rule for a name that a client or a file gives, and the escape of such text in a message | `PlainName`, `QuotedText` |
 | `DataStorage` | The data folder: its location, its files, and the safe write and read of a JSON document | `DataFolder`, `DataFile`, `DataFileScope`, `DataDocument`, `DataReadResult`, `DataStorageError` |
-| `Projects` | The folders that the user adds as projects, their order and names, and the project of a session's start folder | `Project`, `ProjectList`, `ProjectFolderPath`, `ProjectStore`, `LoadedProjects`, `ProjectListError` |
+| `Projects` | The folders that the user adds as projects, their order and names, and the project of a session's start folder | `Project`, `ProjectWithoutFolder`, `ProjectList`, `ProjectFolderPath`, `ProjectStore`, `LoadedProjects`, `ProjectListError` |
 | `Settings` | The settings of version 1: their names, kinds, defaults and text forms, the rule for protected settings, and their file | `SettingName`, `SettingValues`, `SettingRequester`, `OptionKeyBehavior`, `LinkDestination`, `NewSessionCommand`, `SettingsStore`, `LoadedSettings`, `SettingError` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
@@ -388,7 +388,8 @@ After a full flush of the disk (`F_FULLFSYNC`), a rename puts it in the place of
 `DataFolder.create` removes a temporary file that a crash left, once it is older than one minute.
 
 A file that this build cannot read is never deleted and never written over.
-That is a file that is not JSON, that has no format number or the format of a later build, that does not decode, or that is larger than 16 MiB.
+That is a file that is not strict JSON (RFC 8259) in UTF-8, that has no format number or the format of a later build, that does not decode, or that is larger than 16 MiB.
+Foundation's decoder also takes a byte order mark, a comma before a closing bracket, `01`, a raw tab in a string and `\q`. `DocumentTextScanner` refuses them, at most 64 levels deep, so every file that OpenRun writes is strict JSON and keeps each unknown key.
 It gets the name `NAME.unreadable-TIME.json`, with the time in UTC such as `20261110T093000Z`, and the caller starts from the defaults.
 When the system cannot read or move a file, the load throws.
 A write reads the file first, sets it aside when this build cannot read it, and throws when it cannot read or set it aside.
@@ -403,6 +404,9 @@ A load adds a folder with no entry at the end of the list.
 It keeps an entry with no usable folder but does not show it, and a save writes such entries after the others.
 So the projects stay when only `projects.json` is lost, and the names, identifiers and order stay when only `project-folders.json` is lost.
 A crash in a remove between the two writes leaves such a hidden entry. A later sync will bring entries of this kind from other Macs.
+`ProjectList.projectsWithoutFolder` gives these projects with their identifiers and names, so a client can show them, and `remove(identifier:)` removes one. They count toward the limit of 1,000 projects.
+A hidden entry loses its place in the order: a save writes it after the projects that show.
+When an old `project-folders.json` comes back, a project that was added in the meantime has no folder there, so it is hidden until the user adds its folder again.
 
 `SettingsStore` reads each setting alone.
 A value of the wrong type or out of range goes back to its default, and the load names it in `fallbackNames`.
