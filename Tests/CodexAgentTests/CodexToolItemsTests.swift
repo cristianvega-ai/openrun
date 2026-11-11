@@ -33,6 +33,19 @@ import Testing
         #expect(mapper.declineReasons.isEmpty)
     }
 
+    @Test func aNewFileGivesItsPathAndContentAsADiff() throws {
+        let change = "exec-00000000-0000-7000-8000-000000000010"
+        let events = try CodexFixture(name: "file-change").events
+        let file = FileChange(identifier: change + ":0", toolCallIdentifier: change, path: "/work/project/notes.txt", kind: .added,
+                              diff: "@@ -0,0 +1,1 @@\n+hi")
+        #expect(events.contains(.fileChange(file)))
+        let input = JSONValue.object(["changes": .array([.object(["path": .string("/work/project/notes.txt"), "kind": .string("added")])])])
+        #expect(events.contains(.toolCallInput(ToolCallInput(identifier: change, name: "fileChange", input: input))))
+        #expect(events.contains(.toolCallResult(ToolCallResult(identifier: change, output: "", isError: false))))
+        let transcript = Transcript(events: events.map { ConversationEvent($0) })
+        #expect(transcript.items.contains { $0.content == .fileChange(file) })
+    }
+
     @Test func aCommandThatFailsIsAnError() {
         var mapper = CodexEventMapper()
         let item = JSONValue.object(["type": .string("commandExecution"), "id": .string("c"), "status": .string("failed"),

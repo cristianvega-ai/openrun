@@ -24,6 +24,7 @@ The tests that read the output alone take the `server` lines in order.
 | `plain-turn.jsonl` | A plain answer: the user message, text that streams, the token usage, the usage of the account, and the end of the turn. |
 | `command-accepted.jsonl` | A command that needs approval: the request of the app-server, the answer `accept`, the end of the command, and the answer of the agent. |
 | `command-declined.jsonl` | The next turn of the same thread: a command that needs approval, the answer `decline`, and the end of the command with the status `declined`. |
+| `file-change.jsonl` | A new file: the change with its content, the request of the app-server without the diff, the answer `accept`, and the end of the change. |
 
 ## What was replaced
 
