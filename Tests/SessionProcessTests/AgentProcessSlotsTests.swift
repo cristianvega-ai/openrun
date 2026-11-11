@@ -32,6 +32,18 @@ import Testing
         #expect(last == [third, nil] && slots.holders.isEmpty)
     }
 
+    @Test func aHigherLimitGivesSlotsToTheLineAndALowerLimitEndsNoAgent() {
+        var slots = AgentProcessSlots(limit: 1)
+        _ = (slots.take(for: first), slots.take(for: second), slots.take(for: third), slots.take(for: fourth))
+        let granted = slots.setLimit(3)
+        #expect(granted == [second, third] && slots.holders == [first, second, third] && slots.waiting == [fourth])
+        let none = slots.setLimit(1)
+        #expect(none.isEmpty && slots.holders.count == 3 && slots.limit == 1)
+        // The line gets no slot while the agents that run fill the lower limit.
+        let ends = [slots.release(first), slots.release(second), slots.release(third)]
+        #expect(ends == [nil, nil, fourth] && slots.holders == [fourth])
+    }
+
     @Test func aClosedThreadLeavesTheLineAndGivesItsSlotBack() {
         var slots = AgentProcessSlots(limit: 1)
         _ = (slots.take(for: first), slots.take(for: second), slots.take(for: third))

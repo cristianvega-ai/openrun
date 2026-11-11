@@ -72,13 +72,13 @@ extension ThreadRunner {
     /// Asks for a slot for the process. While every slot is taken, the
     /// messages wait, and the chat says why one time.
     private func hasProcessSlot() async -> Bool {
-        let has = await takeProcessSlot(record.identifier)
-        if !has, !waitsForProcessSlot {
-            let limit = AgentProcessSlots.defaultLimit
-            emit(.notice(Notice(level: .information, text: "The message waits, because OpenRun runs at most \(limit) agents at one time. It goes out when another agent ends its work.")))
+        let answer = await takeProcessSlot(record.identifier)
+        if case .waits(let limit) = answer, !waitsForProcessSlot {
+            let agents = limit == 1 ? "1 agent" : "\(limit) agents"
+            emit(.notice(Notice(level: .information, text: "The message waits, because OpenRun runs at most \(agents) at one time. It goes out when another agent ends its work.")))
         }
-        waitsForProcessSlot = !has
-        return has
+        waitsForProcessSlot = answer != .granted
+        return answer == .granted
     }
 
     /// The process runs with no turn and no message: the quiet time starts.

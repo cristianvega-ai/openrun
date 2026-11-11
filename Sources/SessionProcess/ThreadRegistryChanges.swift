@@ -57,7 +57,7 @@ extension ThreadRegistry {
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
         let runner = ThreadRunner(
             record: record, quietTime: quietTime, launchSettings: launchSettings,
-            takeProcessSlot: { [weak self] in await self?.takeProcessSlot(for: $0) ?? false },
+            takeProcessSlot: { [weak self] in await self?.takeProcessSlot(for: $0) ?? .granted },
             changed: { [weak self] in await self?.runnerChanged($0) })
         runners[identifier] = runner
         return runner
@@ -87,12 +87,12 @@ extension ThreadRegistry {
     /// A runner wants to start its agent. When every slot is taken, an
     /// agent with no work ends to make room. When all of them work, the
     /// thread waits in line (decision of 2026-11-10).
-    func takeProcessSlot(for thread: UUID) async -> Bool {
+    func takeProcessSlot(for thread: UUID) async -> ProcessSlotAnswer {
         while !slots.take(for: thread), let idle = await idleRunner() {
             await idle.endProcess()
             await runnerChanged(idle)
         }
-        return slots.holders.contains(thread)
+        return slots.holders.contains(thread) ? .granted : .waits(limit: slots.limit)
     }
 
     /// The runner whose process has had no work for the longest time.

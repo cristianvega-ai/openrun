@@ -59,7 +59,7 @@ import Testing
         let waiting = await fixture.registry.summary(fixture.second)
         #expect(waiting?.waitingMessageCount == 2 && waiting?.isProcessRunning == false)
         let notices = await fixture.secondRunner.keptEvents.compactMap { if case .notice(let notice) = $0.kind { notice.text } else { nil } }
-        #expect(notices.count == 1 && notices.first?.contains("at most 8 agents") == true)
+        #expect(notices.count == 1 && notices.first?.contains("at most 1 agent at one time") == true)
 
         await fixture.firstRunner.stop()
         #expect(await eventually { await fixture.runs() == [false, true] })

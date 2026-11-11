@@ -66,14 +66,14 @@ actor ThreadRunner {
     var lastUse = ContinuousClock.now
     let launchSettings: @Sendable () async throws -> AgentLaunchSettings
     /// Asks the registry whether this thread may run a process now.
-    let takeProcessSlot: @Sendable (UUID) async -> Bool
+    let takeProcessSlot: @Sendable (UUID) async -> ProcessSlotAnswer
     /// Runs after a change of the record or of a fact that a list shows.
     let changed: @Sendable (ThreadRunner) async -> Void
 
     init(
         record: ThreadRecord, bufferByteLimit: Int = ThreadEventBuffer.defaultByteLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings,
-        takeProcessSlot: @escaping @Sendable (UUID) async -> Bool = { _ in true },
+        takeProcessSlot: @escaping @Sendable (UUID) async -> ProcessSlotAnswer = { _ in .granted },
         changed: @escaping @Sendable (ThreadRunner) async -> Void = { _ in }
     ) {
         self.record = record
