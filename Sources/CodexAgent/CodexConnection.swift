@@ -36,18 +36,26 @@ actor CodexConnection {
         }
     }
 
+    // Without an owner, the writer ends, and so the program can end too.
+    deinit { lines.finish() }
+
     /// Starts to read. `ended` runs once, after the last line, with the
     /// end of the app-server.
+    ///
+    /// The task holds the connection and the program weakly. A program that
+    /// nobody holds ends its process group, and its output then ends.
     func start(receiver: @escaping Receiver, ended: @escaping @Sendable (ProcessEnd) async -> Void) {
-        Task { [transport, lineByteLimit] in
+        Task { [weak self, weak transport, output = transport.output, lineByteLimit] in
             var reader = CodexMessageReader(lineByteLimit: lineByteLimit)
-            for await bytes in transport.output {
-                for incoming in reader.read(bytes) where !resolve(incoming) { await receiver(incoming) }
-                transport.markOutputConsumed(bytes.count)
+            for await bytes in output {
+                guard let self else { return }
+                for incoming in reader.read(bytes) where !(await self.resolve(incoming)) { await receiver(incoming) }
+                transport?.markOutputConsumed(bytes.count)
             }
-            for incoming in reader.finish() where !resolve(incoming) { await receiver(incoming) }
-            endAll()
-            await ended(await transport.waitForEnd())
+            guard let self else { return }
+            for incoming in reader.finish() where !(await self.resolve(incoming)) { await receiver(incoming) }
+            await self.endAll()
+            await ended(await self.transport.waitForEnd())
         }
     }
 

@@ -40,7 +40,8 @@ public actor CodexAppServer {
     /// Starts to read, then sends `initialize` with the experimental
     /// capability that the stop needs, and `initialized`.
     func connect() async throws {
-        await connection.start(receiver: { incoming in await self.receive(incoming) }, ended: { end in await self.ended(end) })
+        // Weak, so that a server that nobody holds ends its app-server.
+        await connection.start(receiver: { [weak self] in await self?.receive($0) }, ended: { [weak self] in await self?.ended($0) })
         let client = JSONValue.object([
             "name": .string(options.clientName), "title": .string("OpenRun"), "version": .string(options.clientVersion),
         ])

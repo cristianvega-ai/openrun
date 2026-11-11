@@ -4,7 +4,7 @@ import PseudoTerminal
 
 /// The pipes to an app-server and its end. The real one is an
 /// `AgentProgram`. Tests can give one that holds the lines in memory.
-protocol CodexTransport: Sendable {
+protocol CodexTransport: AnyObject, Sendable {
     /// The bytes of standard output, in order. Only one task reads it.
     var output: AsyncStream<[UInt8]> { get }
     /// Tells the transport that the reader dealt with this many bytes.
