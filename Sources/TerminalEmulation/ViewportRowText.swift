@@ -7,13 +7,16 @@ public struct ViewportRowText: Equatable, Sendable {
     /// The text of each cell from the left: a grapheme cluster, or an empty
     /// text for a blank cell and for the second cell of a wide character.
     public let cells: [String]
+    /// The width of each cell, so a reader can tell the second cell of a wide
+    /// character from a blank cell. It is empty when the width is not known.
+    public let widths: [CellWidth]
     /// The text goes on in the next row, because the row was soft-wrapped.
     public let wrapsToNextRow: Bool
     /// The text comes from the end of the row above, which was soft-wrapped.
     public let continuesPreviousRow: Bool
 
-    public init(cells: [String], wrapsToNextRow: Bool, continuesPreviousRow: Bool) {
-        (self.cells, self.wrapsToNextRow, self.continuesPreviousRow) = (cells, wrapsToNextRow, continuesPreviousRow)
+    public init(cells: [String], widths: [CellWidth] = [], wrapsToNextRow: Bool, continuesPreviousRow: Bool) {
+        (self.cells, self.widths, self.wrapsToNextRow, self.continuesPreviousRow) = (cells, widths, wrapsToNextRow, continuesPreviousRow)
     }
 }
 
@@ -23,8 +26,9 @@ extension Terminal {
         let size = size
         guard row < UInt32(size.rows), size.columns > 0 else { return nil }
         var codepoints = [UInt32](repeating: 0, count: 16)
-        var cells: [String] = []
+        var cells: [String] = [], widths: [CellWidth] = []
         cells.reserveCapacity(Int(size.columns))
+        widths.reserveCapacity(Int(size.columns))
         var flags = (wraps: false, continues: false)
         for column in 0..<size.columns {
             guard var reference = try? gridReference(at: ViewportCell(column: column, row: row)) else { return nil }
@@ -35,6 +39,9 @@ extension Terminal {
                     _ = ghostty_row_get(handle, GHOSTTY_ROW_DATA_WRAP_CONTINUATION, &flags.continues)
                 }
             }
+            var cell: GhosttyCell = 0, wide = GHOSTTY_CELL_WIDE_NARROW
+            if ghostty_grid_ref_cell(&reference, &cell) == GHOSTTY_SUCCESS { _ = ghostty_cell_get(cell, GHOSTTY_CELL_DATA_WIDE, &wide) }
+            widths.append(CellWidth(wide))
             var length = 0
             if ghostty_grid_ref_graphemes(&reference, &codepoints, codepoints.count, &length) == GHOSTTY_OUT_OF_SPACE {
                 codepoints = [UInt32](repeating: 0, count: length)
@@ -44,6 +51,6 @@ extension Terminal {
             text.append(contentsOf: codepoints.prefix(length).compactMap(Unicode.Scalar.init))
             cells.append(String(text))
         }
-        return ViewportRowText(cells: cells, wrapsToNextRow: flags.wraps, continuesPreviousRow: flags.continues)
+        return ViewportRowText(cells: cells, widths: widths, wrapsToNextRow: flags.wraps, continuesPreviousRow: flags.continues)
     }
 }

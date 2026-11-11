@@ -7,6 +7,7 @@ import Testing
         terminal.write("日本abcdefg\r\ne\u{301}")
         let first = try #require(terminal.viewportRowText(at: 0))
         #expect(first.cells == ["日", "", "本", "", "a", "b"])
+        #expect(first.widths == [.wide, .wideTail, .wide, .wideTail, .narrow, .narrow])
         #expect(first.wrapsToNextRow && !first.continuesPreviousRow)
         let second = try #require(terminal.viewportRowText(at: 1))
         #expect(second.cells == ["c", "d", "e", "f", "g", ""] && !second.wrapsToNextRow && second.continuesPreviousRow)
