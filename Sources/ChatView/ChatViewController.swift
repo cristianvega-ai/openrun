@@ -73,7 +73,9 @@ import AppKit
             changedItems.map { changed in row.items.contains(where: changed.contains) } ?? true
         }
         _ = view
-        transcriptView.setRows(rows, changed: Set(changedRows.map(\.key)))
+        // The row of activity tells whether the agent thinks, which no item
+        // names, so it shows again on each change.
+        transcriptView.setRows(rows, changed: Set(changedRows.map(\.key) + ["activity"]))
     }
 
     private func factsDidChange(from old: ChatThreadFacts) {

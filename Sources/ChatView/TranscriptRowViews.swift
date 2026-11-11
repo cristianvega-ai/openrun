@@ -9,6 +9,7 @@
         case .fileChange: FileChangeRowView()
         case .permissionRequest: PermissionRequestRowView()
         case .task, .notice, .turnEnd, .unknown: QuietRowView()
+        case .activity: ActivityRowView()
         default: TranscriptRowView()
         }
     }
