@@ -39,6 +39,7 @@ final class ComposerView: NSView {
         for view in [previews, scrollView, sendButton] as [NSView] { box.addSubview(view) }
         for view in [noteButton, box, footer] as [NSView] { addSubview(view) }
         connectSending()
+        connectImages()
     }
 
     @available(*, unavailable)

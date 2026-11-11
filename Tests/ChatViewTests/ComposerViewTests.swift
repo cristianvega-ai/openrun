@@ -57,4 +57,19 @@ import Testing
         composer.textView.stopAction?(true)
         #expect(stops == 2)
     }
+
+    @Test func imagesGoWithTheMessageAndAHeldMessageComesBack() {
+        let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
+        composer.textView.imagesAction?([png, Data("text".utf8)])
+        #expect(composer.images.count == 1)
+        #expect(composer.problem == ComposerImage.Problem.unknownType.message)
+        composer.previews.removeAction?(0)
+        #expect(composer.images.isEmpty)
+        composer.setBusy(true)
+        composer.textView.string = "Wait"
+        composer.submit()
+        composer.takeHeldMessage()
+        #expect(composer.textView.string == "Wait")
+        #expect(composer.logic.heldMessage == nil)
+    }
 }
