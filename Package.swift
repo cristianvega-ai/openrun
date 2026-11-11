@@ -187,7 +187,7 @@ let package = Package(
         ),
         .testTarget(
             name: "CommandLineToolTests",
-            dependencies: ["SessionProcessHarness", "CommandLineTool", "SessionConnection", "PseudoTerminal", "AgentConversation"]
+            dependencies: ["SessionProcessHarness", "CommandLineTool", "SessionConnection", "PseudoTerminal", "AgentConversation", "fake-agent"]
         ),
     ],
     swiftLanguageModes: [.v6]
