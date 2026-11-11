@@ -41,6 +41,7 @@ let package = Package(
         .testTarget(name: "DataStorageTests", dependencies: ["DataStorage", "SessionProtocol"]),
         // The folders that the user adds as projects, and the project of a session.
         .target(name: "Projects", dependencies: ["DataStorage"]),
+        .testTarget(name: "ProjectsTests", dependencies: ["Projects", "DataStorage"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
