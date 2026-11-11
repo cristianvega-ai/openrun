@@ -10,18 +10,13 @@ import TerminalView
 /// the session goes on.
 @MainActor
 public final class SessionPaneController: NSObject, TerminalViewDelegate {
-    /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
-    static let contentSize = CGSize(width: 656, height: 388)
-    /// The smallest grid that the window can show (decision of 2026-11-08).
+    /// The smallest grid that the pane can show (decision of 2026-11-08).
     /// A shell's prompt and input must fit on the screen, or the shell draws
     /// part of them into the scrollback, where nothing can clean them. With
     /// 60 by 12, a command of 600 characters still kept its output and one
     /// prompt through a drag to the minimum and back; 40 by 8 and 50 by 10
     /// did not.
     static let minimumGrid = TerminalSize(columns: 60, rows: 12)
-    public let window: NSWindow
-    /// Called once when the user closes the window or its program ends.
-    public var onClose: (@MainActor () -> Void)?
     /// Connects and attaches. Tests give a stand-in, so they need no socket.
     var connect: @Sendable (SessionStart, SocketLocation, SessionSize) throws -> StartedSession = { try $0.attach(at: $1, size: $2) }
     private let start: SessionStart
@@ -39,11 +34,12 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     /// The view that a host puts in its layout.
     public let paneView = SessionPaneView()
     var hiddenGridLabel: HiddenGridLabel { paneView.hiddenGridLabel }
+    private var window: NSWindow? { paneView.window }
     var ask: @MainActor (UserQuestion, NSWindow) async -> Bool = { await $0.ask(in: $1) }
     var isWindowKey: @MainActor (NSWindow) -> Bool = { $0.isKeyWindow }
     private var isAttaching = false
     private var pendingKeyTakeover = false
-    private(set) var isClosed = false
+    private var isClosed = false
     private var hasConnectionFailure = false
     private var folder = ""
     /// The grids that the window asked for and the session has not applied
@@ -55,19 +51,11 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
     public init(start: SessionStart, socket: SocketLocation) {
         (self.start, self.socket) = (start, socket)
-        window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         super.init()
-        // The controller owns the window, so AppKit must not release it a second time.
-        window.isReleasedWhenClosed = false
-        window.delegate = self
-        window.contentView = paneView
-        window.contentMinSize = minimumSize
-        window.center()
-        delegate = self
     }
 
     /// The scale of the screen that the pane shows on, or of the main screen before it shows.
-    private var scale: CGFloat { paneView.window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2 }
+    private var scale: CGFloat { window?.backingScaleFactor ?? NSScreen.main?.backingScaleFactor ?? 2 }
 
     /// Attaches with the grid that the terminal view will have at the
     /// present size of the pane, so the host lays the pane out first.
@@ -112,7 +100,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         // Complete the snapshot fit before a later size from another client arrives.
         view.layoutSubtreeIfNeeded()
         // A key event during the attach must follow any earlier foreign size.
-        if pendingKeyTakeover, isWindowKey(window), view.gridSize == view.visibleGridSize { view.takeBackGridSize() }
+        if pendingKeyTakeover, let window, isWindowKey(window), view.gridSize == view.visibleGridSize { view.takeBackGridSize() }
         pendingKeyTakeover = false
         started.attachment.startReceiving(relay.handler { [weak self] event, finish in
             guard let self else { finish(); return }
@@ -154,7 +142,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         if let attachment { work.shutdown(attachment) }
         Task { [weak self] in
             guard let self, !isClosed else { return }
-            _ = await ask(.connectionFailure(detail), window)
+            if let window { _ = await ask(.connectionFailure(detail), window) }
             if !isClosed { delegate?.sessionPaneDidEnd(self) }
         }
     }
@@ -242,7 +230,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     }
 
     public func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool {
-        guard !isClosed else { return false }
+        guard !isClosed, let window else { return false }
         let agreed = await ask(.openLink(address), window)
         return !isClosed && agreed
     }
@@ -256,7 +244,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     }
 
     private func agrees(to question: UserQuestion) async -> Bool {
-        guard !isClosed else { return false }
+        guard !isClosed, let window else { return false }
         let agreed = await ask(question, window)
         return !isClosed && agreed
     }

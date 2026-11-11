@@ -1,24 +1,50 @@
 import AppKit
+import SessionProtocol
+import TerminalView
 
-/// The pane still owns its window. The next changes give the window a
-/// controller of its own around the pane.
-public typealias SessionWindowController = SessionPaneController
+/// One window that shows one session pane. Closing the window detaches,
+/// and the session goes on. The window closes when the program ends.
+@MainActor
+public final class SessionWindowController: NSObject, NSWindowDelegate, SessionPaneDelegate {
+    /// The first size of the content: 80 columns and 24 rows of the standard text, as in Terminal.
+    static let contentSize = CGSize(width: 656, height: 388)
+    public let window: NSWindow
+    let pane: SessionPaneController
+    /// Called once when the user closes the window or its program ends.
+    public var onClose: (@MainActor () -> Void)?
+    private var isClosed = false
 
-/// What the window does when its pane reports.
-extension SessionPaneController: NSWindowDelegate, SessionPaneDelegate {
+    /// - Parameter socket: The socket of the session process: the default one, or the one of `--socket`.
+    public init(start: SessionStart, socket: SocketLocation) {
+        pane = SessionPaneController(start: start, socket: socket)
+        window = NSWindow(contentRect: NSRect(origin: .zero, size: Self.contentSize), styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
+        super.init()
+        // The controller owns the window, so AppKit must not release it a second time.
+        window.isReleasedWhenClosed = false
+        window.delegate = self
+        window.contentView = pane.paneView
+        window.contentMinSize = pane.minimumSize
+        window.center()
+        pane.delegate = self
+    }
+
+    /// The terminal view of the pane, once the attach brought the snapshot.
+    var terminalView: TerminalView? { pane.terminalView }
+
     /// Shows the window and attaches with the grid that its view will have.
     public func showWindow() {
         window.makeKeyAndOrderFront(nil)
-        attach()
+        pane.attach()
     }
 
-    public func windowDidBecomeKey(_ notification: Notification) { activate() }
+    public func windowDidBecomeKey(_ notification: Notification) { pane.activate() }
 
-    public func windowDidResignKey(_ notification: Notification) { deactivate() }
+    public func windowDidResignKey(_ notification: Notification) { pane.deactivate() }
 
     public func windowWillClose(_ notification: Notification) {
         guard !isClosed else { return }
-        close()
+        isClosed = true
+        pane.close()
         onClose?()
     }
 
@@ -36,7 +62,7 @@ extension SessionPaneController: NSWindowDelegate, SessionPaneDelegate {
 
     /// A window on a screen of another size can have another minimum.
     public func windowDidChangeScreen(_ notification: Notification) {
-        if view != nil { keepMinimumSize() }
+        if terminalView != nil { keepMinimumSize() }
     }
 
     /// The window cannot become smaller than the minimum grid at the text size
@@ -46,7 +72,7 @@ extension SessionPaneController: NSWindowDelegate, SessionPaneDelegate {
     /// screen.
     private func keepMinimumSize() {
         let screen = window.screen?.visibleFrame
-        var minimum = minimumSize
+        var minimum = pane.minimumSize
         if let screen {
             let room = window.contentRect(forFrameRect: screen).size
             minimum = NSSize(width: min(minimum.width, room.width), height: min(minimum.height, room.height))

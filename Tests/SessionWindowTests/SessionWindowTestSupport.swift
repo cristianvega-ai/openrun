@@ -134,3 +134,19 @@ extension TerminalView {
     /// The text on the screen of the view.
     var screenText: String { String(decoding: (try? terminal.formatted(.plainText)) ?? [], as: UTF8.self) }
 }
+
+/// The tests of the window reach the parts of its pane by the names that
+/// they had when the window did the work of the pane.
+extension SessionWindowController {
+    static var minimumGrid: TerminalSize { SessionPaneController.minimumGrid }
+    var view: TerminalView? { pane.terminalView }
+    var attachment: (any AttachedSession)? { pane.attachment }
+    var hiddenGridLabel: HiddenGridLabel { pane.hiddenGridLabel }
+    var ask: @MainActor (UserQuestion, NSWindow) async -> Bool { get { pane.ask } set { pane.ask = newValue } }
+    var connect: @Sendable (SessionStart, SocketLocation, SessionSize) throws -> StartedSession { get { pane.connect } set { pane.connect = newValue } }
+    var isWindowKey: @MainActor (NSWindow) -> Bool { get { pane.isWindowKey } set { pane.isWindowKey = newValue } }
+    func handle(_ event: SessionAttachmentEvent, finish: @escaping @Sendable () -> Void) { pane.handle(event, finish: finish) }
+    func terminalView(_ view: TerminalView, send bytes: [UInt8]) { pane.terminalView(view, send: bytes) }
+    func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) { pane.terminalView(view, didChangeGridSize: size) }
+    func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool { await pane.terminalView(view, shouldOpenLink: address) }
+}
