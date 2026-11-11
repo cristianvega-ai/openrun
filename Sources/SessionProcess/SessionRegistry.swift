@@ -8,6 +8,10 @@ actor SessionRegistry {
     private let socketPath: String
     private let helperSearchPath: HelperSearchPath
     private let changes: SessionChangeFeed?
+    /// The most sessions at once (decision of 2026-11-10). An agent can
+    /// start sessions by itself, and a loop must not start them without end.
+    static let defaultSessionLimit = 100
+    private let sessionLimit: Int
     /// Set before `terminateAll` first suspends. A client that is already
     /// connected can still send `createSession` while the programs end, and
     /// that program would outlive the session process.
@@ -16,7 +20,8 @@ actor SessionRegistry {
     /// them can still live, such as a job that the program left behind.
     private var endedTerminalSessions: Set<pid_t> = []
 
-    init(socketPath: String, helperSearchPath: HelperSearchPath, changes: SessionChangeFeed? = nil) {
+    init(socketPath: String, helperSearchPath: HelperSearchPath, changes: SessionChangeFeed? = nil, sessionLimit: Int = defaultSessionLimit) {
+        self.sessionLimit = sessionLimit
         self.socketPath = socketPath
         self.helperSearchPath = helperSearchPath
         self.changes = changes
@@ -28,6 +33,9 @@ actor SessionRegistry {
         // starts in `Session.init`, and the list `terminateAll` ends is
         // already fixed by then.
         guard !isStopping else { throw SessionProcessError.stopping }
+        // The session joins the list before the first suspension point, so
+        // two requests at once cannot both pass the limit.
+        guard sessions.count < sessionLimit else { throw SessionProcessError.sessionLimitReached(limit: sessionLimit) }
         let identifier = UUID()
         var programEnvironment = helperSearchPath.adding(to: environment)
         programEnvironment.merge(
