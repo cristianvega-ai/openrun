@@ -96,7 +96,11 @@ actor ProjectKeeper {
     /// The list as the protocol sends it: the projects with a folder in the
     /// user's order, then those whose folder this Mac does not know.
     static func summaries(of list: ProjectList) -> [ProjectSummary] {
-        list.projects.map { ProjectSummary(identifier: $0.identifier, name: $0.name, folder: $0.folder) }
+        list.projects.map(summary(of:))
             + list.projectsWithoutFolder.map { ProjectSummary(identifier: $0.identifier, name: $0.name, folder: nil) }
+    }
+
+    static func summary(of project: Project) -> ProjectSummary {
+        ProjectSummary(identifier: project.identifier, name: project.name, folder: project.folder)
     }
 }

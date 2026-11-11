@@ -307,8 +307,26 @@ actor SessionServer {
                 client.send(await changeOwn(identifier, for: peer, verb: "clear the alert of") { $0.alert = nil })
             case .listProjects:
                 client.send(.projectList(ProjectKeeper.summaries(of: await projects.list)))
-            case .addProject, .removeProject, .renameProject, .moveProject:
-                client.send(Self.refusal("This session process does not change the projects yet."))
+            case .addProject(let folder, let name, let currentFolder):
+                client.send(await changeProjects {
+                    let added = try await self.projects.add(folder: folder, name: name, currentFolder: currentFolder)
+                    return (.projectAdded(ProjectKeeper.summary(of: added.project)), added.list, added.version)
+                })
+            case .removeProject(let identifier):
+                client.send(await changeProjects {
+                    let changed = try await self.projects.remove(identifier: identifier)
+                    return (.acknowledged, changed.list, changed.version)
+                })
+            case .renameProject(let identifier, let name):
+                client.send(await changeProjects {
+                    let changed = try await self.projects.rename(identifier: identifier, to: name)
+                    return (.acknowledged, changed.list, changed.version)
+                })
+            case .moveProject(let identifier, let place):
+                client.send(await changeProjects {
+                    let changed = try await self.projects.move(identifier: identifier, to: place)
+                    return (.acknowledged, changed.list, changed.version)
+                })
             case .listSettings:
                 client.send(.settingList(SettingKeeper.summaries(of: await settings.values)))
             case .changeSetting:
@@ -394,6 +412,17 @@ actor SessionServer {
             return Self.refusal("Only a program outside every session, or a program in the session itself, may \(verb) session \(target).")
         }
         return await session.update(change) ? .acknowledged : Self.unknownSession(identifier)
+    }
+
+    /// Runs a change of the projects and returns the answer, or the reason
+    /// why nothing changed. Any client may change the projects, because a
+    /// change types into no session and reads none (decision of 2026-11-10).
+    private func changeProjects(_ change: () async throws -> (answer: ServerMessage, list: ProjectList, version: Int)) async -> ServerMessage {
+        do {
+            return try await change().answer
+        } catch {
+            return Self.refusal("\(error)")
+        }
     }
 
     /// Only the signed app outside every session receives questions. An app
