@@ -22,4 +22,19 @@ import SessionsList
         waiting.alert = "Claude needs your permission"
         #expect(SessionsFilter.finished.includes(waiting) && !SessionsFilter.inProgress.includes(waiting))
     }
+
+    @Test func eachOrderArrangesTheRows() {
+        let rows = [row("b 10", active: 5, started: 1), row("a", active: 9, started: 3), row("b 9", active: 7, started: 2)]
+        #expect(SessionsOrder.manual.arranged(rows).map(\.title) == ["b 10", "a", "b 9"])
+        #expect(SessionsOrder.lastActivity.arranged(rows).map(\.title) == ["a", "b 9", "b 10"])
+        #expect(SessionsOrder.startTime.arranged(rows).map(\.title) == ["a", "b 9", "b 10"])
+        #expect(SessionsOrder.name.arranged(rows).map(\.title) == ["a", "b 9", "b 10"])
+    }
+
+    @Test func equalRowsKeepTheUsersOrder() {
+        let rows = [row("x", active: 1, started: 1), row("y", active: 1, started: 1), row("x", active: 1, started: 1)]
+        for order in SessionsOrder.allCases {
+            #expect(order.arranged(rows).map(\.identifier) == (order == .name ? [rows[0], rows[2], rows[1]] : rows).map(\.identifier))
+        }
+    }
 }
