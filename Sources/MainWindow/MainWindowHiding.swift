@@ -56,7 +56,7 @@ extension MainWindowController: NSMenuItemValidation {
     /// The traffic lights sit in the top row of the first visible pane, so
     /// that row keeps room for them.
     func updateTopRowSpaces() {
-        let lights = paneWindow.trafficLightsSpace
+        let lights = isInFullScreen ? 16 : paneWindow.trafficLightsSpace
         projectsList.topRow.leadingSpace = lights
         sessionsList.topRow.leadingSpace = projectsItem.isCollapsed ? lights : 16
         contentPane.topRow.leadingSpace = projectsItem.isCollapsed && sessionsItem.isCollapsed ? lights : 16

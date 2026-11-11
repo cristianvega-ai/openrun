@@ -23,6 +23,8 @@ public final class MainWindowController: NSObject {
     let defaults: UserDefaults
     var layout: PaneLayout
     var isContentActive = false
+    /// In full screen the traffic lights hide, so no top row keeps room for them.
+    var isInFullScreen = false
     /// Whether the window is key. Tests set it, because a test window is not key.
     lazy var isWindowKey: () -> Bool = { [weak paneWindow] in paneWindow?.isKeyWindow ?? false }
     /// The setting of Reduce Motion. Tests set it.
