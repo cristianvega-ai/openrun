@@ -62,6 +62,7 @@ let package = Package(
         // An agent program on pipes, such as `claude -p`, with its process
         // group, and the environment of the user's login shell.
         .target(name: "AgentProgram", dependencies: ["PseudoTerminal"]),
+        .testTarget(name: "AgentProgramTests", dependencies: ["AgentProgram", "PseudoTerminal"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",

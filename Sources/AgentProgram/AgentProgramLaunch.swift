@@ -57,4 +57,22 @@ public struct AgentProgramLaunch: Equatable, Sendable {
         guard information.st_mode & S_IFMT == S_IFDIR else { throw AgentProgramError.systemCallFailed(function: "chdir", code: ENOTDIR) }
         guard access(folder, X_OK) == 0 else { throw AgentProgramError.systemCallFailed(function: "chdir", code: errno) }
     }
+
+    /// The file to run. A name with no slash is searched in the `PATH` of
+    /// the launch environment, then in the system default. The program
+    /// starts in `folder`, so a relative or empty entry means a place
+    /// inside that folder, and the result stays relative. Only a regular
+    /// file with an execute permission matches.
+    func resolvedExecutablePath() throws -> String {
+        guard !executablePath.contains("/") else { return executablePath }
+        let searchPath = environment["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        for directory in searchPath.split(separator: ":", omittingEmptySubsequences: false) {
+            let candidate = directory.isEmpty ? "./\(executablePath)" : "\(directory)/\(executablePath)"
+            let checked = candidate.hasPrefix("/") ? candidate : "\(folder)/\(candidate)"
+            var information = stat()
+            guard stat(checked, &information) == 0, information.st_mode & S_IFMT == S_IFREG else { continue }
+            if access(checked, X_OK) == 0 { return candidate }
+        }
+        throw AgentProgramError.programNotFound(name: executablePath)
+    }
 }
