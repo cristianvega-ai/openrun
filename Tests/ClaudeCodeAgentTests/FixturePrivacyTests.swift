@@ -23,8 +23,13 @@ import Testing
     static let removedWordHashes: Set<String> = [
         "1a5d2f594e9073e1", "1505e1f8fa878cdc", "313ce7d71787960e", "072a626ed2d6cc7d", "282a6dc5066d4725", "8c3908175a49e353",
         "7827e8eb2cb3b95f", "7f2fe580edb35154", "edb4ce8ba5473ec9", "9dde9cf87d682b7b", "4e8c59ec19506cb5", "425ed264c86619b9",
-        "da9e96b401da78ec", "26b47209413e5776",
+        "da9e96b401da78ec", "26b47209413e5776", "07ed400759a0f606",
     ]
+
+    /// Names that were removed from the recordings and hold more than one
+    /// word, such as the names of the owner's MCP servers. They are matched
+    /// whole, so that each of their words stays free for other uses.
+    static let removedNameHashes: Set<String> = ["6af41521fd60d446", "b7370f7cd8cef43a", "a5942b0f72b1ec7f"]
 
     /// Long values that were checked and describe nothing: the red square of
     /// 16 by 16 pixels in `image-turn.jsonl`, and the characters of a model
@@ -54,6 +59,8 @@ import Testing
         var problems: [String] = []
         let words = Set(text.split { !$0.isLetter && !$0.isNumber }.map(String.init))
         if words.contains(where: { removedWordHashes.contains(hash($0)) }) { problems.append("a removed word") }
+        let names = Set(text.split { !$0.isLetter && !$0.isNumber && $0 != "_" && $0 != "-" }.map(String.init))
+        if names.contains(where: { removedNameHashes.contains(hash($0)) }) { problems.append("a removed name") }
         let rules: [(name: String, pattern: String, allowed: (Substring) -> Bool)] = [
             ("a real universal identifier", "[0-9A-Fa-f]{8}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12}",
              { $0.hasPrefix("00000000-0000-") }),
@@ -70,6 +77,8 @@ import Testing
              { $0.wholeMatch(of: /(rs|RateLimitResetCredit)_01Fixture[0-9]+/) != nil }),
             ("a real Codex command identifier", "exec-(?=[A-Za-z0-9-]*[0-9])[A-Za-z0-9-]+",
              { $0.wholeMatch(of: /exec-([0-9]{1,3}|00000000-0000-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})/) != nil }),
+            ("a real credit balance", "\"balance\"\\s*:\\s*\"?[0-9][0-9.]*",
+             { $0.wholeMatch(of: /"balance"\s*:\s*"?(0|[1-9]0*)(\.0+)?/) != nil }),
             ("a real Codex session date", "sessions/[0-9]{4}/[0-9]{2}/[0-9]{2}|rollout-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}",
              { $0 == "sessions/2000/01/01" || $0 == "rollout-2000-01-01T00-00-00" }),
         ]
@@ -103,6 +112,7 @@ import Testing
         #expect(try Self.problems(in: "RateLimitResetCredit_" + String(repeating: "0", count: 32)) == ["a real Codex reasoning or credit identifier"])
         #expect(try Self.problems(in: "exec-" + "4f1c9a2e") == ["a real Codex command identifier"])
         #expect(try Self.problems(in: "sessions/" + "2025/03/04 rollout-" + "2025-03-04T05-06-07") == ["a real Codex session date"])
+        #expect(try Self.problems(in: "\"balance\":\"" + "4321.5678901000\" \"balance\": 100.0") == ["a real credit balance"])
         let codex = "rs_01Fixture1 RateLimitResetCredit_01Fixture1 exec-1 exec-00000000-0000-7000-8000-000000000001 users_abc123"
         #expect(try Self.problems(in: codex + " /codex/sessions/2000/01/01/rollout-2000-01-01T00-00-00-x.jsonl").isEmpty)
     }
