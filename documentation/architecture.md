@@ -536,6 +536,52 @@ The request names no tool call. `ClaudeCodeToolCallMatcher` finds the call that 
 `ClaudeCodeHistoryLocation` finds the history file of a conversation: `projects/FOLDER/IDENTIFIER.jsonl` in the configuration folder. `FOLDER` is the working folder with each character that is not an ASCII letter or digit changed to `-`. When that file does not exist, it tries the real path of the folder, and then every project folder.
 `ClaudeCodeHistoryReader` reads that file from its end, one page of 256 KiB at a time, so a chat shows the newest turns first and never reads the whole file. It leaves out the lines of sub-agents and the lines that Claude Code adds for itself. OpenRun keeps no copy of the history (proposal 3).
 
+### The Codex adapter
+
+One `codex app-server` serves all threads of one account (decision of 2026-11-10).
+`CodexAccountServers` keeps one `CodexAppServer` for each account: its `CODEX_HOME` folder, or the default account of the login shell. A server starts when a call needs it, and it ends when no thread and no call uses it. A read of the account or of the usage without an open thread starts a server for that read alone.
+
+The app-server speaks JSON-RPC on its standard input and output: one JSON object on each line, without the `jsonrpc` member.
+OpenRun's requests have whole-number identifiers. Each request waits for its answer for at most `answerTimeLimit`, 60 seconds by default. When the output ends, every request that waits fails with `connectionEnded`, and so does every later one.
+A line that is not JSON, that has an unknown method, that is longer than 16 MiB, or that the output cuts short becomes an `unknown` event of each open thread, and the connection goes on.
+The handshake sends `initialize` with the name and the version of OpenRun and `capabilities.experimentalApi: true`, which the stop needs. Then it sends `initialized`.
+
+| Method | What OpenRun sends |
+|---|---|
+| `thread/start` | The folder, the model, `approvalPolicy: "untrusted"`, the sandbox `workspace-write` or `read-only`, and the effort as the configuration value `model_reasoning_effort`. |
+| `thread/resume` | The same, with the identifier of the thread and `excludeTurns: true`. The history pages give the earlier turns. |
+| `turn/start` | The text, each image as a data URL, `clientUserMessageId`, and a new model, `effort` or `sandboxPolicy` for this turn and the later ones. |
+| `turn/interrupt`, `thread/backgroundTerminals/list`, `thread/backgroundTerminals/terminate` | The stop. |
+| `thread/turns/list` | A page of the history, with `itemsView: "full"`. |
+| `account/read`, `account/rateLimits/read` | The account and its usage. |
+| `thread/unsubscribe` | The close of a thread. |
+
+Each notification goes to the thread that it names. A notification without a thread, such as `account/rateLimits/updated`, goes to every open thread.
+Codex can send lines of a thread before its answer to the start or the resume. The server keeps the last 64 such lines, and gives them to the thread after its first event.
+`CodexEventMapper` gives the events of each thread: the text as it streams and complete, reasoning only as the fact that it happens, commands with their output and end, file changes with their path, kind and diff, the start and end of each turn, the tokens, the usage, warnings and errors. A notification that a chat does not show becomes a status event, and a method that the mapper does not know becomes an `unknown` event. Each event keeps its line.
+Codex gives the tokens of the thread as a total. The end of a turn carries the difference since its start, and the input leaves out the input from the cache, as with Claude Code. The kind of the error of a failed turn, such as `modelNotFound`, comes as a status event beside the end, because `TurnEnd` has no field for it.
+The events of a thread go through a channel. While more than 1,024 events wait for the caller, the reader of the app-server waits. A slow caller thus slows the pipe, for every thread of the account, and the memory stays bounded.
+
+Codex asks before a command or a file change with `item/commandExecution/requestApproval` or `item/fileChange/requestApproval`. Each request becomes a `permissionRequested` event with the identifier `ITEM/REQUEST`.
+A command shows the command, its folder and the reason. A request for a file change has no diff, so it takes the paths and the diffs from the start of the item with the same identifier. When the start comes after the request, the request shows again with the diff.
+Only `CodexThread.answerPermission` accepts a request: allow sends `accept`, and deny sends `decline`. A second answer sends nothing.
+OpenRun declines a request after `approvalTimeLimit`, 10 minutes by default, at a stop, and at the close of its thread. When the app-server ends, no answer can go, and the request ends as declined. Codex runs nothing that waits (result 3 of the prototype). When Codex withdraws a request with `serverRequest/resolved`, it ends without an answer.
+Every other request of the app-server, such as a question for the user or a tool call of the client, gets the error -32601, and the thread gets a warning.
+
+`CodexThread.stop` declines the requests that wait and sends `turn/interrupt`. It waits at most 5 seconds for the end of the turn. A command that runs goes on after the interrupt as a background terminal (result 8 of the prototype), so the stop lists the background terminals of the thread and ends each one.
+These methods are experimental. When Codex refuses them, the turn still stopped, and the thread gets a warning that a command may still run.
+The output and the end of such a command come after the end of its turn. They become status events, so that the chat does not show the thread as busy again.
+
+`readAccount` gives the kind of the account and its plan. The e-mail address is for display only: the description of `CodexAccount` leaves it out, and OpenRun never logs it.
+`readUsage` and `account/rateLimits/updated` give a `UsageReading`. Each window has a name from its length, such as `seven_day` for 10,080 minutes and `5_hour` for 300, and the kind of a limit that the account reached is the status of the reading.
+
+`CodexThread.historyPage` reads a page of turns with `thread/turns/list`, newest page first, and the cursor of the page gives the next older one. The events of a page are oldest first, from the same mapper as a live turn.
+Codex keeps only the user message of a turn that stopped while text streamed. Such a turn gets a notice that the answer before the stop is not in the history.
+
+Codex writes some files by itself, and OpenRun edits none of them.
+`thread/start` in a new folder writes `[projects."FOLDER"] trust_level = "trusted"` into `config.toml` in the `CODEX_HOME` of the account. OpenRun does not remove the entry.
+Codex also writes the rollout file of each thread under `sessions/` in the same folder. `thread/resume`, `codex resume` and the history read it.
+
 ### The process on pipes
 
 `AgentProgram` starts an agent program with `posix_spawn` on three pipes, in a process group of its own. The program inherits no other descriptor, and it gets only the environment of its `AgentProgramLaunch`.
