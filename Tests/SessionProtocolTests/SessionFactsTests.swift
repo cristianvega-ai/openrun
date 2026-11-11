@@ -53,6 +53,15 @@ import Testing
         #expect(SessionSummary.boundedText(marked).unicodeScalars.count == SessionSummary.textLimit)
     }
 
+    /// A list draws each fact on one line. A mark of text direction could
+    /// show the text of a program in another order, and a separator could
+    /// break the line. The joiner of emoji stays.
+    @Test func aTextLosesTheMarksOfDirectionAndTheSeparators() {
+        let marks = "\u{202A}\u{202B}\u{202C}\u{202D}\u{202E}\u{2066}\u{2067}\u{2068}\u{2069}\u{200E}\u{200F}\u{061C}\u{2028}\u{2029}"
+        #expect(SessionSummary.boundedText("txt.\(marks)exe") == "txt.exe")
+        #expect(SessionSummary.boundedText("👩\u{200D}💻 \u{200B}x") == "👩\u{200D}💻 \u{200B}x")
+    }
+
     @Test func anAlertBoundsItsText() {
         let alert = SessionAlert(text: "\u{1B}[31m" + String(repeating: "x", count: 1000), raisedAt: .now, source: .notifyCommand)
         #expect(alert.text == "[31m" + String(repeating: "x", count: SessionSummary.textLimit - 4))

@@ -281,8 +281,10 @@ actor SessionServer {
             case .renameSession(let identifier, let name):
                 let name = name?.isEmpty == true ? nil : name
                 // A list shows the name on one line.
-                guard name.map({ SessionSummary.boundedText($0) == $0 }) ?? true else {
-                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "A name holds no control character and at most \(SessionSummary.textLimit) characters.")))
+                // Scalars, because the equality of strings ignores some changes.
+                guard name.map({ SessionSummary.boundedText($0).unicodeScalars.elementsEqual($0.unicodeScalars) }) ?? true else {
+                    let rule = "no control character, no mark of text direction, no line separator, and at most \(SessionSummary.textLimit) characters"
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "A name holds \(rule).")))
                     break
                 }
                 client.send(await changeOwn(identifier, for: peer, verb: "rename") { $0.name = name })

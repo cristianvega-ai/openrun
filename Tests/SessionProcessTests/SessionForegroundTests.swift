@@ -35,6 +35,18 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// The name of a folder can hold a mark of text direction, which a
+        /// list must not obey.
+        @Test func theFolderLosesTheMarksOfDirection() async throws {
+            try await RunningSessionProcess.run { process in
+                let root = canonicalPath(process.directory.path)
+                try FileManager.default.createDirectory(atPath: root + "/gpj.\u{202E}exe", withIntermediateDirectories: true)
+                let watcher = try SessionChangeWatcher(process)
+                let identifier = try process.createSession(program: ["/bin/sleep", "60"], folder: URL(fileURLWithPath: root + "/gpj.\u{202E}exe"))
+                #expect(watcher.summary(of: identifier) { $0.currentFolder == root + "/gpj.exe" } != nil)
+            }
+        }
+
         /// A command in line mode works also without output, and the shell
         /// at its prompt again does not.
         @Test func aSilentCommandInLineModeIsInProgress() async throws {

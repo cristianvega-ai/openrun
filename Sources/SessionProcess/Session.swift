@@ -374,7 +374,7 @@ actor Session {
         activity.noteForeground(state)
         summary.foregroundProgram = state.map { SessionSummary.boundedText($0.program.name) }
         guard let folder = state?.currentFolder else { return }
-        summary.currentFolder = folder
+        summary.currentFolder = SessionSummary.boundedText(folder)
         summary.branch = GitBranch.name(forFolder: folder).map(SessionSummary.boundedText)
     }
 

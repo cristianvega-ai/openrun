@@ -56,13 +56,13 @@ public struct SessionSummary: Codable, Equatable, Sendable {
         identifier.uuidString.lowercased()
     }
 
-    /// The text without its control characters (C0, DEL and C1), and with at
-    /// most `textLimit` Unicode scalars. Text from a program is untrusted,
-    /// and a list of sessions shows it on one line.
+    /// The text without the characters of `isRemoved`, and with at most
+    /// `textLimit` Unicode scalars. Text from a program is untrusted, and a
+    /// list of sessions shows it on one line.
     public static func boundedText(_ text: String) -> String {
         var kept = String.UnicodeScalarView()
         var count = 0
-        for scalar in text.unicodeScalars where !isControl(scalar) {
+        for scalar in text.unicodeScalars where !isRemoved(scalar) {
             guard count < textLimit else { break }
             kept.append(scalar)
             count += 1
@@ -70,9 +70,13 @@ public struct SessionSummary: Codable, Equatable, Sendable {
         return String(kept)
     }
 
-    static func isControl(_ scalar: Unicode.Scalar) -> Bool {
+    /// The control characters (C0, DEL and C1), the marks that change the
+    /// direction of text, which could show the text in another order, and
+    /// the line and paragraph separators. Other format characters stay, such
+    /// as the joiner that emoji need.
+    static func isRemoved(_ scalar: Unicode.Scalar) -> Bool {
         switch scalar.value {
-        case 0x00...0x1F, 0x7F...0x9F: true
+        case 0x00...0x1F, 0x7F...0x9F, 0x061C, 0x200E, 0x200F, 0x2028, 0x2029, 0x202A...0x202E, 0x2066...0x2069: true
         default: false
         }
     }

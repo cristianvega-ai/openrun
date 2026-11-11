@@ -15,8 +15,8 @@ public struct SessionAlert: Codable, Equatable, Sendable {
     }
 
     /// The text that the program or the client gave. It is empty for the
-    /// bell. It holds no control character and at most
-    /// `SessionSummary.textLimit` Unicode scalars.
+    /// bell. It holds no control character, no mark of text direction and no
+    /// line separator, and at most `SessionSummary.textLimit` Unicode scalars.
     public var text: String
     public var raisedAt: Date
     public var source: Source

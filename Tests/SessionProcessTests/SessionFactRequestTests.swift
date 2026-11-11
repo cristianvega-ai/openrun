@@ -28,11 +28,13 @@ extension SessionProcessIntegration {
         @Test func aNameWithAControlCharacterOrAnUnknownSessionIsRefused() async throws {
             try await RunningSessionProcess.run { process in
                 let identifier = try #require(UUID(uuidString: try process.createSession(program: ["/bin/sleep", "60"])))
-                guard case .failure(let refusal) = try answer(to: .renameSession(identifier: identifier, name: "a\nb"), from: process) else {
-                    Issue.record("A name with a line break was taken.")
-                    return
+                for name in ["a\nb", "a\u{202E}b", "a\u{2066}b", "a\u{2028}b"] {
+                    #expect(try answer(to: .renameSession(identifier: identifier, name: name), from: process) == .failure(SessionFailure(
+                        reason: .invalidRequest,
+                        message: "A name holds no control character, no mark of text direction, no line separator, and at most 500 characters."
+                    )), "\(name.unicodeScalars.map(\.value))")
                 }
-                #expect(refusal.reason == .invalidRequest)
+                #expect(try answer(to: .renameSession(identifier: identifier, name: "👩\u{200D}💻"), from: process) == .acknowledged)
                 for request in [ClientMessage.renameSession(identifier: UUID(), name: "x"), .raiseSessionAlert(identifier: UUID(), text: "x"), .clearSessionAlert(identifier: UUID())] {
                     guard case .failure(let failure) = try answer(to: request, from: process) else {
                         Issue.record("\(request) found a session.")
