@@ -590,10 +590,15 @@ extension SessionProcessIntegration {
         ///
         /// A busy Mac made the time to fill the queues longer, so a limit on
         /// the time from the go file to the closes failed. Waits in turn show
-        /// as closes 2 seconds apart, and load does not move them apart.
+        /// as closes 2 seconds apart, and load does not move them apart. The
+        /// program measures the pause itself: the longest time that one write
+        /// of 64 KiB took. A late test thread does not move that time.
         @Test(.tags(.takesEverySlot)) func severalStalledViewersPauseTheProgramForTwoSecondsInTotal() async throws {
             try await RunningSessionProcess.run { process in
-                let (identifier, go) = try startFlood(process)
+                let go = process.directory.appendingPathComponent("flood-go")
+                let pause = process.directory.appendingPathComponent("pause")
+                let program = #"use Time::HiRes 'time'; $| = 1; select(undef, undef, undef, 0.02) until -e $ARGV[0]; my $longest = 0; while (1) { my $start = time; print "y\n" x 32768; my $took = time - $start; next if $took <= $longest; $longest = $took; open(my $file, '>', "$ARGV[1].new"); print $file $longest; close $file; rename("$ARGV[1].new", $ARGV[1]); }"#
+                let identifier = try process.createSession(program: ["/usr/bin/perl", "-e", program, go.path, pause.path])
                 let stalled = try (0..<3).map { _ in try attachFlood(process, identifier: identifier, waitsForOutputRoom: true) }
                 defer { stalled.forEach { $0.connection.shutdown() } }
                 FileManager.default.createFile(atPath: go.path, contents: Data())
@@ -612,6 +617,16 @@ extension SessionProcessIntegration {
                 #expect(first - start > .seconds(1.5), "The pause must last the 2 seconds that a viewer gets to make room.")
                 // A test thread that runs late sees the closes later, not further apart.
                 #expect(last - first < .seconds(2), "Three stalled viewers must lose their connections within one pause of 2 seconds.")
+                // The program notes the pause when its write ends, after the closes.
+                var longest = 0.0
+                _ = await eventually(timeout: .seconds(30)) {
+                    longest = Double((try? String(contentsOf: pause, encoding: .utf8)) ?? "") ?? 0
+                    return longest >= 1.5
+                }
+                print("stalled-viewers: the longest write took \(longest) seconds")
+                // The read-ahead of 4 MiB fills in a moment, so the write waits for
+                // nearly all of the pause. Waits in turn, or a longer limit, take 6 s.
+                #expect(longest >= 1.5 && longest < 4, "One pause of 2 seconds must stop the program.")
             }
         }
 
@@ -624,8 +639,10 @@ extension SessionProcessIntegration {
                 FileManager.default.createFile(atPath: go.path, contents: Data())
                 let start = ContinuousClock.now
                 // A byte now and then resets the write stall limit, so without the
-                // pause limit of 2 seconds the viewer stays for good. The time to
-                // fill its queue comes first, and a busy Mac took more than 8 seconds.
+                // pause limit the viewer stays for good. This test proves only that
+                // the pause ends such a viewer. The test of several stalled viewers
+                // proves that a pause lasts 2 seconds. The time to fill the queue
+                // comes first, and a busy Mac took more than 8 seconds.
                 let closed = await eventually(timeout: .seconds(60)) {
                     var byte: UInt8 = 0
                     _ = Darwin.read(stalled.descriptor, &byte, 1)
