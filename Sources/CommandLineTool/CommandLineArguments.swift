@@ -26,6 +26,7 @@ struct CommandLineArguments: Equatable {
         var folder: String?
         var session: String?
         var projectName: String?
+        var (model, mode): (String?, String?)
         var positional: [String] = []
 
         var remaining = words[...]
@@ -39,6 +40,10 @@ struct CommandLineArguments: Equatable {
                 session = try Self.value(of: word, from: &remaining)
             case "--name":
                 projectName = try Self.value(of: word, from: &remaining)
+            case "--model":
+                model = try Self.value(of: word, from: &remaining)
+            case "--mode":
+                mode = try Self.value(of: word, from: &remaining)
             case "--enter":
                 pressEnter = true
             case "--scrollback":
@@ -78,10 +83,15 @@ struct CommandLineArguments: Equatable {
             throw CommandLineToolError.usage("Missing command.")
         }
         let rest = Array(positional.dropFirst())
-        if printsJSON, name != "list", name != "project" {
-            throw CommandLineToolError.usage("--json does not belong to \(name). It works with list and project list.")
+        if printsJSON, name != "list", name != "project", name != "thread" {
+            throw CommandLineToolError.usage("--json does not belong to \(name). It works with list, project list, thread list and thread read.")
         }
-        if projectName != nil, name != "project" { throw CommandLineToolError.usage("--name does not belong to \(name). It works with project add.") }
+        if projectName != nil, name != "project", name != "thread" {
+            throw CommandLineToolError.usage("--name does not belong to \(name). It works with project add and thread new.")
+        }
+        if model != nil || mode != nil, name != "thread" {
+            throw CommandLineToolError.usage("\(model != nil ? "--model" : "--mode") does not belong to \(name). It works with thread new.")
+        }
         if session != nil, name != "notify" { throw CommandLineToolError.usage("--session does not belong to \(name). It works with notify.") }
 
         func allow(_ flag: String, used: Bool, in commands: String) throws {
@@ -138,6 +148,10 @@ struct CommandLineArguments: Equatable {
         case "settings":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
             command = try Self.settingsCommand(rest + (afterSeparator ?? []))
+        case "thread":
+            try Self.requireNoOptions(name, nil, pressEnter, includeScrollback, nil)
+            let options = ThreadOptions(folder: folder, model: model, mode: mode, name: projectName, printsJSON: printsJSON)
+            command = try Self.threadCommand(rest, afterSeparator: afterSeparator, options: options)
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -219,13 +233,13 @@ struct CommandLineArguments: Equatable {
         if word.isEmpty { throw CommandLineToolError.usage("The session identifier is empty.") }
     }
 
-    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "project", "settings", "help"]
+    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "project", "settings", "thread", "help"]
 
     /// Whether the command is `notify`, also when the arguments are wrong.
     static func namesNotify(_ arguments: [String]) -> Bool {
         var words = arguments.prefix { $0 != "--" }[...]
         while let word = words.popFirst() {
-            if ["--socket", "--folder", "--session", "--name"].contains(word) { _ = words.popFirst(); continue }
+            if ["--socket", "--folder", "--session", "--name", "--model", "--mode"].contains(word) { _ = words.popFirst(); continue }
             if !word.hasPrefix("-") { return word == "notify" }
         }
         return false

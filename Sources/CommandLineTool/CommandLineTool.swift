@@ -74,6 +74,8 @@ public enum CommandLineTool {
             write(try ProjectChangeCommand(change: change).run(location: location), to: .standardOutput)
         case .settings(let action):
             write(try SettingsCommand(action: action).run(location: location), to: .standardOutput)
+        case .thread(let action):
+            write(try ThreadCommand(action: action).run(location: location), to: .standardOutput)
         case .notify, .help:
             break
         }

@@ -13,5 +13,6 @@ enum ToolCommand: Equatable {
     case projectList(printsJSON: Bool)
     case projectChange(ProjectChangeCommand.Change)
     case settings(SettingsCommand.Action)
+    case thread(ThreadAction)
     case help
 }
