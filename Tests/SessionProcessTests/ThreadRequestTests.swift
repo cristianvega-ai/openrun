@@ -1,4 +1,7 @@
 import AgentConversation
+import AgentThreads
+import ClaudeCodeAgent
+import DataStorage
 import Foundation
 import SessionConnection
 import SessionProcessHarness
@@ -31,6 +34,34 @@ import Testing
         #expect(thread.model == "sonnet" && thread.permissionMode == "default")
         // A thread that names its model keeps it.
         #expect(try client.createThread(agent: "claude-code", folder: process.directory.path, model: "haiku").model == "haiku")
+    }
+
+    @Test func aClientReadsTheEarlierTurnsFromTheHistoryOfTheAgent() async throws {
+        let settings = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: settings) }
+        let process = try FakeAgentSettings.sessionProcess(environment: ["CLAUDE_CONFIG_DIR": settings.path])
+        defer { process.stop() }
+        let client = try SessionClient(location: try SocketLocation(path: process.socketPath))
+        let thread = try client.createThread(agent: "claude-code", folder: process.directory.path)
+        // No turn ran, so the agent has no history of the thread.
+        #expect(try client.threadHistory(thread.identifier).events.isEmpty)
+        _ = try client.sendThreadMessage(thread.identifier, text: "One.")
+        #expect(await eventually { (try? client.threads().first?.state) == "finishedTurn" })
+
+        // The file is where Claude Code keeps the history of the conversation.
+        let record = try #require(try ThreadStore(dataFolder: DataFolder(path: process.directory.path)).load().list.thread(thread.identifier))
+        let conversation = try #require(UUID(uuidString: record.conversationIdentifier))
+        let file = ClaudeCodeHistoryLocation.fileURL(configurationFolder: settings, workingFolder: thread.folder, conversationIdentifier: conversation)
+        try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: FakeAgentSettings.fixtures.appending(path: "history.jsonl"), to: file)
+        let page = try client.threadHistory(thread.identifier)
+        #expect(page.before == nil && page.events.count == 5)
+        #expect(page.events.first?.kind == .userMessage(UserMessage(
+            identifier: "00000000-0000-4000-8000-000000000195",
+            text: "Run the command `touch held.txt` with your Bash tool. Then reply with the single word ok.", isAccepted: true)))
+        // The start of the history has no page before it, and an unknown thread has no history.
+        #expect(try client.threadHistory(thread.identifier, before: 0).events.isEmpty)
+        #expect(throws: SessionConnectionError.self) { try client.threadHistory(UUID()) }
     }
 
     @Test func aClientMakesAThreadSendsAMessageAndFollowsTheTurn() async throws {
