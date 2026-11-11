@@ -17,7 +17,9 @@ import Testing
         let sent = (0..<500).map { SessionAttachmentEvent.output(Data("\($0) ".utf8)) } + [.sizeChanged(SessionSize(columns: 9, rows: 3)), .exited(.exited(status: 0))]
         let thread = Thread { sent.forEach(handler) }
         thread.start()
-        let end = Date().addingTimeInterval(5)
+        // The test is about order, not speed. Other tests of this bundle hold
+        // the main thread for seconds, and a busy Mac passed a wait of 5 s.
+        let end = Date().addingTimeInterval(60)
         while events.received.count < sent.count, Date() < end { try? await Task.sleep(for: .milliseconds(5)) }
         #expect(events.received == sent && events.onMain)
     }
