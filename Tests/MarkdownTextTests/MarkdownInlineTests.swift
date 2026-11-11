@@ -19,4 +19,25 @@ struct MarkdownInlineTests {
         #expect(spans("`not closed") == [MarkdownSpan("`not closed")])
         #expect(spans("run `swift bu", streaming: true) == [MarkdownSpan("run "), MarkdownSpan("swift bu", style: .code)])
     }
+
+    @Test func emphasisAndStrikethrough() {
+        #expect(spans("a **b** *c* ***d*** __e__ ~~f~~") == [
+            MarkdownSpan("a "), MarkdownSpan("b", style: .bold), MarkdownSpan(" "), MarkdownSpan("c", style: .italic),
+            MarkdownSpan(" "), MarkdownSpan("d", style: [.bold, .italic]), MarkdownSpan(" "), MarkdownSpan("e", style: .bold),
+            MarkdownSpan(" "), MarkdownSpan("f", style: .strikethrough),
+        ])
+        #expect(spans("**bold *both***") == [MarkdownSpan("bold ", style: .bold), MarkdownSpan("both", style: [.bold, .italic])])
+        #expect(spans("*a `*` b*") == [MarkdownSpan("a ", style: .italic), MarkdownSpan("*", style: [.italic, .code]), MarkdownSpan(" b", style: .italic)])
+    }
+
+    @Test func marksThatOpenNothingStay() {
+        #expect(spans("2 * 3 = 6, snake_case_name, ~one~, a ** b") == [MarkdownSpan("2 * 3 = 6, snake_case_name, ~one~, a ** b")])
+        #expect(spans("**not closed") == [MarkdownSpan("**not closed")])
+    }
+
+    @Test func emphasisThatHasNotClosedAtTheEndOfAStreamShowsAsClosed() {
+        #expect(spans("a **bo", streaming: true) == [MarkdownSpan("a "), MarkdownSpan("bo", style: .bold)])
+        #expect(spans("**a** b", streaming: true) == [MarkdownSpan("a", style: .bold), MarkdownSpan(" b")])
+        #expect(spans("a *", streaming: true) == [MarkdownSpan("a *")])
+    }
 }

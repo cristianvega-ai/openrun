@@ -25,6 +25,7 @@ public struct MarkdownInlineParser {
             let next: Int? = switch characters[index] {
             case "\\": escape(at: index, end, style, link)
             case "`": codeSpan(at: index, end, style, link)
+            case "*", "_", "~": emphasis(at: index, end, style, link)
             default: nil
             }
             if let next {
@@ -56,6 +57,14 @@ public struct MarkdownInlineParser {
         var length = 0
         while index + length < end, characters[index + length] == character { length += 1 }
         return length
+    }
+
+    func isWhiteSpace(at index: Int) -> Bool {
+        index < 0 || index >= characters.count || characters[index].isWhitespace
+    }
+
+    func isWordCharacter(at index: Int) -> Bool {
+        index >= 0 && index < characters.count && (characters[index].isLetter || characters[index].isNumber)
     }
 
     private mutating func escape(at index: Int, _ end: Int, _ style: MarkdownSpan.Style, _ link: String?) -> Int? {
