@@ -19,10 +19,7 @@ struct HelperSearchPath: Sendable {
     /// The process reads its own path at its start, because a new build
     /// can replace the bundle while the process runs.
     static func ofThisProcess() -> HelperSearchPath {
-        var buffer = [CChar](repeating: 0, count: 4 * Int(MAXPATHLEN))
-        let length = proc_pidpath(getpid(), &buffer, UInt32(buffer.count))
-        guard length > 0 else { return HelperSearchPath(executablePath: nil) }
-        return HelperSearchPath(executablePath: String(decoding: buffer.prefix(Int(length)).map { UInt8(bitPattern: $0) }, as: UTF8.self))
+        HelperSearchPath(executablePath: ApplicationBundle.executablePathOfThisProcess())
     }
 
     init(executablePath: String?) {
@@ -31,12 +28,7 @@ struct HelperSearchPath: Sendable {
 
     /// `NAME.app/Contents/MacOS/PROGRAM` gives `NAME.app/Contents/Helpers`.
     static func helperFolder(forExecutableAt path: String) -> String? {
-        let components = (path as NSString).pathComponents
-        guard components.count >= 4,
-              components[components.count - 2] == "MacOS",
-              components[components.count - 3] == "Contents",
-              components[components.count - 4].hasSuffix(".app") else { return nil }
-        return NSString.path(withComponents: components.dropLast(2) + ["Helpers"])
+        ApplicationBundle.path(holdingExecutableAt: path).map { $0 + "/Contents/Helpers" }
     }
 
     /// The environment of a new session, with the folder first on its
