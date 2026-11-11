@@ -448,9 +448,14 @@ extension SessionProcessIntegration {
                 let followed = await eventually(timeout: .seconds(6)) {
                     reader.state.withLock { state in state.bytesBeforeSize.map { state.byteCount > $0 } ?? state.isDone }
                 }
+                let before = reader.state.withLock { $0.byteCount }
                 try client.connection.send(ClientMessage.input(Data([3])))
-                let stopped = await eventually(timeout: .seconds(6)) { reader.state.withLock { $0.isDone } }
+                // As in the paced flood test: on a busy Mac the reader took more
+                // than 6 seconds for the output that waited before control-C.
+                // Less than 13 MiB after the key shows that the key did not wait.
+                let stopped = await eventually(timeout: .seconds(30)) { reader.state.withLock { $0.isDone } }
                 let result = reader.state.withLock { $0 }
+                #expect(result.byteCount - before < 13 * 1024 * 1024)
                 #expect(applied && followed)
                 #expect((result.bytesBeforeSize ?? 0) > 0 && result.byteCount > (result.bytesBeforeSize ?? Int.max))
                 #expect(stopped && result.exit == .signaled(signal: SIGINT))
