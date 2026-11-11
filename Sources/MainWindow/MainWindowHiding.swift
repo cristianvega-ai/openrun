@@ -45,10 +45,10 @@ extension MainWindowController: NSMenuItemValidation {
                 context.duration = 0.25
                 context.allowsImplicitAnimation = true
                 item.animator().isCollapsed = collapsed
-            }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.contentPane.endPaneResize() } })
+            }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.paneResizeEnded() } })
         }
         (layout.projectsHidden, layout.sessionsHidden) = (projectsItem.isCollapsed, sessionsItem.isCollapsed)
-        layout.save(to: defaults)
+        if reducesMotion() { layout.save(to: defaults) }
         updateTopRowSpaces()
         keepMinimumSize()
     }

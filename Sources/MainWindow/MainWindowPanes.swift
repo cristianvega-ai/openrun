@@ -6,7 +6,7 @@ extension MainWindowController {
     func configurePanes() {
         let splitView = PaneSplitView()
         splitView.dragStarted = { [weak self] in self?.contentPane.beginPaneResize() }
-        splitView.dragEnded = { [weak self] in self?.contentPane.endPaneResize() }
+        splitView.dragEnded = { [weak self] in self?.paneResizeEnded() }
         splitController.splitView = splitView
         splitController.splitView.isVertical = true
         splitController.splitView.dividerStyle = .thin
@@ -43,6 +43,12 @@ extension MainWindowController {
         if !projectsItem.isCollapsed { layout.projectsWidth = projectsList.view.frame.width }
         if !sessionsItem.isCollapsed { layout.sessionsWidth = sessionsList.view.frame.width }
         (layout.projectsHidden, layout.sessionsHidden) = (projectsItem.isCollapsed, sessionsItem.isCollapsed)
+    }
+
+    /// An animation or a drag of the panes ends. The layout is saved once
+    /// here, not at each step of the change.
+    func paneResizeEnded() {
+        contentPane.endPaneResize()
         layout.save(to: defaults)
     }
 

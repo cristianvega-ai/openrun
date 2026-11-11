@@ -17,6 +17,7 @@ import Testing
         let defaults = temporaryDefaults()
         let first = makeMainWindow(defaults: defaults)
         first.splitController.splitView.setPosition(250, ofDividerAt: 0)
+        first.paneResizeEnded()
         first.window.close()
         #expect(PaneLayout.load(from: defaults).projectsWidth == 250)
         let second = makeMainWindow(defaults: defaults)
