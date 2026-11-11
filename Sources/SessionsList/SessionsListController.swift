@@ -13,9 +13,13 @@ public final class SessionsListController: NSObject {
     public let topRow = PaneTopRow(background: PaneColor.secondPane)
     public weak var delegate: SessionsListDelegate?
     public internal(set) var content = SessionsListContent()
+    public internal(set) var filter = SessionsFilter.all
+    public internal(set) var order = SessionsOrder.manual
     let table = SessionsTableView()
     let scroll = NSScrollView()
     var rows: [SessionsListRow] = []
+    /// The time for the ages of the rows. Tests set it.
+    var now: () -> Date = { Date() }
     /// The table changes its selection while it shows a change, and that is no choice of the user.
     var isShowingChanges = false
 
@@ -31,6 +35,45 @@ public final class SessionsListController: NSObject {
     /// The selected row, if the list shows it.
     public var selection: UUID? {
         rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].identifier : nil
+    }
+
+    /// Shows new content. Only the rows that changed update, and the
+    /// selection stays on its row while the list shows the row.
+    public func show(_ content: SessionsListContent) {
+        self.content = content
+        update()
+    }
+
+    /// Sets the filter and the order, such as the ones of the last start,
+    /// without a report to the delegate.
+    public func arrange(filter: SessionsFilter, order: SessionsOrder) {
+        (self.filter, self.order) = (filter, order)
+        update()
+    }
+
+    /// Selects a row without a report to the delegate.
+    public func select(_ identifier: UUID?) {
+        isShowingChanges = true
+        defer { isShowingChanges = false }
+        guard let index = rows.firstIndex(where: { $0.identifier == identifier }) else { return table.deselectAll(nil) }
+        table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
+        table.scrollRowToVisible(index)
+    }
+
+    /// Makes the rows again from the content, the filter, the order and the time.
+    func update() {
+        let selected = selection
+        let newRows = order.arranged(content.rows.filter(filter.includes)).map { SessionsListRow($0, now: now()) }
+        let changes = RowChanges(from: rows, to: newRows) { $0.identifier }
+        rows = newRows
+        isShowingChanges = true
+        changes.apply(to: table) { index in
+            (table.view(atColumn: 0, row: index, makeIfNecessary: false) as? SessionCellView)?.show(rows[index])
+        }
+        isShowingChanges = false
+        guard selection != selected else { return }
+        select(selected)
+        if selection != selected { delegate?.sessionsList(self, didSelect: selection) }
     }
 
     private func layOut() {
