@@ -113,3 +113,13 @@ let showcaseScreen: String = {
     text += "╰────────────────────╯\r\n\(escape)48;5;4m\(escape)38;5;15m reversed status line \(escape)K\(escape)0m\r\n$ ls -la ~/Projects/openrun\r\n$ "
     return text
 }()
+
+/// A frame as agents draw it, with the other characters that the renderer draws in code.
+let drawnCharactersScreen = """
+    \u{1B}[?25l╭──────────────╮ ┌─┬─┐ ╔═╦═╗ ┏━┳━┓\r
+    │ Claude Code  │ ├─┼─┤ ╠═╬═╣ ┣━╋━┫\r
+    │ ╭──╮ ┄┄┈┈╌╌  │ └─┴─┘ ╚═╩═╝ ┗━┻━┛\r
+    │ ╰──╯ ┆┊╎ ╱╲╳ │ ▁▂▃▄▅▆▇█ ░▒▓ ⣿⣀⡇\r
+    ╰──────────────╯ ▖▗▘▙▚▛▜▝▞▟ ⠁⠂⠄⡀\r
+    \u{1B}[44;30m main \u{1B}[34;42m\u{E0B0}\u{1B}[30m src \u{1B}[0;32m\u{E0B0}\u{1B}[0m \u{E0B1}\u{E0B3}\u{E0B4}\u{E0B6}\u{E0B8}\u{E0BA}
+    """

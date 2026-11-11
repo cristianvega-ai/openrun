@@ -274,6 +274,12 @@ private let screenshotFolder = ProcessInfo.processInfo.environment["OPENRUN_REND
     }
 
     @Test(.enabled(if: screenshotFolder != nil))
+    func theCharactersDrawnInCode() throws {
+        let screen = try renderScreen(drawnCharactersScreen, columns: 40, rows: 7)
+        try screen.target.saveImage(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/drawn-characters.png"))
+    }
+
+    @Test(.enabled(if: screenshotFolder != nil))
     func theFlashOfTheBell() throws {
         let screen = try renderScreen("$ make\r\nBuild complete!\u{07}\r\n$ ", columns: 30, rows: 4, isFlashing: true)
         try screen.target.saveImage(to: URL(fileURLWithPath: "\(screenshotFolder ?? "")/bell-flash.png"))

@@ -40,4 +40,18 @@ import TerminalEmulation
         #expect(pixel(of: screen.target, column: 1, horizontalPosition: 0, verticalPosition: height / 2 - 1) == foreground)
         #expect(pixel(of: screen.target, column: 2, horizontalPosition: width - 1, verticalPosition: height / 2 - 1) != foreground)
     }
+
+    @Test func aRoundedBoxIsClosedOnTheScreen() throws {
+        let screen = try renderScreen("\u{1B}[?25l╭─╮\r\n╰─╯", columns: 4, rows: 2)
+        let (width, height) = (testFonts.cellWidth, testFonts.cellHeight)
+        let foreground = screen.theme.foreground
+        // Each corner meets its horizontal neighbor and the corner below or above it.
+        #expect(pixel(of: screen.target, horizontalPosition: width - 1, verticalPosition: height / 2 - 1) == foreground)
+        #expect(pixel(of: screen.target, column: 2, horizontalPosition: 0, verticalPosition: height / 2 - 1) == foreground)
+        #expect(pixel(of: screen.target, horizontalPosition: width / 2 - 1, verticalPosition: height - 1) == foreground)
+        #expect(pixel(of: screen.target, row: 1, horizontalPosition: width / 2 - 1, verticalPosition: 0) == foreground)
+        #expect(pixel(of: screen.target, column: 2, row: 1, horizontalPosition: width / 2 - 1, verticalPosition: 0) == foreground)
+        // The outer corner of the curve stays empty.
+        #expect(pixel(of: screen.target, horizontalPosition: width / 2, verticalPosition: height / 2 - 1) != foreground)
+    }
 }
