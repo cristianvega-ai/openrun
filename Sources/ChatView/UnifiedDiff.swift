@@ -38,6 +38,29 @@ struct UnifiedDiff: Equatable {
         }
     }
 
+    /// The change from `old` to `new`, such as an edit that an agent asks
+    /// to make. The lines that both start and end with stay as context.
+    /// - Parameter title: The first line, such as "Edit 1 of 2".
+    init(old: String, new: String, title: String?) {
+        let oldLines = old.isEmpty ? [] : old.split(separator: "\n", omittingEmptySubsequences: false)
+        let newLines = new.isEmpty ? [] : new.split(separator: "\n", omittingEmptySubsequences: false)
+        let start = zip(oldLines, newLines).prefix { $0 == $1 }.count
+        let end = zip(oldLines.dropFirst(start).reversed(), newLines.dropFirst(start).reversed()).prefix { $0 == $1 }.count
+        if let title { lines.append(Line(kind: .hunk, text: Substring(title))) }
+        lines += oldLines.prefix(start).map { Line(kind: .context, text: $0) }
+        lines += oldLines.dropFirst(start).dropLast(end).map { Line(kind: .removed, text: $0) }
+        lines += newLines.dropFirst(start).dropLast(end).map { Line(kind: .added, text: $0) }
+        lines += oldLines.suffix(end).map { Line(kind: .context, text: $0) }
+        removedCount = oldLines.count - start - end
+        addedCount = newLines.count - start - end
+    }
+
+    mutating func append(_ other: UnifiedDiff) {
+        lines += other.lines
+        addedCount += other.addedCount
+        removedCount += other.removedCount
+    }
+
     /// The counts as a quiet label, such as "+3 −1".
     var countText: String {
         "+\(addedCount) \u{2212}\(removedCount)"

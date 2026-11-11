@@ -13,4 +13,18 @@ struct UnifiedDiffTests {
     @Test func anEmptyLineInAHunkIsNoLine() {
         #expect(UnifiedDiff("@@ -1 +1 @@\n-a\n+b\n").lines.count == 3)
     }
+
+    @Test func anEditBecomesADiffOfItsOldAndNewText() {
+        let diff = UnifiedDiff(old: "keep\nold one\nold two\nend", new: "keep\nnew\nend", title: "Edit 1 of 2")
+        #expect(diff.lines.map(\.kind) == [.hunk, .context, .removed, .removed, .added, .context])
+        #expect(diff.lines.map(\.text) == ["Edit 1 of 2", "keep", "old one", "old two", "new", "end"])
+        #expect(diff.countText == "+1 \u{2212}2")
+    }
+
+    @Test func diffsJoinInOrder() {
+        var diff = UnifiedDiff(old: "a", new: "b", title: "Edit 1 of 2")
+        diff.append(UnifiedDiff(old: "", new: "c", title: "Edit 2 of 2"))
+        #expect(diff.lines.map(\.text) == ["Edit 1 of 2", "a", "b", "Edit 2 of 2", "c"])
+        #expect(diff.countText == "+2 \u{2212}1")
+    }
 }
