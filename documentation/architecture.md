@@ -668,10 +668,17 @@ Client to server:
 | `detach` | none | the connection closes |
 | `receiveApprovalQuestions` | none | `acknowledged`, then `approvalQuestion` and `approvalQuestionEnded` for as long as the connection stays open. A `failure` with reason `invalidRequest` when the program is not the signed app outside every session |
 | `answerApprovalQuestion` | `identifier`, `allows` | none. Only a connection that holds the question can answer it, and only while it waits |
-| `receiveSessionChanges` | none | `sessionList`, oldest first, then `sessionChanged` and `sessionEnded` for as long as the connection stays open. An attached connection gets a `failure` with reason `invalidRequest`. After it, every message other than `detach` gets a `failure` with reason `invalidRequest`, and the connection stays open |
+| `receiveSessionChanges` | none | `sessionList`, oldest first. A session process that offers projects and settings then sends `projectList` and `settingList`. Then `sessionChanged`, `sessionEnded`, `projectList` and `settingList` follow, in the order of the changes, for as long as the connection stays open. An attached connection gets a `failure` with reason `invalidRequest`. After it, every message other than `detach` gets a `failure` with reason `invalidRequest`, and the connection stays open |
 | `renameSession` | `identifier`, `name` (absent or empty removes the name) | `acknowledged`. A name with a control character or more than 500 Unicode scalars gets a `failure` with reason `invalidRequest` |
 | `raiseSessionAlert` | `identifier`, `text` | `acknowledged`. The alert has the source `notifyCommand`. The session process removes control characters from the text and keeps at most 500 scalars |
 | `clearSessionAlert` | `identifier` | `acknowledged` |
+| `listProjects` | none | `projectList` |
+| `addProject` | `folder`, `name` (optional), `currentFolder` (optional) | `projectAdded` with the new project at the end of the list. The session process resolves the folder: `~` and `~/` start in its home folder, a relative path starts in `currentFolder`, and the symbolic links are resolved. A `failure` with reason `invalidRequest` names the problem: a relative folder with no current folder, a folder that does not exist or is no folder, a folder that is a project already, a name that is not valid, or the limit of 1,000 projects |
+| `removeProject` | `identifier` | `acknowledged`. A project without a folder on this Mac can be removed too |
+| `renameProject` | `identifier`, `name` (absent or empty: the name of the folder shows) | `acknowledged`. A name with a control character or more than 100 characters gets a `failure` |
+| `moveProject` | `identifier`, `place` (0 is the first) | `acknowledged`. A place outside the list gets a `failure` |
+| `listSettings` | none | `settingList` |
+| `changeSetting` | `name`, `text` | `acknowledged`. An unknown name, a value that is not valid, and a protected setting from a caller that may not change it get a `failure` with reason `invalidRequest` and the message of `SettingError`. See "Projects and settings" |
 
 Server to client:
 
@@ -692,9 +699,12 @@ Server to client:
 | `approvalQuestionEnded` | `identifier`. Every connection that holds the question receives it when the question ends |
 | `sessionChanged` | `_0` is a session summary: a new session, or a session with new facts |
 | `sessionEnded` | `identifier` of a session that ended and left the list |
+| `projectList` | `_0` is every project: the projects with a folder in their order, then the projects without a folder on this Mac. A project holds `identifier`, `name` (absent when the user gave none) and `folder` (absent when this Mac does not know it) |
+| `projectAdded` | `_0` is the new project |
+| `settingList` | `_0` is every setting in the order of `SettingName`, each with `name`, `text` and `isProtected`. `text` is the form that `changeSetting` takes back |
 
 A session summary holds `identifier`, `folder`, `command` (a list), `size` and `createdAt` (seconds since 1970).
-It can also hold the facts of the session: `name`, `title`, `currentFolder`, `branch`, `foregroundProgram`, `isInProgress`, `lastOutputAt`, `lastInputAt` (seconds since 1970) and `alert`. An alert holds `text`, `raisedAt` and `source` (`bell`, `terminalNotification` or `notifyCommand`). A fact that is not known is absent. See "Facts of a session".
+It can also hold the facts of the session: `name`, `title`, `currentFolder`, `branch`, `foregroundProgram`, `isInProgress`, `lastOutputAt`, `lastInputAt` (seconds since 1970), `alert` and `projectIdentifier`. An alert holds `text`, `raisedAt` and `source` (`bell`, `terminalNotification` or `notifyCommand`). A fact that is not known is absent. See "Facts of a session".
 A size holds `columns` and `rows`, each 0 to 65,535.
 
 A control frame from a client that the session process cannot decode gets a `failure` with reason `invalidRequest`, and then the connection closes. Examples are text that is not JSON, a name that is no message of the protocol, a missing field, a field of the wrong type, keys in a control frame, and a value out of range, such as a size of 999999 or -1. The message names the problem in the words of the protocol, such as `A frame is malformed: the field resize._0.rows holds a value that is out of range or in the wrong form.` It never quotes the request, which can hold escape sequences. The first frame gets the same answer in place of `hello`. A frame that breaks the framing (a zero length, a length above the limit, or an unknown kind) closes the connection without an answer, because the bytes after it cannot be read as frames. A frame of a kind that only the server sends also closes the connection without an answer, as before. Other clients notice nothing.
@@ -721,7 +731,21 @@ Examples of control payloads:
 {"clearSessionAlert":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}
 {"sessionChanged":{"_0":{"alert":{"raisedAt":1794303000.25,"source":"notifyCommand","text":"Waiting for input"},"command":["claude"],"createdAt":1794302000.5,"folder":"/work","foregroundProgram":"claude","identifier":"3F2A9C1E-0000-4000-8000-000000000001","isInProgress":false,"size":{"columns":80,"rows":24}}}}
 {"sessionEnded":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}
+{"hello":{"capabilities":{"orderedResizeConfirmation":true,"projectsAndSettings":true,"sessionChanges":true},"protocolVersion":1}}
+{"listProjects":{}}
+{"addProject":{"currentFolder":"\/work","folder":"app","name":"App"}}
+{"addProject":{"folder":"\/work\/app"}}
+{"removeProject":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}
+{"renameProject":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","name":"App"}}
+{"moveProject":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","place":0}}
+{"projectList":{"_0":[{"folder":"\/work\/app","identifier":"3F2A9C1E-0000-4000-8000-000000000001","name":"App"},{"identifier":"3F2A9C1E-0000-4000-8000-000000000002"}]}}
+{"projectAdded":{"_0":{"folder":"\/work\/app","identifier":"3F2A9C1E-0000-4000-8000-000000000001","name":"App"}}}
+{"listSettings":{}}
+{"changeSetting":{"name":"font-size","text":"14"}}
+{"settingList":{"_0":[{"isProtected":false,"name":"font-size","text":"14"},{"isProtected":true,"name":"session-limit","text":"100"}]}}
 ```
+
+The encoder of the protocol writes a slash as `\/`. A decoder reads `\/` and `/` the same.
 
 `relaysRawOutput` is a new optional field of `attach`. It stays inside protocol version 1: a client that leaves it out, or sends `false`, does not relay raw output, and an older session process ignores the field.
 `keepsCursorAtLineStart` and `promptRowsAboveCursor` are optional fields of `sizeChanged`, so they stay inside protocol version 1 too. The session leaves them out when they do not apply. An older client ignores it and resizes its copy of the screen as before. After output without a line end, that copy can then differ from the session's screen. Until milestone 5 the session process and its clients come from one build (decision of 2026-10-24), so no such client meets it yet.
@@ -752,10 +776,12 @@ The four messages of approval questions are additions, and only a client that as
 
 The messages of the session changes and the facts are additions too, and so are the new fields of a summary, which an older client ignores. Only a client that asks with `receiveSessionChanges` gets `sessionChanged` and `sessionEnded`. The server's `hello` holds `capabilities.sessionChanges` as `true`. A missing field means `false`, and an older session process answers the new requests with a `failure`. So they stay inside protocol version 1.
 
+The messages of the projects and the settings, and `projectIdentifier` of a summary, are additions in the same way. The server's `hello` holds `capabilities.projectsAndSettings` as `true`. A missing field means `false`. An older session process answers the new requests with a `failure`, and sends no `projectList` or `settingList` on the feed. So they stay inside protocol version 1.
+
 ### A conversation
 
 1. The client connects and sends `hello`. The server answers `hello`.
-2. A request that needs one answer (`createSession`, `listSessions`, `readScreen`, `sendText`, `killSession`, `renameSession`, `raiseSessionAlert`, `clearSessionAlert`) gets its answer. The client may send the next request or close.
+2. A request that needs one answer (`createSession`, `listSessions`, `readScreen`, `sendText`, `killSession`, `renameSession`, `raiseSessionAlert`, `clearSessionAlert`, and the requests of the projects and the settings) gets its answer. The client may send the next request or close.
 3. `attach` starts a longer conversation. See the next section.
 
 Between the connection and step 1, the client checks the folder of the socket and the user of the session process, and the session process checks the user of the client. See "The folder of the socket" and "The user at the other end" in "Process model".
@@ -958,13 +984,27 @@ openrun send IDENTIFIER [--enter] TEXT
 openrun kill IDENTIFIER
 openrun rename IDENTIFIER [NAME]
 openrun notify [--session IDENTIFIER] TEXT
+openrun project list [--json]
+openrun project add PATH [--name NAME]
+openrun project remove PROJECT
+openrun project rename PROJECT [NAME]
+openrun settings list
+openrun settings get NAME
+openrun settings set NAME VALUE
 openrun help
 ```
 
 Every command takes `--socket PATH`. Errors go to standard error with exit code 1. Wrong arguments exit with code 2: this includes `openrun help` with arguments, `openrun COMMAND-THAT-DOES-NOT-EXIST --help`, and an empty session identifier. The tool checks the arguments before it connects, so these exit with 2 whether or not a session process runs. `--help` after a real command (`openrun read abc --help`) shows the help.
 `list` prints one line per session: the identifier, the folder and the command, separated by tabs. A client chose the folder and the arguments, so each field is escaped with `PrintableText.escaping`: a backslash becomes two backslashes, a tab `\t`, a new line `\n`, a carriage return `\r`, and any other control character `\u{XX}` in upper-case hexadecimal. Each session is exactly one line, and the tabs split exactly three columns. The arguments of the command are joined by one space.
-`list --json` prints an object with one key, `sessions`, a list oldest first. Each session has every one of these keys, with `null` for a fact that the session process does not know: `identifier` (lower case), `name`, `title`, `folder`, `currentFolder`, `branch`, `command`, `foregroundProgram`, `isInProgress`, `alert` (`raisedAt`, `source`, `text`), `size` (`columns`, `rows`), `createdAt`, `lastOutputAt` and `lastInputAt`. Times are text in ISO 8601, such as `2026-11-10T09:30:00Z`. JSON escapes every control character, so the output never drives a terminal.
+`list --json` prints an object with one key, `sessions`, a list oldest first. Each session has every one of these keys, with `null` for a fact that the session process does not know: `identifier` (lower case), `name`, `title`, `folder`, `currentFolder`, `branch`, `command`, `foregroundProgram`, `isInProgress`, `alert` (`raisedAt`, `source`, `text`), `size` (`columns`, `rows`), `createdAt`, `lastOutputAt`, `lastInputAt` and `projectIdentifier` (lower case). Times are text in ISO 8601, such as `2026-11-10T09:30:00Z`. JSON escapes every control character, so the output never drives a terminal.
 `rename` joins the words after the identifier, and the words after `--`, with one space. Without a name, it removes the name.
+`project list` prints one line per project: the identifier in lower case, the shown name (the name, or else the last name of the folder), and the folder, separated by tabs. Each field is escaped with `PrintableText.escaping`, as in `list`. The projects with a folder come first, in their order. The projects without a folder on this Mac come last, with an empty folder column, and with an empty name when the user gave none.
+`project list --json` prints an object with one key, `projects`, in the same order. Each project has the keys `identifier` (lower case), `name` and `folder`, with `null` for a name or a folder that is not set.
+`project add` prints the identifier of the new project in lower case, and a new line. It sends its current folder, so a relative PATH starts there. `--name NAME` gives the project a name.
+A PROJECT is a unique start of a project identifier, or the folder of the project (`ProjectMatch`). A word that starts exactly one identifier means that project. Any other word is a folder: a relative path starts at the current folder, `~` is the home folder, and the symbolic links are resolved, as the session process did when it added the project. The tool only makes a folder that does not exist standard, so the project of a deleted folder can still be removed. A word that starts more than one identifier and is the folder of no project lists the candidates.
+`project rename` joins the words after PROJECT, and the words after `--`, with one space. Without a name, the project shows the name of its folder. `project remove` and `project rename` print nothing.
+`settings list` prints one line for each setting, in the order of `SettingName`: the name, a tab, and the text of the value. A protected setting has a third column, `protected`, so a script that reads the first two columns can ignore it. `settings get NAME` prints the text alone. The text is the form that `settings set` takes back, such as `14`, `on`, `left`, `SF Mono`, or one line of JSON for `new-session-commands`. Only its control characters are escaped (`PrintableText.escapingControlCharacters`), so a backslash stays one backslash, and the text of `settings get` goes back through `settings set` unchanged. No valid value holds a control character.
+`settings set` joins the words of VALUE, and the words after `--`, with one space, and prints nothing. A protected setting changes only from OpenRun.app, so the tool gets the message "The setting NAME is protected. Change it in the settings window of OpenRun.", unless `--answerer-requirement` names it.
 `notify` raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`, with the words of TEXT joined by one space. It is for the hooks of an agent. When there is no such session, no session process answers within 5 seconds of `hello`, or the session process does not know the session from `OPENRUN_SESSION`, it writes `ESC ] 777 ; notify ; OpenRun ; TEXT ESC \` to `/dev/tty` instead, without waiting. OpenRun and other terminals show that as a notification. A refusal by the rule for callers is an error, with no write to the terminal, and so is a session after `--session` that the session process does not know, or an identifier that matches more than one session. `notify` exits with 0 when the alert went out and with 1 otherwise. It never exits with 2, also not for wrong arguments, because exit code 2 from a hook of Claude Code blocks the action of the agent.
 Every error message that `openrun` prints has each control character escaped in the same way, including failures that the session process reports, so text from a client never drives the terminal of the caller. A message keeps its backslashes, because the session process and the modules `Projects` and `Settings` already quote the text of a client in it with `QuotedText`. So such text is escaped once (`PrintableText.escapingControlCharacters`). The tool's own line breaks stay. A message with a list, such as the sessions that start with the typed identifier, is a heading and one line for each entry (`CommandLineToolError.failureWithList`). The tool escapes each line on its own, so every entry is on its own line, and a line break inside client text shows as `\n`.
 
