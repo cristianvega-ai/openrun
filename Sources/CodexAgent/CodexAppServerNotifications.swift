@@ -21,7 +21,13 @@ extension CodexAppServer {
             for identifier in threads.keys { await deliver(method, parameters, line: line, to: identifier) }
             return
         }
-        await deliver(method, parameters, line: line, to: thread)
+        if threads[thread] != nil {
+            await deliver(method, parameters, line: line, to: thread)
+        } else {
+            // A thread that closed, or one whose start has not returned.
+            earlyLines.append((thread, method, parameters, line))
+            if earlyLines.count > Self.earlyLineLimit { earlyLines.removeFirst() }
+        }
     }
 
     /// Maps a notification with the mapper of the thread. A method that
@@ -33,11 +39,15 @@ extension CodexAppServer {
         await threads[thread]?.send(kinds, line: line)
     }
 
-    /// Opens a thread with its first events.
+    /// Opens a thread with its first events, then gives it the lines that
+    /// came before its answer.
     func open(_ thread: String, first: [ConversationEventKind]) async -> CodexEventChannel {
         let state = threads[thread] ?? CodexThreadState(channel: CodexEventChannel(limit: options.eventLimit))
         threads[thread] = state
         for kind in first { state.channel.add(ConversationEvent(kind)) }
+        let early = earlyLines.filter { $0.thread == thread }
+        earlyLines.removeAll { $0.thread == thread }
+        for line in early { await deliver(line.method, line.parameters, line: line.line, to: thread) }
         return state.channel
     }
 

@@ -22,4 +22,24 @@ import Testing
         guard case .unknown(let line) = await first.next()?.kind else { Issue.record("No unknown event"); return }
         #expect(line.kind == "no/such/method")
     }
+
+    @Test func aLineBeforeTheOpenOfItsThreadComesAfterTheFirstEvents() async throws {
+        let harness = try await CodexServerHarness()
+        let other = await harness.server.open("other", first: [])
+        harness.serve(delta("early", "first"))
+        harness.serve(delta("other", "mark"))
+        _ = await other.next()
+        let early = await harness.server.open("early", first: [.notice(Notice(level: .information, text: "start"))])
+        #expect(await early.next()?.kind == .notice(Notice(level: .information, text: "start")))
+        #expect(await early.next()?.kind == .agentTextDelta(AgentTextDelta(itemIdentifier: "m", text: "first")))
+    }
+
+    @Test func theEndOfTheServerEndsEveryThread() async throws {
+        let harness = try await CodexServerHarness()
+        let thread = await harness.server.open("a", first: [])
+        harness.transport.close()
+        #expect(await thread.next()?.kind == .processEnded(ProcessEnd(exitStatus: 0, wasRequested: false)))
+        #expect(await thread.next() == nil)
+        #expect(await harness.server.hasEnded)
+    }
 }

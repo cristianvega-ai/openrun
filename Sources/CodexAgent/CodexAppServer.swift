@@ -10,6 +10,10 @@ public actor CodexAppServer {
     let connection: CodexConnection
     let options: CodexServerOptions
     var threads: [String: CodexThreadState] = [:]
+    /// Lines for a thread that is not open yet. Codex can send them before
+    /// its answer to `thread/start` or `thread/resume` arrives.
+    var earlyLines: [(thread: String, method: String, parameters: JSONValue, line: SourceLine)] = []
+    static let earlyLineLimit = 64
     var isShuttingDown = false
     /// Whether the app-server ended. A new thread then needs a new server.
     public private(set) var hasEnded = false
@@ -48,13 +52,23 @@ public actor CodexAppServer {
     }
 
     /// Ends the app-server: its input closes, and after a grace period it
-    /// gets a signal.
+    /// gets a signal. Each open thread then gets the end of the process.
     public func shutDown() async {
         isShuttingDown = true
         await connection.transport.end(gracePeriod: .seconds(2))
     }
 
+    /// Every thread learns the end, and its events end.
     func ended(_ end: ProcessEnd) async {
         hasEnded = true
+        var end = end
+        end.wasRequested = isShuttingDown
+        let open = threads
+        threads = [:]
+        earlyLines = []
+        for state in open.values {
+            await state.send([.processEnded(end)], line: nil)
+            state.channel.finish()
+        }
     }
 }
