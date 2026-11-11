@@ -54,7 +54,21 @@ import TerminalRendering
 
     @Test func wideCharactersBeforeTheAddressKeepTheColumns() throws {
         let found = try #require(try link("日本 https://a.b/日 x", column: 6))
-        #expect(found.address == "https://a.b/" && found.runs == [ViewportCellRun(row: 0, columns: 5..<17)])
+        #expect(found.address == "https://a.b/%E6%97%A5" && found.runs == [ViewportCellRun(row: 0, columns: 5..<19)])
+    }
+
+    @Test func lettersOutsideASCIIArePartOfTheAddressAndOpenEncoded() throws {
+        let path = try #require(try link("see https://de.wikipedia.org/wiki/Zürich_x now", column: 10, columns: 60))
+        #expect(path.address == "https://de.wikipedia.org/wiki/Z%C3%BCrich_x" && path.runs == [ViewportCellRun(row: 0, columns: 4..<42)])
+        #expect(try link("https://münchen.de/ x", column: 3)?.address == "https://xn--mnchen-3ya.de/")
+        let wide = try #require(try link("https://例え.jp/パス x", column: 3))
+        #expect(wide.address == "https://xn--r8jz45g.jp/%E3%83%91%E3%82%B9" && wide.runs == [ViewportCellRun(row: 0, columns: 0..<20)])
+    }
+
+    @Test func symbolsAndPunctuationOutsideASCIIEndTheAddress() throws {
+        for text in ["（https://a.b/c）", "「https://a.b/c」。", "https://a.b/c，next", "https://a.b/c。", "https://a.b/c🙂x", "https://a.b/c→x"] {
+            #expect(try link(text, column: 5)?.address == "https://a.b/c", "\(text)")
+        }
     }
 
     @Test func otherSchemesAndAddressesWithNoHostAreNotLinks() throws {
