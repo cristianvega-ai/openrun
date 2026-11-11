@@ -307,11 +307,20 @@ extension SessionProcessIntegration {
                 defer { connection.close() }
                 try connection.greetSessionProcess()
                 Self.releaseProgram(in: process.directory, round: 1)
-                #expect(await process.waitForScreen(of: identifier, containing: Self.expectedReply))
+                // The test looks at the screen through its open connection.
+                // `openrun read` starts a program for each look, which on a busy
+                // computer took most of a second, and the bytes came after the
+                // window of two seconds.
+                let session = try #require(UUID(uuidString: identifier))
+                #expect(await eventually(timeout: .seconds(60)) {
+                    try? connection.send(ClientMessage.readScreen(identifier: session, includeScrollback: false))
+                    guard case .screen(let text) = try? connection.receive(ServerMessage.self) else { return false }
+                    return text.contains(Self.expectedReply)
+                })
                 // The program has read its reply and now listens for a second
                 // one. These two bytes play a late duplicate.
                 try await Task.sleep(for: .seconds(1))
-                try connection.send(ClientMessage.sendText(identifier: try #require(UUID(uuidString: identifier)), text: "ZZ"))
+                try connection.send(ClientMessage.sendText(identifier: session, text: "ZZ"))
                 #expect(await process.waitForScreen(of: identifier, containing: "DONE1"))
                 #expect(try process.screenText(of: identifier).contains("extra1=2"))
             }
