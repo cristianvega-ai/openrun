@@ -58,9 +58,12 @@ extension ThreadPaneController: ChatViewControllerDelegate {
         }
     }
 
+    func chatViewControllerLoadEarlierHistory(_ controller: ChatViewController) {
+        loadEarlierHistory()
+    }
+
     // These parts of the chat arrive with later work on the threads.
     func chatViewControllerOpenInTerminal(_ controller: ChatViewController) {}
     func chatViewControllerReturnFromTerminal(_ controller: ChatViewController) {}
-    func chatViewControllerLoadEarlierHistory(_ controller: ChatViewController) {}
     func chatViewController(_ controller: ChatViewController, startNewThreadOnAccount identifier: String) {}
 }

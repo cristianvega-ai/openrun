@@ -19,6 +19,10 @@ final class ThreadPaneController: NSObject {
     /// each later batch as an update.
     var isReplayComplete = false
     private var isClosed = false
+    /// What asks for the next page of the earlier turns. Nil asks for the newest page.
+    var historyCursor: Int?
+    var historyPageCount = 0
+    var isLoadingHistory = false
     let socket: SocketLocation
     /// The calls that wait for the socket, in order, off the main thread.
     let work = DispatchQueue(label: "ai.cristianvega.openrun.thread-pane")
@@ -54,7 +58,7 @@ final class ThreadPaneController: NSObject {
     /// The thread has new facts, such as a name.
     func update(_ summary: ThreadSummary, home: String) {
         var facts = Self.facts(of: summary, home: home)
-        facts.hasEarlierHistory = chat.facts.hasEarlierHistory
+        (facts.hasEarlierHistory, facts.isLoadingEarlierHistory) = (chat.facts.hasEarlierHistory, chat.facts.isLoadingEarlierHistory)
         if facts != chat.facts { chat.facts = facts }
     }
 

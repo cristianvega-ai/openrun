@@ -38,6 +38,9 @@ extension ThreadPaneController {
                 chat.facts.hasEarlierHistory = hasEarlierEvents
                 chat.show(transcript)
                 change = TranscriptChange()
+                // After a restart of the session process the thread keeps no
+                // events, so its chat starts with the newest turns of the history.
+                if hasEarlierEvents, transcript.items.isEmpty { loadEarlierHistory() }
             case .requestFailed(let failure): failed?(failure.message)
             case .failed(let error): failed?("The connection to the thread failed. \(error)")
             case .messageSent, .threadEnded, .closed: break

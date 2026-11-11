@@ -34,6 +34,31 @@ import Testing
         #expect(agentTexts(pane) == ["ok"] && pane.chat.transcript == pane.transcript)
     }
 
+    @Test func theChatTakesTheEarlierTurnsFromTheHistoryOfTheAgent() async throws {
+        let settings = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: settings) }
+        let process = try FakeAgentProcess.start(environment: ["CLAUDE_CONFIG_DIR": settings.path])
+        defer { process.stop() }
+        let pane = try await attach(to: process)
+        defer { pane.close() }
+        pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
+        #expect(await waitUntil { pane.transcript.state == .finishedTurn })
+        let live = pane.transcript.items.map(\.identifier)
+
+        // The history of Claude Code holds one earlier turn of this conversation.
+        let folder = settings.appending(path: "projects/" + pane.chat.facts.threadIdentifier)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        try FileManager.default.copyItem(at: FakeAgentProcess.fixtures.appending(path: "history.jsonl"), to: folder.appending(path: pane.chat.facts.threadIdentifier + ".jsonl"))
+        pane.chat.facts.hasEarlierHistory = true
+        pane.chatViewControllerLoadEarlierHistory(pane.chat)
+        #expect(pane.chat.facts.isLoadingEarlierHistory)
+        #expect(await waitUntil { !pane.chat.facts.isLoadingEarlierHistory })
+        let items = pane.transcript.items.map(\.identifier)
+        #expect(items.first == "user:00000000-0000-4000-8000-000000000195" && Array(items.suffix(live.count)) == live && items.count > live.count)
+        // The start of the history came, so the chat offers no older turns.
+        #expect(!pane.chat.facts.hasEarlierHistory && pane.chat.transcript == pane.transcript && pane.transcript.state == .finishedTurn)
+    }
+
     @Test func theAnswerInTheChatAllowsTheCallOfTheAgent() async throws {
         let process = try FakeAgentProcess.start(turns: ["command-turn"], mode: "askPermission", isApplication: true)
         defer { process.stop() }
