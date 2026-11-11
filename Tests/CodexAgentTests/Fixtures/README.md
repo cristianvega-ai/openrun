@@ -26,6 +26,7 @@ The tests that read the output alone take the `server` lines in order.
 | `command-declined.jsonl` | The next turn of the same thread: a command that needs approval, the answer `decline`, and the end of the command with the status `declined`. |
 | `file-change.jsonl` | A new file: the change with its content, the request of the app-server without the diff, the answer `accept`, and the end of the change. |
 | `closed-during-approval.jsonl` | A command that waits for approval when the app-server ends. The app-server ran nothing. |
+| `resume.jsonl` | The resume of a thread without its turns: a status before the answer, the answer, and the tokens of the thread. |
 | `unknown-thread.jsonl` | The resume of a thread that Codex does not know, and its refusal. |
 
 ## What was replaced
