@@ -604,7 +604,10 @@ extension SessionProcessIntegration {
                 _ = fcntl(stalled.descriptor, F_SETFL, O_NONBLOCK)
                 FileManager.default.createFile(atPath: go.path, contents: Data())
                 let start = ContinuousClock.now
-                let closed = await eventually(timeout: .seconds(8)) {
+                // A byte now and then resets the write stall limit, so without the
+                // pause limit of 2 seconds the viewer stays for good. The time to
+                // fill its queue comes first, and a busy Mac took more than 8 seconds.
+                let closed = await eventually(timeout: .seconds(60)) {
                     var byte: UInt8 = 0
                     _ = Darwin.read(stalled.descriptor, &byte, 1)
                     return isClosedBySessionProcess(stalled.descriptor)
