@@ -41,6 +41,10 @@ public final class AgentProgram: @unchecked Sendable {
     var unconsumedBytes = 0
     var errorSource: DispatchSourceRead?
     var standardError: [UInt8] = []
+    var inputSource: DispatchSourceWrite?
+    var inputSourceIsSuspended = true
+    var pendingInput: [PendingInput] = []
+    var inputIsClosing = false
     var reaper: ProcessGroupReaper?
     var exit: ProgramExit?
     var exitWaiters: [CheckedContinuation<ProgramExit, Never>] = []
@@ -76,6 +80,10 @@ public final class AgentProgram: @unchecked Sendable {
         errorReader.setCancelHandler { [self] in close(errorDescriptor); errorDescriptor = -1 }
         errorSource = errorReader
         errorReader.resume()
+        let writer = DispatchSource.makeWriteSource(fileDescriptor: inputDescriptor, queue: queue)
+        writer.setEventHandler { [self] in pumpInput() }
+        writer.setCancelHandler { [self] in close(inputDescriptor); inputDescriptor = -1 }
+        inputSource = writer
         reaper = ProcessGroupReaper(processIdentifier: processIdentifier, queue: queue) { [self] in programEnded($0) }
         reaper?.start()
     }
