@@ -5,4 +5,6 @@
     /// The user opened or closed a part of a row, such as the output of a
     /// tool call. The row's height changes.
     func toggle(_ part: String, in row: TranscriptRowView)
+    /// The user answered a permission request.
+    func answerPermissionRequest(_ identifier: String, with answer: ChatPermissionAnswer)
 }

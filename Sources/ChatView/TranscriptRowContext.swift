@@ -30,6 +30,11 @@ import MarkdownText
     /// The parts of rows that the user opened, such as a tool call.
     var openedParts: Set<String> = []
     weak var actions: TranscriptRowActions?
+    /// The permission requests that the user answered. Their buttons stay
+    /// off until the answer comes back in the transcript.
+    var answeredRequests: Set<String> = []
+    /// The permission requests that VoiceOver announced.
+    var announcedRequests: Set<String> = []
     /// The rendered blocks of each message by their index.
     private var renderedBlocks: [String: [Int: RenderedBlock]] = [:]
 

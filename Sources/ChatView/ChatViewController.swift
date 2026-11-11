@@ -96,4 +96,8 @@ extension ChatViewController: TranscriptRowActions {
         if context.openedParts.remove(part) == nil { context.openedParts.insert(part) }
         scrollView.keepInPlace(row.row.key)
     }
+
+    func answerPermissionRequest(_ identifier: String, with answer: ChatPermissionAnswer) {
+        delegate?.chatViewController(self, answerPermissionRequest: identifier, with: answer)
+    }
 }

@@ -36,4 +36,11 @@ import Testing
         #expect(controller.context.palette.bodyFont.pointSize == 16)
         #expect(controller.transcriptView.rows.count == 2)
     }
+
+    @Test func anAnswerGoesToTheHost() {
+        let delegate = RecordingDelegate()
+        controller.delegate = delegate
+        controller.answerPermissionRequest("p1", with: .deny(message: "Not now"))
+        #expect(delegate.requests == ["answer p1 deny(message: Optional(\"Not now\"))"])
+    }
 }
