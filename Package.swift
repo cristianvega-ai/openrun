@@ -111,6 +111,8 @@ let package = Package(
         // How the panes of the main window look: the theme colors in AppKit, the top row, the selected row.
         .target(name: "PaneAppearance", dependencies: ["TerminalTheme", "TerminalEmulation"]),
         .testTarget(name: "PaneAppearanceTests", dependencies: ["PaneAppearance", "TerminalTheme", "TerminalEmulation"]),
+        // The first pane of the main window: All Sessions, the projects, and No Project.
+        .target(name: "ProjectsList", dependencies: ["PaneAppearance", "ListUpdates"]),
         // One window for one session pane, and the picker of running sessions.
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
