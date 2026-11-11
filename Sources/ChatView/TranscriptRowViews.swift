@@ -1,0 +1,10 @@
+/// Makes the view for each kind of row.
+@MainActor enum TranscriptRowViews {
+    static func make(for row: TranscriptRow) -> TranscriptRowView {
+        switch row.kind {
+        case .userMessage: UserMessageRowView()
+        case .agentText: AgentTextRowView()
+        default: TranscriptRowView()
+        }
+    }
+}
