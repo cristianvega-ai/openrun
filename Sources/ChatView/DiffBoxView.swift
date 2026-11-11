@@ -5,6 +5,8 @@ import AppKit
 final class DiffBoxView: RoundedBoxView, MeasurableView {
     static let padding: CGFloat = 6
     static let maximumHeight: CGFloat = 360
+    /// The height of the lines above which they scroll.
+    var heightLimit = DiffBoxView.maximumHeight
     let scrollView = InnerScrollView()
     let linesView = DiffLinesView()
 
@@ -26,7 +28,7 @@ final class DiffBoxView: RoundedBoxView, MeasurableView {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        min(Self.maximumHeight, linesView.contentHeight) + 2 * Self.padding
+        min(heightLimit, linesView.contentHeight) + 2 * Self.padding
     }
 
     override func layout() {

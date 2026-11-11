@@ -24,7 +24,8 @@ final class PermissionRequestRowView: StackRowView {
             setParts([Part(view: foldedLine)])
             return
         }
-        box.show(words, agentName: context.agentName, isAnswered: context.answeredRequests.contains(requestIdentifier), palette: context.palette)
+        box.show(words, agentName: context.agentName, isAnswered: context.answeredRequests.contains(requestIdentifier), palette: context.palette,
+                 viewportHeight: context.viewportHeight)
         box.answerAction = { [weak self] answer in self?.answer(answer) }
         setParts([Part(view: box)])
     }

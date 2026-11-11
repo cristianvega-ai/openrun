@@ -6,6 +6,8 @@ import AppKit
 final class DetailBoxView: RoundedBoxView, MeasurableView {
     static let padding = NSSize(width: 12, height: 8)
     static let maximumHeight: CGFloat = 300
+    /// The height of the text above which it scrolls.
+    var heightLimit = DetailBoxView.maximumHeight
     let scrollView = InnerScrollView()
     let textView = ChatTextView()
     lazy var copyButton = RowSymbol.button("doc.on.doc", label: "Copy Output", target: self, action: #selector(copyAll))
@@ -52,7 +54,7 @@ final class DetailBoxView: RoundedBoxView, MeasurableView {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        min(Self.maximumHeight, textView.fittingHeight(forWidth: textWidth(inWidth: width))) + 2 * Self.padding.height
+        min(heightLimit, textView.fittingHeight(forWidth: textWidth(inWidth: width))) + 2 * Self.padding.height
     }
 
     /// The text leaves room at the right for the copy control.

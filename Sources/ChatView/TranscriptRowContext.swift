@@ -35,6 +35,9 @@ import MarkdownText
     var answeredRequests: Set<String> = []
     var hasEarlierHistory = false
     var isLoadingEarlierHistory = false
+    /// The height of the transcript on the screen, which a request that
+    /// waits fits in.
+    var viewportHeight: CGFloat = 0
     /// The permission requests that VoiceOver announced.
     var announcedRequests: Set<String> = []
     /// The rendered blocks of each message by their index.

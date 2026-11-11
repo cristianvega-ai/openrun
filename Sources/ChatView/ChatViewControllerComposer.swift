@@ -72,6 +72,12 @@ extension ChatViewController {
         let top = findBar.isHidden ? 0 : FindBarView.height
         findBar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: FindBarView.height)
         scrollView.frame = NSRect(x: 0, y: top, width: bounds.width, height: bottom - top)
+        if context.viewportHeight != scrollView.frame.height {
+            // A request that waits fits its boxes to the transcript.
+            context.viewportHeight = scrollView.frame.height
+            let requests = transcriptView.rows.filter { if case .permissionRequest = $0.kind { true } else { false } }
+            if !requests.isEmpty { transcriptView.setRows(transcriptView.rows, changed: Set(requests.map(\.key))) }
+        }
         emptyView.frame = scrollView.frame
         let side = JumpToNewestButton.side
         jumpButton.frame = NSRect(x: ((bounds.width - side) / 2).rounded(), y: bottom - side - 12, width: side, height: side)

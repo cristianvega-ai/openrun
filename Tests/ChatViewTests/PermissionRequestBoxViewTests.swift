@@ -53,4 +53,16 @@ import Testing
         #expect(request.allowButton.isHidden)
         #expect(!request.denyButton.isHidden)
     }
+
+    @Test func inASmallPaneTheWholeRequestFitsWithFourLinesOfItsText() throws {
+        let command = (1...40).map { "echo \($0)" }.joined(separator: "\n")
+        let request = PermissionRequest(identifier: "p1", toolName: "Bash", input: .object(["command": .string(command)]))
+        let box = PermissionRequestBoxView()
+        box.show(PermissionRequestWords(PermissionRequestItem(request: request), agentName: "Claude Code"), agentName: "Claude Code",
+                 isAnswered: false, palette: ChatPalette(appearance: .graphite), viewportHeight: 320)
+        let text = try #require(box.partViews.last as? DetailBoxView)
+        let font = ChatPalette(appearance: .graphite).smallCodeFont
+        #expect(text.height(forWidth: 300) >= 4 * (font.ascender - font.descender) + 2 * DetailBoxView.padding.height)
+        #expect(box.height(forWidth: 300) <= 320 - 18)
+    }
 }
