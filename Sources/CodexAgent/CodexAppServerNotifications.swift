@@ -46,7 +46,7 @@ extension CodexAppServer {
     /// Opens a thread with its first events, then gives it the lines that
     /// came before its answer.
     func open(_ thread: String, first: [ConversationEventKind]) async -> CodexEventChannel {
-        let state = threads[thread] ?? CodexThreadState(channel: CodexEventChannel(limit: options.eventLimit))
+        let state = threads[thread] ?? CodexThreadState(channel: CodexEventChannel(limit: options.eventLimit, byteLimit: options.eventByteLimit))
         threads[thread] = state
         emit(first, line: nil, to: thread)
         let early = earlyLines.filter { $0.thread == thread }

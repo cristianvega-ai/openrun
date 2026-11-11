@@ -6,35 +6,50 @@ import Synchronization
 ///
 /// The reader never waits for the caller, so that a thread that nobody
 /// reads cannot hold back the answers of the other threads. At most
-/// `limit` events wait. The app-server ends a thread whose caller lets
-/// more wait, and the memory stays bounded.
+/// `limit` events and `byteLimit` bytes wait, and the pieces of one
+/// streamed item count as one event. The app-server ends a thread whose
+/// caller lets more wait, and the memory stays bounded.
 final class CodexEventChannel: Sendable {
     struct State {
         var events: [ConversationEvent] = []
+        /// The room of each event that waits, and of all of them.
+        var sizes: [Int] = []
+        var waitingBytes = 0
         var isFinished = false
         var reader: CheckedContinuation<ConversationEvent?, Never>?
     }
 
     let limit: Int
+    let byteLimit: Int
     let state = Mutex(State())
 
-    init(limit: Int) {
+    init(limit: Int, byteLimit: Int = .max) {
         self.limit = limit
+        self.byteLimit = byteLimit
     }
 
     /// Adds an event without a wait. Returns false, and adds nothing, when
-    /// `limit` events wait already. After the finish, the event goes
-    /// nowhere.
+    /// the event does not fit in the limits. One event of any size can
+    /// wait alone, because one line can be larger than `byteLimit`. After
+    /// the finish, the event goes nowhere.
     @discardableResult
     func add(_ event: ConversationEvent) -> Bool {
         state.withLock { state in
             guard !state.isFinished else { return true }
-            guard state.events.count < limit else { return false }
-            if let reader = state.reader {
+            let size = CodexEventPieces.byteCount(of: event)
+            guard state.events.isEmpty || size <= byteLimit - state.waitingBytes else { return false }
+            if let reader = state.reader, limit > 0 {
                 state.reader = nil
                 reader.resume(returning: event)
+            } else if let last = state.events.last, let joined = CodexEventPieces.joined(last, event) {
+                state.events[state.events.count - 1] = joined
+                state.sizes[state.sizes.count - 1] += size
+                state.waitingBytes += size
             } else {
+                guard state.events.count < limit else { return false }
                 state.events.append(event)
+                state.sizes.append(size)
+                state.waitingBytes += size
             }
             return true
         }
@@ -51,6 +66,7 @@ final class CodexEventChannel: Sendable {
                 reader.resume(returning: last)
             } else if let last {
                 state.events.append(last)
+                state.sizes.append(0)
             }
             state.reader?.resume(returning: nil)
             state.reader = nil
@@ -64,6 +80,7 @@ final class CodexEventChannel: Sendable {
             await withCheckedContinuation { continuation in
                 state.withLock { state in
                     if !state.events.isEmpty {
+                        state.waitingBytes -= state.sizes.removeFirst()
                         continuation.resume(returning: state.events.removeFirst())
                     } else if state.isFinished || state.reader != nil || Task.isCancelled {
                         continuation.resume(returning: nil)

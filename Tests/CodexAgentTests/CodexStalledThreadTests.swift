@@ -6,8 +6,9 @@ import Testing
 @Suite struct CodexStalledThreadTests {
     let options = CodexServerOptions(answerTimeLimit: .seconds(3), eventLimit: 5)
 
-    func delta(_ index: Int) -> String {
-        #"{"method":"item/agentMessage/delta","params":{"threadId":"stalled","itemId":"m","delta":"\#(index)"}}"#
+    /// A piece of an item of its own, so the pieces that wait do not join.
+    func delta(_ index: Int, item: String? = nil) -> String {
+        #"{"method":"item/agentMessage/delta","params":{"threadId":"stalled","itemId":"\#(item ?? "m\(index)")","delta":"\#(index)"}}"#
     }
 
     /// Runs `call`, answers its request of `method` with `result`, and
@@ -55,5 +56,19 @@ import Testing
         // The answer comes after the flood, so the reader read all of it.
         _ = try await answer("account/rateLimits/read", with: #"{"rateLimits":{}}"#, on: harness) { _ = try await harness.server.readUsage() }
         #expect(stalled.state.withLock { $0.events.count } == 6)
+    }
+
+    /// The pieces of one item join, so only their bytes can end the thread.
+    @Test func aFloodOfPiecesOfOneItemKeepsItsBytesBounded() async throws {
+        let harness = try await CodexServerHarness(options: CodexServerOptions(answerTimeLimit: .seconds(3), eventByteLimit: 4_096))
+        let stalled = await harness.server.open("stalled", first: [])
+        for index in 0..<10_000 { harness.serve(delta(index, item: "m")) }
+        _ = try await answer("account/rateLimits/read", with: #"{"rateLimits":{}}"#, on: harness) { _ = try await harness.server.readUsage() }
+        let (events, bytes) = stalled.state.withLock { ($0.events, $0.waitingBytes) }
+        #expect(events.count == 2 && bytes <= 4_096)
+        guard case .agentTextDelta(let text) = events.first?.kind, case .notice(let notice) = events.last?.kind else {
+            Issue.record("Not the joined text and the notice"); return
+        }
+        #expect(text.text.hasPrefix("0123456789101112") && notice.level == .error)
     }
 }

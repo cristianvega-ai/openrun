@@ -16,7 +16,7 @@ extension CodexAppServer {
     /// turn, and the requests of the thread end declined.
     func endUnreadThread(_ thread: String) {
         guard let state = threads.removeValue(forKey: thread) else { return }
-        let text = "OpenRun closed the thread, because more than \(options.eventLimit) of its events waited to show."
+        let text = "OpenRun closed the thread, because too many of its events waited to show."
         state.channel.finish(with: ConversationEvent(.notice(Notice(level: .error, text: text))))
         // A request waits for the reader, so the reader must not wait for it.
         Task {
