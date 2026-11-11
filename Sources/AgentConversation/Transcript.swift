@@ -25,9 +25,14 @@ public struct Transcript: Sendable, Hashable {
     /// The tool calls of each task item, so that its entries in
     /// `taskItems` go when the item goes.
     var taskCalls: [String: [String]] = [:]
+    /// The newest items that the trim dropped, at least 1,024 of them. A
+    /// late event of such an item, such as a delta or a result, changes
+    /// nothing.
+    var droppedItems: RecentIdentifiers
 
     public init(limits: TranscriptLimits = TranscriptLimits()) {
         self.limits = limits
+        droppedItems = RecentIdentifiers(capacity: max(limits.itemLimit, 1_024))
     }
 
     public init(events: some Sequence<ConversationEvent>, limits: TranscriptLimits = TranscriptLimits()) {
@@ -81,13 +86,17 @@ public struct Transcript: Sendable, Hashable {
     }
 
     /// Drops what the transcript kept about items that it trimmed, so that
-    /// its memory stays bounded however many items come and go.
+    /// its memory stays bounded however many items come and go, and
+    /// remembers the newest of them.
     private mutating func forget(_ removed: [String]) {
         for identifier in removed {
+            droppedItems.insert(identifier)
             openItems.remove(identifier)
             waitingPermissions.remove(identifier)
             for call in taskCalls.removeValue(forKey: identifier) ?? [] where taskItems[call] == identifier {
                 taskItems[call] = nil
+                // A later message of the task looks for this name.
+                droppedItems.insert("task:" + call)
             }
         }
         if waitingPermissions.isEmpty, state == .needsUser { state = .inProgress }
@@ -192,7 +201,8 @@ public struct Transcript: Sendable, Hashable {
     }
 
     /// Changes the item in place, or adds it made by `create` and then
-    /// changed. Without `create`, a missing item stays missing.
+    /// changed. Without `create`, or when the trim dropped the item, a
+    /// missing item stays missing.
     mutating func update(
         _ identifier: String, create: TranscriptItemContent? = nil, isOpen: Bool = false,
         _ change: inout TranscriptChange, _ body: (inout TranscriptItemContent) -> Void
@@ -201,7 +211,7 @@ public struct Transcript: Sendable, Hashable {
             if !change.inserted.contains(identifier), !change.updated.contains(identifier) {
                 change.updated.append(identifier)
             }
-        } else if var content = create {
+        } else if var content = create, !droppedItems.contains(identifier) {
             body(&content)
             insert(identifier, content, isOpen: isOpen, &change)
         }
