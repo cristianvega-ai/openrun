@@ -21,6 +21,64 @@ struct BoxLineArms: Equatable {
         self.init(up: weights[0], right: weights[1], down: weights[2], left: weights[3])
     }
 
+    /// Draws the arms with whole pixels. Every arm reaches its edge of the cell at
+    /// the same place for a size of cell, so neighbors join. In the middle, each
+    /// arm stops where it meets the others, so a corner or a joint has no notch,
+    /// and the gap of a double line stays open where another double line joins it.
+    func draw(on canvas: inout CellCanvas) {
+        let light = canvas.lightThickness, heavy = 2 * canvas.lightThickness
+        let (width, height) = (canvas.width, canvas.height)
+        let lightTop = (height - light) / 2, lightBottom = (height - light) / 2 + light
+        let heavyTop = (height - heavy) / 2, heavyBottom = (height - heavy) / 2 + heavy
+        let doubleTop = lightTop - light, doubleBottom = lightBottom + light
+        let lightLeft = (width - light) / 2, lightRight = (width - light) / 2 + light
+        let heavyLeft = (width - heavy) / 2, heavyRight = (width - heavy) / 2 + heavy
+        let doubleLeft = lightLeft - light, doubleRight = lightRight + light
+        let horizontal = [left, right], vertical = [up, down]
+        // Where an arm stops in the middle depends on the arms across it.
+        func stop(across: [Weight], along: (Weight, Weight), heavy: Int, double: Int, light: Int, inner: Int) -> Int {
+            if across.contains(.heavy) { return heavy }
+            if across[0] != across[1] || along.0 == along.1 { return across.contains(.double) ? double : light }
+            return across.allSatisfy { $0 == .none } ? light : inner
+        }
+        let upBottom = stop(across: horizontal, along: (down, up), heavy: heavyBottom, double: doubleBottom, light: lightBottom, inner: lightTop)
+        let downTop = stop(across: horizontal, along: (up, down), heavy: heavyTop, double: doubleTop, light: lightTop, inner: lightBottom)
+        let leftRight = stop(across: vertical, along: (left, right), heavy: heavyRight, double: doubleRight, light: lightRight, inner: lightLeft)
+        let rightLeft = stop(across: vertical, along: (right, left), heavy: heavyLeft, double: doubleLeft, light: lightLeft, inner: lightRight)
+        switch up {
+        case .none: break
+        case .light: canvas.fill(left: lightLeft, top: 0, right: lightRight, bottom: upBottom)
+        case .heavy: canvas.fill(left: heavyLeft, top: 0, right: heavyRight, bottom: upBottom)
+        case .double:
+            canvas.fill(left: doubleLeft, top: 0, right: lightLeft, bottom: left == .double ? lightTop : upBottom)
+            canvas.fill(left: lightRight, top: 0, right: doubleRight, bottom: right == .double ? lightTop : upBottom)
+        }
+        switch right {
+        case .none: break
+        case .light: canvas.fill(left: rightLeft, top: lightTop, right: width, bottom: lightBottom)
+        case .heavy: canvas.fill(left: rightLeft, top: heavyTop, right: width, bottom: heavyBottom)
+        case .double:
+            canvas.fill(left: up == .double ? lightRight : rightLeft, top: doubleTop, right: width, bottom: lightTop)
+            canvas.fill(left: down == .double ? lightRight : rightLeft, top: lightBottom, right: width, bottom: doubleBottom)
+        }
+        switch down {
+        case .none: break
+        case .light: canvas.fill(left: lightLeft, top: downTop, right: lightRight, bottom: height)
+        case .heavy: canvas.fill(left: heavyLeft, top: downTop, right: heavyRight, bottom: height)
+        case .double:
+            canvas.fill(left: doubleLeft, top: left == .double ? lightBottom : downTop, right: lightLeft, bottom: height)
+            canvas.fill(left: lightRight, top: right == .double ? lightBottom : downTop, right: doubleRight, bottom: height)
+        }
+        switch left {
+        case .none: break
+        case .light: canvas.fill(left: 0, top: lightTop, right: leftRight, bottom: lightBottom)
+        case .heavy: canvas.fill(left: 0, top: heavyTop, right: leftRight, bottom: heavyBottom)
+        case .double:
+            canvas.fill(left: 0, top: doubleTop, right: up == .double ? lightLeft : leftRight, bottom: lightTop)
+            canvas.fill(left: 0, top: lightBottom, right: down == .double ? lightLeft : leftRight, bottom: doubleBottom)
+        }
+    }
+
     /// The arms of U+2500 to U+257F, 16 characters in each line, in the order up,
     /// right, down and left. A dash marks a character that is drawn another way.
     private static let table: [Substring] = """

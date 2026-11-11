@@ -12,6 +12,14 @@ var selectionColor: TerminalColor { TerminalTheme.graphite(for: .dark).selection
 /// The space around the grid: 8 points.
 var testPadding: Int { Int((8 * testFonts.scale).rounded()) }
 
+/// The cells of text sizes from 6 to 72 points at both backing scales, in pixels.
+let drawnCellSizes: [(width: Int, height: Int)] = [6, 9, 11, 13, 17, 24, 36, 50, 72].flatMap { pointSize in
+    [1, 2].map { scale in
+        let fonts = FontSet(pointSize: CGFloat(pointSize), scale: CGFloat(scale))
+        return (fonts.cellWidth, fonts.cellHeight)
+    }
+}
+
 /// A terminal that already ran `output`, with a render state that read it.
 func makeScreen(_ output: String, columns: UInt16 = 20, rows: UInt16 = 3) throws -> (terminal: Terminal, state: RenderState) {
     let terminal = try Terminal(size: TerminalSize(columns: columns, rows: rows), scrollbackLimit: 0)
