@@ -7,6 +7,7 @@ actor SessionServer {
     private let listener: SocketListener
     private let registry: SessionRegistry
     private let questions = ApprovalQuestions()
+    private let changes = SessionChangeFeed()
     private let answererRequirement: AnswererRequirement
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
@@ -21,7 +22,7 @@ actor SessionServer {
         listener = try SocketListener(location: location)
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
-        registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess())
+        registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes)
     }
 
     func start() {
@@ -122,9 +123,16 @@ actor SessionServer {
     private func serve(_ client: ClientConnection, peer: PeerProcess) async {
         let owner = ObjectIdentifier(client)
         var attachedSession: Session?
+        var isWatching = false
 
         messages: for await received in client.messages {
             if Task.isCancelled { break }
+            // An answer would mix with the changes, so a watcher only leaves.
+            if isWatching, received.message != .detach {
+                client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection receives the session changes and takes no other request.")))
+                client.markHandled(received)
+                continue
+            }
             switch received.message {
             case .hello:
                 client.send(.failure(SessionFailure(reason: .invalidRequest, message: "Hello was already sent.")))
@@ -261,7 +269,14 @@ actor SessionServer {
                 await questions.addAnswerer(owner) { client.send($0) }
             case .answerApprovalQuestion(let identifier, let allows):
                 await questions.answer(identifier, allows: allows, from: owner)
-            case .receiveSessionChanges, .renameSession, .raiseSessionAlert, .clearSessionAlert:
+            case .receiveSessionChanges:
+                guard attachedSession == nil else {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection is attached.")))
+                    break
+                }
+                isWatching = true
+                changes.addWatcher(owner) { client.send($0) }
+            case .renameSession, .raiseSessionAlert, .clearSessionAlert:
                 // The capability `sessionChanges` is off until these work.
                 client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This session process does not keep the facts of its sessions.")))
             }
@@ -273,6 +288,7 @@ actor SessionServer {
             attachedSession.withdrawTypedInput(from: owner)
         }
         await questions.removeAnswerer(owner)
+        changes.removeWatcher(owner)
         client.closeAfterSending()
     }
 

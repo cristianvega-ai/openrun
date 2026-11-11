@@ -43,6 +43,9 @@ actor Session {
     private var programExit: SessionExit?
     private var runTask: Task<Void, Never>?
     private let onFinish: @Sendable (UUID) async -> Void
+    /// Where the watchers of the sessions hear of this session. Nil for a
+    /// session that a test makes alone.
+    private let changes: SessionChangeFeed?
 
     /// Creates the terminal, then starts the program.
     ///
@@ -56,12 +59,14 @@ actor Session {
     init(
         summary: SessionSummary,
         launch: ProgramLaunch,
+        changes: SessionChangeFeed? = nil,
         onFinish: @escaping @Sendable (UUID) async -> Void,
         answerTimeLimit: Duration = .milliseconds(500),
         installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try Session.installReplies(on: $0, handler: $1) }
     ) throws {
         self.summary = summary
         self.onFinish = onFinish
+        self.changes = changes
         self.answerTimeLimit = answerTimeLimit
         let gate = ReplyGate()
         replyGate = gate
@@ -117,6 +122,7 @@ actor Session {
 
     /// Starts reading the program's output. Call once, right after creating.
     func start() {
+        changes?.add(summary)
         runTask = Task { await self.run() }
     }
 
@@ -311,6 +317,7 @@ actor Session {
         clientsThatReceiveSizeChanges.removeAll()
         clientsThatWaitForOutputRoom.removeAll()
         updateReplyGate()
+        changes?.end(summary.identifier)
         await onFinish(summary.identifier)
     }
 

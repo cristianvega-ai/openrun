@@ -7,6 +7,7 @@ actor SessionRegistry {
     private var sessions: [UUID: Session] = [:]
     private let socketPath: String
     private let helperSearchPath: HelperSearchPath
+    private let changes: SessionChangeFeed?
     /// Set before `terminateAll` first suspends. A client that is already
     /// connected can still send `createSession` while the programs end, and
     /// that program would outlive the session process.
@@ -15,9 +16,10 @@ actor SessionRegistry {
     /// them can still live, such as a job that the program left behind.
     private var endedTerminalSessions: Set<pid_t> = []
 
-    init(socketPath: String, helperSearchPath: HelperSearchPath) {
+    init(socketPath: String, helperSearchPath: HelperSearchPath, changes: SessionChangeFeed? = nil) {
         self.socketPath = socketPath
         self.helperSearchPath = helperSearchPath
+        self.changes = changes
     }
 
     /// Starts a session and adds it to the list.
@@ -52,7 +54,7 @@ actor SessionRegistry {
         }
 
         let summary = SessionSummary(identifier: identifier, folder: folder, command: shownCommand, size: size, createdAt: Date())
-        let session = try Session(summary: summary, launch: launch) { [self] identifier in
+        let session = try Session(summary: summary, launch: launch, changes: changes) { [self] identifier in
             await remove(identifier)
         }
         sessions[identifier] = session
