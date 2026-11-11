@@ -77,6 +77,7 @@ let package = Package(
         // Markdown as agents write it: its blocks and inline styles while
         // it streams, and their text for display.
         .target(name: "MarkdownText"),
+        .testTarget(name: "MarkdownTextTests", dependencies: ["MarkdownText"]),
         // A stand-in for `claude -p` that plays recorded turns, so that no
         // test runs the real agent.
         .executableTarget(name: "fake-agent", path: "Tests/FakeAgent"),
