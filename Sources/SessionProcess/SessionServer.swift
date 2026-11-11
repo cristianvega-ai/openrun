@@ -24,8 +24,8 @@ actor SessionServer {
     func start() {
         let connections = listener.connections
         acceptTask = Task {
-            for await connection in connections {
-                self.accept(connection)
+            for await accepted in connections {
+                self.accept(accepted.connection, peer: accepted.peer)
             }
         }
     }
@@ -66,7 +66,7 @@ actor SessionServer {
 
     // MARK: - Clients
 
-    private func accept(_ connection: MessageConnection) {
+    private func accept(_ connection: MessageConnection, peer: PeerProcess) {
         // The listener can take a connection just before the socket closes.
         // It closes before hello, so its client wakes the next process.
         guard !isClosed else {
@@ -87,7 +87,7 @@ actor SessionServer {
         let key = ObjectIdentifier(client)
         clients[key] = client
         let handler = Task {
-            await self.serve(client)
+            await self.serve(client, peer: peer)
             // The place stays taken until the socket is closed and both of the
             // client's threads are done with it. A client that detaches while
             // its last messages still go out counts until then, so clients
@@ -116,7 +116,7 @@ actor SessionServer {
     /// When the client detaches or leaves, its input that has not gone to the
     /// program yet is dropped, and its requests that were not handled yet are
     /// dropped too. A client that leaves therefore holds no memory.
-    private func serve(_ client: ClientConnection) async {
+    private func serve(_ client: ClientConnection, peer: PeerProcess) async {
         let owner = ObjectIdentifier(client)
         var attachedSession: Session?
 

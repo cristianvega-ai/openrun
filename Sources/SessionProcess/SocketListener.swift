@@ -7,8 +7,15 @@ import SessionProtocol
 /// creates the socket file with private permissions, and accepts connections
 /// from programs of the same user.
 final class SocketListener: @unchecked Sendable {
+    /// A connection, and the program that made it.
+    struct Accepted: Sendable {
+        let connection: MessageConnection
+        /// Read at the accept, before any message (see `PeerProcess`).
+        let peer: PeerProcess
+    }
+
     /// Connections in the order they arrived. The stream finishes after `close`.
-    let connections: AsyncStream<MessageConnection>
+    let connections: AsyncStream<Accepted>
     private let location: SocketLocation
     private let source: DispatchSourceRead
     /// Held until the listener goes away, which is the end of the process.
@@ -55,7 +62,7 @@ final class SocketListener: @unchecked Sendable {
         // buffer is full, the newest connection is dropped and closes.
         // This is the intended behavior.
         let (stream, continuation) = AsyncStream.makeStream(
-            of: MessageConnection.self,
+            of: Accepted.self,
             bufferingPolicy: .bufferingOldest(Self.waitingConnectionLimit)
         )
         connections = stream
@@ -73,19 +80,22 @@ final class SocketListener: @unchecked Sendable {
                     _ = fcntl(accepted, F_SETFL, 0)
                     let connection = MessageConnection(descriptor: accepted)
                     // Another user gets nothing, not even a refusal. Closing
-                    // the connection is all it learns.
+                    // the connection is all it learns. A connection whose
+                    // program cannot be read is closed too.
+                    let peer: PeerProcess
                     do {
                         try connection.requirePeer(allowedPeer)
+                        peer = try connection.peerProcess()
                     } catch {
                         SessionServer.log("Refused a connection: \(error)")
                         connection.shutdown()
                         continue
                     }
-                    switch continuation.yield(connection) {
+                    switch continuation.yield(Accepted(connection: connection, peer: peer)) {
                     case .enqueued:
                         break
                     case .dropped(let dropped):
-                        dropped.shutdown()
+                        dropped.connection.shutdown()
                     case .terminated:
                         connection.shutdown()
                     @unknown default:

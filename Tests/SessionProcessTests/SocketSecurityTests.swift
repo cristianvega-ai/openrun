@@ -516,9 +516,9 @@ extension SessionProcessIntegration {
                 let connections = listener.connections
                 let counting = Task {
                     var count = 0
-                    for await connection in connections {
+                    for await accepted in connections {
                         count += 1
-                        connection.shutdown()
+                        accepted.connection.shutdown()
                     }
                     return count
                 }
@@ -571,9 +571,9 @@ extension SessionProcessIntegration {
 
             listener.close()
             var waited = 0
-            for await connection in listener.connections {
+            for await accepted in listener.connections {
                 waited += 1
-                connection.shutdown()
+                accepted.connection.shutdown()
             }
             #expect(waited == limit)
         }
