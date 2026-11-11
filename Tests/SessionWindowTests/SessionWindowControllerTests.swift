@@ -4,6 +4,7 @@ import SessionProtocol
 import TerminalEmulation
 import Testing
 import Synchronization
+@testable import SessionPane
 @testable import SessionWindow
 @testable import TerminalView
 

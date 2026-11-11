@@ -2,6 +2,7 @@ import Dispatch
 import Foundation
 import Synchronization
 import Testing
+@testable import SessionPane
 @testable import SessionWindow
 
 @MainActor @Suite struct InputBackpressureTests {

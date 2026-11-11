@@ -1,3 +1,4 @@
+@testable import SessionPane
 import AppKit
 import SessionConnection
 import SessionProtocol

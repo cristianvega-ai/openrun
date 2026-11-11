@@ -6,7 +6,7 @@ import TerminalEmulation
 import TerminalView
 import Testing
 import Synchronization
-import SessionPane
+@testable import SessionPane
 @testable import SessionWindow
 
 @Suite(.isolatedThread) struct SessionStartTests {

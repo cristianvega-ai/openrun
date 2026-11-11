@@ -2,6 +2,7 @@ import AppKit
 import SessionProtocol
 import TerminalEmulation
 import Testing
+@testable import SessionPane
 @testable import SessionWindow
 @testable import TerminalView
 

@@ -1,6 +1,7 @@
 import AppKit
 import SessionConnection
 import SessionLaunch
+import SessionPane
 import SessionProtocol
 import SessionWindow
 

@@ -1,6 +1,7 @@
 import AppKit
 import SessionProcessHarness
 import SessionProtocol
+@testable import SessionPane
 @testable import SessionWindow
 import Testing
 import TerminalView
