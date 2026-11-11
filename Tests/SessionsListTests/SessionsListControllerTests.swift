@@ -41,3 +41,16 @@ import Testing
         #expect(list.selection == nil && host.selections == [identifiers[1], nil])
     }
 }
+
+@MainActor @Suite struct SessionsListAgeTests {
+    /// The age of a finished row grows with the time, in the view that the row already has.
+    @Test func anUpdateShowsTheNewAgesInPlace() {
+        let (list, _, window, _) = makeSessionsList()
+        defer { window.close() }
+        let cell = list.cell(at: 2)
+        #expect(cell?.age.stringValue == "8m")
+        list.now = { Date(timeIntervalSince1970: 10_000 + 3_600) }
+        list.update()
+        #expect(list.cell(at: 2) === cell && cell?.age.stringValue == "1h")
+    }
+}

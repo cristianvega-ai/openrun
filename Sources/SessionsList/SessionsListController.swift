@@ -38,6 +38,22 @@ public final class SessionsListController: NSObject {
         configureTopRow()
         configureTable()
         layOut()
+        startAgeTimer()
+    }
+
+    /// The ages of the finished rows grow while the list shows them. Once a
+    /// minute the rows whose age text changed update in place. The timer
+    /// ends itself when the controller goes away.
+    private func startAgeTimer() {
+        let timer = Timer(timeInterval: 60, repeats: true) { [weak self] timer in
+            let isGone = MainActor.assumeIsolated {
+                self?.update()
+                return self == nil
+            }
+            if isGone { timer.invalidate() }
+        }
+        timer.tolerance = 10
+        RunLoop.main.add(timer, forMode: .common)
     }
 
     /// The view that takes the keyboard focus when the pane gets it.
