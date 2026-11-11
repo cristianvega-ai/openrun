@@ -130,6 +130,10 @@ actor SessionServer {
             case .listSessions:
                 client.send(.sessionList(await registry.summaries()))
             case .readScreen(let identifier, let includeScrollback):
+                if let refusal = await refusal(of: peer, toward: identifier, .read) {
+                    client.send(refusal)
+                    break
+                }
                 let answer = await readScreen(identifier, includeScrollback: includeScrollback)
                 if case .screen = answer {
                     // A screen can be larger than the output limit, so it does
@@ -142,6 +146,10 @@ actor SessionServer {
             case .sendText(let identifier, let text):
                 guard let session = await registry.session(for: identifier) else {
                     client.send(Self.unknownSession(identifier))
+                    break
+                }
+                if let refusal = await refusal(of: peer, toward: identifier, .type) {
+                    client.send(refusal)
                     break
                 }
                 // The answer waits until the text is in the program's backlog,
@@ -161,6 +169,10 @@ actor SessionServer {
             case .killSession(let identifier):
                 guard let session = await registry.session(for: identifier) else {
                     client.send(Self.unknownSession(identifier))
+                    break
+                }
+                if let refusal = await refusal(of: peer, toward: identifier, .kill) {
+                    client.send(refusal)
                     break
                 }
                 guard session === attachedSession else {
@@ -190,6 +202,10 @@ actor SessionServer {
                 }
                 guard let session = await registry.session(for: identifier) else {
                     client.send(Self.unknownSession(identifier))
+                    break
+                }
+                if let refusal = await refusal(of: peer, toward: identifier, .attach) {
+                    client.send(refusal)
                     break
                 }
                 do {
@@ -267,6 +283,30 @@ actor SessionServer {
         } catch {
             return .failure(SessionFailure(reason: .invalidRequest, message: "\(error)"))
         }
+    }
+
+    /// What a caller in one session wants to do to another one.
+    enum CrossSessionAction: String {
+        case type = "type into"
+        case read
+        case attach = "attach to"
+        case kill
+    }
+
+    /// The refusal of a request on another session, or nil when the caller
+    /// may do it (decision of 2026-10-15). The reason is an existing one, so
+    /// protocol version 1 does not change.
+    private func refusal(of peer: PeerProcess, toward target: UUID, _ action: CrossSessionAction) async -> ServerMessage? {
+        let place = await registry.place(of: peer)
+        guard !place.mayAct(on: target) else { return nil }
+        let targetText = SessionSummary.text(for: target)
+        let message = switch place {
+        case .session(let own):
+            "A program in session \(SessionSummary.text(for: own)) cannot \(action.rawValue) session \(targetText) without the user's approval."
+        default:
+            "The program that asked to \(action.rawValue) session \(targetText) ended before the session process found its session."
+        }
+        return .failure(SessionFailure(reason: .invalidRequest, message: message))
     }
 
     private static func unknownSession(_ identifier: UUID) -> ServerMessage {
