@@ -6,6 +6,10 @@ final class ChatTextView: NSTextView {
     /// Gets the target of a link that the user clicks. Nothing opens a
     /// link by itself.
     var linkAction: ((String) -> Void)?
+    /// The whole message of the row, for Copy Message in the menu.
+    var messageText: (() -> String)?
+    /// The general pasteboard, or a private one in tests.
+    var pasteboard = NSPasteboard.general
 
     init() {
         let storage = NSTextStorage()
@@ -63,5 +67,20 @@ extension ChatTextView: NSTextViewDelegate {
         let target = (link as? String) ?? (link as? URL)?.absoluteString
         if let target { linkAction?(target) }
         return true
+    }
+
+    /// Adds Copy Message at the top of the menu of a message.
+    func textView(_ view: NSTextView, menu: NSMenu, for event: NSEvent, at characterIndex: Int) -> NSMenu? {
+        guard messageText != nil else { return menu }
+        let item = NSMenuItem(title: "Copy Message", action: #selector(copyMessage), keyEquivalent: "")
+        item.target = self
+        menu.insertItem(item, at: 0)
+        menu.insertItem(.separator(), at: 1)
+        return menu
+    }
+
+    @objc func copyMessage() {
+        pasteboard.clearContents()
+        pasteboard.setString(messageText?() ?? "", forType: .string)
     }
 }

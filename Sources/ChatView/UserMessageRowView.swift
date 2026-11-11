@@ -35,6 +35,7 @@ final class UserMessageRowView: TranscriptRowView {
             .font: palette.bodyFont, .foregroundColor: palette.text, .paragraphStyle: paragraph,
         ]))
         textView.selectedTextAttributes = [.backgroundColor: palette.selection]
+        textView.messageText = { message.text }
         bubble.fillColor = palette.userMessageBackground
         bubble.alphaValue = message.isAccepted ? 1 : 0.6
     }

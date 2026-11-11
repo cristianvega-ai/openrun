@@ -22,6 +22,7 @@ final class AgentTextRowView: TranscriptRowView {
         ]
         textView.selectedTextAttributes = [.backgroundColor: context.palette.selection]
         textView.linkAction = { [weak context] target in context?.actions?.openLink(target) }
+        textView.messageText = { [weak context] in context?.documents[item]?.text ?? "" }
         textView.show(context.text(ofBlocks: blocks, in: item))
     }
 
