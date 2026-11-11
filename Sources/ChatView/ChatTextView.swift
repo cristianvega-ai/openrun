@@ -1,4 +1,5 @@
 import AppKit
+import MarkdownText
 
 /// The text view of a row: selectable, not editable, with no background
 /// and no inset, and with TextKit 1, which shows the tables of Markdown.
@@ -13,7 +14,7 @@ final class ChatTextView: NSTextView {
 
     init() {
         let storage = NSTextStorage()
-        let layoutManager = NSLayoutManager()
+        let layoutManager = MarkdownLayoutManager()
         let container = NSTextContainer(size: NSSize(width: 100, height: CGFloat.greatestFiniteMagnitude))
         container.lineFragmentPadding = 0
         layoutManager.addTextContainer(container)
