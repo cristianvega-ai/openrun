@@ -31,4 +31,11 @@ import Testing
         transport.serve(#"{"id":0,"error":{"code":-32600,"message":"Not initialized"}}"#)
         await #expect(throws: CodexRequestError.refused(code: -32600, message: "Not initialized")) { try await connect.value }
     }
+
+    @Test func theShutDownEndsTheServer() async throws {
+        let harness = try await CodexServerHarness()
+        await harness.server.shutDown()
+        while await !harness.server.hasEnded { try await Task.sleep(for: .milliseconds(10)) }
+        await #expect(throws: CodexRequestError.connectionEnded) { try await harness.server.request("account/read", .object([:])) }
+    }
 }
