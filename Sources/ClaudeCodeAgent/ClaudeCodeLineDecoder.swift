@@ -20,6 +20,7 @@ struct ClaudeCodeLineDecoder: Sendable {
     mutating func decode(_ line: JSONValue) -> [ConversationEventKind]? {
         guard let type = line["type"]?.string else { return nil }
         switch type {
+        case "system": return systemEvents(line)
         case "assistant": return assistantEvents(line)
         case "user": return userEvents(line)
         case "result": return [.turnEnded(Self.turnEnd(line))]
