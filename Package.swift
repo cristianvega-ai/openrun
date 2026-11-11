@@ -59,6 +59,9 @@ let package = Package(
         // the decoder of its output, its permission hook, and its history.
         .target(name: "ClaudeCodeAgent", dependencies: ["AgentConversation"]),
         .testTarget(name: "ClaudeCodeAgentTests", dependencies: ["ClaudeCodeAgent", "AgentConversation"], exclude: ["Fixtures"]),
+        // An agent program on pipes, such as `claude -p`, with its process
+        // group, and the environment of the user's login shell.
+        .target(name: "AgentProgram", dependencies: ["PseudoTerminal"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
