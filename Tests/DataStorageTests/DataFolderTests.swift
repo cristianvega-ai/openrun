@@ -48,4 +48,17 @@ import Testing
             try DataFolder(path: file).create()
         }
     }
+
+    @Test func createRemovesOnlyOldTemporaryFiles() throws {
+        let temporary = try TemporaryFolder()
+        let old = temporary.path + "/.settings.json.1.writing"
+        let new = temporary.path + "/.settings.json.2.writing"
+        let other = temporary.path + "/.hidden"
+        for file in [old, new, other] { try Data().write(to: URL(fileURLWithPath: file)) }
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: old)
+        try FileManager.default.setAttributes([.modificationDate: Date(timeIntervalSinceNow: -3600)], ofItemAtPath: other)
+        try DataFolder(path: temporary.path).create()
+        let names = Set(try FileManager.default.contentsOfDirectory(atPath: temporary.path))
+        #expect(names == [".settings.json.2.writing", ".hidden"])
+    }
 }

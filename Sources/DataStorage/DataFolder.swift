@@ -52,7 +52,23 @@ public struct DataFolder: Equatable, Sendable {
         guard (status.st_mode & S_IFMT) == S_IFDIR else {
             throw DataStorageError.notAFolder(path: path)
         }
-        guard status.st_mode & 0o777 != 0o700 else { return }
-        guard chmod(path, 0o700) == 0 else { throw DataStorageError.failure(of: "chmod") }
+        if status.st_mode & 0o777 != 0o700 {
+            guard chmod(path, 0o700) == 0 else { throw DataStorageError.failure(of: "chmod") }
+        }
+        removeTemporaryFiles(olderThan: Date(timeIntervalSinceNow: -60))
+    }
+
+    /// A crash in the middle of a write leaves its temporary file. Only old
+    /// ones go, because the app writes its own file here too, and a write in
+    /// progress must keep its temporary file until the rename.
+    func removeTemporaryFiles(olderThan limit: Date) {
+        let manager = FileManager.default
+        guard let names = try? manager.contentsOfDirectory(atPath: path) else { return }
+        for name in names where name.hasPrefix(".") && name.hasSuffix(AtomicFileWriter.temporarySuffix) {
+            let file = path + "/" + name
+            guard let changed = (try? manager.attributesOfItem(atPath: file))?[.modificationDate] as? Date,
+                  changed < limit else { continue }
+            try? manager.removeItem(atPath: file)
+        }
     }
 }

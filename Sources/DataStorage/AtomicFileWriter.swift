@@ -9,7 +9,8 @@ import Foundation
 /// replaces the name at once. The temporary file is made with mode 0600, so
 /// no other user can read it at any moment.
 enum AtomicFileWriter {
-    /// The end of the name of a temporary file.
+    /// The end of the name of a temporary file. A crash can leave such a
+    /// file, and `DataFolder.create` removes it later.
     static let temporarySuffix = ".writing"
 
     static func write(_ data: Data, to path: String) throws {
