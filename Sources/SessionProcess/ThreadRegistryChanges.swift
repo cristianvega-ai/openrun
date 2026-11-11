@@ -62,8 +62,11 @@ extension ThreadRegistry {
     /// A runner has a new title, state or process. The record goes to the
     /// file when it changed, and the summary goes to the clients.
     func runnerChanged(_ runner: ThreadRunner) async {
-        let (record, state, isRunning, waiting) = await (runner.record, runner.state, runner.isProcessRunning, runner.waitingMessages.count)
+        let (record, state, process, waiting) = await (runner.record, runner.state, runner.program?.processIdentifier, runner.waitingMessages.count)
         guard runners[record.identifier] === runner, let kept = list.thread(record.identifier) else { return }
+        agentProcesses = agentProcesses.filter { $0.value != record.identifier }
+        if let process { agentProcesses[process] = record.identifier }
+        let isRunning = process != nil
         if kept != record {
             try? list.update(record.identifier) { $0 = record }
             do { try store.save(list) } catch { SessionLog.write("The facts of a thread could not be saved: ", detail: "\(error)") }

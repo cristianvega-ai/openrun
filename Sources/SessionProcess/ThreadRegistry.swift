@@ -21,6 +21,8 @@ actor ThreadRegistry {
     /// The newest summary of each thread, as the lists of the clients show it.
     var summaries: [UUID: ThreadSummary] = [:]
     var projects: ProjectList
+    /// The process of the agent of each thread whose agent runs.
+    var agentProcesses: [pid_t: UUID] = [:]
     /// The model and the permission mode of a thread that names none.
     var defaultModel = "opus"
     var defaultPermissionMode = "default"
@@ -53,6 +55,13 @@ actor ThreadRegistry {
 
     func summary(_ identifier: UUID) -> ThreadSummary? {
         summaries[identifier]
+    }
+
+    /// The thread whose agent is this process or one of its parents. Such
+    /// a program runs for the agent, and not for the user.
+    func thread(startedProcess process: pid_t) -> UUID? {
+        guard !agentProcesses.isEmpty else { return nil }
+        return ProcessAncestry.ancestor(of: process, among: Set(agentProcesses.keys)).flatMap { agentProcesses[$0] }
     }
 
     /// Whether a process of an agent runs, so the session process must stay.
