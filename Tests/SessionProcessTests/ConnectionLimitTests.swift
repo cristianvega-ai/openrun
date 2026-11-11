@@ -303,13 +303,17 @@ extension SessionProcessIntegration {
                 // the attach, so only the wake at the end of the program ends the wait sooner:
                 // 2 seconds after the queue is full. A busy Mac took up to 20 seconds to
                 // fill the queue, so the test now counts from the attach. Without the wake,
-                // the session ends no sooner than 30 seconds after the attach.
+                // the session ends no sooner than 30 seconds after the attach. The client
+                // takes a byte each 100 ms through a relay, so the write stall limit of
+                // 10 seconds cannot end it first.
                 let size = SessionSize(columns: 240, rows: 50)
                 let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: #"print "x" x 65536 for 1 .. 160;"#)
                 let attached = ContinuousClock.now
                 let client = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { client.connection.shutdown() }
                 try #require(client.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
+                let relay = try TrickleRelay(from: client.descriptor)
+                defer { relay.connection.shutdown() }
                 FileManager.default.createFile(atPath: go.path, contents: Data())
                 let gone = await eventually(timeout: attached + .seconds(28) - ContinuousClock.now) { (try? process.listedIdentifiers())?.isEmpty == true }
                 print("program-exit-wake: gone \(gone) after \(ContinuousClock.now - attached) from the attach")
