@@ -88,7 +88,7 @@ let package = Package(
         .testTarget(name: "SessionLaunchTests", dependencies: ["SessionLaunch"]),
         .target(
             name: "SessionProcess",
-            dependencies: ["TerminalEmulation", "TerminalTheme", "PseudoTerminal", "SessionProtocol", "SessionLaunch", "GitBranch", "UntrustedText"]
+            dependencies: ["TerminalEmulation", "TerminalTheme", "PseudoTerminal", "SessionProtocol", "SessionLaunch", "GitBranch", "UntrustedText", "DataStorage", "Projects", "Settings"]
         ),
         .executableTarget(
             name: "openrun-session",
@@ -140,7 +140,7 @@ let package = Package(
         ),
         .testTarget(
             name: "SessionProcessTests",
-            dependencies: ["SessionProcessHarness", "SessionProcess", "SessionProtocol", "SessionLaunch", "TerminalEmulation"]
+            dependencies: ["SessionProcessHarness", "SessionProcess", "SessionProtocol", "SessionLaunch", "TerminalEmulation", "DataStorage", "Projects", "Settings"]
         ),
         .testTarget(
             name: "CommandLineToolTests",

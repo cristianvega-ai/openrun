@@ -1,3 +1,4 @@
+import DataStorage
 import Foundation
 import SessionLaunch
 import SessionProtocol
@@ -17,13 +18,19 @@ public struct SessionProcess: Sendable {
     let idleExit: IdleExit?
     /// The program that may receive and answer approval questions.
     let answererRequirement: AnswererRequirement
+    /// Where the projects and the settings are. Only this process writes there.
+    let dataFolder: DataFolder
 
     public init(socketLocation: SocketLocation) {
         self.init(socketLocation: socketLocation, machServiceName: nil, idleExit: nil, answererRequirement: .ofThisProcess())
     }
 
-    init(socketLocation: SocketLocation, machServiceName: String?, idleExit: IdleExit?, answererRequirement: AnswererRequirement = .ofThisProcess()) {
+    init(
+        socketLocation: SocketLocation, dataFolder: DataFolder? = nil, machServiceName: String?, idleExit: IdleExit?,
+        answererRequirement: AnswererRequirement = .ofThisProcess()
+    ) {
         self.socketLocation = socketLocation
+        self.dataFolder = dataFolder ?? DataFolder(path: socketLocation.folder)
         self.machServiceName = machServiceName
         self.idleExit = idleExit
         self.answererRequirement = answererRequirement
@@ -80,6 +87,7 @@ public struct SessionProcess: Sendable {
     /// Returns the exit code of the process.
     public static func runFromCommandLine(arguments: [String], environment: [String: String]) async -> Int32 {
         var socketFlag: String?
+        var dataFolderFlag: String?
         var answererRequirement = AnswererRequirement.ofThisProcess()
         var isLaunchAgent = false
         var remaining = arguments[...]
@@ -88,6 +96,9 @@ public struct SessionProcess: Sendable {
             case "--socket":
                 guard let path = remaining.popFirst() else { return usageError("--socket needs a path.") }
                 socketFlag = path
+            case "--data-folder":
+                guard let path = remaining.popFirst() else { return usageError("--data-folder needs a path.") }
+                dataFolderFlag = path
             case "--answerer-requirement":
                 guard let text = remaining.popFirst() else { return usageError("--answerer-requirement needs a code requirement.") }
                 answererRequirement = AnswererRequirement(text: text)
@@ -107,7 +118,11 @@ public struct SessionProcess: Sendable {
             let location = try SocketLocation.resolve(flag: socketFlag, environment: isLaunchAgent ? [:] : environment)
             let machServiceName = isLaunchAgent ? LaunchAgentNames.machServiceName(in: environment) : nil
             let idleExit = isLaunchAgent ? IdleExit(environment: environment) : nil
-            try await SessionProcess(socketLocation: location, machServiceName: machServiceName, idleExit: idleExit, answererRequirement: answererRequirement).run()
+            let dataFolder = dataFolderFlag.map { Self.dataFolder(flag: $0, currentFolder: FileManager.default.currentDirectoryPath) }
+            try await SessionProcess(
+                socketLocation: location, dataFolder: dataFolder, machServiceName: machServiceName, idleExit: idleExit,
+                answererRequirement: answererRequirement
+            ).run()
             return 0
         } catch {
             SessionLog.write("", detail: "\(error)")
@@ -115,13 +130,22 @@ public struct SessionProcess: Sendable {
         }
     }
 
+    /// The folder that `--data-folder` names. A relative path starts at the
+    /// current folder, as the path of the socket does.
+    static func dataFolder(flag: String, currentFolder: String) -> DataFolder {
+        let url = URL(fileURLWithPath: flag, relativeTo: URL(fileURLWithPath: currentFolder, isDirectory: true))
+        return DataFolder(path: url.standardizedFileURL.path)
+    }
+
     private static let usage = """
-        Usage: openrun-session [--socket PATH] [--answerer-requirement REQUIREMENT] [--launch-agent]
+        Usage: openrun-session [--socket PATH] [--data-folder PATH] [--answerer-requirement REQUIREMENT] [--launch-agent]
 
         Runs the OpenRun session process in the foreground and logs to standard error.
         The socket is PATH, or OPENRUN_SOCKET, or ~/Library/Application Support/OpenRun/session.socket.
         A relative path starts at the current folder. The folder of the socket must belong to you,
         and other users must not be able to write to it.
+        The projects and the settings are in the folder of the socket, or in the folder
+        that --data-folder names.
         launchd gives --launch-agent: the process then answers wake requests, and it
         ends after 30 seconds with no session and no client.
         Only a program that meets REQUIREMENT, in the code requirement language, receives
