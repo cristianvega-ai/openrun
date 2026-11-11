@@ -1,5 +1,8 @@
 import AppKit
 import Foundation
+import SessionProcessHarness
+import SessionProtocol
+import Testing
 @testable import TerminalView
 @testable import SessionPane
 
@@ -38,3 +41,38 @@ extension TerminalView {
     var screenText: String { String(decoding: (try? terminal.formatted(.plainText)) ?? [], as: UTF8.self) }
 }
 
+/// A pane that a test window holds beside another control.
+struct HostedPane {
+    let pane: SessionPaneController, host: RecordingHost, window: NSWindow, identifier: String
+}
+
+/// Starts a shell session and attaches a pane to it at the right of a text field.
+@MainActor
+func hostPane(in process: RunningSessionProcess, folder: URL, focusesPane: Bool = true) async throws -> HostedPane {
+    _ = NSApplication.shared
+    let identifier = try process.createSession(program: ["/bin/sh", "-i"], folder: folder, environment: ["HOME": folder.path, "PATH": "/usr/bin:/bin", "PS1": "pane> "])
+    let pane = SessionPaneController(start: .runningSession(try #require(UUID(uuidString: identifier))), socket: try SocketLocation(path: process.socketPath))
+    let host = RecordingHost()
+    pane.delegate = host
+    let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
+    window.isReleasedWhenClosed = false
+    let other = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))
+    window.contentView?.addSubview(other)
+    pane.paneView.frame = NSRect(x: 240, y: 0, width: 660, height: 500)
+    window.contentView?.addSubview(pane.paneView)
+    window.makeFirstResponder(focusesPane ? pane.paneView : other)
+    pane.attach()
+    await waitOnMainThread { pane.terminalView?.screenText.contains("pane>") == true }
+    try #require(pane.terminalView?.screenText.contains("pane>") == true)
+    return HostedPane(pane: pane, host: host, window: window, identifier: identifier)
+}
+
+/// Runs `body` with a session process and a folder for its sessions.
+@MainActor
+func withSessionProcess(_ body: (RunningSessionProcess, URL) async throws -> Void) async throws {
+    let folder = try RunningSessionProcess.makeDirectory()
+    defer { try? FileManager.default.removeItem(at: folder) }
+    let process = try RunningSessionProcess()
+    defer { process.stop() }
+    try await body(process, folder)
+}
