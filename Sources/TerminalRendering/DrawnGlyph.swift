@@ -10,7 +10,7 @@ enum DrawnGlyph {
         var canvas = CellCanvas(width: cellWidth * key.columns, height: cellHeight)
         if let arms = BoxLineArms(scalar) {
             arms.draw(on: &canvas)
-        } else {
+        } else if !BoxDrawingShapes.draw(scalar, on: &canvas) {
             return nil
         }
         return canvas.bitmap
