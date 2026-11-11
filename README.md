@@ -131,11 +131,18 @@ openrun project list                        # identifier, name and folder of eac
 openrun project rename ~/Projects/app       # a folder or an identifier start; no name shows the folder's name
 openrun settings list                       # the name and the value of each setting
 openrun settings set font-size 14           # change a setting
+openrun thread new -- "Run the tests"       # start a thread with Claude Code and print its identifier
+openrun thread list                         # identifier, state, folder and name of each thread
+openrun thread read 7c1d                    # the conversation that the thread keeps, as plain text
+openrun thread send 7c1d "Now fix them"     # send the next message; it waits behind a turn that runs
+openrun thread stop 7c1d                    # stop the turn
+openrun thread close 7c1d                   # end the agent and remove the thread
 openrun help
 ```
 
 `openrun notify` is for the hooks of an agent. It raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`. When no session process answers, or none knows the session in `OPENRUN_SESSION`, it writes OSC 777 to the terminal instead. A session after `--session` must exist. It exits with 0 when the alert went out and with 1 otherwise, never with 2, so it never blocks a hook of Claude Code.
 A program in a session may rename or alert only its own session. The session process refuses at once when it tries another one.
+Only a program outside every session and every thread may use the `thread` commands, so an agent cannot drive another agent. No command answers a permission request of an agent: you answer it in the chat of OpenRun.app.
 
 Every client may read and change the projects and the settings. A protected setting, such as `session-limit`, changes only for OpenRun.app outside every session; every other program gets a message that says so. A change is saved at once. When the save fails, the client gets the reason, and nothing changes. The session process uses two settings itself: `session-limit` applies to the next new session, and `scrollback-limit` to the sessions that start after the change.
 
