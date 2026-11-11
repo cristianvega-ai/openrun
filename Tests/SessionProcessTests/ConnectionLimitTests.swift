@@ -525,6 +525,10 @@ extension SessionProcessIntegration {
 
         /// The waits for the full clients ran one after another, so the program
         /// stopped for 2 seconds for each stalled client: about 6 seconds here.
+        ///
+        /// A busy Mac made the time to fill the queues longer, so a limit on
+        /// the time from the go file to the closes failed. Waits in turn show
+        /// as closes 2 seconds apart, and load does not move them apart.
         @Test(.tags(.takesEverySlot)) func severalStalledViewersPauseTheProgramForTwoSecondsInTotal() async throws {
             try await RunningSessionProcess.run { process in
                 let (identifier, go) = try startFlood(process)
@@ -532,11 +536,20 @@ extension SessionProcessIntegration {
                 defer { stalled.forEach { $0.connection.shutdown() } }
                 FileManager.default.createFile(atPath: go.path, contents: Data())
                 let start = ContinuousClock.now
-                let closed = await eventually(timeout: .seconds(4)) { stalled.allSatisfy { isClosedBySessionProcess($0.descriptor) } }
-                let elapsed = ContinuousClock.now - start
-                print("stalled-viewers: all closed \(closed) after \(elapsed)")
-                #expect(closed, "Three stalled viewers must lose their connections within one pause of 2 seconds.")
-                #expect(elapsed > .seconds(1.5), "The pause must last the 2 seconds that a viewer gets to make room.")
+                var closedAt: [Int: ContinuousClock.Instant] = [:]
+                let closed = await eventually(timeout: .seconds(60)) {
+                    for (index, client) in stalled.enumerated() where closedAt[index] == nil && isClosedBySessionProcess(client.descriptor) {
+                        closedAt[index] = .now
+                    }
+                    return closedAt.count == stalled.count
+                }
+                let first = closedAt.values.min() ?? start, last = closedAt.values.max() ?? start
+                print("stalled-viewers: all closed \(closed) from \(first - start) to \(last - start)")
+                #expect(closed, "Three stalled viewers must lose their connections.")
+                // The pause starts after the queues are full, so load only makes this longer.
+                #expect(first - start > .seconds(1.5), "The pause must last the 2 seconds that a viewer gets to make room.")
+                // A test thread that runs late sees the closes later, not further apart.
+                #expect(last - first < .seconds(2), "Three stalled viewers must lose their connections within one pause of 2 seconds.")
             }
         }
 
