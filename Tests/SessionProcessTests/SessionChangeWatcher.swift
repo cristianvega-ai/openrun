@@ -49,3 +49,15 @@ final class SessionChangeWatcher {
         next(within: limit) { $0 == .sessionEnded(identifier: UUID(uuidString: identifier) ?? UUID()) } != nil
     }
 }
+
+/// The summaries that `listSessions` gives, with every fact.
+func listedSummaries(of process: RunningSessionProcess) throws -> [SessionSummary] {
+    let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+    defer { connection.shutdown() }
+    _ = try connection.greetSessionProcess(within: .seconds(5))
+    try connection.send(ClientMessage.listSessions)
+    guard case .sessionList(let summaries) = try connection.receive(ServerMessage.self, timeLimit: .wholeFrame(by: .now + .seconds(5))) else {
+        throw HarnessError.commandFailed(description: "The session process sent no list.")
+    }
+    return summaries
+}
