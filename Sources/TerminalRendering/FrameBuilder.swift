@@ -57,7 +57,8 @@ struct FrameBuilder {
 
     /// Moves the quadrilaterals of each row to its place on the screen: down by the
     /// rows above it, and in by the space around the grid.
-    init(cache: RowCache, metrics: CellMetrics, padding: Int, cursor: Cursor? = nil, markedText: MarkedTextQuadrilaterals? = nil, flash: CellQuadrilateral? = nil) {
+    init(cache: RowCache, metrics: CellMetrics, padding: Int, cursor: Cursor? = nil, markedText: MarkedTextQuadrilaterals? = nil, flash: CellQuadrilateral? = nil,
+         underlines: [CellQuadrilateral] = []) {
         for index in cache.order.indices {
             guard let row = cache.quadrilaterals(at: index) else { continue }
             let top = padding + index * metrics.height
@@ -98,6 +99,7 @@ struct FrameBuilder {
             glyphs += markedText.glyphs
             overlays += markedText.overlays
         }
+        overlays += underlines
         if let flash { overlays.append(flash) }
     }
 }

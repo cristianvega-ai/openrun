@@ -1,3 +1,4 @@
+import Metal
 import Testing
 import TerminalEmulation
 @testable import TerminalRendering
@@ -25,5 +26,27 @@ import TerminalEmulation
             }
         }
         #expect(cell.filter { $0 != corner }.count > 20)
+    }
+}
+
+@Suite struct LinkUnderlineTests {
+    @Test func anUnderlinedRunDrawsInTheTextColorAndRedrawsOnlyItsRow() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let screen = try makeScreen("\u{1B}[?25lhttps://a.b\r\nnext", columns: 12, rows: 3)
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        let metrics = testFonts.metrics
+        func underlinePixel(_ target: OffscreenTarget, column: Int) -> TerminalColor {
+            target.pixel(horizontalPosition: testPadding + column * metrics.width + 1, verticalPosition: testPadding + metrics.underlinePosition)
+        }
+        try renderer.prepare(from: screen.state)
+        let plain = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: plain))
+        renderer.underlinedRuns = [ViewportCellRun(row: 0, columns: 0..<11)]
+        let underlined = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: underlined) && renderer.rowsDrawn == 1)
+        #expect(underlinePixel(underlined, column: 3) == screen.state.colors.foreground)
+        #expect(underlinePixel(underlined, column: 11) == underlinePixel(plain, column: 11))
+        #expect(underlinePixel(plain, column: 3) != screen.state.colors.foreground)
     }
 }

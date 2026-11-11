@@ -25,6 +25,9 @@ public final class TerminalRenderer {
     public var isCursorShown = true
     /// Whether the picture has the flash of the visual bell over it.
     public var isFlashing = false
+    /// The cells that get an underline in the text color, such as a link while
+    /// Command is down over it. Only the bands of the rows that change are drawn again.
+    public var underlinedRuns: [ViewportCellRun] = []
     private let device: MTLDevice
     private let queue: MTLCommandQueue
     private let shaders: ShaderLibrary
@@ -149,8 +152,10 @@ public final class TerminalRenderer {
         let marked = markedTextToDraw()
         if atlas.isFull && !reclaimedForFrame { return false }
         let flash = isFlashing ? colors.map { OverlayQuadrilaterals.flash(width: target.texture.width, height: target.texture.height, color: $0.foreground) } : nil
+        let underlines = colors.map { OverlayQuadrilaterals.underlines(of: underlinedRuns, color: $0.foreground, metrics: fonts.metrics, padding: padding) } ?? []
         let frame = FrameBuilder(
-            cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash)
+            cache: cache, metrics: fonts.metrics, padding: padding, cursor: marked == nil ? cursorToDraw() : nil, markedText: marked, flash: flash,
+            underlines: underlines)
         let bands = frame.bands(rowCount: rowCount, targetHeight: backing.height, metrics: fonts.metrics, padding: padding)
         let previous = drawnBands
         let rebuild = previous?.count != bands.count || drawnGrid != grid || drawnColors != colors || drawnSelectionColor != selectionColor
