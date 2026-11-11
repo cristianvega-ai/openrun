@@ -32,7 +32,7 @@ class StackRowView: TranscriptRowView {
             let x = column.x + part.indentation - (isBox ? 0 : 6)
             let partWidth = column.width - part.indentation + (isBox ? 0 : 6)
             let height = isBox ? Self.height(of: part.view, width: partWidth) : DisclosureLineView.height
-            let frame = NSRect(x: x, y: top + (isBox ? 2 : 0), width: partWidth, height: height)
+            let frame = NSRect(x: x, y: top + (isBox && parts.count > 1 ? 2 : 0), width: partWidth, height: height)
             top = frame.maxY + (isBox ? 6 : 0)
             return frame
         }
