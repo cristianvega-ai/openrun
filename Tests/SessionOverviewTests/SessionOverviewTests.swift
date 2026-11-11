@@ -30,4 +30,22 @@ import Testing
         overview.apply(.sessions([first]))
         #expect(overview.sessions == [first])
     }
+
+    @Test func theProjectsAndTheSettingsAreWholeLists() {
+        let project = ProjectSummary(identifier: UUID(), name: "App", folder: "/work/app")
+        var overview = SessionOverview()
+        overview.apply(.projects([project]))
+        overview.apply(.settings([SettingSummary(name: "font-size", text: "15", isProtected: false)]))
+        #expect(overview.projects == [project])
+        #expect(overview.settingText(named: "font-size") == "15")
+        #expect(overview.settingText(named: "theme") == nil)
+    }
+
+    @Test func theEndOfAConnectionKeepsTheLastFacts() {
+        var overview = SessionOverview(sessions: [Self.summary()])
+        let before = overview
+        overview.apply(.closed)
+        overview.apply(.failed(.connectionClosed))
+        #expect(overview == before)
+    }
 }
