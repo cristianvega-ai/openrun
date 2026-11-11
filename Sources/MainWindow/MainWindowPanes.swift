@@ -37,6 +37,7 @@ extension MainWindowController {
         splitController.splitView.setPosition(layout.projectsWidth + divider + layout.sessionsWidth, ofDividerAt: 1)
         // A position applies to a visible pane, so the panes hide after their widths apply.
         (projectsItem.isCollapsed, sessionsItem.isCollapsed) = (layout.projectsHidden, layout.sessionsHidden)
+        makeChosenWidthConstraints()
         // The split view controller is the delegate of its split view, so the window listens for the resize.
         NotificationCenter.default.addObserver(self, selector: #selector(panesDidResize),
             name: NSSplitView.didResizeSubviewsNotification, object: splitController.splitView)

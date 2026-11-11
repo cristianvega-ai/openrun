@@ -27,6 +27,8 @@ public final class MainWindowController: NSObject {
     var isInFullScreen = false
     /// A check of the minimum size waits for a later turn of the main queue.
     var isMinimumCheckWaiting = false
+    /// The constraints that keep each list at its chosen width where there is room.
+    var chosenWidths: [NSLayoutConstraint] = []
     var widthsAtDragStart: (projects: CGFloat, sessions: CGFloat) = (0, 0)
     /// The number of the last animation of the lists, and of the last one that ended.
     var animationGeneration = 0, finishedAnimationGeneration = 0

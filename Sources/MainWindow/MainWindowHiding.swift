@@ -44,6 +44,7 @@ extension MainWindowController: NSMenuItemValidation {
         // move. So the animation never asks for a size that the minimum refuses.
         if item === projectsItem { layout.projectsHidden = collapsed } else { layout.sessionsHidden = collapsed }
         updateTopRowSpaces()
+        updateChosenWidths()
         keepMinimumSize()
         if !animates {
             item.isCollapsed = collapsed

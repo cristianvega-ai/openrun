@@ -3,9 +3,9 @@ import Testing
 @testable import MainWindow
 
 /// The width of a list is the user's choice, made by a drag of its edge. A
-/// squeeze can make a list narrower, but it does not change the choice.
+/// squeeze can make a list narrower, but the list grows back when room comes back.
 @MainActor @Suite struct MainWindowChosenWidthTests {
-    @Test func aSqueezeKeepsTheChosenWidths() async throws {
+    @Test func aSqueezeKeepsTheChosenWidthsAndTheListsGrowBack() async throws {
         let defaults = temporaryDefaults()
         let controller = makeMainWindow(defaults: defaults)
         defer { controller.window.close() }
@@ -19,7 +19,9 @@ import Testing
         splitView.setPosition(260 + splitView.dividerThickness + 340, ofDividerAt: 1)
         controller.window.layoutIfNeeded()
         splitView.dragEnded?()
-        func expectSaved(_ step: String) {
+        func expectWidths(_ projects: CGFloat, _ sessions: CGFloat, _ step: String) {
+            let (shownProjects, shownSessions) = (controller.projectsList.view.frame.width, controller.sessionsList.view.frame.width)
+            #expect(shownProjects == projects && shownSessions == sessions, "\(step): \(shownProjects), \(shownSessions)")
             let saved = PaneLayout.load(from: defaults)
             #expect(saved.projectsWidth == 260 && saved.sessionsWidth == 340, "\(step): saved \(saved.projectsWidth), \(saved.sessionsWidth)")
         }
@@ -28,14 +30,15 @@ import Testing
             await turns(seconds: 0.3)
             controller.window.layoutIfNeeded()
         }
-        #expect(controller.projectsList.view.frame.width == 260 && controller.sessionsList.view.frame.width == 340)
-        expectSaved("drag")
+        expectWidths(260, 340, "drag")
         await change { controller.window.setContentSize(NSSize(width: 10, height: 760)) }
-        expectSaved("squeeze")
+        expectWidths(controller.projectsItem.minimumThickness, 240, "squeeze")
         await change { controller.toggleProjectsList(nil) }
-        expectSaved("hide")
+        #expect(controller.sessionsList.view.frame.width == 340, "a hide gives the room back to the sessions list first")
         await change { controller.toggleProjectsList(nil) }
-        expectSaved("show")
+        expectWidths(controller.projectsItem.minimumThickness, 240, "show")
+        await change { controller.window.setContentSize(NSSize(width: 1_400, height: 760)) }
+        expectWidths(260, 340, "widen")
         let next = makeMainWindow(defaults: defaults)
         defer { next.window.close() }
         #expect(next.projectsList.view.frame.width == 260 && next.sessionsList.view.frame.width == 340)
