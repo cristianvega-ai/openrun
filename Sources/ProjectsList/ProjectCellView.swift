@@ -34,7 +34,9 @@ final class ProjectCellView: NSTableCellView {
             icon.widthAnchor.constraint(equalToConstant: 18),
             name.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
             name.centerYAnchor.constraint(equalTo: centerYAnchor),
-            count.leadingAnchor.constraint(greaterThanOrEqualTo: name.trailingAnchor, constant: 6),
+            // The cut name can draw 2 points past its alignment rectangle,
+            // so 10 points here keep 8 visible points before the count.
+            count.leadingAnchor.constraint(greaterThanOrEqualTo: name.trailingAnchor, constant: 10),
             count.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
             count.firstBaselineAnchor.constraint(equalTo: name.firstBaselineAnchor),
         ])

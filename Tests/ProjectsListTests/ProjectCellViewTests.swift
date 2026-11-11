@@ -16,6 +16,17 @@ import Testing
         #expect(cell.name.stringValue == "All Sessions" && cell.count.stringValue.isEmpty && cell.toolTip == nil)
     }
 
+    /// A cut name keeps at least 8 points from the count. A label can draw
+    /// its text up to its frame, 2 points past its alignment rectangle.
+    @Test func aCutNameKeepsItsDistanceFromTheCount() {
+        let project = ProjectDisplay(identifier: UUID(), name: "infrastructure-terraform-modules", folder: "/p/i", attentionCount: 1)
+        let cell = ProjectCellView()
+        cell.show(ProjectsListRow.rows(for: ProjectsListContent(projects: [project]))[2])
+        cell.layoutSubtreeIfNeeded()
+        #expect(cell.name.frame.width < cell.name.intrinsicContentSize.width)
+        #expect(cell.count.alignmentRect(forFrame: cell.count.frame).minX - cell.name.frame.maxX >= 8)
+    }
+
     /// A new count while the user edits the name must not undo the edit.
     @Test func theNameStaysWhileTheUserEditsIt() throws {
         _ = NSApplication.shared
