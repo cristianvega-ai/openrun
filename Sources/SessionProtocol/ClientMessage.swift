@@ -52,6 +52,15 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case resize(SessionSize, requestsConfirmation: Bool? = nil)
     /// Leaves the session running and closes this connection.
     case detach
+
+    // Approval questions, on a connection that stays open.
+
+    /// Asks for the approval questions. Only the signed app outside every
+    /// session gets them. Answer: `acknowledged`, then each
+    /// `approvalQuestion` and `approvalQuestionEnded`.
+    case receiveApprovalQuestions
+    /// The user's answer to one question. No message answers it.
+    case answerApprovalQuestion(identifier: UUID, allows: Bool)
 }
 
 extension ClientMessage: FramedMessage {
@@ -94,6 +103,8 @@ extension ClientMessage {
         case .input: "input"
         case .resize: "resize"
         case .detach: "detach"
+        case .receiveApprovalQuestions: "receiveApprovalQuestions"
+        case .answerApprovalQuestion: "answerApprovalQuestion"
         }
     }
 }

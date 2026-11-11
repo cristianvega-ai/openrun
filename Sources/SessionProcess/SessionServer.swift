@@ -247,6 +247,10 @@ actor SessionServer {
             case .detach:
                 client.markHandled(received)
                 break messages
+            case .receiveApprovalQuestions:
+                client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This session process asks no approval questions yet.")))
+            case .answerApprovalQuestion:
+                break
             }
             client.markHandled(received)
         }

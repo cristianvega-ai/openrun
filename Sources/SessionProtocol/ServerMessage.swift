@@ -32,6 +32,12 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// The request worked and has nothing more to say.
     case acknowledged
     case failure(SessionFailure)
+    /// A question for the user. Only a connection that asked with
+    /// `receiveApprovalQuestions` receives one.
+    case approvalQuestion(ApprovalQuestion)
+    /// The question has ended: an answer came, its time limit passed, or the
+    /// program that asked left. Every connection that holds it receives this.
+    case approvalQuestionEnded(identifier: UUID)
 }
 
 extension ServerMessage: FramedMessage {
@@ -83,6 +89,8 @@ extension ServerMessage {
         case .exited: "exited"
         case .acknowledged: "acknowledged"
         case .failure: "failure"
+        case .approvalQuestion: "approvalQuestion"
+        case .approvalQuestionEnded: "approvalQuestionEnded"
         }
     }
 }

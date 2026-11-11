@@ -90,6 +90,8 @@ import Testing
             .input(Data([0x1B, 0x5B, 0x41])),
             .resize(size),
             .detach,
+            .receiveApprovalQuestions,
+            .answerApprovalQuestion(identifier: identifier, allows: true),
         ]
         for message in clientMessages {
             #expect(try ClientMessage(frame: message.frame()) == message)
@@ -107,6 +109,9 @@ import Testing
             .exited(.signaled(signal: 9)),
             .acknowledged,
             .failure(SessionFailure(reason: .unknownSession, message: "No session.")),
+            .approvalQuestion(ApprovalQuestion(identifier: identifier, askingSession: summary, targetSession: summary, request: .typing("yes\r"))),
+            .approvalQuestion(ApprovalQuestion(identifier: identifier, askingSession: summary, targetSession: summary, request: .kill)),
+            .approvalQuestionEnded(identifier: identifier),
         ]
         for message in serverMessages {
             #expect(try ServerMessage(frame: message.frame()) == message)
@@ -420,5 +425,15 @@ import Testing
             size: size,
             createdAt: Date(timeIntervalSince1970: 1_700_000_000)
         )))
+    }
+}
+
+@Suite struct ApprovalQuestionTests {
+    /// Typed text can be as large as a frame, so a question shows its start
+    /// and how long all of it is.
+    @Test func aQuestionShowsTheStartOfLongText() {
+        let text = String(repeating: "a", count: ApprovalQuestion.shownCharacterLimit) + "tail"
+        #expect(ApprovalQuestion.Request.typing(text) == .type(start: String(repeating: "a", count: ApprovalQuestion.shownCharacterLimit), characterCount: text.count))
+        #expect(ApprovalQuestion.Request.typing("yes\r") == .type(start: "yes\r", characterCount: 4))
     }
 }
