@@ -35,8 +35,11 @@ extension ThreadRunner {
     }
 
     /// Gives the next message that waits to the agent, when no turn runs.
+    /// A process that OpenRun asked to end takes no message: its end
+    /// brings the next call, which starts a new process.
     func sendNextMessage() async {
-        guard activeMessage == nil, !isClosed, let message = waitingMessages.first else { return }
+        let isEnding = program != nil && endWasRequested
+        guard activeMessage == nil, !isClosed, !isEnding, let message = waitingMessages.first else { return }
         waitingMessages.removeFirst()
         activeMessage = message.identifier
         do {

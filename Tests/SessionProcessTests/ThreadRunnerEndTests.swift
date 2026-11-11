@@ -50,6 +50,24 @@ import Testing
         await runner.close()
     }
 
+    @Test func aProcessWithNoWorkEndsAfterTheQuietTimeAndATurnKeepsItsProcess() async throws {
+        let quietTime = Duration.milliseconds(300)
+        let runner = ThreadRunner(record: FakeAgentSettings.record(), quietTime: quietTime, launchSettings: settings(later: FakeAgentSettings.make(mode: "neverEnds")))
+        try await runner.send(text: "First.")
+        #expect(await eventually { await runner.state == .finishedTurn })
+        #expect(await eventually { await !runner.isProcessRunning })
+        // OpenRun asked for the end, so the thread shows no failure.
+        #expect(await processEnds(runner) == [ProcessEnd(exitStatus: 0, wasRequested: true)])
+        #expect(await runner.state == .finishedTurn)
+
+        // The next message starts a process, and it stays while its turn runs.
+        try await runner.send(text: "Second.")
+        #expect(await eventually { await runner.state == .inProgress })
+        try await Task.sleep(for: quietTime * 3)
+        #expect(await runner.isProcessRunning)
+        await runner.close()
+    }
+
     @Test func aResumeOfAConversationThatTheAgentDoesNotKnowFailsTheTurn() async throws {
         let runner = ThreadRunner(record: FakeAgentSettings.record(), launchSettings: settings(later: FakeAgentSettings.make(mode: "unknownConversation")))
         try await runner.send(text: "First.")

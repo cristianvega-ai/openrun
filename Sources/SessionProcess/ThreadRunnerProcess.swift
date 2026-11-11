@@ -51,7 +51,29 @@ extension ThreadRunner {
             (activeMessage, record.hasConversation, record.lastActivityAt) = (nil, true, Date())
         }
         if turnEnded || transcript.state != stateBefore { await changed(self) }
-        if turnEnded { await sendNextMessage() }
+        if turnEnded {
+            await sendNextMessage()
+            watchForQuietTime()
+        }
+    }
+
+    /// Starts the wait for the quiet time. A process that has no work
+    /// for that long ends, and the next message starts a new one
+    /// (decision of 2026-11-10).
+    func watchForQuietTime() {
+        quietTask?.cancel()
+        guard let since = idleSince else { return }
+        let wait = quietTime - (ContinuousClock.now - since)
+        quietTask = Task {
+            try? await Task.sleep(for: wait)
+            if !Task.isCancelled { await self.quietTimePassed() }
+        }
+    }
+
+    private func quietTimePassed() async {
+        // A turn that runs now starts the wait again at its end.
+        guard let since = idleSince else { return }
+        if ContinuousClock.now - since >= quietTime { await endProcess() } else { watchForQuietTime() }
     }
 
     /// The process ended: by a stop, at the quiet time, by itself, or
@@ -59,6 +81,7 @@ extension ThreadRunner {
     private func ended(_ ended: AgentProgram, exit: ProgramExit) async {
         guard program === ended else { return }
         program = nil
+        quietTask?.cancel()
         endPermissions()
         let (status, signal): (Int32?, Int32?) = switch exit {
         case .exited(let status): (status, nil)

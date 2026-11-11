@@ -25,6 +25,9 @@ actor ThreadRunner {
     /// The longest wait for the answer of the user to a permission
     /// request: 24 hours, as long as the hook of the agent may wait.
     static let permissionTimeLimit = Duration.seconds(ClaudeCodeLaunch.hookTimeoutSeconds)
+    /// How long a process with no work stays: five minutes (decision of
+    /// 2026-11-10). A resume takes less than a second.
+    static let defaultQuietTime = Duration.seconds(300)
 
     struct WaitingMessage {
         let identifier: UUID
@@ -50,6 +53,9 @@ actor ThreadRunner {
     /// or the close of the thread.
     var endWasRequested = false
     var isClosed = false
+    /// The wait for the quiet time of the process.
+    var quietTask: Task<Void, Never>?
+    let quietTime: Duration
     /// The time of the last message or event, for the quiet time and the
     /// limit of processes.
     var lastUse = ContinuousClock.now
@@ -58,19 +64,24 @@ actor ThreadRunner {
     let changed: @Sendable (ThreadRunner) async -> Void
 
     init(
-        record: ThreadRecord, bufferByteLimit: Int = ThreadEventBuffer.defaultByteLimit,
+        record: ThreadRecord, bufferByteLimit: Int = ThreadEventBuffer.defaultByteLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings,
         changed: @escaping @Sendable (ThreadRunner) async -> Void = { _ in }
     ) {
         self.record = record
         buffer = ThreadEventBuffer(byteLimit: bufferByteLimit)
-        (self.launchSettings, self.changed) = (launchSettings, changed)
+        (self.quietTime, self.launchSettings, self.changed) = (quietTime, launchSettings, changed)
     }
 
     var state: ThreadState { transcript.state }
     var isProcessRunning: Bool { program != nil }
     /// Whether a turn runs or a message waits, so the process must stay.
     var isBusy: Bool { activeMessage != nil || !waitingMessages.isEmpty }
+    /// Since when the process has had no work. Nil when it has work, when
+    /// OpenRun asked it to end, or when no process runs.
+    var idleSince: ContinuousClock.Instant? {
+        program != nil && !endWasRequested && !isBusy ? lastUse : nil
+    }
 
     /// Gives an event to the transcript, the buffer and the clients.
     func emit(_ kind: ConversationEventKind, sourceLine: SourceLine? = nil) {
