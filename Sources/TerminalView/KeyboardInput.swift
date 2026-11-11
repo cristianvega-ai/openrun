@@ -27,6 +27,10 @@ final class KeyboardInput {
     ///   every key.
     func bytes(forKeyDown event: NSEvent, interpret: (NSEvent) -> Void) -> [UInt8] {
         let hadMarkedText = textInput.hasMarkedText
+        // A program that turned on the kitty keyboard protocol gets these keys as it asked.
+        if !hadMarkedText, event.type == .keyDown, terminal.kittyKeyboardFlags == 0, let bytes = MacTextKeys.bytes(for: event) {
+            return bytes
+        }
         // An input method can change its own input source while it composes, so only a key
         // with no marked text can tell a change of the layout.
         let layoutBefore = hadMarkedText ? nil : layout.identifier()
