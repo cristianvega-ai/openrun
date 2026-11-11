@@ -13,4 +13,14 @@ public enum ClaudeCodePermissionMode: String, Codable, Sendable, CaseIterable {
     case doNotAsk = "dontAsk"
     /// A classifier of Claude Code decides instead of the user.
     case automatic = "auto"
+
+    /// The modes from the strictest to the widest: each one lets the
+    /// agent do more without an answer of the user than the one before.
+    public static let fromStrictestToWidest: [ClaudeCodePermissionMode] = [.plan, .doNotAsk, .standard, .acceptEdits, .automatic]
+
+    /// The modes that let the agent do no more than `limit` does, the
+    /// strictest first. A thread can take each of them (proposal 9).
+    public static func modes(upTo limit: ClaudeCodePermissionMode) -> [ClaudeCodePermissionMode] {
+        fromStrictestToWidest.prefix { $0 != limit } + [limit]
+    }
 }
