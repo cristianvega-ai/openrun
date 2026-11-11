@@ -35,6 +35,10 @@ let package = Package(
         .testTarget(name: "TerminalRenderingTests", dependencies: ["TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
         .target(name: "TerminalView", dependencies: ["TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
         .testTarget(name: "TerminalViewTests", dependencies: ["TerminalView", "TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
+        // Text from a client or a file that OpenRun shows: the check of a
+        // name and the escape of text in a message.
+        .target(name: "UntrustedText"),
+        .testTarget(name: "UntrustedTextTests", dependencies: ["UntrustedText"]),
         // Where OpenRun keeps its data as readable JSON, and the safe write
         // and read of each file.
         .target(name: "DataStorage"),
