@@ -22,4 +22,18 @@ import Testing
         #expect(controller.context.text(ofBlocks: 0..<1, in: "text:a").string == "One two")
         #expect(controller.transcriptView.rowViews.views.keys.sorted() == ["activity", "text:a#0", "user:1"])
     }
+
+    @Test func aLinkGoesToTheHost() {
+        let delegate = RecordingDelegate()
+        controller.delegate = delegate
+        controller.openLink("https://example.com")
+        #expect(delegate.requests == ["link https://example.com"])
+    }
+
+    @Test func aNewAppearanceKeepsTheRows() {
+        controller.show(Transcript(events: [TestEvents.user("1", "Hello")]))
+        controller.appearance = ChatAppearance(light: ChatAppearance.graphite.light, dark: ChatAppearance.graphite.dark, bodyFontSize: 16)
+        #expect(controller.context.palette.bodyFont.pointSize == 16)
+        #expect(controller.transcriptView.rows.count == 2)
+    }
 }

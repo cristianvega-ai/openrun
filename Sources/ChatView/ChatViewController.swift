@@ -7,10 +7,13 @@ import AppKit
 /// thread and an appearance. It reports what the user does through its
 /// delegate.
 @MainActor public final class ChatViewController: NSViewController {
+    public weak var delegate: ChatViewControllerDelegate?
     public var facts: ChatThreadFacts {
         didSet { factsDidChange(from: oldValue) }
     }
-    public let appearance: ChatAppearance
+    public var appearance: ChatAppearance {
+        didSet { if appearance != oldValue { appearanceDidChange() } }
+    }
     public private(set) var transcript = Transcript()
     let context: TranscriptRowContext
     let transcriptView: TranscriptView
@@ -25,6 +28,7 @@ import AppKit
         scrollView = TranscriptScrollView(transcriptView: transcriptView)
         super.init(nibName: nil, bundle: nil)
         context.agentName = facts.agentName
+        context.actions = self
     }
 
     @available(*, unavailable)
@@ -32,6 +36,9 @@ import AppKit
 
     /// The smallest size of the pane that still shows a usable chat.
     public var minimumSize: NSSize { NSSize(width: 320, height: 260) }
+
+    /// The title of the pane.
+    public var paneTitle: String { facts.title }
 
     public override func loadView() {
         let root = ChatRootView(palette: context.palette)
@@ -72,4 +79,18 @@ import AppKit
     private func factsDidChange(from old: ChatThreadFacts) {
         context.agentName = facts.agentName
     }
+
+    private func appearanceDidChange() {
+        context.palette = ChatPalette(appearance: appearance)
+        (view as? ChatRootView)?.palette = context.palette
+        reloadRows(changedItems: nil)
+    }
+}
+
+extension ChatViewController: TranscriptRowActions {
+    func openLink(_ target: String) {
+        delegate?.chatViewController(self, openLink: target)
+    }
+
+    func toggle(_ part: String, in row: TranscriptRowView) {}
 }
