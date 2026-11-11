@@ -67,7 +67,7 @@ let package = Package(
         .testTarget(name: "SessionLaunchTests", dependencies: ["SessionLaunch"]),
         .target(
             name: "SessionProcess",
-            dependencies: ["TerminalEmulation", "TerminalTheme", "PseudoTerminal", "SessionProtocol", "SessionLaunch"]
+            dependencies: ["TerminalEmulation", "TerminalTheme", "PseudoTerminal", "SessionProtocol", "SessionLaunch", "GitBranch"]
         ),
         .executableTarget(
             name: "openrun-session",

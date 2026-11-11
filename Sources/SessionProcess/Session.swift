@@ -1,4 +1,5 @@
 import Foundation
+import GitBranch
 import PseudoTerminal
 import SessionProtocol
 import Synchronization
@@ -48,6 +49,13 @@ actor Session {
     private let changes: SessionChangeFeed?
     /// What the terminal reported while it parsed the last piece of output.
     private let terminalEvents = TerminalEvents()
+    /// Whether the session works. See `SessionActivity`.
+    private var activity = SessionActivity()
+    /// Looks at the foreground while output or input comes.
+    private var factsRefresh: Task<Void, Never>?
+    /// How often the session looks at the folder, the branch, the foreground
+    /// program and the mode of the terminal while output or input comes.
+    static let factsRefreshInterval: Duration = .seconds(1)
     /// The summary that the watchers have, and when it went out.
     private var publishedSummary: SessionSummary?
     private var publishedAt: ContinuousClock.Instant?
@@ -133,6 +141,8 @@ actor Session {
 
     /// Starts reading the program's output. Call once, right after creating.
     func start() {
+        readForeground()
+        summary.isInProgress = activity.isInProgress(at: .now)
         (publishedSummary, publishedAt) = (summary, .now)
         changes?.add(summary)
         runTask = Task { await self.run() }
@@ -330,6 +340,7 @@ actor Session {
         clientsThatWaitForOutputRoom.removeAll()
         updateReplyGate()
         waitingPublish?.cancel()
+        factsRefresh?.cancel()
         changes?.end(summary.identifier)
         await onFinish(summary.identifier)
     }
@@ -342,8 +353,49 @@ actor Session {
         let message = ServerMessage.output(Data(bytes))
         for client in clients.values { client.send(message) }
         summary.lastOutputAt = Date()
+        activity.noteOutput(at: .now)
+        summary.isInProgress = activity.isInProgress(at: .now)
         takeTerminalEvents()
         publish()
+        refreshFactsWhileActive()
+    }
+
+    /// Reads the foreground program, its folder, the branch of the folder
+    /// and the mode of the terminal. A folder that the system does not
+    /// report keeps the last one.
+    private func readForeground() {
+        let state = pseudoTerminal.foregroundState
+        activity.noteForeground(state)
+        summary.foregroundProgram = state.map { SessionSummary.boundedText($0.program.name) }
+        guard let folder = state?.currentFolder else { return }
+        summary.currentFolder = folder
+        summary.branch = GitBranch.name(forFolder: folder).map(SessionSummary.boundedText)
+    }
+
+    /// Looks at the foreground once in `factsRefreshInterval` while output
+    /// or input comes, and once more after both have been quiet for
+    /// `SessionActivity.quietTime`. A silent session costs no work.
+    private func refreshFactsWhileActive() {
+        guard factsRefresh == nil, !isFinished, !isEnding else { return }
+        factsRefresh = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: Self.factsRefreshInterval)
+                guard let self, await self.refreshFacts() else { return }
+            }
+        }
+    }
+
+    /// Returns whether to look again. The times of the last output and
+    /// input go out once the session is quiet.
+    private func refreshFacts() -> Bool {
+        guard !isFinished, !isEnding else { return false }
+        readForeground()
+        let now = ContinuousClock.now
+        summary.isInProgress = activity.isInProgress(at: now)
+        let isQuiet = activity.isQuiet(at: now)
+        publish(includingTimes: isQuiet)
+        if isQuiet { factsRefresh = nil }
+        return !isQuiet
     }
 
     /// Takes what the terminal reported while it parsed the output.

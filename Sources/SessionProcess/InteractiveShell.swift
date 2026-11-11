@@ -15,15 +15,21 @@ enum InteractiveShell {
     /// prompt is not in progress (decision of 2026-11-10).
     private static let shellNames: Set<String> = ["sh", "bash", "zsh", "fish", "dash", "ksh", "mksh", "oksh", "yash", "tcsh", "csh", "nu", "elvish", "xonsh", "pwsh"]
 
-    static func isShell(_ program: ForegroundProgram) -> Bool {
-        shellNames.contains(program.name)
+    /// A shell that reads its commands from its terminal, and so has a
+    /// prompt. A shell with a command string or a script has none.
+    static func hasPrompt(_ program: ForegroundProgram) -> Bool {
+        shellNames.contains(program.name) && readsCommandsFromTerminal(program)
     }
 
     /// Long options of bash whose value is the next argument.
     private static let longOptionsWithValue: Set<String> = ["--rcfile", "--init-file"]
 
     static func lineEditor(of program: ForegroundProgram) -> LineEditor? {
-        guard program.name == "bash" else { return nil }
+        program.name == "bash" && readsCommandsFromTerminal(program) ? .readline : nil
+    }
+
+    /// No `-c` and no operand after the options, which would be a script.
+    private static func readsCommandsFromTerminal(_ program: ForegroundProgram) -> Bool {
         var remaining = program.arguments.dropFirst()
         while let argument = remaining.first {
             if argument == "--" || argument == "-" {
@@ -33,15 +39,16 @@ enum InteractiveShell {
             guard argument.count > 1, argument.hasPrefix("-") || argument.hasPrefix("+") else { break }
             remaining = remaining.dropFirst()
             if argument.hasPrefix("--") {
+                if argument == "--command" { return false }
                 if longOptionsWithValue.contains(argument) { remaining = remaining.dropFirst() }
                 continue
             }
             let letters = argument.dropFirst()
-            if letters.contains("c") { return nil }
+            if letters.contains("c") { return false }
             // `-o` and `-O` take the name of an option.
             if letters.contains("o") || letters.contains("O") { remaining = remaining.dropFirst() }
         }
         // An operand is a script.
-        return remaining.isEmpty ? .readline : nil
+        return remaining.isEmpty
     }
 }

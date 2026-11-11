@@ -58,10 +58,10 @@ struct SessionActivity {
     }
 
     /// The shell that the terminal started, or a shell that reads its keys
-    /// in raw mode with its line editor. A shell in line mode below the
-    /// first one runs a script.
+    /// in raw mode with its line editor. A shell with a command string or a
+    /// script, such as `sh -c` or `bash build.sh`, runs commands.
     private var isShellAtItsPrompt: Bool {
-        guard let foreground, InteractiveShell.isShell(foreground.program) else { return false }
+        guard let foreground, InteractiveShell.hasPrompt(foreground.program) else { return false }
         return foreground.leadsSession || !foreground.isInLineMode
     }
 }
