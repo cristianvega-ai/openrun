@@ -20,6 +20,8 @@ public struct SessionProcess: Sendable {
     let answererRequirement: AnswererRequirement
     /// Where the projects and the settings are. Only this process writes there.
     let dataFolder: DataFolder
+    /// How the agents of the threads start.
+    let agentOptions: AgentLaunchProvider.Options
 
     public init(socketLocation: SocketLocation) {
         self.init(socketLocation: socketLocation, machServiceName: nil, idleExit: nil, answererRequirement: .ofThisProcess())
@@ -27,8 +29,9 @@ public struct SessionProcess: Sendable {
 
     init(
         socketLocation: SocketLocation, dataFolder: DataFolder? = nil, machServiceName: String?, idleExit: IdleExit?,
-        answererRequirement: AnswererRequirement = .ofThisProcess()
+        answererRequirement: AnswererRequirement = .ofThisProcess(), agentOptions: AgentLaunchProvider.Options = AgentLaunchProvider.Options()
     ) {
+        self.agentOptions = agentOptions
         self.socketLocation = socketLocation
         self.dataFolder = dataFolder ?? DataFolder(path: socketLocation.folder)
         self.machServiceName = machServiceName
@@ -44,7 +47,7 @@ public struct SessionProcess: Sendable {
         // Signal handling starts first, so a signal that arrives while the
         // socket opens is not lost.
         let signals = ShutdownSignals()
-        let server = try SessionServer(location: socketLocation, dataFolder: dataFolder, answererRequirement: answererRequirement)
+        let server = try SessionServer(location: socketLocation, dataFolder: dataFolder, answererRequirement: answererRequirement, agentOptions: agentOptions)
         await server.start()
         SessionLog.write("Listening on ", detail: socketLocation.path)
         let wakeService = machServiceName.flatMap(startWakeService)
@@ -90,6 +93,7 @@ public struct SessionProcess: Sendable {
         var dataFolderFlag: String?
         var answererRequirement = AnswererRequirement.ofThisProcess()
         var isLaunchAgent = false
+        var agentOptions = AgentLaunchProvider.Options()
         var remaining = arguments[...]
         while let argument = remaining.popFirst() {
             switch argument {
@@ -99,6 +103,11 @@ public struct SessionProcess: Sendable {
             case "--data-folder":
                 guard let path = remaining.popFirst() else { return usageError("--data-folder needs a path.") }
                 dataFolderFlag = path
+            case "--agent-program":
+                guard let program = remaining.popFirst(), !program.isEmpty else { return usageError("--agent-program needs a program.") }
+                agentOptions.program = program
+            case "--own-environment-for-agents":
+                agentOptions.usesOwnEnvironment = true
             case "--answerer-requirement":
                 guard let text = remaining.popFirst() else { return usageError("--answerer-requirement needs a code requirement.") }
                 answererRequirement = AnswererRequirement(text: text)
@@ -121,7 +130,7 @@ public struct SessionProcess: Sendable {
             let dataFolder = dataFolderFlag.map { Self.dataFolder(flag: $0, currentFolder: FileManager.default.currentDirectoryPath) }
             try await SessionProcess(
                 socketLocation: location, dataFolder: dataFolder, machServiceName: machServiceName, idleExit: idleExit,
-                answererRequirement: answererRequirement
+                answererRequirement: answererRequirement, agentOptions: agentOptions
             ).run()
             return 0
         } catch {
@@ -139,6 +148,7 @@ public struct SessionProcess: Sendable {
 
     private static let usage = """
         Usage: openrun-session [--socket PATH] [--data-folder PATH] [--answerer-requirement REQUIREMENT] [--launch-agent]
+                               [--agent-program PROGRAM] [--own-environment-for-agents]
 
         Runs the OpenRun session process in the foreground and logs to standard error.
         The socket is PATH, or OPENRUN_SOCKET, or ~/Library/Application Support/OpenRun/session.socket.
@@ -146,6 +156,8 @@ public struct SessionProcess: Sendable {
         and other users must not be able to write to it.
         The projects and the settings are in the folder of the socket, or in the folder
         that --data-folder names.
+        The agent of a thread is PROGRAM, or claude. It gets the environment of your login
+        shell, or with --own-environment-for-agents the environment of this process.
         launchd gives --launch-agent: the process then answers wake requests, and it
         ends after 30 seconds with no session and no client.
         Only a program that meets REQUIREMENT, in the code requirement language, receives

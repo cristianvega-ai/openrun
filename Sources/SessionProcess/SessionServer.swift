@@ -1,3 +1,4 @@
+import AgentThreads
 import DataStorage
 import Foundation
 import Projects
@@ -14,6 +15,7 @@ actor SessionServer {
     private let answererRequirement: AnswererRequirement
     private let projects: ProjectKeeper
     private let settings: SettingKeeper
+    let threads: ThreadRegistry
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -25,7 +27,10 @@ actor SessionServer {
     ///
     /// - Parameter dataFolder: Where the projects and the settings are. Nil
     ///   means the folder of the socket.
-    init(location: SocketLocation, dataFolder: DataFolder? = nil, answererRequirement: AnswererRequirement = AnswererRequirement(text: nil)) throws {
+    init(
+        location: SocketLocation, dataFolder: DataFolder? = nil, answererRequirement: AnswererRequirement = AnswererRequirement(text: nil),
+        agentOptions: AgentLaunchProvider.Options = AgentLaunchProvider.Options()
+    ) throws {
         self.answererRequirement = answererRequirement
         listener = try SocketListener(location: location)
         // The lock of the socket is taken, so no other session process on
@@ -37,6 +42,8 @@ actor SessionServer {
         let settingStore = SettingsStore(dataFolder: dataFolder)
         let loadedSettings = SettingKeeper.load(from: settingStore)
         settings = SettingKeeper(store: settingStore, values: loadedSettings, changes: changes)
+        let agents = AgentLaunchProvider(options: agentOptions, socketPath: location.path)
+        threads = ThreadRegistry(store: ThreadStore(dataFolder: dataFolder), projects: loadedProjects, changes: changes) { await agents.settings() }
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
         registry = SessionRegistry(
@@ -61,6 +68,7 @@ actor SessionServer {
         close()
         await acceptTask?.value
         await registry.terminateAll()
+        await threads.terminateAll()
         // Each client gets a short time to take what still waits for it, such
         // as the exit status of its program. See `closeAfterSending`.
         for client in clients.values { client.closeAfterSending() }
@@ -72,7 +80,7 @@ actor SessionServer {
     func closeWhenIdle(for limit: Duration, beforeClosing: @Sendable () -> Void) async -> Bool {
         // Clients can arrive while the registry answers, so they are checked
         // again after it. No wait comes between that check and the close.
-        guard !isClosed, clients.isEmpty, await registry.isEmpty, clients.isEmpty else {
+        guard !isClosed, clients.isEmpty, await registry.isEmpty, await !threads.hasRunningProcess, clients.isEmpty else {
             lastBusy = .now
             return false
         }
@@ -431,6 +439,7 @@ actor SessionServer {
         do {
             let (answer, list, version) = try await change()
             await registry.updateProjects(list, version: version)
+            await threads.updateProjects(list)
             return answer
         } catch {
             return Self.refusal("\(error)")
