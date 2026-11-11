@@ -42,8 +42,10 @@ enum PlainLinkFinder {
                     continue
                 }
                 if width == .wideHead { continue }
-                // A blank cell ends an address.
-                characters.append(text.count == 1 ? Character(text) : " ")
+                // A blank cell ends an address. A hidden format character, such as a zero-width
+                // space, joins the cell before it; it stays in the word, so the word is no link.
+                let isFormat = text.unicodeScalars.contains { $0.properties.generalCategory == .format }
+                characters.append(isFormat ? PlainLinkFinder.format : text.count == 1 ? Character(text) : " ")
                 places.append((firstRow + offset, column..<column + 1))
             }
         }
@@ -61,11 +63,15 @@ enum PlainLinkFinder {
         guard let schemeStart = schemeStarts.last(where: { start + $0 <= target }) else { return nil }
         var address = Array(word[schemeStart...])
         trimTrailingPunctuation(&address)
-        let first = start + schemeStart
-        // Foundation encodes the letters outside ASCII, in the path with percent signs and in
-        // the host with the form for international names, so what opens is what the text shows.
-        guard target < first + address.count, let encoded = URL(string: String(address))?.absoluteString,
-            LinkSchemeRule.target(for: encoded) != nil else { return nil }
+        let first = start + schemeStart, after = first + address.count
+        guard target < after, !address.contains(PlainLinkFinder.format), let authority = PlainLinkAuthority.read(address),
+            !authority.endsAddress || PlainLinkAuthority.endsHost(next: characters.dropFirst(after).first, afterNext: characters.dropFirst(after + 1).first)
+        else { return nil }
+        // Foundation encodes the letters outside ASCII in the path. It also folds some look-alike
+        // forms into ASCII, so a host that differs from the text on the screen is no link.
+        guard let url = URL(string: String(address)), url.host?.lowercased() == authority.host.lowercased(),
+            LinkSchemeRule.target(for: url.absoluteString) != nil else { return nil }
+        let encoded = url.absoluteString
         let covered = places[first..<first + address.count]
         let runs = Dictionary(grouping: covered, by: \.row).keys.sorted().map { row in
             let columns = covered.filter { $0.row == row }.map(\.columns)
@@ -74,10 +80,14 @@ enum PlainLinkFinder {
         return PlainLink(address: encoded, runs: runs)
     }
 
+    /// Stands for a cell that holds a format character, which no address may hold.
+    private static let format: Character = "\u{200B}"
+
     /// No address holds white space or these ASCII characters. Outside ASCII, an
     /// address holds letters and digits, and a symbol such as an emoji, or
     /// punctuation such as `。` or `）`, ends it.
     private static func isDelimiter(_ character: Character) -> Bool {
+        if character == format { return false }
         if !character.isASCII { return !(character.isLetter || character.isNumber) }
         return character.isWhitespace || "<>\"`{}|\\^".contains(character)
     }

@@ -60,9 +60,26 @@ import TerminalRendering
     @Test func lettersOutsideASCIIArePartOfTheAddressAndOpenEncoded() throws {
         let path = try #require(try link("see https://de.wikipedia.org/wiki/Zürich_x now", column: 10, columns: 60))
         #expect(path.address == "https://de.wikipedia.org/wiki/Z%C3%BCrich_x" && path.runs == [ViewportCellRun(row: 0, columns: 4..<42)])
-        #expect(try link("https://münchen.de/ x", column: 3)?.address == "https://xn--mnchen-3ya.de/")
-        let wide = try #require(try link("https://例え.jp/パス x", column: 3))
-        #expect(wide.address == "https://xn--r8jz45g.jp/%E3%83%91%E3%82%B9" && wide.runs == [ViewportCellRun(row: 0, columns: 0..<20)])
+        let wide = try #require(try link("https://a.jp/パス x", column: 3))
+        #expect(wide.address == "https://a.jp/%E3%83%91%E3%82%B9" && wide.runs == [ViewportCellRun(row: 0, columns: 0..<17)])
+    }
+
+    @Test func aHostThatIsNotPlainASCIIIsNoLink() throws {
+        let texts = ["https://аpple.com/", "https://ｇｏｏｄ.com/", "https://ﬁnance.com/", "https://ⓖood.com/", "https://münchen.de/ x",
+            "https://例え.jp/パス", "https://goo\u{200B}d.com/x", "https://good．com/x", "https://good。com/x", "https://a.b/c\u{200E}d"]
+        for text in texts {
+            #expect(try link(text, column: 3) == nil && link(text, column: 10) == nil, "\(text)")
+        }
+    }
+
+    @Test func anASCIIHostEndsAtPunctuationOrAPortOrAPath() throws {
+        let cases = ["Go to https://good.com.": "https://good.com", "https://good.com, then": "https://good.com",
+            "(https://good.com)": "https://good.com", "https://good.com。": "https://good.com", "https://a.b/c😀": "https://a.b/c",
+            "https://[::1]:8080/x": "https://[::1]:8080/x", "https://good.com:8443 x": "https://good.com:8443",
+            "https://me@good.com/": "https://me@good.com/"]
+        for (text, address) in cases {
+            #expect(try link(text, column: text.hasPrefix("Go") ? 9 : 4)?.address == address, "\(text)")
+        }
     }
 
     @Test func symbolsAndPunctuationOutsideASCIIEndTheAddress() throws {
