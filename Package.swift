@@ -99,8 +99,8 @@ let package = Package(
             name: "SessionProtocolTests",
             dependencies: ["SessionProtocol"]
         ),
-        .target(name: "SessionConnection", dependencies: ["SessionProtocol", "SessionLaunch"]),
-        .testTarget(name: "SessionConnectionTests", dependencies: ["SessionConnection", "SessionProtocol", "SessionLaunch"]),
+        .target(name: "SessionConnection", dependencies: ["SessionProtocol", "SessionLaunch", "AgentConversation"]),
+        .testTarget(name: "SessionConnectionTests", dependencies: ["SessionConnection", "SessionProtocol", "SessionLaunch", "AgentConversation"]),
         // What the session process holds, kept live for the app: the
         // sessions, the projects and the settings.
         .target(name: "SessionOverview", dependencies: ["SessionConnection", "SessionProtocol", "SessionLaunch"]),
