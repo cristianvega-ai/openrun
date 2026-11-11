@@ -28,6 +28,17 @@ struct TranscriptStorage: Sendable, Hashable {
         byteCount += size
     }
 
+    /// Adds earlier items before the first item, in their order. Each
+    /// identifier must be new. The positions of the other items stay.
+    mutating func prepend(_ earlier: [TranscriptItem]) {
+        firstPosition -= earlier.count
+        for (index, item) in earlier.enumerated() { positions[item.identifier] = firstPosition + index }
+        let sizes = earlier.map(\.content.estimatedByteCount)
+        items.insert(contentsOf: earlier, at: 0)
+        byteCounts.insert(contentsOf: sizes, at: 0)
+        byteCount += sizes.reduce(0, +)
+    }
+
     /// Changes the content of an item in place. Returns false when no item
     /// has the identifier.
     @discardableResult

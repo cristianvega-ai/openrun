@@ -88,7 +88,7 @@ public struct Transcript: Sendable, Hashable {
     /// Drops what the transcript kept about items that it trimmed, so that
     /// its memory stays bounded however many items come and go, and
     /// remembers the newest of them.
-    private mutating func forget(_ removed: [String]) {
+    mutating func forget(_ removed: [String]) {
         for identifier in removed {
             droppedItems.insert(identifier)
             openItems.remove(identifier)
