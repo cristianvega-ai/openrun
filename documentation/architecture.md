@@ -603,6 +603,16 @@ It answers each user message line with a recorded turn from `Tests/ClaudeCodeAge
 `FakeAgentTests` run it through `AgentProgram`, the decoder and a transcript.
 The fixtures come from real runs of Claude Code 2.1.322, with everything that describes the owner removed. `FixturePrivacyTests` scans every file of the three modules, their tests and the fake agent for identifiers that are not made up, long opaque values, home folders, e-mail addresses and the words that were removed.
 
+### The fake app-server
+
+The tests never start the real `codex`, because it spends the owner's subscription and writes into the owner's Codex configuration.
+`Tests/FakeCodex` builds the program `fake-codex`. It takes only the argument `app-server`, and refuses any other command line with the exit status 64.
+`FAKE_CODEX_SCRIPTS` names the recorded exchanges of `Tests/CodexAgentTests/Fixtures`, which it plays one after the other. Each step is a line of OpenRun that it checks, or a line of the app-server that it writes. A line of OpenRun that the step does not expect ends it with the status 2. `Tests/CodexAgentTests/Fixtures/README.md` describes the form.
+Special steps play an answer that never comes, the end of the connection while an approval waits, a line cut short, and a crash. While an approval waits for the end, any line of OpenRun ends the fake with the status 3, so a test sees an answer that should not go.
+After the last step, each request gets an empty answer, and the end of its input ends the fake.
+The tests in `CodexAgentTests` run it through `AgentProgram`, the server and a transcript. Faster tests play the same fixtures on a transport in memory.
+The fixtures come from real runs of Codex 0.167.0, with everything that describes the owner removed. `FixturePrivacyTests` scans them too.
+
 ## Launch agent
 
 OpenRun.app registers the session process as a launch agent with SMAppService (`LaunchAgentRegistration`). The property list is `Bundle/ai.cristianvega.openrun.session.plist`, and the bundle script copies it to `Contents/Library/LaunchAgents`. A test compares it with `LaunchAgentNames`.
