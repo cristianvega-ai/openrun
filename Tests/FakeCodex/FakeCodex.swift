@@ -17,6 +17,7 @@ struct FakeCodex {
         guard arguments == ["app-server"] else { return fail("the arguments are not `app-server`", status: 64) }
         let files = (environment["FAKE_CODEX_SCRIPTS"] ?? "").split(separator: ":").map(String.init)
         var request: Any = NSNull()
+        var lastLine = ""
         for file in files {
             guard let text = try? String(contentsOfFile: file, encoding: .utf8) else { return fail("cannot read \(file)") }
             for stepText in text.split(separator: "\n") {
@@ -27,9 +28,10 @@ struct FakeCodex {
                     if method != "answer" { request = message["id"] ?? NSNull() }
                 } else if var line = step["server"] as? [String: Any] {
                     if line["id"] as? String == "$request" { line["id"] = request }
-                    write(encode(line))
-                } else {
-                    return fail("unknown step")
+                    lastLine = encode(line)
+                    write(lastLine)
+                } else if let status = special(step["special"] as? String ?? "", lastLine: lastLine) {
+                    return status
                 }
             }
         }
@@ -40,6 +42,30 @@ struct FakeCodex {
             }
         }
         return 0
+    }
+
+    /// Plays a special case, and returns the exit status when it ends the
+    /// program.
+    func special(_ name: String, lastLine: String) -> Int32? {
+        switch name {
+        case "hang":
+            // No answer comes. The program ends with its input.
+            while readLine() != nil {}
+            return 0
+        case "exit":
+            // The app-server waits for an answer. It must not get one: it
+            // ends with the input, as Codex does, and runs nothing.
+            while let line = readLine() { return fail("a line came while the approval waited: \(line.prefix(60))", status: 3) }
+            return 0
+        case "cutLine":
+            write(String(decoding: lastLine.utf8.prefix(lastLine.utf8.count / 2), as: UTF8.self), lineEnd: false)
+            return 1
+        case "crash":
+            kill(getpid(), SIGKILL)
+            return 1
+        default:
+            return fail("unknown special case \(name)")
+        }
     }
 
     /// Checks a line of OpenRun against a step. Returns the problem.

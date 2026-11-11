@@ -31,6 +31,9 @@ The tests that read the output alone take the `server` lines in order.
 | `usage.jsonl` | The account and its rate limits, read without a thread. |
 | `history.jsonl` | Two pages of the turns of the main thread, newest first, with stopped turns. |
 | `second-thread.jsonl` | A second thread on the same app-server, in another folder. |
+| `never-answers.jsonl` | Made by hand: a thread start that gets no answer. |
+| `cut-line.jsonl` | Made by hand from `plain-turn.jsonl`: the output stops in the middle of a line, and the app-server fails. |
+| `crash.jsonl` | Made by hand from `plain-turn.jsonl`: the app-server is killed in the middle of the turn. |
 | `unknown-thread.jsonl` | The resume of a thread that Codex does not know, and its refusal. |
 
 ## What was replaced
