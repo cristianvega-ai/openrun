@@ -211,3 +211,17 @@ import Testing
         #expect(view.gridSize == TerminalSize(columns: 30, rows: 5))
     }
 }
+
+@MainActor @Suite struct ScrollbackLimitTests {
+    @Test func theOwnerSetsTheScrollbackLimitOfALiveView() throws {
+        let view = try TerminalView()
+        #expect(view.scrollbackLimit == 10_000)
+        view.terminal.write(String(repeating: "line\r\n", count: 9_000) + "last")
+        let before = view.terminal.scrollbackLineCount
+        view.scrollbackLimit = 100
+        #expect(view.scrollbackLimit == 100 && view.terminal.scrollbackLineCount < before)
+        #expect(try String(decoding: view.terminal.formatted(.plainText), as: UTF8.self).hasSuffix("last"))
+        view.scrollbackLimit = -5
+        #expect(view.scrollbackLimit == 0)
+    }
+}

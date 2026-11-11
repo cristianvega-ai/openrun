@@ -405,6 +405,21 @@ public final class TerminalView: NSView {
         }
     }
 
+    /// The most lines of scrollback that the local terminal keeps, from zero to
+    /// one million. A lower limit drops the oldest lines at once; the screen stays.
+    public var scrollbackLimit: Int {
+        get { terminal.scrollbackLimit }
+        set {
+            do {
+                try terminal.setScrollbackLimit(min(max(newValue, 0), Terminal.maximumScrollbackLines))
+            } catch {
+                logger.error("The scrollback limit failed: \(String(describing: error), privacy: .private)")
+            }
+            updateScrollBar()
+            requestFrame()
+        }
+    }
+
     /// Which Option keys act as Alt. A change applies to the next key.
     public var optionKeyRule: OptionKeyRule {
         get { keyboard.optionKeyRule }

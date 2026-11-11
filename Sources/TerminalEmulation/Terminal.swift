@@ -214,6 +214,25 @@ public final class Terminal {
         return GhosttyPointCoordinate(x: size.columns - 1, y: UInt32(size.rows - 1))
     }
 
+    /// The most lines of scrollback that the terminal keeps.
+    public var scrollbackLimit: Int {
+        (try? value(GHOSTTY_TERMINAL_DATA_SCROLLBACK_MAX_LINES, as: Int.self)) ?? 0
+    }
+
+    /// Changes the most lines of scrollback, from zero to `maximumScrollbackLines`.
+    /// A lower limit removes the oldest lines at once, in whole pages, as
+    /// `init(size:scrollbackLimit:)` describes. The screen does not change.
+    public func setScrollbackLimit(_ lines: Int) throws {
+        guard (0...Terminal.maximumScrollbackLines).contains(lines) else {
+            throw TerminalEmulationError.invalidValue(in: "Terminal.setScrollbackLimit")
+        }
+        var lineLimit = lines
+        try TerminalEmulationError.check(
+            ghostty_terminal_set(handle, GHOSTTY_TERMINAL_OPT_SCROLLBACK_MAX_LINES, &lineLimit),
+            from: "ghostty_terminal_set"
+        )
+    }
+
     private func configure(scrollbackLimit: Int) throws {
         // A negative number would reach libghostty-vt as an enormous unsigned
         // one, and the byte limit that could stop it is removed below.

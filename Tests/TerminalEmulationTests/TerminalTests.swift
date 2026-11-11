@@ -99,6 +99,18 @@ extension Terminal {
         }
     }
 
+    @Test func aLiveTerminalTakesANewScrollbackLimit() throws {
+        let terminal = try makeTerminal(columns: 20, rows: 5, scrollbackLimit: 100_000)
+        #expect(terminal.scrollbackLimit == 100_000)
+        terminal.write(String(repeating: "line\r\n", count: 20_000))
+        let before = terminal.scrollbackLineCount
+        try terminal.setScrollbackLimit(10)
+        #expect(terminal.scrollbackLimit == 10 && terminal.scrollbackLineCount < before)
+        #expect(throws: TerminalEmulationError.self) { try terminal.setScrollbackLimit(-1) }
+        #expect(throws: TerminalEmulationError.self) { try terminal.setScrollbackLimit(Terminal.maximumScrollbackLines + 1) }
+        #expect(terminal.scrollbackLimit == 10)
+    }
+
     @Test func scrollbackLimitsFromZeroToTheMaximumAreAccepted() throws {
         _ = try makeTerminal(scrollbackLimit: 0)
         _ = try makeTerminal(scrollbackLimit: Terminal.maximumScrollbackLines)
