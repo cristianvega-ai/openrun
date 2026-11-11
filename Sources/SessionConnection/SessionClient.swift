@@ -110,6 +110,27 @@ public struct SessionClient: Sendable {
         try SessionIdentifierMatch.find(typed, in: summaries())
     }
 
+    /// Gives a session a name, or removes it with `nil` or an empty name. A
+    /// program in a session may name only its own session.
+    public func rename(session identifier: UUID, to name: String?) throws {
+        try requestAcknowledgement(.renameSession(identifier: identifier, name: name), named: "rename")
+    }
+
+    /// Raises the alert of a session with a text. A program in a session may
+    /// alert only its own session.
+    public func raiseAlert(session identifier: UUID, text: String) throws {
+        try requestAcknowledgement(.raiseSessionAlert(identifier: identifier, text: text), named: "alert")
+    }
+
+    /// Ends the alert of a session, as when the user selects it.
+    public func clearAlert(session identifier: UUID) throws {
+        try requestAcknowledgement(.clearSessionAlert(identifier: identifier), named: "clear alert")
+    }
+
+    private func requestAcknowledgement(_ message: ClientMessage, named name: String) throws {
+        guard case .acknowledged = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: name) }
+    }
+
     /// Attaches the connection to a session, and returns once the snapshot
     /// is there. The connection then belongs to the attachment, so the
     /// client takes no more requests.
