@@ -21,6 +21,9 @@ import Testing
             (ServerMessage.threadMessageSent(identifier: identifier), #"{"threadMessageSent":{"identifier":\#(name)}}"#),
             (ServerMessage.threadEnded(identifier: identifier), #"{"threadEnded":{"identifier":\#(name)}}"#),
             (ServerMessage.threadList([]), #"{"threadList":{"_0":[]}}"#),
+            (ClientMessage.requestToolPermission(request: Data("{}".utf8)), #"{"requestToolPermission":{"request":"e30="}}"#),
+            (ClientMessage.answerToolPermission(thread: identifier, request: "p1", allows: true), #"{"answerToolPermission":{"allows":true,"request":"p1","thread":\#(name)}}"#),
+            (ServerMessage.toolPermissionAnswer(allows: false, message: "No."), #"{"toolPermissionAnswer":{"allows":false,"message":"No."}}"#),
         ]
         for (message, text) in expected {
             #expect(String(decoding: try message.frame().payload, as: UTF8.self) == text)

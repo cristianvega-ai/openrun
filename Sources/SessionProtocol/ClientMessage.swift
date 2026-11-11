@@ -135,6 +135,18 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Stops the turn of a thread. Answer: `acknowledged`, also when no
     /// turn runs.
     case stopThread(identifier: UUID)
+
+    // The permission requests of an agent (decision of 2026-11-10).
+
+    /// The permission hook of an agent asks for the user. `request` is
+    /// what the agent gave the hook, as it came. Only a program that the
+    /// agent of a thread started may send it. The answer comes when the
+    /// user answered or the request ended: `toolPermissionAnswer`.
+    case requestToolPermission(request: Data)
+    /// The answer of the user to a permission request of a thread. Only
+    /// OpenRun.app may send it. Answer: `acknowledged`, or a failure when
+    /// the request does not wait any more.
+    case answerToolPermission(thread: UUID, request: String, allows: Bool, message: String? = nil)
 }
 
 extension ClientMessage: FramedMessage {
@@ -197,6 +209,8 @@ extension ClientMessage {
         case .attachThread: "attachThread"
         case .sendThreadMessage: "sendThreadMessage"
         case .stopThread: "stopThread"
+        case .requestToolPermission: "requestToolPermission"
+        case .answerToolPermission: "answerToolPermission"
         }
     }
 }

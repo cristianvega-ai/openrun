@@ -78,6 +78,10 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// The thread closed and left the list. An attached connection gets
     /// it as its last message.
     case threadEnded(identifier: UUID)
+    /// The end of a permission request, for the hook that asked. Only
+    /// `allows` true lets the tool call run. `message` tells the agent why
+    /// a call does not run.
+    case toolPermissionAnswer(allows: Bool, message: String? = nil)
     /// One event of the thread that the connection is attached to, as the
     /// JSON of a conversation event. It travels as a raw frame.
     case threadEvent(Data)
@@ -153,6 +157,7 @@ extension ServerMessage {
         case .threadMessageSent: "threadMessageSent"
         case .threadChanged: "threadChanged"
         case .threadEnded: "threadEnded"
+        case .toolPermissionAnswer: "toolPermissionAnswer"
         }
     }
 }

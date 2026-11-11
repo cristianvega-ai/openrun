@@ -353,6 +353,10 @@ actor SessionServer {
                     break
                 }
                 if let answer = await answer(threadRequest: received.message, from: client, peer: peer, attached: &attachedThread) { client.send(answer) }
+            case .requestToolPermission, .answerToolPermission:
+                // The question to the user comes in the next commits. Until
+                // then no tool call gets a permission.
+                client.send(.toolPermissionAnswer(allows: false, message: "OpenRun cannot ask the user yet."))
             }
             client.markHandled(received)
         }
