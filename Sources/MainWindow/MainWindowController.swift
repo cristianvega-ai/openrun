@@ -21,6 +21,8 @@ public final class MainWindowController: NSObject {
     let sessionsShadow = SheetShadowView()
     let defaults: UserDefaults
     var layout: PaneLayout
+    /// The setting of Reduce Motion. Tests set it.
+    var reducesMotion = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
     /// - Parameters:
     ///   - defaults: Where the window keeps the layout of its panes.

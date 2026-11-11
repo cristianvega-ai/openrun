@@ -14,8 +14,6 @@ extension MainWindowController {
         (projectsItem.holdingPriority, sessionsItem.holdingPriority, contentItem.holdingPriority) = (.init(270), .init(260), .init(250))
         (projectsItem.canCollapse, sessionsItem.canCollapse) = (true, true)
         [projectsItem, sessionsItem, contentItem].forEach(splitController.addSplitViewItem)
-        projectsItem.isCollapsed = layout.projectsHidden
-        sessionsItem.isCollapsed = layout.sessionsHidden
         let root = NSView()
         paneWindow.contentView = root
         splitController.view.frame = root.bounds
@@ -27,10 +25,13 @@ extension MainWindowController {
         let divider = splitController.splitView.dividerThickness
         splitController.splitView.setPosition(layout.projectsWidth, ofDividerAt: 0)
         splitController.splitView.setPosition(layout.projectsWidth + divider + layout.sessionsWidth, ofDividerAt: 1)
+        // A position applies to a visible pane, so the panes hide after their widths apply.
+        (projectsItem.isCollapsed, sessionsItem.isCollapsed) = (layout.projectsHidden, layout.sessionsHidden)
         // The split view controller is the delegate of its split view, so the window listens for the resize.
         NotificationCenter.default.addObserver(self, selector: #selector(panesDidResize),
             name: NSSplitView.didResizeSubviewsNotification, object: splitController.splitView)
         placeShadows()
+        updateTopRowSpaces()
     }
 
     /// Keeps the widths that the user drags, and moves the shadows with the panes.
