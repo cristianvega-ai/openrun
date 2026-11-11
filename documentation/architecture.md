@@ -448,6 +448,7 @@ Text, thinking and tool input stream with item identifiers made from the message
 A `result` line ends the turn: done, stopped when Claude Code reports an abort, or failed with the error text. A line from a sub-agent becomes a message of its task.
 
 The hook program, `openrun permission-request`, reads `ClaudeCodePermissionHookRequest` from its standard input and writes `ClaudeCodePermissionHookAnswer` to its standard output.
+A refusal by a hook that failed, which Claude Code reports with the type of a refusal by the hook, has the reason `unanswered`, not `user`.
 The request names no tool call. `ClaudeCodeToolCallMatcher` finds the call that the request is for: the oldest open call with the same tool name and input. The end of a turn or of the process clears the open calls, and it keeps at most 256.
 
 `ClaudeCodeHistoryLocation` finds the history file of a conversation: `projects/FOLDER/IDENTIFIER.jsonl` in the configuration folder. `FOLDER` is the working folder with each character that is not an ASCII letter or digit changed to `-`. When that file does not exist, it tries the real path of the folder, and then every project folder.
@@ -460,6 +461,9 @@ The output comes as an `AsyncStream`. Reads stop while more than 4 MiB waits tha
 Writes to standard input do not block a thread. They wait in order until the pipe takes them, and they fail when the program ends.
 `send(signal:)` signals the whole group, so SIGINT stops a turn with the commands that the agent started. `terminate` sends SIGTERM, and SIGKILL after a grace period.
 When the program ends, `ProcessGroupReaper` waits for it without reaping it. The zombie keeps the number of the group, so no signal can reach another program. It ends the rest of the group: SIGTERM, then SIGKILL after one second, for at most two seconds. Then it reaps the program. No zombie stays.
+A stopped program has not ended, and `terminate` also sends SIGCONT, so a stopped program acts on SIGTERM. The reaper does no work while the program runs: it looks one time at the start, and then waits for the exit event.
+An `AgentProgram` that nobody holds any more sends SIGKILL to its group, so a forgotten object cannot leave an agent behind.
+The pipe ends move above descriptor 2 before the program starts, so the pipes work also when the parent has 0, 1 or 2 closed. The test program `agent-program-probe` checks this in a process of its own.
 
 `LoginShellEnvironment` runs the user's login shell one time as `SHELL -l -i -c`, with standard input closed, and reads the environment that it prints between two markers. The shell gets 10 seconds and 1 MiB of output. On a failure the caller uses its own environment.
 
@@ -469,7 +473,7 @@ The tests never start the real `claude`, because it spends the owner's subscript
 `Tests/FakeAgent` builds the program `fake-agent`. It refuses any command line that `ClaudeCodeLaunch` does not make, and the variable `CLAUDECODE`, with the exit status 64.
 It answers each user message line with a recorded turn from `Tests/ClaudeCodeAgentTests/Fixtures`. It puts in the identifier of the conversation and echoes the user message as Claude Code does. `FAKE_AGENT_MODE` selects a special case: a conversation that does not exist, a turn that waits for SIGINT, a line cut short, a crash, or a flood of text.
 `FakeAgentTests` run it through `AgentProgram`, the decoder and a transcript.
-The fixtures come from real runs of Claude Code 2.1.322, with everything that describes the owner removed. `FixturePrivacyTests` scans them.
+The fixtures come from real runs of Claude Code 2.1.322, with everything that describes the owner removed. `FixturePrivacyTests` scans every file of the three modules, their tests and the fake agent for identifiers that are not made up, long opaque values, home folders, e-mail addresses and the words that were removed.
 
 ## Launch agent
 
