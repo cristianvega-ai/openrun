@@ -706,6 +706,8 @@ Claude Code starts with a `PermissionRequest` hook, `openrun permission-request`
 
 A stop, the end of the agent, the close of the thread, the time limit, and the end of the connection of the hook all end the request with a denial. The hook exits with 0 and a denial on every failure of its own, so no failure grants. The `openrun` tool has no command that answers.
 
+`specifications/ThreadPermission.tla` models this route with three requests, two threads and three answerers: the trusted app, a signed app that an agent started, and a program with no signature. Its safety checks say that the session process allows a request only with the answer of the user, that a tool runs only with that answer, that a request which has ended is never allowed later, and that a chat shows only the requests of its own agent. Seven controls each remove one protection, and TLC finds the violation that the control names: the signature check, the place check, the caller check, the thread from the caller, the final answer, the block when a hook fails, and the time limit. The model takes as given that Claude Code blocks the tool when the hook fails or prints a denial, which the prototype measured, and that `ProcessAncestry` finds the agent of a caller.
+
 ### Chat view
 
 `ChatView` shows one thread. It knows no agent, no process and no socket: it uses no `SessionProtocol`, `SessionConnection` or `SessionProcess`, and no module of the main window.
