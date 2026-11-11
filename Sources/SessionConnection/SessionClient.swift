@@ -208,6 +208,22 @@ public struct SessionClient: Sendable {
         try requestAcknowledgement(.stopThread(identifier: identifier), named: "thread stop")
     }
 
+    /// Asks the session process for the user, as the permission hook of
+    /// an agent does. `request` is what the agent gave the hook. The call
+    /// returns when the request ended.
+    public func requestToolPermission(_ request: Data) throws -> (allows: Bool, message: String?) {
+        guard case .toolPermissionAnswer(let allows, let message) = try self.request(.requestToolPermission(request: request)) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "permission-request")
+        }
+        return (allows, message)
+    }
+
+    /// Gives the answer of the user to a permission request of a thread.
+    /// The session process takes it only from OpenRun.app.
+    public func answerToolPermission(thread: UUID, request: String, allows: Bool, message: String? = nil) throws {
+        try requestAcknowledgement(.answerToolPermission(thread: thread, request: request, allows: allows, message: message), named: "permission answer")
+    }
+
     /// Attaches the connection to a thread. The connection then belongs
     /// to the attachment, so the client takes no more requests.
     public func attachThread(_ identifier: UUID) throws -> ThreadAttachment {

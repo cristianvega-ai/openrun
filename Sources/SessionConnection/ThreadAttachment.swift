@@ -52,6 +52,13 @@ public final class ThreadAttachment: Sendable {
         try SessionConnectionError.wrapping { try connection.send(message) }
     }
 
+    /// Sends the answer of the user to a permission request. A refusal of
+    /// the session process comes as `requestFailed` among the events.
+    public func answer(permission request: String, allows: Bool, message: String? = nil) throws {
+        let answer = ClientMessage.answerToolPermission(thread: summary.identifier, request: request, allows: allows, message: message)
+        try SessionConnectionError.wrapping { try connection.send(answer) }
+    }
+
     /// Stops the turn of the thread.
     public func stop() throws {
         try SessionConnectionError.wrapping { try connection.send(ClientMessage.stopThread(identifier: summary.identifier)) }
