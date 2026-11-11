@@ -1,5 +1,6 @@
 import AppKit
 import MainWindow
+import SessionOverview
 import SessionPane
 
 /// What the third pane shows: the session of the selected row, a notice,
@@ -7,8 +8,11 @@ import SessionPane
 extension Workspace {
     /// What the third pane must show now.
     var wantedContent: ShownContent {
-        guard let session = layout.selectedRow.flatMap({ layout.row($0) })?.pane.sessions.first else { return .nothing }
-        return .session(session)
+        guard let session = layout.selectedRow.flatMap({ layout.row($0) })?.pane.sessions.first, !exitedSessions.contains(session) else {
+            if case .disconnected(let reason) = connection.status { return .notice(.noSessionProcess(reason: reason)) }
+            return .nothing
+        }
+        return lostSessions.contains(session) ? .notice(.lostSession) : .session(session)
     }
 
     /// Shows the pane of the first session of the selected row, or what
@@ -26,7 +30,9 @@ extension Workspace {
         case .nothing:
             window.showContent(nil)
         case .notice(let notice):
-            window.showContent(PaneContent(view: PaneNoticeView(notice), title: "", minimumSize: PaneNoticeView.minimumSize))
+            let view = PaneNoticeView(notice)
+            view.action = { [weak self] in self?.connectAgain() }
+            window.showContent(PaneContent(view: view, title: "", minimumSize: PaneNoticeView.minimumSize))
         case .session(let session):
             let (pane, isNew) = panes.pane(for: session)
             window.showContent(PaneContent(pane.content))
@@ -43,9 +49,23 @@ extension Workspace {
     /// pane takes other content at the next refresh.
     func sessionEnded(_ session: UUID) {
         panes.close(session)
+        lostSessions.remove(session)
+        exitedSessions.remove(session)
         if shownSession == session { shownIsStale = true }
     }
 
+    /// The user wants a new connection to the session of the selected row.
+    func connectAgain() {
+        if let session = layout.selectedRow.flatMap({ layout.row($0) })?.pane.sessions.first { lostSessions.remove(session) }
+        refresh()
+    }
+
+    /// The connection of the app to the session process came or went.
+    func statusChanged() {
+        // A new connection brings a new list, so each session can try again.
+        if connection.status == .connected { lostSessions = [] }
+        refresh()
+    }
 }
 
 /// The map from the value of a session pane to the content of the third pane.

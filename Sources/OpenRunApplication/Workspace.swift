@@ -31,6 +31,10 @@ final class Workspace: NSObject {
     /// session closed, so the next refresh shows other content.
     var shown = ShownContent.nothing
     var shownIsStale = false
+    /// Sessions whose pane lost its connection while the session runs, and
+    /// sessions whose program ended before the feed said so.
+    var lostSessions: Set<UUID> = []
+    var exitedSessions: Set<UUID> = []
     /// Whether the window is key and the keyboard focus is in the third pane.
     var isContentActive = false
     /// A session that the user asked for. Its row takes the selection
@@ -78,6 +82,7 @@ final class Workspace: NSObject {
         if case .project(let identifier) = layout.selectedEntry { projectToSelect = identifier }
         window.projectsList.select(ProjectsListEntry(layout.selectedEntry))
         connection.overviewChanged = { [weak self] in self?.overviewChanged(from: $0) }
+        connection.statusChanged = { [weak self] in self?.statusChanged() }
     }
 
     /// Shows the window and starts to follow the session process. The
