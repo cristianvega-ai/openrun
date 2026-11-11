@@ -24,7 +24,7 @@ extension CodexAppServer {
             if let turn = state.mapper.turnToStop {
                 _ = try? await request("turn/interrupt", .object(["threadId": .string(thread), "turnId": .string(turn)]))
             }
-            _ = try? await request("thread/unsubscribe", .object(["threadId": .string(thread)]))
+            unsubscribe(thread)
         }
     }
 }

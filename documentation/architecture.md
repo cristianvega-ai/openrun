@@ -555,7 +555,7 @@ The handshake sends `initialize` with the name and the version of OpenRun and `c
 | `turn/interrupt`, `thread/backgroundTerminals/list`, `thread/backgroundTerminals/terminate` | The stop. |
 | `thread/turns/list` | A page of the history, with `itemsView: "full"`. |
 | `account/read`, `account/rateLimits/read` | The account and its usage. |
-| `thread/unsubscribe` | The close of a thread. |
+| `thread/unsubscribe` | The close of a thread. The close does not wait for the answer, which has a time limit of 2 seconds. |
 
 Each notification goes to the thread that it names. A notification without a thread, such as `account/rateLimits/updated`, goes to every open thread.
 Codex can send lines of a thread before its answer to the start or the resume. The server keeps the last 64 such lines, and gives them to the thread after its first event.

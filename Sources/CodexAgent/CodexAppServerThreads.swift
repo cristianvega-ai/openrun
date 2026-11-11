@@ -35,7 +35,17 @@ extension CodexAppServer {
         await endApprovals(of: { $0 == identifier })
         guard let state = threads.removeValue(forKey: identifier) else { return }
         state.channel.finish()
-        // Codex then sends no more notifications of the thread here.
-        _ = try? await request("thread/unsubscribe", .object(["threadId": .string(identifier)]))
+        unsubscribe(identifier)
+    }
+
+    /// The most time that the answer to `thread/unsubscribe` may take.
+    static let unsubscribeTimeLimit: Duration = .seconds(2)
+
+    /// Tells Codex to send no more notifications of the thread here. Its
+    /// answer has no use, so a close does not wait for it, even when the
+    /// app-server answers nothing.
+    func unsubscribe(_ thread: String) {
+        let line = JSONValue.object(["threadId": .string(thread)])
+        Task { _ = try? await connection.request("thread/unsubscribe", line, timeLimit: Self.unsubscribeTimeLimit) }
     }
 }

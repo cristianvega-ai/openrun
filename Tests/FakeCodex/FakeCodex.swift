@@ -52,6 +52,11 @@ struct FakeCodex {
             // No answer comes. The program ends with its input.
             while readLine() != nil {}
             return 0
+        case "deaf":
+            // No answer comes, and neither the end of the input nor SIGTERM
+            // ends the program. Only SIGKILL does.
+            signal(SIGTERM, SIG_IGN)
+            while true { sleep(60) }
         case "exit":
             // The app-server waits for an answer. It must not get one: it
             // ends with the input, as Codex does, and runs nothing.
