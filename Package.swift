@@ -48,7 +48,7 @@ let package = Package(
         .testTarget(name: "ProjectsTests", dependencies: ["Projects", "DataStorage"]),
         // The typed settings, their text forms for the tool, and the rule
         // for protected settings.
-        .target(name: "Settings", dependencies: ["DataStorage"]),
+        .target(name: "Settings", dependencies: ["DataStorage", "UntrustedText"]),
         .testTarget(name: "SettingsTests", dependencies: ["Settings", "DataStorage"]),
         .target(name: "SessionProtocol"),
         .testTarget(

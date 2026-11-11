@@ -1,4 +1,5 @@
 import Foundation
+import UntrustedText
 
 /// The kind of value of a setting: what it accepts, its text form for the
 /// tool, and its form in `settings.json`.
@@ -32,7 +33,7 @@ enum SettingKind: Sendable {
     /// Whether a value is of this kind and in its range.
     func accepts(_ value: SettingValue) -> Bool {
         switch (self, value) {
-        case (.text(let limit), .text(let text)): SettingText.isPlain(text, lengthLimit: limit)
+        case (.text(let limit), .text(let text)): PlainName.isValid(text, lengthLimit: limit)
         case (.wholeNumber(let range), .wholeNumber(let number)): range.contains(number)
         case (.flag, .flag): true
         case (.choice(let options), .choice(let choice)): options.contains(choice)

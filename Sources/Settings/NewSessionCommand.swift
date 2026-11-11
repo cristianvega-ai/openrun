@@ -1,3 +1,5 @@
+import UntrustedText
+
 /// One entry of the new-session button: a name to show, and the command
 /// that the new session runs.
 public struct NewSessionCommand: Hashable, Sendable {
@@ -25,11 +27,11 @@ public struct NewSessionCommand: Hashable, Sendable {
     }
 
     /// Whether the settings can hold this entry: a name of 1 to 50
-    /// characters and a command line of at most 1000, neither with a
-    /// control character. A new line in a command line would end the
+    /// characters and a command line of at most 1000, both plain as
+    /// `PlainName` checks. A new line in a command line would end the
     /// command that the shell reads and start another.
     var isValid: Bool {
-        SettingText.isPlain(name, lengthLimit: Self.nameLengthLimit)
-            && SettingText.isPlain(commandLine, lengthLimit: Self.commandLineLengthLimit, allowsEmpty: true)
+        PlainName.isValid(name, lengthLimit: Self.nameLengthLimit)
+            && PlainName.isValid(commandLine, lengthLimit: Self.commandLineLengthLimit, allowsEmpty: true)
     }
 }

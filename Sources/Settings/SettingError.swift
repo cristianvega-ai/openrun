@@ -1,3 +1,5 @@
+import UntrustedText
+
 /// A setting could not be read or changed. Nothing changed.
 ///
 /// The messages never show a value that a client sent, and show an unknown
@@ -13,7 +15,7 @@ public enum SettingError: Error, Equatable, Sendable, CustomStringConvertible {
     public var description: String {
         switch self {
         case .unknownName(let name):
-            "OpenRun has no setting \(SettingText.quoted(name)). Run `openrun settings list` to see the settings."
+            "OpenRun has no setting \(QuotedText.quoted(name, characterLimit: 64)). Run `openrun settings list` to see the settings."
         case .invalidValue(let setting):
             "The setting \(setting.rawValue) takes \(setting.kind.requirement)."
         case .protectedSetting(let setting):
