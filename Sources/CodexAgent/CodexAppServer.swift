@@ -16,6 +16,11 @@ public actor CodexAppServer {
     /// its answer to `thread/start` or `thread/resume` arrives.
     var earlyLines: [(thread: String, method: String, parameters: JSONValue, line: SourceLine)] = []
     static let earlyLineLimit = 64
+    /// The threads that closed and whose `thread/unsubscribe` has no
+    /// answer yet, with the number of such closes. Until the answer, Codex
+    /// can still send lines of the thread. They must not wait for a later
+    /// resume of the thread, which would show them again.
+    var unsubscribingThreads: [String: Int] = [:]
     var isShuttingDown = false
     /// Whether the app-server ended. A new thread then needs a new server.
     public private(set) var hasEnded = false

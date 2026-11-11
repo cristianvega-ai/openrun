@@ -35,7 +35,15 @@ extension CodexAppServer {
         await endApprovals(of: { $0 == identifier })
         guard let state = threads.removeValue(forKey: identifier) else { return }
         state.channel.finish()
+        dropLines(of: identifier)
         unsubscribe(identifier)
+    }
+
+    /// A thread closed. The lines that wait for it go, and the lines that
+    /// still come are dropped until Codex took its `thread/unsubscribe`.
+    func dropLines(of thread: String) {
+        earlyLines.removeAll { $0.thread == thread }
+        unsubscribingThreads[thread, default: 0] += 1
     }
 
     /// The most time that the answer to `thread/unsubscribe` may take.
@@ -46,6 +54,12 @@ extension CodexAppServer {
     /// app-server answers nothing.
     func unsubscribe(_ thread: String) {
         let line = JSONValue.object(["threadId": .string(thread)])
-        Task { _ = try? await connection.request("thread/unsubscribe", line, timeLimit: Self.unsubscribeTimeLimit) }
+        Task {
+            _ = try? await connection.request("thread/unsubscribe", line, timeLimit: Self.unsubscribeTimeLimit)
+            // After the answer or the time limit, a line of the thread
+            // belongs to a resume.
+            let closes = unsubscribingThreads[thread] ?? 1
+            unsubscribingThreads[thread] = closes > 1 ? closes - 1 : nil
+        }
     }
 }

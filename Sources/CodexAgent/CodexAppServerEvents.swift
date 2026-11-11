@@ -18,6 +18,7 @@ extension CodexAppServer {
         guard let state = threads.removeValue(forKey: thread) else { return }
         let text = "OpenRun closed the thread, because too many of its events waited to show."
         state.channel.finish(with: ConversationEvent(.notice(Notice(level: .error, text: text))))
+        dropLines(of: thread)
         // A request waits for the reader, so the reader must not wait for it.
         Task {
             await endApprovals(of: { $0 == thread })

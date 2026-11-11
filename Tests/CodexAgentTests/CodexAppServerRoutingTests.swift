@@ -34,6 +34,27 @@ import Testing
         #expect(await early.next()?.kind == .agentTextDelta(AgentTextDelta(itemIdentifier: "m", text: "first")))
     }
 
+    /// A resumed thread must not show again what came after its close.
+    @Test func theLinesOfAClosedThreadDoNotWaitForItsResume() async throws {
+        let harness = try await CodexServerHarness()
+        let other = await harness.server.open("other", first: [])
+        _ = await harness.server.open("a", first: [])
+        await harness.server.closeThread("a")
+        harness.serve(delta("a", "stale"))
+        let request = await harness.nextWritten()
+        #expect(request?["method"] == .string("thread/unsubscribe"))
+        harness.serve(#"{"id":\#(request?["id"]?.integer ?? -1),"result":{}}"#)
+        let deadline = ContinuousClock.now + .seconds(10)
+        while await !harness.server.unsubscribingThreads.isEmpty, ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(5)) }
+        // Codex took the unsubscribe, so this line belongs to a resume.
+        harness.serve(delta("a", "early"))
+        harness.serve(delta("other", "mark"))
+        _ = await other.next()
+        let resumed = await harness.server.open("a", first: [])
+        #expect(await resumed.next()?.kind == .agentTextDelta(AgentTextDelta(itemIdentifier: "m", text: "early")))
+        #expect(await harness.server.earlyLines.isEmpty)
+    }
+
     @Test func theEndOfTheServerEndsEveryThread() async throws {
         let harness = try await CodexServerHarness()
         let thread = await harness.server.open("a", first: [])

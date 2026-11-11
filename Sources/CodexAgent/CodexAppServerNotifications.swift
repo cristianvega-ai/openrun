@@ -27,8 +27,9 @@ extension CodexAppServer {
             if method == "serverRequest/resolved" { await approvalResolved(parameters, thread: thread) }
             await deliver(method, parameters, line: line, to: thread)
             if method == "item/started", let item = parameters["item"]?["id"]?.string { await showApprovals(of: item, line: line) }
-        } else {
-            // A thread that closed, or one whose start has not returned.
+        } else if unsubscribingThreads[thread] == nil {
+            // A thread whose start or resume has not returned. A line of a
+            // thread that closed is dropped.
             earlyLines.append((thread, method, parameters, line))
             if earlyLines.count > Self.earlyLineLimit { earlyLines.removeFirst() }
         }
