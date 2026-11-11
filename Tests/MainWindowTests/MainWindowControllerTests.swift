@@ -17,8 +17,11 @@ import Testing
     @Test func theWindowOpensWithTheWidthsThatTheUserLeft() {
         let defaults = temporaryDefaults()
         let first = makeMainWindow(defaults: defaults)
+        // Only a drag of an edge makes a new choice of a width.
+        first.dragStarted()
         first.splitController.splitView.setPosition(250, ofDividerAt: 0)
-        first.paneResizeEnded()
+        first.window.layoutIfNeeded()
+        first.dragEnded()
         first.window.close()
         #expect(PaneLayout.load(from: defaults).projectsWidth == 250)
         let second = makeMainWindow(defaults: defaults)

@@ -5,8 +5,8 @@ import PaneAppearance
 extension MainWindowController {
     func configurePanes() {
         let splitView = PaneSplitView()
-        splitView.dragStarted = { [weak self] in self?.contentPane.beginPaneResize() }
-        splitView.dragEnded = { [weak self] in self?.paneResizeEnded() }
+        splitView.dragStarted = { [weak self] in self?.dragStarted() }
+        splitView.dragEnded = { [weak self] in self?.dragEnded() }
         splitController.splitView = splitView
         splitController.splitView.isVertical = true
         splitController.splitView.dividerStyle = .thin
@@ -44,11 +44,10 @@ extension MainWindowController {
         updateTopRowSpaces()
     }
 
-    /// Keeps the widths that the user drags, and moves the shadows with the panes.
+    /// Moves the shadows with the panes. Only the end of a drag changes the
+    /// chosen widths, so a squeeze does not.
     @objc func panesDidResize(_ notification: Notification) {
         placeShadows()
-        if !projectsItem.isCollapsed { layout.projectsWidth = projectsList.view.frame.width }
-        if !sessionsItem.isCollapsed { layout.sessionsWidth = sessionsList.view.frame.width }
     }
 
     /// An animation or a drag of the panes ends. The layout is saved once
