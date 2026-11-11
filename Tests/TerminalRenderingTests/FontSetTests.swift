@@ -17,6 +17,21 @@ import Testing
         #expect(names[FontFace.italic.rawValue].hasSuffix("Italic"))
     }
 
+    @Test func aNamedMonospacedFontGivesEveryFace() {
+        let fonts = FontSet(pointSize: 13, scale: 2, fontName: "Menlo")
+        let names = FontFace.allCases.map { CTFontCopyPostScriptName(fonts.font(for: $0)) as String }
+        #expect(names == ["Menlo-Regular", "Menlo-Bold", "Menlo-Italic", "Menlo-BoldItalic"])
+        #expect(CTFontCopyPostScriptName(FontSet(pointSize: 13, scale: 2, fontName: "Menlo-Bold").font(for: .regular)) as String == "Menlo-Bold")
+        #expect(fonts.fontName == "Menlo" && fonts.cellWidth != 0)
+    }
+
+    @Test func anUnknownOrProportionalFontFallsBackToSFMono() {
+        for name in ["No Such Font 12345", "Helvetica", ""] {
+            let name = CTFontCopyPostScriptName(FontSet(pointSize: 13, scale: 2, fontName: name).font(for: .regular)) as String
+            #expect(name.hasPrefix(".AppleSystemUIFontMonospaced"), "\(name)")
+        }
+    }
+
     @Test func linesLieInsideTheCell() {
         let metrics = FontSet(pointSize: 13, scale: 2).metrics
         #expect(metrics.strikethroughPosition < metrics.baseline)
