@@ -81,6 +81,43 @@ struct MainWindowPictureTests {
         }
     }
 
+    /// The slide of a toggle of the projects list at 0, 60, 120, 180 and 250 ms.
+    /// The test moves the panes by hand, as the animation does, and draws the
+    /// window offscreen. So it works on a locked screen, where no animation runs.
+    @Test func picturesOfAToggleOfTheProjectsList() async throws {
+        let output = URL(fileURLWithPath: try #require(ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"]))
+        try FileManager.default.createDirectory(at: output, withIntermediateDirectories: true)
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        var sample = PictureSample()
+        controller.projectsList.show(sample.projects)
+        controller.projectsList.select(.project(sample.projectIdentifiers[0]))
+        controller.sessionsList.show(sample.sessions)
+        controller.showWindow()
+        await turns(seconds: 0.6)
+        let split = controller.splitController.view, full = split.frame.width
+        let width = controller.frame(of: controller.sessionsList.view).minX
+        for hides in [true, false] {
+            controller.layout.projectsHidden = hides
+            controller.updateTopRowSpaces()
+            for time in [0, 60, 120, 180, 250] {
+                // The animation eases in and out. The content keeps its right edge.
+                let part = Double(time) / 250, eased = part * part * (3 - 2 * part)
+                let shift = width * (hides ? eased : 1 - eased)
+                split.frame = NSRect(x: -shift, y: 0, width: full + shift, height: split.frame.height)
+                controller.window.layoutIfNeeded()
+                try render(controller.window, to: output.appendingPathComponent("toggle-\(hides ? "hide" : "show")-\(time).png"))
+            }
+        }
+    }
+
+    private func render(_ window: NSWindow, to path: URL) throws {
+        let view = try #require(window.contentView)
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: path)
+    }
+
     /// Turns of the main run loop, so AppKit draws and the session answers.
     private func turns(seconds: Double = 5, until condition: () -> Bool = { false }) async {
         let end = Date().addingTimeInterval(seconds)
