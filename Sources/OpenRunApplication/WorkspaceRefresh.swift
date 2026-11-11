@@ -18,10 +18,11 @@ extension Workspace {
         threadsChanged(from: previous)
         if overview.settings != previous.settings { settingsChanged() }
         alertsChanged(from: previous)
-        let isFirstList = showsSessionAtStart && connection.hasSessionList
+        let isFirstList = showsSessionAtStart && connection.hasFirstLists
         if isFirstList {
             showsSessionAtStart = false
-            if overview.sessions.isEmpty { newSession() }
+            // A window with a thread is not empty, and it needs no new shell.
+            if overview.sessions.isEmpty, overview.threads.isEmpty { newSession() }
         }
         for session in previous.sessions where overview.session(session.identifier) == nil { sessionEnded(session.identifier) }
         if let wanted = sessionToSelect, let row = layout.row(showing: wanted) {

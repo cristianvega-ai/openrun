@@ -48,4 +48,17 @@ import Testing
         #expect(try test.process.listedIdentifiers().count == 1 && !test.workspace.showsSessionAtStart)
         #expect(test.workspace.layout.selectedRow == running && test.workspace.connection.overview.session(running)?.alert == nil)
     }
+
+    /// After a restart of the Mac, the threads stay and the sessions do not.
+    @Test func theStartOpensNoShellWhenAThreadExists() async throws {
+        let test = try TestWorkspace(process: try FakeAgentProcess.start())
+        defer { test.stop() }
+        let thread = try #require(UUID(uuidString: try test.process.runCommand(["thread", "new", "--folder", test.process.directory.path]).outputLines.first ?? ""))
+        let application = makeApplication(test)
+        application.applicationDidFinishLaunching(launch)
+        #expect(await waitUntil { test.workspace.shownThread == thread })
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(try test.process.listedIdentifiers().isEmpty && !test.workspace.showsSessionAtStart)
+        #expect(test.workspace.layout.selectedRow == thread)
+    }
 }

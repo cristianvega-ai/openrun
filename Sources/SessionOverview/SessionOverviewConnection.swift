@@ -20,8 +20,13 @@ public final class SessionOverviewConnection {
     /// Whether a list of the agent threads came since the start. A
     /// session process of an older build sends none.
     public private(set) var hasThreadList = false
-    /// Called after each batch that changed the overview, with the
-    /// overview before the batch.
+    /// Whether every list of the start came: the sessions, and the threads
+    /// from a session process that keeps threads. Only then does an empty
+    /// overview mean that nothing runs.
+    public var hasFirstLists: Bool { hasSessionList && (hasThreadList || !expectsThreadList) }
+    private var expectsThreadList = true
+    /// Called after each batch that changed the overview or made the
+    /// first lists complete, with the overview before the batch.
     public var overviewChanged: ((_ previous: SessionOverview) -> Void)?
     public var statusChanged: (() -> Void)?
     /// Opens the feed. Tests give their own.
@@ -79,6 +84,7 @@ public final class SessionOverviewConnection {
         switch result {
         case .success(let receiver):
             self.receiver = receiver
+            expectsThreadList = receiver.includesThreads
             retryDelay = firstRetryDelay
             setStatus(.connected)
             let pending = PendingChanges()
@@ -93,7 +99,7 @@ public final class SessionOverviewConnection {
 
     private func take(_ pending: PendingChanges, generation: Int) {
         guard generation == self.generation else { return }
-        let previous = overview
+        let (previous, hadFirstLists) = (overview, hasFirstLists)
         var end: String?
         for event in pending.takeAll() {
             overview.apply(event)
@@ -105,7 +111,7 @@ public final class SessionOverviewConnection {
             default: break
             }
         }
-        if overview != previous { overviewChanged?(previous) }
+        if overview != previous || hasFirstLists != hadFirstLists { overviewChanged?(previous) }
         if let end { lostConnection(reason: end) }
     }
 

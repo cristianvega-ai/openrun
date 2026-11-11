@@ -33,13 +33,15 @@ public final class SessionChangeReceiver: Sendable {
         case failed(SessionConnectionError)
     }
 
+    /// Whether the client asked for the agent threads. Their list then
+    /// comes one time, after the settings.
+    public let includesThreads: Bool
     private let connection: MessageConnection
     private let initialList: [SessionSummary]
     private let isReceiving = Atomic<Bool>(false)
 
-    private init(connection: MessageConnection, initialList: [SessionSummary]) {
-        self.connection = connection
-        self.initialList = initialList
+    private init(connection: MessageConnection, initialList: [SessionSummary], includesThreads: Bool) {
+        (self.connection, self.initialList, self.includesThreads) = (connection, initialList, includesThreads)
     }
 
     /// Asks for the changes, and returns once the present list is there.
@@ -50,7 +52,7 @@ public final class SessionChangeReceiver: Sendable {
         let request = ClientMessage.receiveSessionChanges(includesThreads: includesThreads ? true : nil)
         try SessionConnectionError.wrapping { try connection.send(request) }
         switch try SessionConnectionError.wrapping({ try connection.receive(ServerMessage.self) }) {
-        case .sessionList(let list): return SessionChangeReceiver(connection: connection, initialList: list)
+        case .sessionList(let list): return SessionChangeReceiver(connection: connection, initialList: list, includesThreads: includesThreads)
         case .failure(let failure): throw SessionConnectionError.requestFailed(failure)
         case nil: throw SessionConnectionError.connectionClosed
         default: throw SessionConnectionError.unexpectedAnswer(request: "receiveSessionChanges")

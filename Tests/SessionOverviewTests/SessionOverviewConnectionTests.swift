@@ -11,13 +11,13 @@ import Testing
         let connection = SessionOverviewConnection(socket: try SocketLocation(path: process.socketPath))
         var previousCounts: [Int] = []
         connection.overviewChanged = { previousCounts.append($0.sessions.count) }
-        #expect(!connection.hasSessionList && !connection.hasThreadList)
+        #expect(!connection.hasSessionList && !connection.hasThreadList && !connection.hasFirstLists)
         connection.start()
         connection.start()
         let identifier = try process.createSession(program: ["/bin/sh"])
         #expect(await waitUntil { connection.overview.sessions.map(\.identifierText) == [identifier] })
         #expect(connection.status == .connected && connection.hasSessionList)
-        #expect(await waitUntil { connection.hasThreadList })
+        #expect(await waitUntil { connection.hasThreadList && connection.hasFirstLists })
         #expect(connection.overview.settingText(named: "font-size") == "13")
         _ = try process.runCommand(["rename", identifier, "Build"])
         #expect(await waitUntil { connection.overview.sessions.first?.name == "Build" })
