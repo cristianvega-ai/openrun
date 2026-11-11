@@ -77,6 +77,23 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Ends the alert of a session. Answer: `acknowledged`. A program in a
     /// session may clear only its own.
     case clearSessionAlert(identifier: UUID)
+
+    // The projects. Any client may change them, because they type into no
+    // session and read none.
+
+    /// Answer: `projectList`.
+    case listProjects
+    /// Adds a folder as a project at the end of the list. A relative folder
+    /// starts at `currentFolder`, the folder of the client, and `~` is the
+    /// home folder. Answer: `projectAdded`.
+    case addProject(folder: String, name: String?, currentFolder: String?)
+    /// Removes a project. Its sessions keep running. Answer: `acknowledged`.
+    case removeProject(identifier: UUID)
+    /// Gives a project a name, or removes the name with `nil` or an empty
+    /// name. Answer: `acknowledged`.
+    case renameProject(identifier: UUID, name: String?)
+    /// Moves a project to `place` in the order, from 0. Answer: `acknowledged`.
+    case moveProject(identifier: UUID, place: Int)
 }
 
 extension ClientMessage: FramedMessage {
@@ -125,6 +142,11 @@ extension ClientMessage {
         case .renameSession: "renameSession"
         case .raiseSessionAlert: "raiseSessionAlert"
         case .clearSessionAlert: "clearSessionAlert"
+        case .listProjects: "listProjects"
+        case .addProject: "addProject"
+        case .removeProject: "removeProject"
+        case .renameProject: "renameProject"
+        case .moveProject: "moveProject"
         }
     }
 }

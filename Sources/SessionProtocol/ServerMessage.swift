@@ -44,6 +44,14 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// The session has ended and left the list. Only a connection that
     /// asked with `receiveSessionChanges` receives it.
     case sessionEnded(identifier: UUID)
+    /// Every project: those with a folder in the user's order, then those
+    /// whose folder this Mac does not know. The answer to `listProjects`,
+    /// and on a connection that asked with `receiveSessionChanges`, the
+    /// whole new list after each change.
+    case projectList([ProjectSummary])
+    /// The answer to `addProject`: the new project, last among the
+    /// projects with a folder.
+    case projectAdded(ProjectSummary)
 }
 
 extension ServerMessage: FramedMessage {
@@ -99,6 +107,8 @@ extension ServerMessage {
         case .approvalQuestionEnded: "approvalQuestionEnded"
         case .sessionChanged: "sessionChanged"
         case .sessionEnded: "sessionEnded"
+        case .projectList: "projectList"
+        case .projectAdded: "projectAdded"
         }
     }
 }
