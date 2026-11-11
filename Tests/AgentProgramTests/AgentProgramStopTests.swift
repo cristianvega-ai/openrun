@@ -1,9 +1,9 @@
-import AgentProgram
 import Darwin
 import Foundation
 import PseudoTerminal
 import Synchronization
 import Testing
+@testable import AgentProgram
 
 /// A program that stops, such as one that gets SIGTSTP, has not ended.
 @Suite struct AgentProgramStopTests {
@@ -39,5 +39,16 @@ import Testing
         }
         await terminating.value
         #expect(await program.waitForExit() == .signaled(signal: SIGTERM))
+    }
+
+    @Test func anIdleProgramCausesNoPeriodicWork() async throws {
+        let program = try startProgram("sleep", ["300"])
+        try await Task.sleep(for: .milliseconds(100))
+        let before = program.queue.sync { program.reaper?.checkCount ?? -1 }
+        try await Task.sleep(for: .seconds(1))
+        let after = program.queue.sync { program.reaper?.checkCount ?? -1 }
+        #expect(before >= 1)
+        #expect(after == before)
+        await program.terminate()
     }
 }

@@ -18,6 +18,8 @@ final class ProcessGroupReaper: @unchecked Sendable {
     private let onExit: (ProgramExit) -> Void
     private var source: DispatchSourceProcess?
     private(set) var hasReaped = false
+    /// The checks for an end so far, which a test counts.
+    private(set) var checkCount = 0
 
     init(processIdentifier: pid_t, queue: DispatchQueue, onExit: @escaping (ProgramExit) -> Void) {
         self.processIdentifier = processIdentifier
@@ -27,36 +29,48 @@ final class ProcessGroupReaper: @unchecked Sendable {
 
     func start() {
         let watcher = DispatchSource.makeProcessSource(identifier: processIdentifier, eventMask: .exit, queue: queue)
-        watcher.setEventHandler { [self] in checkExit() }
+        watcher.setEventHandler { [self] in
+            guard source != nil else { return }
+            source?.cancel()
+            source = nil
+            waitForExit()
+        }
         source = watcher
         watcher.resume()
-        // The program may have ended before the watcher existed.
-        checkExit()
+        // The program may have ended before the watcher existed. Otherwise
+        // nothing runs until the exit event, so an idle program costs no work.
+        if hasExited() {
+            watcher.cancel()
+            source = nil
+            endGroup(since: DispatchTime.now().uptimeNanoseconds, terminated: false)
+        }
     }
 
     /// Sends `signal` to the group while the program is not reaped.
     func signalGroup(_ signal: Int32) { if !hasReaped { killpg(processIdentifier, signal) } }
 
-    /// Looks whether the program ended, without reaping it.
-    private func checkExit() {
-        guard source != nil else { return }
+    /// The exit event can come a moment before the program can be waited
+    /// for, so a short poll follows it, and only it.
+    private func waitForExit() {
+        guard hasExited() else {
+            queue.asyncAfter(deadline: .now() + .milliseconds(5)) { [self] in waitForExit() }
+            return
+        }
+        endGroup(since: DispatchTime.now().uptimeNanoseconds, terminated: false)
+    }
+
+    /// Whether the program ended, without reaping it. `waitid` on macOS also
+    /// reports a stopped or continued program, and that is no end. After an
+    /// error, such as ECHILD, the reap tells.
+    private func hasExited() -> Bool {
+        checkCount += 1
         var information = siginfo_t()
         var result: Int32
         repeat {
             result = waitid(P_PID, id_t(processIdentifier), &information, WEXITED | WNOHANG | WNOWAIT)
         } while result < 0 && errno == EINTR
-        // The event can come before the program can be waited for, and it
-        // comes once. After another error, such as ECHILD, the reap tells.
-        // `waitid` on macOS also reports a stopped or continued program, and
-        // that is no end.
-        let ended = information.si_pid != 0 && [CLD_EXITED, CLD_KILLED, CLD_DUMPED].contains(information.si_code)
-        if result == 0, !ended {
-            queue.asyncAfter(deadline: .now() + .milliseconds(5)) { [self] in checkExit() }
-            return
-        }
-        source?.cancel()
-        source = nil
-        endGroup(since: DispatchTime.now().uptimeNanoseconds, terminated: false)
+        guard result == 0 else { return true }
+        return information.si_pid != 0 && [CLD_EXITED, CLD_KILLED, CLD_DUMPED].contains(information.si_code)
     }
 
     private func endGroup(since start: UInt64, terminated: Bool) {
