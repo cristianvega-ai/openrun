@@ -23,6 +23,29 @@ import Testing
         #expect(!next.projectsItem.isCollapsed && next.contentPane.topRow.leadingSpace == 16 && !PaneLayout.load(from: defaults).projectsHidden)
     }
 
+    /// A list hides only through its button, its menu command and its key.
+    /// A drag of an edge stops at the minimum width of the list.
+    @Test func aDragPastTheMinimumKeepsTheListAtItsMinimum() throws {
+        let defaults = temporaryDefaults()
+        let controller = makeMainWindow(defaults: defaults)
+        defer { controller.window.close() }
+        let splitView = try #require(controller.splitController.splitView as? PaneSplitView)
+        // The sessions list goes first, so it has room to grow when the projects list shrinks.
+        for edge in [1, 0] {
+            let list = edge == 0 ? controller.projectsList.view : controller.sessionsList.view
+            let item = edge == 0 ? controller.projectsItem : controller.sessionsItem
+            splitView.dragStarted?()
+            splitView.setPosition(edge == 0 ? 0 : controller.frame(of: list).minX, ofDividerAt: edge)
+            controller.window.layoutIfNeeded()
+            splitView.dragEnded?()
+            let saved = PaneLayout.load(from: defaults)
+            #expect(!controller.projectsItem.isCollapsed && !controller.sessionsItem.isCollapsed, "edge \(edge)")
+            #expect(list.frame.width == item.minimumThickness && !saved.projectsHidden && !saved.sessionsHidden, "edge \(edge)")
+            #expect(!controller.layout.projectsHidden && !controller.layout.sessionsHidden, "edge \(edge)")
+            #expect(controller.window.contentMinSize.width == expectedMinimumWidth(of: controller, content: 360), "edge \(edge)")
+        }
+    }
+
     @Test func theMenuItemsSayWhatTheyDoNow() throws {
         let controller = makeMainWindow()
         defer { controller.window.close() }

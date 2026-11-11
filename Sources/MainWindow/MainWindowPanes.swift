@@ -15,7 +15,9 @@ extension MainWindowController {
         // The first pane holds its width the hardest, so a drag of the second
         // edge changes only the second pane, and a resize of the window changes the third.
         (projectsItem.holdingPriority, sessionsItem.holdingPriority, contentItem.holdingPriority) = (.init(270), .init(260), .init(250))
-        (projectsItem.canCollapse, sessionsItem.canCollapse) = (true, true)
+        // A list hides only through its button, its menu command and its key
+        // (decision of 2026-11-10). A drag of an edge stops at the minimum width.
+        (projectsItem.canCollapse, sessionsItem.canCollapse) = (false, false)
         [projectsItem, sessionsItem, contentItem].forEach(splitController.addSplitViewItem)
         let root = NSView()
         paneWindow.contentView = root
