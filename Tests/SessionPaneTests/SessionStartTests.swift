@@ -7,7 +7,6 @@ import TerminalView
 import Testing
 import Synchronization
 @testable import SessionPane
-@testable import SessionWindow
 
 @Suite(.isolatedThread) struct SessionStartTests {
     private func screen(of started: StartedSession) throws -> Terminal {

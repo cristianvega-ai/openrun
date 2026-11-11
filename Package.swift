@@ -104,6 +104,7 @@ let package = Package(
         ),
         // One session in a view that any window can hold: the attach, the size rules, the title and the questions.
         .target(name: "SessionPane", dependencies: ["TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
+        .testTarget(name: "SessionPaneTests", dependencies: ["SessionPane", "TerminalView", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness"]),
         // One window for one session pane, and the picker of running sessions.
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
