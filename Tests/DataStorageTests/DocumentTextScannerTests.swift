@@ -39,8 +39,15 @@ import Testing
     @Test(arguments: [
         "\"a\tb\"", "\"a\nb\"", #""\q""#, #""\u12""#, #""\u12G4""#, "\"open",
         "01", "tru", "nul", "1.", "-", "1e", "1e+", ".5", "+1", "NaN", "Infinity", "0x1",
+        "[01]", "[1,]", "{\"a\": 1,}", "[1 2]", "{\"a\" 1}", "{1: 2}", "[,]", "[", "{\"a\": [1}",
     ])
     func textThatIsNotStrictJSONFails(text: String) {
         #expect(!Self.isValid(text))
+    }
+
+    @Test func textDeeperThanTheLimitFails() {
+        let depth = DocumentTextScanner.depthLimit
+        #expect(Self.isValid(String(repeating: "[", count: depth) + String(repeating: "]", count: depth)))
+        #expect(!Self.isValid(String(repeating: "[", count: depth + 1) + String(repeating: "]", count: depth + 1)))
     }
 }

@@ -2,12 +2,19 @@
 /// decode, and accepts only strict JSON (RFC 8259).
 ///
 /// Foundation's decoder also takes text that is not JSON, such as a raw
-/// tab in a string, the escape `\q` or the number `01`. A value that this build keeps as
+/// tab in a string, the escape `\q`, the number `01` or a comma before a
+/// closing bracket. A value that this build keeps as
 /// text goes back into the file, so it must be valid there. The scanner
 /// does not check UTF-8; `ObjectMembers` checks the whole text.
 struct DocumentTextScanner {
+    /// OpenRun writes at most four levels. Each level takes frames of the
+    /// stack, and a thread of the Swift concurrency pool has a small one:
+    /// 512 levels overflowed it in a debug build.
+    static let depthLimit = 64
+
     let bytes: [UInt8]
     private var position = 0
+    private var depth = 0
 
     init(bytes: [UInt8]) {
         self.bytes = bytes
@@ -68,26 +75,32 @@ struct DocumentTextScanner {
         switch bytes[position] {
         case UInt8(ascii: "\""):
             return string()
-        case UInt8(ascii: "{"), UInt8(ascii: "["):
-            var depth = 0
-            while position < bytes.count {
-                switch bytes[position] {
-                case UInt8(ascii: "\""):
-                    guard string() != nil else { return nil }
-                    continue
-                case UInt8(ascii: "{"), UInt8(ascii: "["): depth += 1
-                case UInt8(ascii: "}"), UInt8(ascii: "]"): depth -= 1
-                default: break
-                }
-                position += 1
-                if depth == 0 { return bytes[start..<position] }
-            }
-            return nil
+        case UInt8(ascii: "{"):
+            return takeContainer(close: "}", hasKeys: true) ? bytes[start..<position] : nil
+        case UInt8(ascii: "["):
+            return takeContainer(close: "]", hasKeys: false) ? bytes[start..<position] : nil
         case UInt8(ascii: "t"): return takeWord("true") ? bytes[start..<position] : nil
         case UInt8(ascii: "f"): return takeWord("false") ? bytes[start..<position] : nil
         case UInt8(ascii: "n"): return takeWord("null") ? bytes[start..<position] : nil
         default: return takeNumber() ? bytes[start..<position] : nil
         }
+    }
+
+    /// An object or an array, with a comma between two members and none
+    /// before the end, and at most `depthLimit` levels deep.
+    private mutating func takeContainer(close: Unicode.Scalar, hasKeys: Bool) -> Bool {
+        guard depth < Self.depthLimit else { return false }
+        depth += 1
+        defer { depth -= 1 }
+        position += 1
+        if take(UInt8(ascii: close)) { return true }
+        repeat {
+            if hasKeys {
+                guard string() != nil, take(UInt8(ascii: ":")) else { return false }
+            }
+            guard value() != nil else { return false }
+        } while take(UInt8(ascii: ","))
+        return take(UInt8(ascii: close))
     }
 
     private mutating func takeWord(_ word: String) -> Bool {
