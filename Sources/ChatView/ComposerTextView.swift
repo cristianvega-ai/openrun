@@ -1,0 +1,58 @@
+import AppKit
+
+/// The field of the composer. Return sends, and Shift-Return or
+/// Option-Return starts a new line. While an input method marks text, Return
+/// goes to the input method, so a word is never sent half done.
+final class ComposerTextView: NSTextView {
+    var placeholder = "" { didSet { needsDisplay = true } }
+    var placeholderColor = NSColor.placeholderTextColor
+    var sendAction: (() -> Void)?
+    /// Escape, or Command-Period with `isImmediate` set.
+    var stopAction: ((_ isImmediate: Bool) -> Void)?
+    /// Pasted images.
+    var imagesAction: (([Data]) -> Void)?
+
+    override func doCommand(by selector: Selector) {
+        let modifiers = NSApp?.currentEvent?.modifierFlags ?? []
+        switch selector {
+        case #selector(insertNewline(_:)) where !hasMarkedText():
+            if modifiers.contains(.shift) || modifiers.contains(.option) { insertNewlineIgnoringFieldEditor(nil) } else { sendAction?() }
+        case #selector(cancelOperation(_:)) where !hasMarkedText():
+            stopAction?(modifiers.contains(.command))
+        default:
+            super.doCommand(by: selector)
+        }
+    }
+
+    override func paste(_ sender: Any?) {
+        let images = Self.imageData(on: .general)
+        guard images.isEmpty else { return imagesAction?(images) ?? () }
+        pasteAsPlainText(sender)
+    }
+
+    /// The image data on a pasteboard: an image that was copied, or the
+    /// files of images.
+    static func imageData(on board: NSPasteboard) -> [Data] {
+        let urls = board.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        let files = urls.compactMap { try? Data(contentsOf: $0, options: .mappedIfSafe) }.filter { ComposerImage.mediaType(of: $0) != nil }
+        if !files.isEmpty { return files }
+        for type in [NSPasteboard.PasteboardType.png, NSPasteboard.PasteboardType("public.jpeg"), .tiff] {
+            guard let data = board.data(forType: type) else { continue }
+            if type == .tiff { return NSBitmapImageRep(data: data)?.representation(using: .png, properties: [:]).map { [$0] } ?? [] }
+            return [data]
+        }
+        return []
+    }
+
+    override func draw(_ dirtyRect: NSRect) {
+        super.draw(dirtyRect)
+        guard string.isEmpty, !hasMarkedText(), let font else { return }
+        let origin = NSPoint(x: textContainerInset.width + (textContainer?.lineFragmentPadding ?? 0), y: textContainerInset.height)
+        placeholder.draw(at: origin, withAttributes: [.font: font, .foregroundColor: placeholderColor])
+    }
+
+    override func didChangeText() {
+        super.didChangeText()
+        needsDisplay = true
+    }
+}
