@@ -40,6 +40,23 @@ enum UsageText {
                           Print the value of a setting.
           settings set NAME VALUE
                           Change a setting.
+          thread list [--json]
+                          Show every agent thread: identifier, state, folder and name.
+          thread new [--folder PATH] [--model MODEL] [--mode MODE] [--name NAME] [-- TEXT]
+                          Start a thread with Claude Code and print its identifier.
+                          TEXT is the first message.
+          thread send THREAD TEXT
+                          Send a message to a thread. It waits behind a turn that runs.
+          thread read THREAD [--json]
+                          Print the conversation that the thread keeps, as plain text.
+                          With --json, print each event as one line of JSON.
+          thread stop THREAD
+                          Stop the turn of a thread.
+          thread rename THREAD [NAME]
+                          Give a thread a name. Without NAME, remove the name.
+          thread close THREAD
+                          End the agent of a thread and remove the thread. The
+                          conversation stays in the history of the agent.
           help            Show this text.
 
         Options for every command:
@@ -49,7 +66,9 @@ enum UsageText {
 
         An IDENTIFIER can be any unique start of a session identifier.
         A PROJECT can be any unique start of a project identifier, or the project's folder.
+        A THREAD can be any unique start of a thread identifier.
         A program in a session may rename or alert only its own session.
+        Only a program outside every session and every thread may use the thread commands.
         """
 
     static let hint = "Run 'openrun help' for the list of commands."
