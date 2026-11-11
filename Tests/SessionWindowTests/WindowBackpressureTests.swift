@@ -142,16 +142,19 @@ private final class TracedAttachment: AttachedSession {
         try #require((process.descriptorCount ?? 0) > baseline)
         let bytes = [UInt8](repeating: 65, count: 4 * 1024 * 1024)
         for _ in 0..<8 { window.terminalView(view, send: bytes) }
-        let deadline = ContinuousClock.now + .seconds(20)
-        var previous = traced.record.withLock { $0 }, stableSince = ContinuousClock.now
+        // The program reads nothing. The session takes two sends into its
+        // backlog of 8 MiB and holds a third in its read-ahead, so the fourth
+        // waits for good. A send that only waited for a busy Mac looked
+        // blocked once it stopped for 500 ms, and it could finish before the
+        // close.
+        let deadline = ContinuousClock.now + .seconds(60)
         var blocked = false
         while ContinuousClock.now < deadline {
             try await Task.sleep(for: .milliseconds(50))
             let current = traced.record.withLock { $0 }
-            if current != previous { previous = current; stableSince = .now }
-            if current.started > current.finished && ContinuousClock.now - stableSince >= .milliseconds(500) { blocked = true; break }
+            if current.finished >= 3 && current.started > current.finished { blocked = true; break }
         }
-        try #require(blocked, "The program must hold an input send before the window closes.")
+        try #require(blocked, "The program must hold an input send before the window closes: \(traced.record.withLock { $0 })")
         let before = traced.record.withLock { $0 }
         try #require(before.started < 8, "Some input events must still wait in the window queue.")
         window.window.close()
