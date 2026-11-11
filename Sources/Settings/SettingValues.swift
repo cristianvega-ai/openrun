@@ -23,6 +23,10 @@ public struct SettingValues: Hashable, Sendable {
     public var showsNotifications: Bool { flag(.showsNotifications) }
     public var sessionLimit: Int { wholeNumber(.sessionLimit) }
     public var asksBeforeUnsafePaste: Bool { flag(.asksBeforeUnsafePaste) }
+    public var claudeCodeModel: String { text(of: .claudeCodeModel) }
+    public var claudeCodePermissionMode: String { text(of: .claudeCodePermissionMode) }
+    public var claudeCodeProgram: String { text(of: .claudeCodeProgram) }
+    public var agentProcessLimit: Int { wholeNumber(.agentProcessLimit) }
 
     /// The text form of a setting, as `openrun settings get` prints it.
     public func text(of name: SettingName) -> String {

@@ -32,7 +32,8 @@ enum SettingTextForm {
             case "off", "false", "no": .flag(false)
             default: nil
             }
-        case .choice: .choice(word.lowercased())
+        // The choice keeps its own spelling, such as `acceptEdits`.
+        case .choice(let options): options.first { $0.lowercased() == word.lowercased() }.map(SettingValue.choice)
         case .commands:
             (try? JSONDecoder().decode(StoredValue.self, from: Data(text.utf8)))
                 .flatMap { SettingStoredForm.value(from: $0, as: kind) }

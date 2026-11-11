@@ -7,6 +7,8 @@ import Testing
         .theme: "Solarized Light", .fontName: "Menlo", .fontSize: "72", .optionAsAlt: "neither",
         .scrollbackLimit: "0", .newSessionCommands: #"[{"command":"htop","name":"Monitor"}]"#,
         .linkDestination: "browser-split", .showsNotifications: "off", .sessionLimit: "1", .asksBeforeUnsafePaste: "off",
+        .claudeCodeModel: "claude-sonnet-5-5", .claudeCodePermissionMode: "acceptEdits",
+        .claudeCodeProgram: "/opt/homebrew/bin/claude", .agentProcessLimit: "32",
     ]
 
     @Test func everySettingRoundTripsThroughText() throws {
@@ -27,6 +29,11 @@ import Testing
         #expect(!values.showsNotifications)
         #expect(values.sessionLimit == 1)
         #expect(!values.asksBeforeUnsafePaste)
+        #expect(values.claudeCodeModel == "claude-sonnet-5-5" && values.claudeCodePermissionMode == "acceptEdits")
+        #expect(values.claudeCodeProgram == "/opt/homebrew/bin/claude" && values.agentProcessLimit == 32)
+        // The case of a choice does not count, and the value keeps its own spelling.
+        try values.change(.claudeCodePermissionMode, to: " DONTASK ", requestedBy: .application)
+        #expect(values.claudeCodePermissionMode == "dontAsk")
     }
 
     @Test func theDefaultsAreTheOnesOfTheDecisionLog() {
@@ -41,6 +48,8 @@ import Testing
         #expect(values.showsNotifications)
         #expect(values.sessionLimit == 100)
         #expect(values.asksBeforeUnsafePaste)
+        #expect(values.claudeCodeModel == "opus" && values.claudeCodePermissionMode == "default")
+        #expect(values.claudeCodeProgram == "claude" && values.agentProcessLimit == 8)
     }
 
     /// The rule of 2026-10-27, in its one place: only the app changes a
@@ -49,7 +58,7 @@ import Testing
     func onlyTheAppChangesAProtectedSetting(name: SettingName) throws {
         var values = SettingValues()
         let before = values.text(of: name)
-        let text = name == .sessionLimit ? "1000" : "off"
+        let text = try #require(Self.changedTexts[name])
         #expect(throws: SettingError.protectedSetting(name)) {
             try values.change(name, to: text, requestedBy: .otherClient)
         }

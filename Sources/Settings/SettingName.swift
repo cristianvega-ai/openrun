@@ -22,12 +22,31 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
     case sessionLimit = "session-limit"
     /// Whether a paste that could run a command asks first. Protected.
     case asksBeforeUnsafePaste = "ask-before-unsafe-paste"
+    /// The model of a new thread with Claude Code: a name that
+    /// `claude --model` takes, such as `opus`.
+    case claudeCodeModel = "claude-code-model"
+    /// The permission mode of a new thread with Claude Code, and the
+    /// widest mode that a thread can take (proposal 9). Protected.
+    case claudeCodePermissionMode = "claude-code-permission-mode"
+    /// The program of Claude Code: a name that the login shell of the
+    /// user finds, or a path. Protected, because another program could
+    /// leave out the permission hook.
+    case claudeCodeProgram = "claude-code-program"
+    /// The most agent processes that run at one time. Protected.
+    case agentProcessLimit = "agent-process-limit"
+
+    /// The permission modes of Claude Code that OpenRun uses, from the
+    /// strictest to the widest.
+    public static let claudeCodePermissionModes = ["plan", "dontAsk", "default", "acceptEdits", "auto"]
 
     /// A protected setting removes a question or widens what an agent can
     /// do, so only OpenRun.app can change it (decision of 2026-10-27). Any
     /// client can read it.
     public var isProtected: Bool {
-        self == .sessionLimit || self == .asksBeforeUnsafePaste
+        switch self {
+        case .sessionLimit, .asksBeforeUnsafePaste, .claudeCodePermissionMode, .claudeCodeProgram, .agentProcessLimit: true
+        default: false
+        }
     }
 
     /// The setting with this name.
@@ -40,7 +59,10 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
 
     var kind: SettingKind {
         switch self {
-        case .theme, .fontName: .text(lengthLimit: 100)
+        case .theme, .fontName, .claudeCodeModel: .text(lengthLimit: 100)
+        case .claudeCodeProgram: .text(lengthLimit: 1_000)
+        case .claudeCodePermissionMode: .choice(Self.claudeCodePermissionModes)
+        case .agentProcessLimit: .wholeNumber(1...32)
         case .fontSize: .wholeNumber(6...72)
         case .optionAsAlt: .choice(OptionKeyBehavior.allCases.map(\.rawValue))
         case .scrollbackLimit: .wholeNumber(0...1_000_000)
@@ -62,6 +84,10 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
         case .linkDestination: .choice(LinkDestination.defaultBrowser.rawValue)
         case .showsNotifications, .asksBeforeUnsafePaste: .flag(true)
         case .sessionLimit: .wholeNumber(100)
+        case .claudeCodeModel: .text("opus")
+        case .claudeCodePermissionMode: .choice("default")
+        case .claudeCodeProgram: .text("claude")
+        case .agentProcessLimit: .wholeNumber(8)
         }
     }
 }
