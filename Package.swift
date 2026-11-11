@@ -105,6 +105,9 @@ let package = Package(
         // One session in a view that any window can hold: the attach, the size rules, the title and the questions.
         .target(name: "SessionPane", dependencies: ["TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionPaneTests", dependencies: ["SessionPane", "TerminalView", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness"]),
+        // The in-place changes between two versions of a list, for the tables of the panes.
+        .target(name: "ListUpdates"),
+        .testTarget(name: "ListUpdatesTests", dependencies: ["ListUpdates"]),
         // How the panes of the main window look: the theme colors in AppKit, the top row, the selected row.
         .target(name: "PaneAppearance", dependencies: ["TerminalTheme", "TerminalEmulation"]),
         .testTarget(name: "PaneAppearanceTests", dependencies: ["PaneAppearance", "TerminalTheme", "TerminalEmulation"]),
