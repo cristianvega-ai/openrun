@@ -33,6 +33,9 @@ import Testing
     /// half a second, because under load a size can go out late.
     private func settle(_ controller: MainWindowController, _ pane: SessionPaneController) async {
         await turns(seconds: 5) { !controller.contentPane.isHoldingWidth }
+        // The session applies the grid that fits the pane, so no size of the
+        // setup goes out late and counts for the toggle.
+        await turns(seconds: 10) { pane.terminalView.map { $0.gridSize == $0.visibleGridSize } ?? true }
         var count = -1
         while count != pane.sentSizeRequests {
             count = pane.sentSizeRequests
