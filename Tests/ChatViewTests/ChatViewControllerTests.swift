@@ -55,4 +55,19 @@ import Testing
         #expect(delegate.requests == ["earlier"])
         #expect(controller.context.isLoadingEarlierHistory)
     }
+
+    @Test func theComposerSendsThroughTheHostAndKeepsADraft() {
+        let delegate = RecordingDelegate()
+        controller.delegate = delegate
+        controller.composer.textView.string = "Run the tests."
+        controller.composer.submit()
+        #expect(delegate.requests == ["send Run the tests. 0"])
+        controller.composer.textView.string = "Half"
+        controller.composer.textDidChange(Notification(name: NSText.didChangeNotification))
+        controller.facts.threadIdentifier = "other"
+        #expect(controller.composer.textView.string == "")
+        controller.facts.threadIdentifier = "thread"
+        #expect(controller.composer.textView.string == "Half")
+        #expect(controller.focusView === controller.composer.textView)
+    }
 }

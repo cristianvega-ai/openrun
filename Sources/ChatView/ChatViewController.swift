@@ -18,6 +18,7 @@ import AppKit
     let context: TranscriptRowContext
     let transcriptView: TranscriptView
     let scrollView: TranscriptScrollView
+    let composer: ComposerView
     private var builder = TranscriptRowBuilder()
 
     public init(facts: ChatThreadFacts, appearance: ChatAppearance = .graphite) {
@@ -26,7 +27,9 @@ import AppKit
         context = TranscriptRowContext(palette: ChatPalette(appearance: appearance))
         transcriptView = TranscriptView(context: context)
         scrollView = TranscriptScrollView(transcriptView: transcriptView)
+        composer = ComposerView(palette: context.palette)
         super.init(nibName: nil, bundle: nil)
+        connectComposer()
         context.agentName = facts.agentName
         context.actions = self
         context.hasEarlierHistory = facts.hasEarlierHistory
@@ -45,12 +48,13 @@ import AppKit
     public override func loadView() {
         let root = ChatRootView(palette: context.palette)
         root.addSubview(scrollView)
+        root.addSubview(composer)
         view = root
     }
 
     public override func viewDidLayout() {
         super.viewDidLayout()
-        scrollView.frame = view.bounds
+        layoutChat()
     }
 
     /// Shows a whole transcript, such as the first one of a thread.
@@ -78,10 +82,13 @@ import AppKit
         // The row of activity tells whether the agent thinks, which no item
         // names, so it shows again on each change.
         transcriptView.setRows(rows, changed: Set(changedRows.map(\.key) + ["activity"]))
+        composer.setBusy(transcript.state == .inProgress || transcript.state == .needsUser)
     }
 
     private func factsDidChange(from old: ChatThreadFacts) {
         context.agentName = facts.agentName
+        if facts.threadIdentifier != old.threadIdentifier { switchDraft(from: old.threadIdentifier) }
+        composer.show(facts, palette: context.palette)
         context.hasEarlierHistory = facts.hasEarlierHistory
         context.isLoadingEarlierHistory = facts.isLoadingEarlierHistory
         if (facts.agentName, facts.hasEarlierHistory, facts.isLoadingEarlierHistory)
@@ -93,6 +100,7 @@ import AppKit
     private func appearanceDidChange() {
         context.palette = ChatPalette(appearance: appearance)
         (view as? ChatRootView)?.palette = context.palette
+        composer.show(facts, palette: context.palette)
         reloadRows(changedItems: nil)
     }
 }
