@@ -64,4 +64,21 @@ import Testing
         #expect(loaded.list.projects.allSatisfy { $0.name == nil })
         #expect(loaded.setAsidePaths.count == 1)
     }
+
+    /// The reproduction of the review: a lost folders file, a load and a
+    /// save must not cost the names, the identifiers or the order.
+    @Test func theNamesStayWhenTheFoldersAreLost() throws {
+        let temporary = try TemporaryFolder()
+        let folder = DataFolder(path: temporary.path)
+        let store = ProjectStore(dataFolder: folder)
+        try store.save(ProjectList(checked: [Self.second, Self.first]))
+        let folders = try Data(contentsOf: URL(fileURLWithPath: folder.path(of: .projectFolders)))
+        try Data("{".utf8).write(to: URL(fileURLWithPath: folder.path(of: .projectFolders)))
+        let loaded = try store.load()
+        #expect(loaded.list.projects.isEmpty)
+        #expect(loaded.setAsidePaths.count == 1)
+        try store.save(loaded.list)
+        try folders.write(to: URL(fileURLWithPath: folder.path(of: .projectFolders)))
+        #expect(try store.load().list.projects == [Self.second, Self.first])
+    }
 }

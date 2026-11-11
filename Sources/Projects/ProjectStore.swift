@@ -6,8 +6,9 @@ import Foundation
 /// The list takes two files: the names and the order can sync, and the
 /// folders stay on this Mac. A save writes the folders first. So a crash
 /// between the two writes leaves either a folder with no entry, which the
-/// next load adds back at the end, or an entry with no folder, which the
-/// next load leaves out. Either way, the last change completes.
+/// next load adds back at the end, or an entry with no folder. The load
+/// keeps an entry with no folder but does not show it, so a lost
+/// `project-folders.json` never costs the names and the identifiers.
 public struct ProjectStore: Sendable {
     public let dataFolder: DataFolder
 
@@ -25,7 +26,7 @@ public struct ProjectStore: Sendable {
         try dataFolder.write(ProjectFoldersDocument(folders: folders))
         try dataFolder.write(ProjectsDocument(projects: list.projects.map {
             ProjectsDocument.Entry(identifier: $0.identifier, name: $0.name)
-        }))
+        } + list.entriesWithoutFolder))
     }
 
     /// Reads both files. A file that cannot be read is set aside, and the
@@ -50,9 +51,9 @@ public struct ProjectStore: Sendable {
     /// Joins each entry to its folder, in the order of the entries. A folder
     /// with no entry comes at the end with no name, in the order of the
     /// folders. So the projects stay when only `projects.json` is lost. A
-    /// second entry for an identifier or a folder, a relative folder, and an
-    /// entry with no folder are left out. A bad name is dropped, and the
-    /// folder's name shows.
+    /// second entry for an identifier is left out. An entry with no folder,
+    /// a relative folder or the folder of an earlier entry is kept without
+    /// a folder. A bad name is dropped, and the folder's name shows.
     static func merge(entries: [ProjectsDocument.Entry], folders: [String: String]) -> ProjectList {
         var folderOfIdentifier: [UUID: String] = [:]
         for (key, path) in folders {
@@ -65,15 +66,18 @@ public struct ProjectStore: Sendable {
             .sorted { ($0.value, $0.key.uuidString) < ($1.value, $1.key.uuidString) }
             .map { ProjectsDocument.Entry(identifier: $0.key, name: nil) }
         var projects: [Project] = []
+        var withoutFolder: [ProjectsDocument.Entry] = []
         var identifiers = Set<UUID>()
         var usedFolders = Set<String>()
-        for entry in entries + orphans where projects.count < ProjectList.countLimit {
-            guard let folder = folderOfIdentifier[entry.identifier],
-                  identifiers.insert(entry.identifier).inserted,
-                  usedFolders.insert(folder).inserted else { continue }
+        for entry in entries + orphans where projects.count + withoutFolder.count < ProjectList.countLimit {
+            guard identifiers.insert(entry.identifier).inserted else { continue }
             let name = (try? Project.validName(entry.name)) ?? nil
+            guard let folder = folderOfIdentifier[entry.identifier], usedFolders.insert(folder).inserted else {
+                withoutFolder.append(ProjectsDocument.Entry(identifier: entry.identifier, name: name))
+                continue
+            }
             projects.append(Project(identifier: entry.identifier, folder: folder, name: name))
         }
-        return ProjectList(checked: projects)
+        return ProjectList(checked: projects, entriesWithoutFolder: withoutFolder)
     }
 }

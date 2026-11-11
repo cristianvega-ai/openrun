@@ -24,7 +24,7 @@ import Testing
         #expect(list.projects.map(\.name) == ["Three", nil, nil, nil])
     }
 
-    @Test func badEntriesAreLeftOut() {
+    @Test func entriesWithNoUsableFolderAreKeptHidden() {
         let list = ProjectStore.merge(
             entries: [Self.entry(1), Self.entry(1, "Again"), Self.entry(2), Self.entry(3), Self.entry(4, "bad\u{7}"), Self.entry(5)],
             folders: Self.folders([1: "/one", 2: "/one/", 3: "relative", 4: "/four"])
@@ -32,6 +32,7 @@ import Testing
         )
         #expect(list.projects.map(\.folder) == ["/one", "/four"])
         #expect(list.projects.map(\.name) == [nil, nil])
+        #expect(list.entriesWithoutFolder.map(\.identifier) == [2, 3, 5].map { Self.identifiers[$0 - 1] })
     }
 
     @Test func theLoadKeepsAtMostTheLimit() {

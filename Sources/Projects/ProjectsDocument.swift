@@ -8,7 +8,7 @@ struct ProjectsDocument: DataDocument {
     static let format = 1
     static let knownKeys: Set<String> = ["projects"]
 
-    struct Entry: Codable, Sendable {
+    struct Entry: Codable, Hashable, Sendable {
         var identifier: UUID
         var name: String?
     }
