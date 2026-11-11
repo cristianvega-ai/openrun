@@ -50,6 +50,15 @@ final class SessionChangeWatcher {
     }
 }
 
+/// Sends one request on a new connection and returns the answer.
+func answer(to request: ClientMessage, from process: RunningSessionProcess) throws -> ServerMessage? {
+    let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+    defer { connection.shutdown() }
+    _ = try connection.greetSessionProcess(within: .seconds(5))
+    try connection.send(request)
+    return try connection.receive(ServerMessage.self, timeLimit: .wholeFrame(by: .now + .seconds(10)))
+}
+
 /// The summaries that `listSessions` gives, with every fact.
 func listedSummaries(of process: RunningSessionProcess) throws -> [SessionSummary] {
     let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
