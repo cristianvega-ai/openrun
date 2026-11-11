@@ -1,9 +1,7 @@
 import AppKit
 import ListContent
-import MainWindow
 import ProjectsList
 import SessionOverview
-import SessionPane
 import SessionsList
 
 /// From the facts of the session process to the lists and the third pane.
@@ -15,10 +13,7 @@ extension Workspace {
         // Before the first list, no session is known, and the kept rows stay.
         if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
         if overview.settings != previous.settings { settings = LiveSettings.values(from: overview.settings) }
-        for session in previous.sessions where overview.session(session.identifier) == nil {
-            panes.close(session.identifier)
-            if shownSession == session.identifier { shownSession = nil }
-        }
+        for session in previous.sessions where overview.session(session.identifier) == nil { sessionEnded(session.identifier) }
         if let wanted = sessionToSelect, let row = layout.row(showing: wanted) {
             layout.selectedRow = row.identifier
         } else if layout.selectedRow == nil, let selectedBefore {
@@ -58,30 +53,8 @@ extension Workspace {
         isContentActive ? shownSession : nil
     }
 
-    /// Shows the pane of the first session of the selected row. A pane
-    /// that is new attaches after the window laid it out, because it
-    /// estimates its grid from its size.
-    func showSelectedRow() {
-        let session = layout.selectedRow.flatMap { layout.row($0) }?.pane.sessions.first
-        let takesFocus = isContentActive || (session != nil && session == sessionToSelect)
-        if session == sessionToSelect { sessionToSelect = nil }
-        guard session != shownSession else { return }
-        if let shownSession { panes.existing(shownSession)?.deactivate() }
-        shownSession = session
-        guard let session else { return window.showContent(nil) }
-        let (pane, isNew) = panes.pane(for: session)
-        window.showContent(PaneContent(pane.content))
-        if isNew {
-            window.window.layoutIfNeeded()
-            pane.attach()
-        }
-        if takesFocus { window.focusContent() }
-    }
-}
-
-/// The map from the value of a session pane to the content of the third pane.
-extension PaneContent {
-    init(_ session: SessionPaneContent) {
-        self.init(view: session.view, title: session.title, minimumSize: session.minimumSize, focusView: session.focusView, textInset: session.textInset)
+    /// The session whose pane the third pane shows.
+    var shownSession: UUID? {
+        if case .session(let session) = shown { session } else { nil }
     }
 }

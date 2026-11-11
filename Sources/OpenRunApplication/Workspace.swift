@@ -27,8 +27,10 @@ final class Workspace: NSObject {
     var layout: WindowLayout
     var savedLayout: WindowLayout
     var settings = SettingValues()
-    /// The session whose pane the third pane shows.
-    var shownSession: UUID?
+    /// What the third pane shows. It is stale when the pane of its
+    /// session closed, so the next refresh shows other content.
+    var shown = ShownContent.nothing
+    var shownIsStale = false
     /// Whether the window is key and the keyboard focus is in the third pane.
     var isContentActive = false
     /// A session that the user asked for. Its row takes the selection
