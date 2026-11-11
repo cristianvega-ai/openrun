@@ -20,6 +20,10 @@ import AppKit
         hasVerticalScroller = true
         autohidesScrollers = true
         scrollerStyle = .overlay
+        // Under the title bar of a window, AppKit would add an inset and
+        // move the rows. That move has the look of a scroll of the user,
+        // and the view would stop to follow the newest row.
+        automaticallyAdjustsContentInsets = false
         contentView.drawsBackground = false
         documentView = transcriptView
         contentView.postsBoundsChangedNotifications = true

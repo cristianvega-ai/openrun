@@ -22,6 +22,8 @@ import Testing
 
     @Test func theViewFollowsTheNewestRow() {
         #expect(scrollView.distanceFromBottom == 0)
+        // An inset under a title bar would move the rows as a scroll of the user does.
+        #expect(!scrollView.automaticallyAdjustsContentInsets)
         show(messages: 61)
         #expect(scrollView.distanceFromBottom == 0)
         #expect(scrollView.transcriptView.rowViews.views["user:60"] != nil)
