@@ -8,6 +8,16 @@ final class DetailBoxView: RoundedBoxView, MeasurableView {
     static let maximumHeight: CGFloat = 300
     let scrollView = InnerScrollView()
     let textView = ChatTextView()
+    lazy var copyButton = RowSymbol.button("doc.on.doc", label: "Copy Output", target: self, action: #selector(copyAll))
+    /// The text that the copy control copies. Nil hides the control.
+    var copyText: String? {
+        didSet {
+            copyButton.isHidden = copyText == nil
+            needsLayout = true
+        }
+    }
+    /// The general pasteboard, or a private one in tests.
+    var pasteboard = NSPasteboard.general
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -15,6 +25,8 @@ final class DetailBoxView: RoundedBoxView, MeasurableView {
         scrollView.automaticallyAdjustsContentInsets = false
         scrollView.documentView = textView
         addSubview(scrollView)
+        copyButton.isHidden = true
+        addSubview(copyButton)
     }
 
     @available(*, unavailable)
@@ -40,7 +52,12 @@ final class DetailBoxView: RoundedBoxView, MeasurableView {
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        min(Self.maximumHeight, textView.fittingHeight(forWidth: width - 2 * Self.padding.width)) + 2 * Self.padding.height
+        min(Self.maximumHeight, textView.fittingHeight(forWidth: textWidth(inWidth: width))) + 2 * Self.padding.height
+    }
+
+    /// The text leaves room at the right for the copy control.
+    private func textWidth(inWidth width: CGFloat) -> CGFloat {
+        width - 2 * Self.padding.width - (copyText == nil ? 0 : 24)
     }
 
     override func layout() {
@@ -49,7 +66,14 @@ final class DetailBoxView: RoundedBoxView, MeasurableView {
         // sits at the edge, and the inset of the text keeps its margins.
         scrollView.frame = bounds.insetBy(dx: 0, dy: Self.padding.height)
         textView.textContainerInset = NSSize(width: Self.padding.width, height: 0)
-        let height = textView.fittingHeight(forWidth: bounds.width - 2 * Self.padding.width)
-        textView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: height)
+        let textWidth = textWidth(inWidth: bounds.width)
+        let height = textView.fittingHeight(forWidth: textWidth)
+        textView.frame = NSRect(x: 0, y: 0, width: textWidth + 2 * Self.padding.width, height: height)
+        copyButton.frame = NSRect(x: bounds.width - 30, y: 2, width: 28, height: 26)
+    }
+
+    @objc func copyAll() {
+        pasteboard.clearContents()
+        pasteboard.setString(copyText ?? "", forType: .string)
     }
 }

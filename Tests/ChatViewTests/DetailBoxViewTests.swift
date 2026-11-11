@@ -25,4 +25,16 @@ import Testing
         #expect(box.textView.frame.width <= box.scrollView.contentView.bounds.width)
         #expect(box.scrollView.documentView === box.textView)
     }
+
+    @Test func theCopyControlCopiesTheWholeText() {
+        let box = DetailBoxView()
+        box.show([("swift test", nil)], palette: ChatPalette(appearance: .graphite))
+        #expect(box.copyButton.isHidden)
+        box.copyText = "all of the output"
+        #expect(!box.copyButton.isHidden)
+        box.pasteboard = NSPasteboard.withUniqueName()
+        defer { box.pasteboard.releaseGlobally() }
+        box.copyButton.performClick(nil)
+        #expect(box.pasteboard.string(forType: .string) == "all of the output")
+    }
 }

@@ -34,7 +34,7 @@ struct QuietLine: Equatable {
         case .unknown(let line):
             let status = line.kind.map { "Kind \($0)" }
             self.init(symbolName: "questionmark.circle", title: "A line that this version cannot read", status: status,
-                      kindLabel: "Unknown line", details: [String(BoundedLines(line.text, lineLimit: 40).text)])
+                      kindLabel: "Unknown line", details: [line.text])
         default: return nil
         }
     }

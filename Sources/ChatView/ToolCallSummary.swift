@@ -69,16 +69,13 @@ struct ToolCallSummary: Equatable {
         return text.prefix(1).uppercased() + text.dropFirst()
     }
 
-    /// The input and the first 12 lines of the output of a call, with
-    /// the count of the other lines.
+    /// The input and the output of a call. Its box scrolls, so it holds
+    /// all of the output that the transcript kept.
     static func detail(of call: ToolCallItem, subject: String?) -> [(text: String, note: String?)] {
         var parts: [(text: String, note: String?)] = [(subject ?? call.inputText, nil)]
-        let output = BoundedLines(call.output, lineLimit: 12)
-        if !output.text.isEmpty {
+        if !call.output.isEmpty {
             let isCut = call.outputByteCount > call.output.utf8.count
-            let hidden = output.hiddenLineCount == 1 ? "1 more line" : "\(output.hiddenLineCount) more lines"
-            let note = output.hiddenLineCount > 0 ? hidden + (isCut ? " and more output" : "") : isCut ? "More output was not kept" : nil
-            parts.append((String(output.text), note))
+            parts.append((call.output, isCut ? "More output was not kept" : nil))
         }
         return parts
     }

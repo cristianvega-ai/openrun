@@ -38,6 +38,7 @@ final class ToolCallsRowView: StackRowView {
             let detail = details[identifier] ?? DetailBoxView()
             details[identifier] = detail
             detail.show(ToolCallSummary.detail(of: call, subject: summary.subject), palette: context.palette)
+            detail.copyText = call.output.isEmpty ? nil : call.output
             newParts.append(Part(view: detail, indentation: indentation))
         }
         setParts(newParts)

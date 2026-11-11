@@ -33,12 +33,13 @@ struct ToolCallSummaryTests {
         #expect(ToolCallSummary.title(ofRun: calls) == "Read 2 files, searched 2 times, ran 1 command")
     }
 
-    @Test func theDetailShowsTheInputAndTheStartOfTheOutput() {
+    @Test func theDetailShowsTheInputAndAllOfTheOutputThatWasKept() {
         var output = call("Bash", ["command": "seq 20"])
         output.output = (1...20).map(String.init).joined(separator: "\n")
-        output.outputByteCount = output.output.utf8.count + 100
         let detail = ToolCallSummary.detail(of: output, subject: "seq 20")
-        #expect(detail.map(\.text) == ["seq 20", (1...12).map(String.init).joined(separator: "\n")])
-        #expect(detail.map(\.note) == [nil, "8 more lines and more output"])
+        #expect(detail.map(\.text) == ["seq 20", output.output])
+        #expect(detail.map(\.note) == [nil, nil])
+        output.outputByteCount = output.output.utf8.count + 100
+        #expect(ToolCallSummary.detail(of: output, subject: "seq 20").last?.note == "More output was not kept")
     }
 }
