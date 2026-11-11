@@ -32,7 +32,9 @@ import Testing
     @Test func aReadWithoutThreadStartsAServerForTheReadAlone() async throws {
         let servers = CodexAccountServers { _ in
             let harness = try await CodexServerHarness()
-            Task { try await harness.play("usage") }
+            // A failed play leaves the read without an answer, and the
+            // expectations below then fail.
+            Task { try? await harness.play("usage") }
             return harness.server
         }
         let account = try await servers.readAccount(account: "/config/a")
