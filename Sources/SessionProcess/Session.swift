@@ -420,6 +420,15 @@ actor Session {
         terminalEvents.reset()
     }
 
+    /// Changes the facts that a client gives, such as the name or the alert.
+    /// Returns false when the session has ended.
+    func update(_ change: @Sendable (inout SessionSummary) -> Void) -> Bool {
+        guard !isFinished else { return false }
+        change(&summary)
+        publish()
+        return true
+    }
+
     /// Notes input. The keys of an attached client end the alert, because
     /// the user is at the session. Text that a program sends does not.
     func noteInput(isTyped: Bool) {

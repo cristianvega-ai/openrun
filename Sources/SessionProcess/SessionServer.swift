@@ -278,9 +278,18 @@ actor SessionServer {
                 }
                 isWatching = true
                 changes.addWatcher(owner) { client.send($0) }
-            case .renameSession, .raiseSessionAlert, .clearSessionAlert:
-                // The capability `sessionChanges` is off until these work.
-                client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This session process does not keep the facts of its sessions.")))
+            case .renameSession(let identifier, let name):
+                let name = name?.isEmpty == true ? nil : name
+                // A list shows the name on one line.
+                guard name.map({ SessionSummary.boundedText($0) == $0 }) ?? true else {
+                    client.send(.failure(SessionFailure(reason: .invalidRequest, message: "A name holds no control character and at most \(SessionSummary.textLimit) characters.")))
+                    break
+                }
+                client.send(await changeOwn(identifier, for: peer, verb: "rename") { $0.name = name })
+            case .raiseSessionAlert(let identifier, let text):
+                client.send(await changeOwn(identifier, for: peer, verb: "alert") { $0.alert = SessionAlert(text: text, raisedAt: Date(), source: .notifyCommand) })
+            case .clearSessionAlert(let identifier):
+                client.send(await changeOwn(identifier, for: peer, verb: "clear the alert of") { $0.alert = nil })
             }
             client.markHandled(received)
         }
@@ -350,6 +359,18 @@ actor SessionServer {
         case .withdrawn: return Self.refusal("\(start), and then it left.")
         case .anotherQuestionWaits: return Self.refusal("\(start) while another question of that session waits for the user.")
         }
+    }
+
+    /// Changes a fact that a client gives. A program in a session may change
+    /// only its own session, and no question is asked, because a name or an
+    /// alert neither types nor reads (decision of 2026-11-10).
+    private func changeOwn(_ identifier: UUID, for peer: PeerProcess, verb: String, _ change: @escaping @Sendable (inout SessionSummary) -> Void) async -> ServerMessage {
+        guard let session = await registry.session(for: identifier) else { return Self.unknownSession(identifier) }
+        guard await registry.place(of: peer).mayAct(on: identifier) else {
+            let target = SessionSummary.text(for: identifier)
+            return Self.refusal("Only a program outside every session, or a program in session \(target) itself, may \(verb) session \(target).")
+        }
+        return await session.update(change) ? .acknowledged : Self.unknownSession(identifier)
     }
 
     /// Only the signed app outside every session receives questions. An app
