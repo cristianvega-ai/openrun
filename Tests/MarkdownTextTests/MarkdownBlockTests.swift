@@ -23,4 +23,13 @@ struct MarkdownBlockTests {
     @Test func aBlockStartEndsAParagraph() {
         #expect(kinds("Text\n# Head\nMore\n***") == [.paragraph("Text"), .heading(level: 1, text: "Head"), .paragraph("More"), .rule])
     }
+
+    @Test func codeBlocksKeepTheirTextAndLanguage() {
+        #expect(kinds("```swift\nlet a = 1\n\n  indented\n```\nafter") == [
+            .code(language: "swift", text: "let a = 1\n\n  indented", isClosed: true), .paragraph("after"),
+        ])
+        #expect(kinds("~~~\n# not a heading\n````") == [.code(language: nil, text: "# not a heading\n````", isClosed: false)])
+        #expect(kinds("````\n```\n````") == [.code(language: nil, text: "```", isClosed: true)])
+        #expect(kinds("Text\n```\ncode\n```") == [.paragraph("Text"), .code(language: nil, text: "code", isClosed: true)])
+    }
 }

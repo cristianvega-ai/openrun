@@ -27,7 +27,9 @@ struct MarkdownBlockParser {
                 index += 1
                 continue
             }
-            if let heading = MarkdownLine.heading(line) {
+            if let fence = MarkdownFence(line) {
+                parseCode(fence)
+            } else if let heading = MarkdownLine.heading(line) {
                 append(.heading(level: heading.level, text: String(heading.text)))
                 index += 1
             } else if MarkdownLine.isRule(line) {
@@ -50,6 +52,6 @@ struct MarkdownBlockParser {
 
     /// Whether the line starts a block and so ends a paragraph before it.
     static func interruptsParagraph(_ line: Substring) -> Bool {
-        MarkdownLine.heading(line) != nil || MarkdownLine.isRule(line)
+        MarkdownFence(line) != nil || MarkdownLine.heading(line) != nil || MarkdownLine.isRule(line)
     }
 }
