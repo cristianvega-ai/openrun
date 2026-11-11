@@ -36,6 +36,12 @@ public struct CodexThread: Sendable {
         await server.stop(thread: identifier)
     }
 
+    /// A page of the earlier turns of the thread: the newest page without
+    /// a cursor, and an older one with the cursor of the page before.
+    public func historyPage(cursor: String? = nil, turnLimit: Int = 10) async throws -> CodexHistoryPage {
+        try await server.historyPage(thread: identifier, cursor: cursor, turnLimit: turnLimit)
+    }
+
     /// Ends the thread on the app-server. Its events end. The app-server
     /// stays for its other threads.
     public func close() async {
