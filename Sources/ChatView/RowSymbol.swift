@@ -9,7 +9,7 @@ import AppKit
     }
 
     /// A borderless button that shows only a symbol, such as Copy.
-    static func button(_ name: String, label: String, target: AnyObject?, action: Selector) -> NSButton {
+    static func button(_ name: String, label: String, target: AnyObject?, action: Selector?) -> NSButton {
         let button = NSButton(image: image(name, pointSize: 12) ?? NSImage(), target: target, action: action)
         button.isBordered = false
         button.imagePosition = .imageOnly
