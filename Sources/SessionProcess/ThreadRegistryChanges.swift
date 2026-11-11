@@ -83,4 +83,22 @@ extension ThreadRegistry {
         summaries[identifier] = summary
         changes?.threadChanged(summary)
     }
+
+    /// Takes a newer list of the projects, and gives each thread the
+    /// project that its folder belongs to now.
+    func updateProjects(_ newer: ProjectList) {
+        projects = newer
+        for record in list.threads { publishIfProjectChanged(record) }
+    }
+
+    private func publishIfProjectChanged(_ record: ThreadRecord) {
+        let project = projects.project(holding: record.folder)?.identifier
+        if summaries[record.identifier]?.projectIdentifier != project { publish(record.identifier) }
+    }
+
+    /// Ends the process of every thread, when the session process stops.
+    func terminateAll() async {
+        for runner in runners.values { await runner.close() }
+        runners = [:]
+    }
 }
