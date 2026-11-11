@@ -4,6 +4,7 @@ import Foundation
 import SessionConnection
 import SessionProtocol
 import TerminalEmulation
+import UntrustedText
 
 /// `openrun attach`: shows a session in this terminal and types into it.
 ///

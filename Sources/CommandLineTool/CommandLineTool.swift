@@ -1,7 +1,7 @@
 import Foundation
 import SessionConnection
 import SessionProtocol
-import TerminalEmulation
+import UntrustedText
 
 /// The `openrun` command: reads the arguments, runs one command, and returns
 /// the exit code. Output goes to standard output, and every error goes to

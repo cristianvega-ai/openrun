@@ -1,7 +1,7 @@
 import Foundation
 import SessionLaunch
 import SessionProtocol
-import TerminalEmulation
+import UntrustedText
 
 /// The background process that owns every shell and agent.
 ///

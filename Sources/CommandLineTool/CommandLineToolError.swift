@@ -1,5 +1,5 @@
 import SessionConnection
-import TerminalEmulation
+import UntrustedText
 
 /// Why a command did not finish. The error decides the exit code.
 enum CommandLineToolError: Error, CustomStringConvertible {

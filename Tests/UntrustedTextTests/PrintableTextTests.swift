@@ -1,5 +1,5 @@
 import Testing
-import TerminalEmulation
+import UntrustedText
 
 @Suite struct PrintableTextTests {
     @Test func plainTextStaysAsItIs() {

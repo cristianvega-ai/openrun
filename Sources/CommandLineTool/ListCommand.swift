@@ -1,6 +1,6 @@
 import SessionConnection
 import SessionProtocol
-import TerminalEmulation
+import UntrustedText
 
 /// `openrun list`: one line per session, with tabs between the columns so
 /// that a script can split them even when a folder contains spaces. With

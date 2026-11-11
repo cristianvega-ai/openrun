@@ -1,6 +1,6 @@
 import Foundation
 import os
-import TerminalEmulation
+import UntrustedText
 
 /// The log of the session process.
 ///
