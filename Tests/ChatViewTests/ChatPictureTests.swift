@@ -85,4 +85,12 @@ struct ChatPictureTests {
             TestEvents.permission("b", "Bash", ["command": command, "description": "Install the tools"]),
         ]), size: NSSize(width: 820, height: 1400))
     }
+
+    @Test func theKeyboardFocusOnALine() throws {
+        try picture("focus", Transcript(events: SampleConversation.firstTurn), size: NSSize(width: 820, height: 700)) { controller in
+            controller.view.layoutSubtreeIfNeeded()
+            let line = controller.composer.textView.nextKeyView
+            controller.view.window?.makeFirstResponder(line)
+        }
+    }
 }

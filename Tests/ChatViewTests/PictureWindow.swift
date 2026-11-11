@@ -10,7 +10,7 @@ import Testing
 
     init(controller: ChatViewController, size: NSSize, appearance: NSAppearance.Name) {
         self.controller = controller
-        window = NSWindow(
+        window = KeyPictureNSWindow(
             contentRect: NSRect(origin: NSPoint(x: 80, y: 80), size: size), styleMask: [.titled, .fullSizeContentView],
             backing: .buffered, defer: false)
         window.titlebarAppearsTransparent = true
@@ -81,4 +81,10 @@ final class PictureBackgroundView: NSView {
         color.setFill()
         dirtyRect.fill()
     }
+}
+
+/// A window that draws as the key window, as the front window of the app
+/// does. A test cannot make a window key while the screen is locked.
+final class KeyPictureNSWindow: NSWindow {
+    override var isKeyWindow: Bool { true }
 }
