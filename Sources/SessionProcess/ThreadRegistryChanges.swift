@@ -54,7 +54,7 @@ extension ThreadRegistry {
     func runner(for identifier: UUID) throws -> ThreadRunner {
         if let runner = runners[identifier] { return runner }
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
-        let runner = ThreadRunner(record: record, launchSettings: launchSettings) { [weak self] in await self?.runnerChanged($0) }
+        let runner = ThreadRunner(record: record, launchSettings: launchSettings, changed: { [weak self] in await self?.runnerChanged($0) })
         runners[identifier] = runner
         return runner
     }

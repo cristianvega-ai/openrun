@@ -53,6 +53,11 @@ actor ThreadRunner {
     /// or the close of the thread.
     var endWasRequested = false
     var isClosed = false
+    /// Whether the runner asks for a slot or starts its process now. The
+    /// messages wait until that has finished.
+    var isStartingProcess = false
+    /// Whether a message waits because every slot for a process is taken.
+    var waitsForProcessSlot = false
     /// The wait for the quiet time of the process.
     var quietTask: Task<Void, Never>?
     let quietTime: Duration
@@ -60,17 +65,20 @@ actor ThreadRunner {
     /// limit of processes.
     var lastUse = ContinuousClock.now
     let launchSettings: @Sendable () async throws -> AgentLaunchSettings
+    /// Asks the registry whether this thread may run a process now.
+    let takeProcessSlot: @Sendable (UUID) async -> Bool
     /// Runs after a change of the record or of a fact that a list shows.
     let changed: @Sendable (ThreadRunner) async -> Void
 
     init(
         record: ThreadRecord, bufferByteLimit: Int = ThreadEventBuffer.defaultByteLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings,
+        takeProcessSlot: @escaping @Sendable (UUID) async -> Bool = { _ in true },
         changed: @escaping @Sendable (ThreadRunner) async -> Void = { _ in }
     ) {
         self.record = record
         buffer = ThreadEventBuffer(byteLimit: bufferByteLimit)
-        (self.quietTime, self.launchSettings, self.changed) = (quietTime, launchSettings, changed)
+        (self.quietTime, self.launchSettings, self.takeProcessSlot, self.changed) = (quietTime, launchSettings, takeProcessSlot, changed)
     }
 
     var state: ThreadState { transcript.state }
@@ -80,7 +88,12 @@ actor ThreadRunner {
     /// Since when the process has had no work. Nil when it has work, when
     /// OpenRun asked it to end, or when no process runs.
     var idleSince: ContinuousClock.Instant? {
-        program != nil && !endWasRequested && !isBusy ? lastUse : nil
+        program != nil && !endWasRequested && !isBusy && !isStartingProcess ? lastUse : nil
+    }
+
+    /// What the registry reads of the runner, in one step.
+    var facts: (record: ThreadRecord, state: ThreadState, process: pid_t?, waitingMessageCount: Int, holdsProcessSlot: Bool) {
+        (record, transcript.state, program?.processIdentifier, waitingMessages.count, program != nil || isStartingProcess)
     }
 
     /// Gives an event to the transcript, the buffer and the clients.

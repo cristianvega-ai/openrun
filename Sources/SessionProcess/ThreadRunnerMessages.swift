@@ -39,22 +39,51 @@ extension ThreadRunner {
     /// brings the next call, which starts a new process.
     func sendNextMessage() async {
         let isEnding = program != nil && endWasRequested
-        guard activeMessage == nil, !isClosed, !isEnding, let message = waitingMessages.first else { return }
-        waitingMessages.removeFirst()
-        activeMessage = message.identifier
+        guard activeMessage == nil, !isClosed, !isStartingProcess, !isEnding, let message = waitingMessages.first else { return }
+        var isActive = false
         do {
             var running = program
-            if running == nil { running = try await startProcess() }
+            if running == nil {
+                isStartingProcess = true
+                defer { isStartingProcess = false }
+                guard await hasProcessSlot() else { return await changed(self) }
+                running = try await startProcess()
+            }
+            // The thread closed during the start, so its new process must end too.
+            guard !isClosed else { return await running?.terminate(gracePeriod: .seconds(1)) ?? () }
+            // A stop during the start removed the message.
+            guard waitingMessages.first?.identifier == message.identifier else { return await processHasNoWork() }
+            waitingMessages.removeFirst()
+            (activeMessage, isActive) = (message.identifier, true)
             try await running?.write(message.line)
         } catch {
             // The agent could not start, or it ended before it took the
-            // message. The later messages would fail in the same way.
+            // message. The later messages would fail in the same way. An
+            // agent that ended during the write gave its own end.
             waitingMessages = []
-            if activeMessage == message.identifier {
+            if !isActive || activeMessage == message.identifier {
                 activeMessage = nil
                 emit(.turnEnded(TurnEnd(outcome: .failed, errorText: "The agent could not take the message. \(error)")))
             }
         }
+        await changed(self)
+    }
+
+    /// Asks for a slot for the process. While every slot is taken, the
+    /// messages wait, and the chat says why one time.
+    private func hasProcessSlot() async -> Bool {
+        let has = await takeProcessSlot(record.identifier)
+        if !has, !waitsForProcessSlot {
+            let limit = AgentProcessSlots.defaultLimit
+            emit(.notice(Notice(level: .information, text: "The message waits, because OpenRun runs at most \(limit) agents at one time. It goes out when another agent ends its work.")))
+        }
+        waitsForProcessSlot = !has
+        return has
+    }
+
+    /// The process runs with no turn and no message: the quiet time starts.
+    func processHasNoWork() async {
+        watchForQuietTime()
         await changed(self)
     }
 
