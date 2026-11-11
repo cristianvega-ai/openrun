@@ -1,10 +1,10 @@
 import Foundation
 
-/// A folder as a row shows it.
-enum FolderText {
+/// A folder as a row or a chat shows it.
+public enum FolderText {
     /// The folder with `~` in place of the home folder, such as
     /// `~/Projects/openrun`. Any other folder stays as it is.
-    static func shown(_ folder: String, home: String) -> String {
+    public static func shown(_ folder: String, home: String) -> String {
         guard !home.isEmpty, home != "/" else { return folder }
         if folder == home { return "~" }
         return folder.hasPrefix(home + "/") ? "~" + folder.dropFirst(home.count) : folder
