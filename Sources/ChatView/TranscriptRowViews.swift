@@ -6,6 +6,7 @@
         case .agentText: AgentTextRowView()
         case .agentCode: CodeBlockRowView()
         case .toolCalls: ToolCallsRowView()
+        case .fileChange: FileChangeRowView()
         default: TranscriptRowView()
         }
     }
