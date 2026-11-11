@@ -32,6 +32,21 @@ import Testing
         #expect(layout.rows == [LayoutRow(session: a), LayoutRow(session: b)])
     }
 
+    @Test func aThreadGetsARowAndStaysUntilTheAppKnowsThatItClosed() throws {
+        var layout = WindowLayout()
+        layout.follow(sessions: [a], threads: [b])
+        #expect(layout.rows == [LayoutRow(thread: b), LayoutRow(session: a)])
+        #expect(layout.row(showing: b)?.identifier == b && layout.rows[0].pane.threads == [b] && layout.rows[0].pane.sessions.isEmpty)
+        // The app does not know the threads now, such as before their first list.
+        layout.follow(sessions: [])
+        #expect(layout.rows == [LayoutRow(thread: b)])
+        let data = try JSONEncoder().encode(layout.rows)
+        #expect(try JSONDecoder().decode([LayoutRow].self, from: data) == layout.rows)
+        #expect(String(decoding: data, as: UTF8.self).contains(#""thread":"#))
+        layout.follow(sessions: [], threads: [])
+        #expect(layout.rows.isEmpty)
+    }
+
     @Test func aMoveAmongTheShownRowsLeavesTheOtherRowsInPlace() {
         var layout = WindowLayout(rows: [a, b, c, d].map { LayoutRow(session: $0) })
         // The list shows the rows of one project: a, c and d.

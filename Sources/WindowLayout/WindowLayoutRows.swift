@@ -6,9 +6,9 @@ extension WindowLayout {
         rows.first { $0.identifier == identifier }
     }
 
-    /// The row that shows a session, if one does.
-    public func row(showing session: UUID) -> LayoutRow? {
-        rows.first { $0.pane.sessions.contains(session) }
+    /// The row that shows a session or a thread, if one does.
+    public func row(showing identifier: UUID) -> LayoutRow? {
+        rows.first { $0.pane.sessions.contains(identifier) || $0.pane.threads.contains(identifier) }
     }
 
     /// Brings the rows in step with the sessions that run, oldest first.
@@ -18,8 +18,13 @@ extension WindowLayout {
     /// row, and a row with no session goes away. A file that the user
     /// changed can name a row or a session twice, and only the first
     /// stays. The selected row stays selected only while it exists.
-    public mutating func follow(sessions running: [UUID]) {
-        let runs = Set(running)
+    ///
+    /// - Parameter threads: The agent threads that exist, oldest first, or
+    ///   `nil` while the app does not know them. The rows of the threads
+    ///   then stay as they are.
+    public mutating func follow(sessions running: [UUID], threads: [UUID]? = nil) {
+        let known = rows.flatMap(\.pane.threads)
+        let runs = Set(running + (threads ?? known))
         var shown = Set<UUID>(), identifiers = Set<UUID>()
         rows = rows.compactMap { row in
             guard !identifiers.contains(row.identifier),
@@ -29,6 +34,9 @@ extension WindowLayout {
         }
         for session in running where !shown.contains(session) && !identifiers.contains(session) {
             rows.insert(LayoutRow(session: session), at: 0)
+        }
+        for thread in threads ?? [] where !shown.contains(thread) && !identifiers.contains(thread) {
+            rows.insert(LayoutRow(thread: thread), at: 0)
         }
         if let selectedRow, row(selectedRow) == nil { self.selectedRow = nil }
     }

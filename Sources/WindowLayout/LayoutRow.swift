@@ -17,4 +17,9 @@ public struct LayoutRow: Codable, Equatable, Sendable {
     public init(session: UUID) {
         self.init(identifier: session, pane: .session(session))
     }
+
+    /// A row for one agent thread.
+    public init(thread: UUID) {
+        self.init(identifier: thread, pane: .thread(thread))
+    }
 }
