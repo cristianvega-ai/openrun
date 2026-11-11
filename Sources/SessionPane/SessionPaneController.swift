@@ -50,7 +50,9 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     private var isAttaching = false
     private var pendingKeyTakeover = false
     private var isClosed = false
-    private var hasConnectionFailure = false
+    /// Whether the connection to the session failed. A host then knows
+    /// that the pane ended and the session can still run.
+    public private(set) var hasConnectionFailure = false
     /// A connection failure that came while the pane had no window. The
     /// pane shows it when it next gets a window, and then ends.
     private var unshownFailure: String?
