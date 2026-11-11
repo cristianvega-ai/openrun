@@ -294,6 +294,8 @@ actor SessionServer {
                 client.send(await changeOwn(identifier, for: peer, verb: "clear the alert of") { $0.alert = nil })
             case .listProjects, .addProject, .removeProject, .renameProject, .moveProject:
                 client.send(Self.refusal("This session process keeps no projects yet."))
+            case .listSettings, .changeSetting:
+                client.send(Self.refusal("This session process keeps no settings yet."))
             }
             client.markHandled(received)
         }

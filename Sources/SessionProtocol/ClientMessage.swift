@@ -94,6 +94,15 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case renameProject(identifier: UUID, name: String?)
     /// Moves a project to `place` in the order, from 0. Answer: `acknowledged`.
     case moveProject(identifier: UUID, place: Int)
+
+    // The settings.
+
+    /// Answer: `settingList`.
+    case listSettings
+    /// Changes one setting to the value that `text` gives, in the form of
+    /// `openrun settings set`. Only OpenRun.app may change a protected
+    /// setting. Answer: `acknowledged`.
+    case changeSetting(name: String, text: String)
 }
 
 extension ClientMessage: FramedMessage {
@@ -147,6 +156,8 @@ extension ClientMessage {
         case .removeProject: "removeProject"
         case .renameProject: "renameProject"
         case .moveProject: "moveProject"
+        case .listSettings: "listSettings"
+        case .changeSetting: "changeSetting"
         }
     }
 }

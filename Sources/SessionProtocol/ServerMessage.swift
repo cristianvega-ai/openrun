@@ -52,6 +52,10 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// The answer to `addProject`: the new project, last among the
     /// projects with a folder.
     case projectAdded(ProjectSummary)
+    /// Every setting, in a fixed order. The answer to `listSettings`, and
+    /// on a connection that asked with `receiveSessionChanges`, the whole
+    /// new list after each change.
+    case settingList([SettingSummary])
 }
 
 extension ServerMessage: FramedMessage {
@@ -109,6 +113,7 @@ extension ServerMessage {
         case .sessionEnded: "sessionEnded"
         case .projectList: "projectList"
         case .projectAdded: "projectAdded"
+        case .settingList: "settingList"
         }
     }
 }
