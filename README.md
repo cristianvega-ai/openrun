@@ -1,7 +1,7 @@
 # OpenRun
 
 OpenRun is a native macOS terminal for work with coding agents.
-This repository holds the session process, the `openrun` command-line tool, and an app with one terminal view per window.
+This repository holds the session process, the `openrun` command-line tool, and the app with its three-pane window: the projects, the sessions, and one session.
 `documentation/product.md` holds the product decisions.
 `documentation/architecture.md` explains the code.
 
@@ -37,7 +37,7 @@ The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-
    The script signs with the one Apple Development identity of the keychain, and stops when there is none or more than one. Set `OPENRUN_SIGNING_IDENTITY` to the identity to use when the keychain has more than one. Set it to `-` for an ad hoc test build in a scratch folder. With an ad hoc signature, launchd ties the launch agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
    The script replaces each file of an existing bundle by a rename, so a session process that runs keeps its own file.
 
-4. Open `/Applications/OpenRun.app`. The app registers its launch agent and opens a window with a login shell in the home folder. File > New Window (Command-N) opens another session. File > Attach to Session… lists running sessions and opens the one you choose. Closing a window leaves its session running.
+4. Open `/Applications/OpenRun.app`. The app registers its launch agent and opens its main window. The first pane lists the projects, the second pane the sessions, and the third pane shows the selected session. When no session runs, the app starts a login shell in the home folder. File > New Session (Command-N) starts another session, in the folder of the selected project. File > Close Session (Command-W) ends the selected session, and asks first when a program other than a shell runs in it. Closing the window (Command-Shift-W) or quitting the app leaves every session running, and the window shows them again when it opens.
 
 For an isolated development run, use a nondefault socket and a scratch bundle. Start the session process yourself; the app does not register or wake the launch agent for this socket.
 
@@ -168,8 +168,11 @@ When `openrun new` is given a program name without a slash, the session process 
 | `Sources/DataStorage`, `Sources/UntrustedText` | Safe writes to the data folder, and text from a client made safe to show |
 | `Sources/SessionLaunch` | How launchd starts the session process: the launch agent, its wake, and its registration |
 | `Sources/CommandLineTool` | The `openrun` commands |
-| `Sources/SessionWindow` | Connects one terminal view to one session and owns its window |
-| `Sources/OpenRunApplication` | The app, its menus and windows, and launch-agent setup |
+| `Sources/SessionPane` | Connects one terminal view to one session, in a view that a window holds |
+| `Sources/MainWindow`, `Sources/ProjectsList`, `Sources/SessionsList`, `Sources/PaneAppearance` | The three-pane window and its two lists |
+| `Sources/SessionOverview` | Keeps the sessions, the projects and the settings of the session process live for the app |
+| `Sources/WindowLayout`, `Sources/ListContent` | The rows that the window keeps, and what its lists show |
+| `Sources/OpenRunApplication` | The app: launch-agent setup, the host of the main window, and the menus |
 | `Sources/openrun`, `Sources/openrun-session`, `Sources/openrun-application` | Thin programs that call the features above |
 | `Bundle` | The property lists of OpenRun.app and of its launch agent |
 
