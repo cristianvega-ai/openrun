@@ -18,9 +18,15 @@ struct CodexEventMapper: Sendable {
         "item/autoApprovalReview/started", "item/autoApprovalReview/completed",
     ]
 
+    /// The most items whose start the mapper keeps for an approval.
+    static let itemLimit = 256
+
     /// The client identifiers of the user messages that went to Codex and
     /// that Codex has not echoed yet, oldest first.
     var pendingMessageIdentifiers: [String] = []
+    /// Items that started and did not complete, for the approvals that
+    /// name them, in the order of their start.
+    var startedItems: [(identifier: String, item: JSONValue)] = []
     /// The turn that runs, from its start to its end.
     var activeTurn: String?
     /// The tokens of the thread before the turn that runs, and now.

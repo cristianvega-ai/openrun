@@ -41,6 +41,17 @@ import Testing
                                                      byteCount: 100_000)))
     }
 
+    @Test func itemsThatNeverCompleteKeepTheirTableSmall() {
+        var mapper = CodexEventMapper()
+        for index in 0..<5_000 {
+            let item = JSONValue.object(["type": .string("commandExecution"), "id": .string("item\(index)")])
+            _ = mapper.events(method: "item/started", parameters: .object(["item": item]))
+        }
+        #expect(mapper.startedItems.count <= CodexEventMapper.itemLimit)
+        #expect(mapper.startedItem("item4999")?["id"] == .string("item4999"))
+        #expect(mapper.startedItem("item0") == nil)
+    }
+
     @Test func declinesThatNeverCompleteKeepTheirTableSmall() {
         var mapper = CodexEventMapper()
         for index in 0..<5_000 { mapper.noteDecline(of: "item\(index)", reason: .unanswered) }

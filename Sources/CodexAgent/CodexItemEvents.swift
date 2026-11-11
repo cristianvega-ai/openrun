@@ -16,6 +16,7 @@ extension CodexEventMapper {
         case "reasoning":
             return [.thinking(Thinking(itemIdentifier: identifier, isComplete: false))]
         case "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch":
+            remember(item, identifier)
             return toolCallStarted(item, identifier: identifier, type: type)
         case "contextCompaction":
             return [.notice(Notice(level: .information, text: "Codex compacts the conversation."))]
@@ -35,6 +36,7 @@ extension CodexEventMapper {
         case "reasoning":
             return [.thinking(Thinking(itemIdentifier: identifier, isComplete: true))]
         case "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch":
+            startedItems.removeAll { $0.identifier == identifier }
             return toolCallCompleted(item, identifier: identifier, type: type)
         default:
             return nil
@@ -50,5 +52,17 @@ extension CodexEventMapper {
         let images = content.count { ["image", "localImage"].contains($0["type"]?.string ?? "") }
         let identifier = item["clientId"]?.string ?? pendingIdentifier ?? item["id"]?.string ?? ""
         return UserMessage(identifier: identifier, text: text, imageCount: images, isAccepted: true)
+    }
+
+    /// Keeps the start of an item for an approval that names it. The
+    /// oldest go first past the limit.
+    mutating func remember(_ item: JSONValue, _ identifier: String) {
+        startedItems.removeAll { $0.identifier == identifier }
+        startedItems.append((identifier, item))
+        if startedItems.count > Self.itemLimit { startedItems.removeFirst() }
+    }
+
+    func startedItem(_ identifier: String) -> JSONValue? {
+        startedItems.last { $0.identifier == identifier }?.item
     }
 }

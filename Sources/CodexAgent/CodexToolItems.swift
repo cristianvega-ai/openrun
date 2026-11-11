@@ -26,8 +26,11 @@ extension CodexEventMapper {
         let status = item["status"]?.string
         let reason = declineReasons.removeValue(forKey: identifier)
         if status == "declined" {
-            let message = reason == .unanswered
-                ? "No one answered the request in time, so OpenRun declined it." : "The user declined it in OpenRun."
+            let message = switch reason {
+            case .unanswered: "No one answered the request in time, so OpenRun declined it."
+            case .other: "OpenRun declined it, because the turn stopped or the thread closed."
+            default: "The user declined it in OpenRun."
+            }
             events.append(.toolCallRefused(ToolCallRefusal(
                 identifier: identifier, toolName: Self.toolName(item, type: type), reason: reason ?? .user, message: message)))
             return events
