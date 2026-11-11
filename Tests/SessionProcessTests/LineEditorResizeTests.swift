@@ -36,8 +36,11 @@ private final class FollowingViewer {
     /// Takes messages until the screen shows the text, or until none came
     /// for the quiet time when the text is nil.
     @discardableResult
-    func follow(until text: String? = nil, quiet: Duration = .seconds(10)) throws -> Bool {
+    func follow(until text: String? = nil, quiet: Duration = .seconds(10), once: Bool = false) throws -> Bool {
+        var taken = 0
         while true {
+            if once && taken == 1 { return true }
+            taken += 1
             if let text, try self.text().contains(text) { return true }
             let message: ServerMessage?
             do {
@@ -54,6 +57,15 @@ private final class FollowingViewer {
             case nil: return false
             default: break
             }
+        }
+    }
+
+    /// Takes messages while the condition holds, until the time limit. One
+    /// time limit for all, so a wait never ends in the middle of a frame.
+    func follow(while condition: () throws -> Bool, within limit: Duration) throws {
+        let deadline = ContinuousClock.now + limit
+        while try condition() {
+            guard ContinuousClock.now < deadline, try follow(until: nil, quiet: deadline - .now, once: true) else { return }
         }
     }
 
@@ -170,7 +182,11 @@ extension SessionProcessIntegration {
             while :; do sleep 0.05; done
             """
             let size = SessionSize(columns: 80, rows: 24)
-            let session = try makeSession("/bin/bash", ["-c", script], environment: ["PATH": "/usr/bin:/bin"], size: size, answerTimeLimit: .milliseconds(300))
+            // The answer must come after the limit, and before 5 times the
+            // limit, when the session stops the wait. With 300 ms, a busy Mac
+            // sent the answer after 1.5 s. The limit of 500 ms, as in the
+            // product, gives the late answer until 2.5 s.
+            let session = try makeSession("/bin/bash", ["-c", script], environment: ["PATH": "/usr/bin:/bin"], size: size, answerTimeLimit: .milliseconds(500))
             await session.start()
             let viewer = try FollowingViewer()
             try await viewer.attach(to: session, size: size)
@@ -181,6 +197,9 @@ extension SessionProcessIntegration {
                 try await session.resize(to: SessionSize(columns: columns, rows: 24), from: viewer.connection, confirmsResize: true)
                 try await Task.sleep(for: .milliseconds(100))
             }
+            // A busy Mac drew the last prompt more than 2 s late, so the test
+            // waits for it. A prompt drawn at the wrong width stays wrong.
+            try viewer.follow(while: { try viewer.sizes.count < 2 || viewer.text().replacingOccurrences(of: "\n", with: "") != original }, within: .seconds(30))
             try viewer.follow(quiet: .milliseconds(2000))
             #expect(viewer.sizes == [SessionSize(columns: 100, rows: 24), SessionSize(columns: 30, rows: 24)])
             #expect(try viewer.text().replacingOccurrences(of: "\n", with: "") == original)
