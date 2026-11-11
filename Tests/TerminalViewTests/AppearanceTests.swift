@@ -57,6 +57,23 @@ import TerminalTheme
         #expect(state.colors.background == dark.background && state.colors.palette[2] == dark.firstSixteenColors[2])
     }
 
+    @Test func theOwnerSetsAThemeForEachAppearanceAndTheSelectionStays() throws {
+        let view = try TerminalView()
+        view.appearance = NSAppearance(named: .darkAqua)
+        #expect(view.themes == .graphite)
+        view.terminal.write("hello")
+        try view.terminal.selectWord(at: ViewportCell(column: 0, row: 0))
+        var light = TerminalTheme.graphite(for: .light), dark = TerminalTheme.graphite(for: .dark)
+        dark.background = TerminalColor(red: 1, green: 2, blue: 3)
+        dark.selection = TerminalColor(red: 4, green: 5, blue: 6)
+        light.background = TerminalColor(red: 250, green: 250, blue: 240)
+        view.themes = AppearanceThemes(light: light, dark: dark)
+        #expect(view.terminal.defaultBackgroundColor == dark.background && view.renderer.selectionColor == dark.selection)
+        #expect(try corner(of: view) == dark.background && view.terminal.selectedText() == "hello")
+        view.appearance = NSAppearance(named: .aqua)
+        #expect(view.terminal.defaultBackgroundColor == light.background && view.theme == light)
+    }
+
     @Test func theViewFollowsTheAppearanceWithTheGraphiteTheme() throws {
         let view = try TerminalView()
         view.appearance = NSAppearance(named: .darkAqua)

@@ -7,8 +7,8 @@ import TerminalTheme
 import os
 
 /// A terminal on the screen. The view has its own `Terminal` and draws it with
-/// Metal in the Graphite colors. Output comes in through `write`, and a display
-/// link draws the frames.
+/// Metal in the colors of its theme, Graphite by default. Output comes in
+/// through `write`, and a display link draws the frames.
 ///
 /// The view and its terminal run on the main thread, so they need no lock.
 @MainActor
@@ -27,8 +27,22 @@ public final class TerminalView: NSView {
     /// The pasteboard for copy and paste. A test gives another one.
     var pasteboard: any PasteboardAccess = GeneralPasteboard()
     private(set) var renderer: TerminalRenderer
-    /// The colors of the screen: the Graphite theme of the current appearance.
+    /// The colors of the screen: the theme of `themes` for the current appearance.
     private(set) var theme = TerminalTheme.graphite(for: .light)
+
+    /// The themes for the light and the dark appearance. A change takes effect at
+    /// once and keeps the screen, the selection and marked text. Colors that a
+    /// program set with OSC 4, 10, 11 or 12 stay.
+    public var themes = AppearanceThemes.graphite {
+        didSet {
+            guard themes != oldValue, let scheme = appearanceObserver?.scheme else { return }
+            do {
+                try applyTheme(for: scheme)
+            } catch {
+                logger.error("The theme failed: \(String(describing: error), privacy: .private)")
+            }
+        }
+    }
     private var appearanceObserver: AppearanceObserver?
     public weak var delegate: TerminalViewDelegate? {
         didSet {
@@ -656,7 +670,7 @@ public final class TerminalView: NSView {
 
     /// A program can still set its own colors, and they stay when the theme changes.
     private func applyTheme(for scheme: TerminalColorScheme) throws {
-        theme = .graphite(for: scheme)
+        theme = themes.theme(for: scheme)
         try theme.apply(to: terminal)
         renderer.selectionColor = theme.selection
         schedule?.requestFrame()
