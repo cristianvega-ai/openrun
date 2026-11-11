@@ -29,6 +29,8 @@ import AppKit
         super.init(nibName: nil, bundle: nil)
         context.agentName = facts.agentName
         context.actions = self
+        context.hasEarlierHistory = facts.hasEarlierHistory
+        scrollView.reachedTop = { [weak self] in self?.loadEarlierHistory() }
     }
 
     @available(*, unavailable)
@@ -80,6 +82,12 @@ import AppKit
 
     private func factsDidChange(from old: ChatThreadFacts) {
         context.agentName = facts.agentName
+        context.hasEarlierHistory = facts.hasEarlierHistory
+        context.isLoadingEarlierHistory = facts.isLoadingEarlierHistory
+        if (facts.agentName, facts.hasEarlierHistory, facts.isLoadingEarlierHistory)
+            != (old.agentName, old.hasEarlierHistory, old.isLoadingEarlierHistory) {
+            reloadRows(changedItems: nil)
+        }
     }
 
     private func appearanceDidChange() {
@@ -97,6 +105,13 @@ extension ChatViewController: TranscriptRowActions {
     func toggle(_ part: String, in row: TranscriptRowView) {
         if context.openedParts.remove(part) == nil { context.openedParts.insert(part) }
         scrollView.keepInPlace(row.row.key)
+    }
+
+    /// Asks the host once for the earlier history, until it loads.
+    func loadEarlierHistory() {
+        guard facts.hasEarlierHistory, !facts.isLoadingEarlierHistory else { return }
+        facts.isLoadingEarlierHistory = true
+        delegate?.chatViewControllerLoadEarlierHistory(self)
     }
 
     func answerPermissionRequest(_ identifier: String, with answer: ChatPermissionAnswer) {

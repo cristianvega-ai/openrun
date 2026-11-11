@@ -10,6 +10,7 @@
         case .permissionRequest: PermissionRequestRowView()
         case .task, .notice, .turnEnd, .unknown: QuietRowView()
         case .activity: ActivityRowView()
+        case .earlierItems: EarlierItemsRowView()
         default: TranscriptRowView()
         }
     }

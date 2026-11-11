@@ -33,6 +33,8 @@ import MarkdownText
     /// The permission requests that the user answered. Their buttons stay
     /// off until the answer comes back in the transcript.
     var answeredRequests: Set<String> = []
+    var hasEarlierHistory = false
+    var isLoadingEarlierHistory = false
     /// The permission requests that VoiceOver announced.
     var announcedRequests: Set<String> = []
     /// The rendered blocks of each message by their index.

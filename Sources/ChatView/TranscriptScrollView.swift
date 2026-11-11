@@ -9,6 +9,8 @@ import AppKit
     let transcriptView: TranscriptView
     /// Tells when the user leaves the bottom or comes back to it.
     var followingChanged: ((Bool) -> Void)?
+    /// Tells when the user scrolls to the top.
+    var reachedTop: (() -> Void)?
     private var lastClipSize = NSSize.zero
 
     init(transcriptView: TranscriptView) {
@@ -63,6 +65,7 @@ import AppKit
         // view starts or stops to follow the newest row.
         setFollowing(distanceFromBottom <= Self.bottomTolerance)
         transcriptView.tile()
+        if contentView.bounds.minY < 60 { reachedTop?() }
     }
 
     private func setFollowing(_ isFollowing: Bool) {

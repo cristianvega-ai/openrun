@@ -8,6 +8,7 @@ import Testing
         var answers: [String] = []
         func openLink(_ target: String) {}
         func toggle(_ part: String, in row: TranscriptRowView) {}
+        func loadEarlierHistory() {}
         func answerPermissionRequest(_ identifier: String, with answer: ChatPermissionAnswer) { answers.append(identifier) }
     }
 

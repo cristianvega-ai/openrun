@@ -43,4 +43,16 @@ import Testing
         controller.answerPermissionRequest("p1", with: .deny(message: "Not now"))
         #expect(delegate.requests == ["answer p1 deny(message: Optional(\"Not now\"))"])
     }
+
+    @Test func earlierHistoryShowsARowAndLoadsOnce() {
+        let delegate = RecordingDelegate()
+        controller.delegate = delegate
+        controller.facts.hasEarlierHistory = true
+        controller.show(Transcript(events: [TestEvents.user("1", "Hello")]))
+        #expect(controller.transcriptView.rows.first?.key == "earlier")
+        controller.loadEarlierHistory()
+        controller.loadEarlierHistory()
+        #expect(delegate.requests == ["earlier"])
+        #expect(controller.context.isLoadingEarlierHistory)
+    }
 }
