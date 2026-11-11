@@ -13,10 +13,26 @@ public enum PrintableText {
     /// (U+0080 to U+009F) becomes `\u{XX}` in upper-case hexadecimal. All
     /// other text, including letters outside ASCII and emoji, stays as it is.
     public static func escaping(_ text: String) -> String {
+        escape(text, keepsBackslashes: false)
+    }
+
+    /// Escapes each control character as `escaping` does, and keeps every
+    /// other character as it is, also a backslash.
+    ///
+    /// This is for text that holds no control character by its own rule:
+    /// a message in which `QuotedText` already escaped the text of a client,
+    /// or the value of a setting. Such text stays as it is, so nothing is
+    /// escaped twice, and a control character that slipped in still drives
+    /// no terminal.
+    public static func escapingControlCharacters(in text: String) -> String {
+        escape(text, keepsBackslashes: true)
+    }
+
+    private static func escape(_ text: String, keepsBackslashes: Bool) -> String {
         var result = ""
         for scalar in text.unicodeScalars {
             switch scalar.value {
-            case 0x5C: result += "\\\\"
+            case 0x5C where !keepsBackslashes: result += "\\\\"
             case 0x09: result += "\\t"
             case 0x0A: result += "\\n"
             case 0x0D: result += "\\r"

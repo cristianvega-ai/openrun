@@ -51,12 +51,17 @@ enum CommandLineToolError: Error, CustomStringConvertible {
     /// client chose, so each line is escaped on its own. The line breaks that
     /// separate the lines of a list are the tool's own and stay. A line break
     /// inside one line is client text and is escaped like the rest.
+    ///
+    /// A message of the session process can quote such text already
+    /// (`QuotedText`), so a message keeps its backslashes, and the text of a
+    /// client is escaped once. The lines of a list hold raw values, such as
+    /// a folder, and are escaped in full.
     var printableDescription: String {
         switch self {
         case .usage(let message), .failure(let message):
-            PrintableText.escaping(message)
+            PrintableText.escapingControlCharacters(in: message)
         case .failureWithList(let heading, let lines):
-            ([heading] + lines).map(PrintableText.escaping).joined(separator: "\n")
+            ([PrintableText.escapingControlCharacters(in: heading)] + lines.map(PrintableText.escaping)).joined(separator: "\n")
         }
     }
 }

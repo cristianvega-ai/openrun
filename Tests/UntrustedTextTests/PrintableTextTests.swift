@@ -48,3 +48,17 @@ import UntrustedText
         #expect(!result.unicodeScalars.contains { $0.value < 0x20 || (0x7F...0x9F).contains($0.value) })
     }
 }
+
+@Suite struct PrintableTextOfMessagesTests {
+    /// A message that `QuotedText` made safe is printed as it is, so a
+    /// backslash of the client shows once.
+    @Test func aQuotedValueIsNotEscapedTwice() {
+        let message = "The folder \(QuotedText.quoted("/a\\b\u{1B}c")) does not exist."
+        #expect(PrintableText.escapingControlCharacters(in: message) == message)
+        #expect(message == #"The folder "/a\\b\u{1B}c" does not exist."#)
+    }
+
+    @Test func aControlCharacterThatSlippedInIsStillEscaped() {
+        #expect(PrintableText.escapingControlCharacters(in: "a\\b\u{1B}[2J\nc") == "a\\b\\u{1B}[2J\\nc")
+    }
+}

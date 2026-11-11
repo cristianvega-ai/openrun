@@ -182,3 +182,13 @@ private func usageMessage(_ words: String...) -> String? {
         }
     }
 }
+
+@Suite struct ToolErrorEscapeTests {
+    /// The session process quotes the text of a client in its messages, so
+    /// the tool prints the message as it is, and a backslash shows once.
+    @Test func aMessageThatQuotesAPathShowsEachBackslashOnce() {
+        let message = #"The folder "/work/a\\b\u{1B}" does not exist."#
+        #expect(CommandLineToolError.failure(message).printableDescription == message)
+        #expect(CommandLineToolError.failure("raw\u{1B}[2J").printableDescription == "raw\\u{1B}[2J")
+    }
+}

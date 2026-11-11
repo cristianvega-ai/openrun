@@ -79,7 +79,7 @@ public enum CommandLineTool {
     /// of the caller, so every control character is escaped. The tool's own
     /// line breaks, between the lines of a list, are kept.
     private static func writeError(_ error: Error) {
-        let text = (error as? CommandLineToolError)?.printableDescription ?? PrintableText.escaping("\(error)")
+        let text = (error as? CommandLineToolError)?.printableDescription ?? PrintableText.escapingControlCharacters(in: "\(error)")
         write("openrun: \(text)\n", to: .standardError)
     }
 
