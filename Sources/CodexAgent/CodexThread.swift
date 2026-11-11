@@ -28,6 +28,14 @@ public struct CodexThread: Sendable {
         await server.answerPermission(identifier, answer: answer, thread: self.identifier)
     }
 
+    /// Stops the thread: it declines the requests that wait, interrupts
+    /// the turn, and ends the commands that still run. The next turn works
+    /// as usual.
+    @discardableResult
+    public func stop() async -> CodexStop {
+        await server.stop(thread: identifier)
+    }
+
     /// Ends the thread on the app-server. Its events end. The app-server
     /// stays for its other threads.
     public func close() async {
