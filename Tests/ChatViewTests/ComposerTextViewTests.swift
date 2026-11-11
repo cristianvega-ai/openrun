@@ -23,4 +23,11 @@ import Testing
         board.setData(png, forType: .png)
         #expect(ComposerTextView.imageData(on: board) == [png])
     }
+
+    @Test func theFieldTakesPlainText() {
+        let field = ComposerTextView()
+        #expect(!field.isRichText)
+        #expect(field.allowsUndo)
+        #expect(field.textContainer?.widthTracksTextView == true)
+    }
 }

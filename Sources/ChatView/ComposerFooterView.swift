@@ -11,7 +11,6 @@ final class ComposerFooterView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         placeLabel.lineBreakMode = .byTruncatingHead
-        placeLabel.alignment = .right
         for view in [modelButton, modeButton, placeLabel] { addSubview(view) }
     }
 
