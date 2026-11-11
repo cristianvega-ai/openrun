@@ -71,4 +71,17 @@ public struct DataFolder: Equatable, Sendable {
             try? manager.removeItem(atPath: file)
         }
     }
+
+    /// Writes a document as readable JSON, with its keys in order and one
+    /// key on each line, and replaces its file in one step with mode 0600.
+    /// Call `create` first.
+    public func write<Document: DataDocument>(_ document: Document) throws {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys, .withoutEscapingSlashes]
+        guard var data = try? encoder.encode(FormattedDocument(document: document)) else {
+            throw DataStorageError.documentNotEncoded(file: Document.file.name)
+        }
+        data.append(UInt8(ascii: "\n"))
+        try AtomicFileWriter.write(data, to: path(of: Document.file))
+    }
 }
