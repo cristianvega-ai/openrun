@@ -117,6 +117,12 @@ public final class RunningSessionProcess: @unchecked Sendable {
             let base = Self.temporaryDirectory()
             throw HarnessError.commandFailed(description: "The socket path \(socketPath) has \(socketPath.utf8.count) bytes, and a Unix socket address holds \(Self.longestSocketPath). TMPDIR is \(base), with \(base.utf8.count) characters. Use a shorter TMPDIR.")
         }
+        do {
+            try UserDataGuard.check(executable: Self.sessionExecutable, arguments: ["--socket", socketPath] + arguments, currentFolder: nil)
+        } catch {
+            if ownsDirectory { try? FileManager.default.removeItem(at: self.directory) }
+            throw error
+        }
         logFile = self.directory.appendingPathComponent(logName)
         FileManager.default.createFile(atPath: logFile.path, contents: nil)
         if let descriptorLimit {

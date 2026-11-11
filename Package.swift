@@ -135,7 +135,7 @@ let package = Package(
         // executables and plays the part of a terminal window.
         .target(
             name: "SessionProcessHarness",
-            dependencies: ["PseudoTerminal", "TerminalEmulation", "openrun", "openrun-session"],
+            dependencies: ["PseudoTerminal", "TerminalEmulation", "DataStorage", "openrun", "openrun-session"],
             path: "Tests/SessionProcessHarness"
         ),
         .testTarget(

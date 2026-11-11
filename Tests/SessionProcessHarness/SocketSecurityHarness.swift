@@ -127,6 +127,7 @@ extension SocketSecurityHarness {
         }
 
         public init(executable: URL, arguments: [String], folder: URL, logFile: URL, environment: [String: String] = [:]) throws {
+            try UserDataGuard.check(executable: executable, arguments: arguments, currentFolder: folder)
             self.logFile = logFile
             FileManager.default.createFile(atPath: logFile.path, contents: nil)
             process.executableURL = executable
