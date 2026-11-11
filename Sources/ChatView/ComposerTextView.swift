@@ -74,7 +74,7 @@ final class ComposerTextView: NSTextView {
             }
         }
         if !images.isEmpty { imagesAction?(images) }
-        if !paths.isEmpty { insertText(paths.joined(separator: " "), replacementRange: selectedRange()) }
+        if !paths.isEmpty { insertText(paths.map(DroppedPath.text).joined(separator: " ") + " ", replacementRange: selectedRange()) }
         return true
     }
 
