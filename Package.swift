@@ -64,7 +64,10 @@ let package = Package(
         // Codex in a thread: the client of `codex app-server`, one server
         // for each account, and the events of its threads.
         .target(name: "CodexAgent", dependencies: ["AgentConversation", "AgentProgram", "PseudoTerminal"]),
-        .testTarget(name: "CodexAgentTests", dependencies: ["CodexAgent", "AgentConversation", "AgentProgram"], exclude: ["Fixtures"]),
+        .testTarget(name: "CodexAgentTests", dependencies: ["CodexAgent", "AgentConversation", "AgentProgram", "fake-codex"], exclude: ["Fixtures"]),
+        // A stand-in for `codex app-server` that plays recorded exchanges,
+        // so that no test runs the real agent.
+        .executableTarget(name: "fake-codex", path: "Tests/FakeCodex"),
         // An agent program on pipes, such as `claude -p`, with its process
         // group, and the environment of the user's login shell.
         .target(name: "AgentProgram", dependencies: ["PseudoTerminal"]),
