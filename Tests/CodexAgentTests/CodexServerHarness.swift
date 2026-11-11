@@ -52,6 +52,8 @@ struct CodexServerHarness {
             } else if case .object(var line)? = step["server"] {
                 if line["id"] == .string("$request") { line["id"] = request }
                 serve(String(decoding: try encoder.encode(JSONValue.object(line)), as: UTF8.self))
+            } else if step["special"] == .string("exit") {
+                transport.close()
             }
         }
         return lines

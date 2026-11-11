@@ -50,6 +50,15 @@ extension CodexAppServer {
         await endApproval(identifier, decision: nil, outcome: .cancelled, reason: .other, message: "Codex withdrew the request.")
     }
 
+    /// Ends the approvals of the threads that `isIncluded` names. While the
+    /// app-server runs, each one is declined. After its end, none can be.
+    func endApprovals(of isIncluded: (String) -> Bool) async {
+        let message = hasEnded ? "The Codex app-server ended, so the request was declined." : "OpenRun declined the request."
+        for (identifier, approval) in approvals where isIncluded(approval.thread) {
+            await endApproval(identifier, decision: hasEnded ? nil : "decline", outcome: .cancelled, reason: .other, message: message)
+        }
+    }
+
     func sendDecision(_ decision: String, to request: CodexRequestIdentifier) async {
         guard let line = try? CodexOutgoingLine.response(to: request, result: .object(["decision": .string(decision)])) else { return }
         await connection.send(line)

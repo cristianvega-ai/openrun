@@ -21,6 +21,7 @@ import Testing
                 #expect(await !thread.answerPermission(identifier: request.identifier, answer: .allow))
             }
             if case .turnEnded = event.kind { break }
+            if case .processEnded = event.kind { break }
         }
         _ = try await played
         return events
@@ -46,5 +47,28 @@ import Testing
         let identifier = "exec-00000000-0000-7000-8000-000000000007/1"
         #expect(events.contains { if case .permissionEnded(let end) = $0.kind { end.identifier == identifier && end.outcome == .timedOut } else { false } })
         #expect(events.contains { if case .toolCallRefused(let refusal) = $0.kind { refusal.reason == .unanswered } else { false } })
+    }
+
+    @Test func aRequestThatWaitsWhenTheServerEndsIsDeclinedWithoutAnswer() async throws {
+        let events = try await turn("closed-during-approval", answer: nil)
+        let identifier = "exec-00000000-0000-7000-8000-000000000003/0"
+        #expect(events.suffix(2).map(\.kind) == [
+            .permissionEnded(PermissionEnd(identifier: identifier, outcome: .cancelled, message: "The Codex app-server ended, so the request was declined.")),
+            .processEnded(ProcessEnd(exitStatus: 0, wasRequested: false)),
+        ])
+        #expect(!Transcript(events: events).items.contains { if case .toolCall(let call) = $0.content { call.state == .succeeded } else { false } })
+    }
+
+    @Test func theCloseOfTheThreadDeclinesItsRequests() async throws {
+        let harness = try await CodexServerHarness()
+        let channel = await harness.server.open("a", first: [])
+        harness.serve(#"{"id":3,"method":"item/commandExecution/requestApproval","params":{"threadId":"a","itemId":"c","command":"ls"}}"#)
+        guard case .permissionRequested? = await channel.next()?.kind else { Issue.record("No request"); return }
+        let close = Task { await harness.server.closeThread("a") }
+        #expect(await harness.nextWritten() == .object(["id": .number(3), "result": .object(["decision": .string("decline")])]))
+        #expect(await channel.next()?.kind == .permissionEnded(PermissionEnd(identifier: "c/3", outcome: .cancelled, message: "OpenRun declined the request.")))
+        let unsubscribe = await harness.nextWritten()
+        harness.serve(#"{"id":\#(unsubscribe?["id"]?.integer ?? 0),"result":{}}"#)
+        await close.value
     }
 }

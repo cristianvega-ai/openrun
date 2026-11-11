@@ -60,9 +60,13 @@ public actor CodexAppServer {
         await connection.transport.end(gracePeriod: .seconds(2))
     }
 
-    /// Every thread learns the end, and its events end.
+    /// Every approval and every thread learns the end, and the events of
+    /// each thread end.
     func ended(_ end: ProcessEnd) async {
         hasEnded = true
+        // Codex ran nothing that waited: it ends the turn when its client
+        // goes. No answer can go, so each request ends declined.
+        await endApprovals(of: { _ in true })
         var end = end
         end.wasRequested = isShuttingDown
         let open = threads

@@ -32,6 +32,7 @@ extension CodexAppServer {
     }
 
     func closeThread(_ identifier: String) async {
+        await endApprovals(of: { $0 == identifier })
         guard let state = threads.removeValue(forKey: identifier) else { return }
         state.channel.finish()
         // Codex then sends no more notifications of the thread here.
