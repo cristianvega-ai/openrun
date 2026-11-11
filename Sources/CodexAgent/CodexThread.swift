@@ -20,6 +20,14 @@ public struct CodexThread: Sendable {
         try await server.startTurn(turn, thread: identifier)
     }
 
+    /// Answers a permission request of the thread with the user's answer.
+    /// Returns false when the request no longer waits, and then nothing
+    /// goes to Codex.
+    @discardableResult
+    public func answerPermission(identifier: String, answer: CodexPermissionAnswer) async -> Bool {
+        await server.answerPermission(identifier, answer: answer, thread: self.identifier)
+    }
+
     /// Ends the thread on the app-server. Its events end. The app-server
     /// stays for its other threads.
     public func close() async {

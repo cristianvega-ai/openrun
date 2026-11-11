@@ -10,6 +10,8 @@ public actor CodexAppServer {
     let connection: CodexConnection
     let options: CodexServerOptions
     var threads: [String: CodexThreadState] = [:]
+    /// The approvals that wait for the user, by permission identifier.
+    var approvals: [String: CodexApproval] = [:]
     /// Lines for a thread that is not open yet. Codex can send them before
     /// its answer to `thread/start` or `thread/resume` arrives.
     var earlyLines: [(thread: String, method: String, parameters: JSONValue, line: SourceLine)] = []

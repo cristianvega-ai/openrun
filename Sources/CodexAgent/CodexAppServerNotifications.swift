@@ -57,9 +57,13 @@ extension CodexAppServer {
         parameters["threadId"]?.string ?? parameters["thread"]?["id"]?.string
     }
 
-    /// Refuses a request of the app-server, so that Codex does not wait
-    /// for an answer. The thread learns of it.
+    /// Sends an approval to its thread. OpenRun refuses any other request
+    /// of the app-server, so that Codex does not wait for an answer, and
+    /// the thread learns of it.
     func serverRequest(_ identifier: CodexRequestIdentifier, method: String, parameters: JSONValue, line: SourceLine) async {
+        if method == CodexApproval.commandMethod || method == CodexApproval.fileChangeMethod {
+            return await approvalRequested(identifier, method: method, parameters: parameters, line: line)
+        }
         if let refusal = try? CodexOutgoingLine.failure(to: identifier, code: -32601, message: "OpenRun does not support \(method).") {
             await connection.send(refusal)
         }
