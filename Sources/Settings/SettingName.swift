@@ -29,4 +29,39 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
     public var isProtected: Bool {
         self == .sessionLimit || self == .asksBeforeUnsafePaste
     }
+
+    /// The setting with this name.
+    ///
+    /// - Throws: `SettingError.unknownName`.
+    public static func named(_ name: String) throws -> SettingName {
+        guard let setting = SettingName(rawValue: name) else { throw SettingError.unknownName(name) }
+        return setting
+    }
+
+    var kind: SettingKind {
+        switch self {
+        case .theme, .fontName: .text(lengthLimit: 100)
+        case .fontSize: .wholeNumber(6...72)
+        case .optionAsAlt: .choice(OptionKeyBehavior.allCases.map(\.rawValue))
+        case .scrollbackLimit: .wholeNumber(0...1_000_000)
+        case .newSessionCommands: .commands
+        case .linkDestination: .choice(LinkDestination.allCases.map(\.rawValue))
+        case .showsNotifications, .asksBeforeUnsafePaste: .flag
+        case .sessionLimit: .wholeNumber(1...1000)
+        }
+    }
+
+    var defaultValue: SettingValue {
+        switch self {
+        case .theme: .text("graphite")
+        case .fontName: .text("SF Mono")
+        case .fontSize: .wholeNumber(13)
+        case .optionAsAlt: .choice(OptionKeyBehavior.left.rawValue)
+        case .scrollbackLimit: .wholeNumber(10_000)
+        case .newSessionCommands: .commands(NewSessionCommand.defaults)
+        case .linkDestination: .choice(LinkDestination.defaultBrowser.rawValue)
+        case .showsNotifications, .asksBeforeUnsafePaste: .flag(true)
+        case .sessionLimit: .wholeNumber(100)
+        }
+    }
 }
