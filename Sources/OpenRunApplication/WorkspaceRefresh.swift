@@ -12,7 +12,7 @@ extension Workspace {
         let (shownRows, selectedBefore) = (window.sessionsList.shownIdentifiers, layout.selectedRow)
         // Before the first list, no session is known, and the kept rows stay.
         if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
-        if overview.settings != previous.settings { settings = LiveSettings.values(from: overview.settings) }
+        if overview.settings != previous.settings { settingsChanged() }
         for session in previous.sessions where overview.session(session.identifier) == nil { sessionEnded(session.identifier) }
         if let wanted = sessionToSelect, let row = layout.row(showing: wanted) {
             layout.selectedRow = row.identifier

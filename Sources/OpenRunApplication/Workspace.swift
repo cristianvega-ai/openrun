@@ -81,6 +81,7 @@ final class Workspace: NSObject {
         // The projects come with the feed, so a kept project waits for it.
         if case .project(let identifier) = layout.selectedEntry { projectToSelect = identifier }
         window.projectsList.select(ProjectsListEntry(layout.selectedEntry))
+        window.delegate = self
         connection.overviewChanged = { [weak self] in self?.overviewChanged(from: $0) }
         connection.statusChanged = { [weak self] in self?.statusChanged() }
     }
@@ -88,8 +89,14 @@ final class Workspace: NSObject {
     /// Shows the window and starts to follow the session process. The
     /// window comes at once, and the lists fill when the feed answers.
     func start() {
-        window.showWindow()
+        showWindow()
         connection.start()
+    }
+
+    /// Shows the window again after the user closed it, with the selected row.
+    func showWindow() {
+        window.showWindow()
+        refresh()
     }
 
     /// Detaches every pane and writes the layout. The sessions go on.

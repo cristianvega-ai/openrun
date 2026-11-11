@@ -37,6 +37,7 @@ extension Workspace {
             let (pane, isNew) = panes.pane(for: session)
             window.showContent(PaneContent(pane.content))
             if isNew {
+                configure(pane)
                 // The pane estimates its grid from its size, so the window lays it out first.
                 window.window.layoutIfNeeded()
                 pane.attach()
