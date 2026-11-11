@@ -57,3 +57,41 @@ import AgentConversation
         #expect(transcript.items.first?.content == .agentMessage(AgentMessage(text: "ababababab", isComplete: false)))
     }
 }
+
+@Suite struct TranscriptStateTests {
+    func states(after kinds: [ConversationEventKind]) -> [ThreadState] {
+        var transcript = Transcript()
+        return kinds.map { transcript.apply(ConversationEvent($0)); return transcript.state }
+    }
+
+    @Test func aTurnGoesFromIdleThroughProgressToItsEnd() {
+        let message = ConversationEventKind.userMessage(UserMessage(identifier: "u", text: "Hi", isAccepted: false))
+        #expect(states(after: [.usage(UsageReading(windows: []))]) == [.idle])
+        #expect(states(after: [message, .turnEnded(TurnEnd(outcome: .done))]) == [.inProgress, .finishedTurn])
+        #expect(states(after: [message, .turnEnded(TurnEnd(outcome: .stopped))]) == [.inProgress, .idle])
+        #expect(states(after: [message, .turnEnded(TurnEnd(outcome: .failed))]) == [.inProgress, .failed])
+        #expect(states(after: [message, .processEnded(ProcessEnd(exitStatus: 1, wasRequested: false))]) == [.inProgress, .failed])
+        #expect(states(after: [message, .processEnded(ProcessEnd(exitStatus: nil, signal: 2, wasRequested: true))]) == [.inProgress, .idle])
+        #expect(states(after: [.turnEnded(TurnEnd(outcome: .done)), .agentStatus(AgentStatus(kind: "x"))]) == [.finishedTurn, .finishedTurn])
+    }
+
+    @Test func theEndOfATurnCompletesTextThatStillStreams() {
+        var transcript = Transcript()
+        transcript.apply(ConversationEvent(.agentTextDelta(AgentTextDelta(itemIdentifier: "m", text: "Hal"))))
+        let change = transcript.apply(ConversationEvent(.turnEnded(TurnEnd(outcome: .stopped, durationMilliseconds: 9))))
+        #expect(change.inserted == ["turn:2"])
+        #expect(change.updated == ["text:m"])
+        #expect(transcript.items.map(\.content) == [
+            .agentMessage(AgentMessage(text: "Hal", isComplete: true)), .turnEnd(TurnEnd(outcome: .stopped, durationMilliseconds: 9)),
+        ])
+    }
+
+    @Test func aProcessThatFailsAddsANoticeWithItsStandardError() {
+        var transcript = Transcript()
+        transcript.apply(ConversationEvent(.processEnded(ProcessEnd(exitStatus: 1, wasRequested: false, standardErrorText: "No conversation"))))
+        transcript.apply(ConversationEvent(.processEnded(ProcessEnd(exitStatus: 0, wasRequested: false))))
+        #expect(transcript.items.map(\.content) == [
+            .notice(Notice(level: .error, text: "The agent's process ended with status 1.\nNo conversation")),
+        ])
+    }
+}
