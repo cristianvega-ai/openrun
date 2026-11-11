@@ -2,8 +2,9 @@ import Foundation
 import SessionProtocol
 import Synchronization
 
-/// The newest summary of each session, and the connections that watch them
-/// (`receiveSessionChanges`, decision of 2026-11-10).
+/// The newest summary of each session, the projects and the settings, and
+/// the connections that watch them (`receiveSessionChanges`, decision of
+/// 2026-11-10).
 ///
 /// Each session hands its summary here from its own context, and the feed
 /// sends it to every watcher under one lock. So a watcher gets the present
@@ -16,6 +17,10 @@ final class SessionChangeFeed: Sendable {
 
     private struct State {
         var summaries: [UUID: SessionSummary] = [:]
+        /// Nil until the keeper of the projects gives its first list.
+        var projects: [ProjectSummary]?
+        /// Nil until the keeper of the settings gives its first list.
+        var settings: [SettingSummary]?
         var watchers: [ObjectIdentifier: Send] = [:]
     }
 
@@ -47,10 +52,30 @@ final class SessionChangeFeed: Sendable {
         }
     }
 
-    /// Sends the present list, oldest first, and then each change.
+    /// Keeps the new list of the projects and sends it to every watcher.
+    func replaceProjects(_ projects: [ProjectSummary]) {
+        state.withLock { state in
+            state.projects = projects
+            for send in state.watchers.values { send(.projectList(projects)) }
+        }
+    }
+
+    /// Keeps the new list of the settings and sends it to every watcher.
+    func replaceSettings(_ settings: [SettingSummary]) {
+        state.withLock { state in
+            state.settings = settings
+            for send in state.watchers.values { send(.settingList(settings)) }
+        }
+    }
+
+    /// Sends the present list, oldest first, then the projects and the
+    /// settings, and then each change of any of them, in the order of the
+    /// changes (decision of 2026-11-10).
     func addWatcher(_ key: ObjectIdentifier, send: @escaping Send) {
         state.withLock { state in
             send(.sessionList(state.summaries.values.sorted { $0.createdAt < $1.createdAt }))
+            if let projects = state.projects { send(.projectList(projects)) }
+            if let settings = state.settings { send(.settingList(settings)) }
             state.watchers[key] = send
         }
     }

@@ -64,4 +64,27 @@ private func makeSummary(createdAt seconds: TimeInterval) -> SessionSummary {
         #expect(first.messages == [.sessionList([]), .sessionChanged(summary)])
         #expect(second.messages == [.sessionList([]), .sessionChanged(summary), .sessionEnded(identifier: summary.identifier)])
     }
+
+    /// The projects and the settings come right after the session list,
+    /// and each later change comes in the order in which it happened.
+    @Test func theProjectsAndTheSettingsFollowTheListInOrder() {
+        let feed = SessionChangeFeed()
+        let summary = makeSummary(createdAt: 1)
+        feed.add(summary)
+        let project = ProjectSummary(identifier: UUID(), name: nil, folder: "/work")
+        let setting = SettingSummary(name: "theme", text: "graphite", isProtected: false)
+        feed.replaceProjects([project])
+        feed.replaceSettings([setting])
+        let watcher = Watcher()
+        feed.addWatcher(watcher.key, send: watcher.send)
+        feed.replaceProjects([])
+        var named = summary
+        named.name = "build"
+        feed.change(named)
+        feed.replaceSettings([])
+        #expect(watcher.messages == [
+            .sessionList([summary]), .projectList([project]), .settingList([setting]),
+            .projectList([]), .sessionChanged(named), .settingList([]),
+        ])
+    }
 }
