@@ -127,6 +127,52 @@ public struct SessionClient: Sendable {
         try requestAcknowledgement(.clearSessionAlert(identifier: identifier), named: "clear alert")
     }
 
+    /// The projects in their order, then the projects whose folder this Mac
+    /// does not know. Check `capabilities.projectsAndSettings` first.
+    public func projects() throws -> [ProjectSummary] {
+        guard case .projectList(let projects) = try request(.listProjects) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "project list")
+        }
+        return projects
+    }
+
+    /// Adds a project. The session process resolves `folder`: a relative
+    /// path starts at `currentFolder`, and `~` is the home folder.
+    public func addProject(folder: String, name: String?, currentFolder: String?) throws -> ProjectSummary {
+        guard case .projectAdded(let project) = try request(.addProject(folder: folder, name: name, currentFolder: currentFolder)) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "project add")
+        }
+        return project
+    }
+
+    public func removeProject(_ identifier: UUID) throws {
+        try requestAcknowledgement(.removeProject(identifier: identifier), named: "project remove")
+    }
+
+    /// Gives a project a name, or removes it with `nil` or an empty name, so
+    /// that the project shows the name of its folder.
+    public func renameProject(_ identifier: UUID, to name: String?) throws {
+        try requestAcknowledgement(.renameProject(identifier: identifier, name: name), named: "project rename")
+    }
+
+    /// Moves a project to a place in the order, where 0 is the first.
+    public func moveProject(_ identifier: UUID, to place: Int) throws {
+        try requestAcknowledgement(.moveProject(identifier: identifier, place: place), named: "project move")
+    }
+
+    /// Every setting, in the order of the settings module.
+    public func settings() throws -> [SettingSummary] {
+        guard case .settingList(let settings) = try request(.listSettings) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "settings list")
+        }
+        return settings
+    }
+
+    /// Changes one setting. A protected setting changes only for the app.
+    public func changeSetting(named name: String, to text: String) throws {
+        try requestAcknowledgement(.changeSetting(name: name, text: text), named: "settings set")
+    }
+
     private func requestAcknowledgement(_ message: ClientMessage, named name: String) throws {
         guard case .acknowledged = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: name) }
     }
