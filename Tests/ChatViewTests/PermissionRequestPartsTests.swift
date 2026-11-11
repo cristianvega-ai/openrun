@@ -44,4 +44,28 @@ struct PermissionRequestPartsTests {
         #expect(request.title == "Claude Code wants to use mcp__notes__write")
         #expect(request.parts == [.text("body: B⟨U+3164⟩\ntitle: A")])
     }
+
+    @Test func aCodexCommandShowsItsFolderAndItsReason() {
+        let request = words("commandExecution", ["command": .string("npm install"), "cwd": .string("/work/app"), "reason": .string("Needs the network")])
+        #expect(request.title == "Claude Code wants to run a command")
+        #expect(request.subject == "npm install")
+        #expect(request.parts == [.note("Reason: Needs the network"), .text("npm install"), .note("In the folder /work/app")])
+    }
+
+    @Test func aCodexFileChangeShowsEachFileAndTheWiderAccess() {
+        let changes: JSONValue = .array([
+            .object(["path": .string("a.txt"), "kind": .object(["type": .string("update")]), "diff": .string("@@ -1 +1 @@\n-a\n+b")]),
+            .object(["path": .string("new.sh"), "kind": .string("add"), "diff": .string("rm -rf /")]),
+            .object(["path": .string("old.txt"), "kind": .string("delete"), "diff": .string("")]),
+        ])
+        let request = words("fileChange", ["changes": changes, "grantRoot": .string("/")])
+        #expect(request.title == "Claude Code wants to change files")
+        #expect(request.subject == "a.txt, new.sh, old.txt")
+        #expect(request.parts == [
+            .note("Change a.txt"), .diff(UnifiedDiff("@@ -1 +1 @@\n-a\n+b")),
+            .note("New file new.sh"), .diff(UnifiedDiff(old: "", new: "rm -rf /", title: nil)),
+            .note("Delete old.txt"),
+            .note("It also asks to write anywhere in /"),
+        ])
+    }
 }

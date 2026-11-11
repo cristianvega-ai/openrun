@@ -22,12 +22,20 @@ struct PermissionRequestWords: Equatable {
     init(_ item: PermissionRequestItem, agentName: String) {
         let request = item.request
         var input = PermissionRequestInput(request.input)
+        let reason = input.text("reason")
         let action: String
         switch request.toolName {
-        case "Bash":
+        case "Bash", "commandExecution":
             action = "run a command"
             subject = input.text("command") ?? ""
             parts = [.text(subject)]
+            if let folder = input.text("cwd") { parts.append(.note("In the folder " + folder)) }
+        case "fileChange":
+            action = "change files"
+            let changes = input.value("changes")?.array ?? []
+            subject = changes.compactMap { $0["path"]?.string }.joined(separator: ", ")
+            parts = changes.flatMap(Self.parts(ofChange:))
+            if let root = input.text("grantRoot") { parts.append(.note("It also asks to write anywhere in " + root)) }
         case "Edit", "MultiEdit", "Write", "NotebookEdit":
             subject = input.text("file_path") ?? input.text("notebook_path") ?? ""
             parts = [.note(subject)]
@@ -41,6 +49,7 @@ struct PermissionRequestWords: Equatable {
             subject = request.toolName
         }
         title = "\(agentName) wants to \(action)"
+        if let reason { parts.insert(.note("Reason: " + reason), at: 0) }
         let rest = input.rest
         if !rest.isEmpty { parts += parts.isEmpty ? [.text(rest)] : [.note("More input:"), .text(rest)] }
         subject = Self.visible(subject)
@@ -70,6 +79,21 @@ struct PermissionRequestWords: Equatable {
             if input.value("replace_all")?.bool == true { parts.append(.note("It changes every place where the old text occurs.")) }
         }
         return "edit a file"
+    }
+
+    /// The parts of one file of a change of Codex: what happens to the
+    /// file, and its diff, or its content when the file is new or goes.
+    private static func parts(ofChange change: JSONValue) -> [Part] {
+        let path = change["path"]?.string ?? ""
+        let kind = change["kind"]?.string ?? change["kind"]?["type"]?.string ?? ""
+        let text = change["diff"]?.string ?? ""
+        let move = change["kind"]?["move_path"]?.string.map { ", and move it to " + $0 } ?? ""
+        let diff = UnifiedDiff(text)
+        switch kind {
+        case "add": return [.note("New file " + path), .diff(diff.lines.isEmpty ? UnifiedDiff(old: "", new: text, title: nil) : diff)]
+        case "delete": return [.note("Delete " + path)] + (text.isEmpty ? [] : [.diff(diff.lines.isEmpty ? UnifiedDiff(old: text, new: "", title: nil) : diff)])
+        default: return [.note("Change " + path + move), diff.lines.isEmpty ? .text(text) : .diff(diff)]
+        }
     }
 
     private static func visible(_ part: Part) -> Part {
