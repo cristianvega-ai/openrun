@@ -1,3 +1,4 @@
+import AlertNotifications
 import AppKit
 import SessionProcessHarness
 import SessionProtocol
@@ -22,13 +23,16 @@ struct TestWorkspace {
     let workspace: Workspace
     /// Where the window keeps the widths of its panes.
     let defaults: UserDefaults
+    let notifier = RecordingNotifier()
     private let defaultsName = "OpenRunTests-\(UUID().uuidString)"
 
     init() throws {
         _ = NSApplication.shared
         process = try RunningSessionProcess()
         defaults = try #require(UserDefaults(suiteName: defaultsName))
-        workspace = Workspace(socket: try SocketLocation(path: process.socketPath), defaults: defaults, frameName: nil)
+        workspace = Workspace(socket: try SocketLocation(path: process.socketPath), defaults: defaults, frameName: nil, notifier: notifier)
+        workspace.setBadge = { _ in }
+        workspace.activateApplication = {}
         workspace.window.window.setContentSize(NSSize(width: 1_100, height: 700))
     }
 
@@ -52,4 +56,14 @@ struct TestWorkspace {
 extension TerminalView {
     /// The text on the screen of the view.
     var screenText: String { String(decoding: (try? terminal.formatted(.plainText)) ?? [], as: UTF8.self) }
+}
+
+/// A stand-in for the notifications of macOS.
+@MainActor final class RecordingNotifier: AlertNotifier {
+    var posted: [AlertNotification] = []
+    var removed: [String] = []
+    var opened: ((String) -> Void)?
+
+    func post(_ notification: AlertNotification) { posted.append(notification) }
+    func remove(identifier: String) { removed.append(identifier) }
 }
