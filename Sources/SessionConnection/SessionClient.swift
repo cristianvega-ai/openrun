@@ -173,6 +173,47 @@ public struct SessionClient: Sendable {
         try requestAcknowledgement(.changeSetting(name: name, text: text), named: "settings set")
     }
 
+    /// Every agent thread, oldest first. Check `capabilities.threads` first.
+    public func threads() throws -> [ThreadSummary] {
+        guard case .threadList(let threads) = try request(.listThreads) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "thread list")
+        }
+        return threads
+    }
+
+    /// Makes a thread. `nil` for the model or the permission mode takes
+    /// the one of the settings.
+    public func createThread(agent: String, folder: String, model: String? = nil, permissionMode: String? = nil, name: String? = nil) throws -> ThreadSummary {
+        let message = ClientMessage.createThread(agent: agent, folder: folder, model: model, permissionMode: permissionMode, name: name)
+        guard case .threadCreated(let thread) = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: "thread new") }
+        return thread
+    }
+
+    public func renameThread(_ identifier: UUID, to name: String?) throws {
+        try requestAcknowledgement(.renameThread(identifier: identifier, name: name), named: "thread rename")
+    }
+
+    public func closeThread(_ identifier: UUID) throws {
+        try requestAcknowledgement(.closeThread(identifier: identifier), named: "thread close")
+    }
+
+    /// Sends a message of the user and returns its identifier.
+    public func sendThreadMessage(_ identifier: UUID, text: String, images: [ThreadImage] = []) throws -> UUID {
+        let message = ClientMessage.sendThreadMessage(identifier: identifier, text: text, images: images.isEmpty ? nil : images)
+        guard case .threadMessageSent(let sent) = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: "thread send") }
+        return sent
+    }
+
+    public func stopThread(_ identifier: UUID) throws {
+        try requestAcknowledgement(.stopThread(identifier: identifier), named: "thread stop")
+    }
+
+    /// Attaches the connection to a thread. The connection then belongs
+    /// to the attachment, so the client takes no more requests.
+    public func attachThread(_ identifier: UUID) throws -> ThreadAttachment {
+        try ThreadAttachment.attach(on: connection, to: identifier)
+    }
+
     private func requestAcknowledgement(_ message: ClientMessage, named name: String) throws {
         guard case .acknowledged = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: name) }
     }
