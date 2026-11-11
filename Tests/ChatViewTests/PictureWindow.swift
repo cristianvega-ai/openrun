@@ -22,9 +22,6 @@ import Testing
         let topRow = NSView(frame: NSRect(x: 0, y: size.height - 52, width: size.width, height: 52))
         let title = NSTextField(labelWithString: controller.paneTitle)
         title.font = .systemFont(ofSize: 13, weight: .semibold)
-        title.sizeToFit()
-        title.frame.origin = NSPoint(x: 20, y: (52 - title.frame.height) / 2)
-        topRow.addSubview(title)
         var right = size.width - 16
         for item in controller.topRowItems.reversed() {
             item.layoutSubtreeIfNeeded()
@@ -34,6 +31,12 @@ import Testing
             topRow.addSubview(item)
             right -= 10
         }
+        // The title gives way to the items at the right, as in the main window.
+        title.lineBreakMode = .byTruncatingTail
+        title.sizeToFit()
+        title.frame = NSRect(x: 20, y: (52 - title.frame.height) / 2, width: min(title.frame.width, right - 30),
+                             height: title.frame.height)
+        topRow.addSubview(title)
         controller.view.frame = NSRect(x: 0, y: 0, width: size.width, height: size.height - 52)
         content.addSubview(controller.view)
         content.addSubview(topRow)
