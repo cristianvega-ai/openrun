@@ -36,6 +36,22 @@ import Testing
         ])
     }
 
+    @Test func handsOnTheProjectsAndTheSettings() async throws {
+        let (clientSide, sessionSide) = try MessageConnection.makePair()
+        defer { clientSide.shutdown(); sessionSide.shutdown() }
+        let projects = [ProjectSummary(identifier: UUID(), name: "App", folder: "/work/app")]
+        let settings = [SettingSummary(name: "session-limit", text: "100", isProtected: true)]
+        Thread {
+            defer { sessionSide.shutdown() }
+            _ = try? sessionSide.receive(ClientMessage.self)
+            try? sessionSide.send(ServerMessage.sessionList([]))
+            try? sessionSide.send(ServerMessage.projectList(projects))
+            try? sessionSide.send(ServerMessage.settingList(settings))
+        }.start()
+        let receiver = try SessionChangeReceiver.open(on: clientSide)
+        #expect(try await Self.events(of: receiver, count: 4) == [.sessions([]), .projects(projects), .settings(settings), .closed])
+    }
+
     @Test func aRefusalEndsTheRequest() throws {
         let (clientSide, sessionSide) = try MessageConnection.makePair()
         defer { clientSide.shutdown(); sessionSide.shutdown() }

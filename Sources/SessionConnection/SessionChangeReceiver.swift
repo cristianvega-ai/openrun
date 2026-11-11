@@ -8,8 +8,9 @@ import Synchronization
 /// from its idle exit, like every connection.
 public final class SessionChangeReceiver: Sendable {
     /// What the session process tells the client. `sessions` comes first,
-    /// once, and `closed` or `failed` last. Later kinds of change, such as the
-    /// projects, come as further cases.
+    /// once, and `closed` or `failed` last. A session process that offers
+    /// projects and settings sends `projects` and `settings` right after
+    /// `sessions`, and again after each change of them.
     public enum Event: Equatable, Sendable {
         /// Every session at the start, oldest first.
         case sessions([SessionSummary])
@@ -17,6 +18,10 @@ public final class SessionChangeReceiver: Sendable {
         case sessionChanged(SessionSummary)
         /// The session ended and left the list.
         case sessionEnded(UUID)
+        /// The whole list of projects, as `SessionClient.projects()` gives it.
+        case projects([ProjectSummary])
+        /// Every setting, as `SessionClient.settings()` gives them.
+        case settings([SettingSummary])
         case closed
         case failed(SessionConnectionError)
     }
@@ -65,6 +70,8 @@ public final class SessionChangeReceiver: Sendable {
                 switch message {
                 case .sessionChanged(let summary): handler(.sessionChanged(summary))
                 case .sessionEnded(let identifier): handler(.sessionEnded(identifier))
+                case .projectList(let projects): handler(.projects(projects))
+                case .settingList(let settings): handler(.settings(settings))
                 case .failure(let failure): return handler(.failed(.requestFailed(failure)))
                 case nil: return handler(.closed)
                 default: continue
