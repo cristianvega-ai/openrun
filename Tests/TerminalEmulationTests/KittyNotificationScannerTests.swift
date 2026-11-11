@@ -40,6 +40,31 @@ import Testing
         #expect(Self.notifications(in: [output]) == [nil])
     }
 
+    /// The metadata comes from the program, so no form of it may stop the
+    /// session process.
+    @Test(arguments: ["=", "==", "=x", "x=", ":", "::", "", "=:=", "p=:=body", "e=1:=", "d=0:="])
+    func anyMetadataIsSafe(_ metadata: String) {
+        #expect(Self.notifications(in: ["\u{1B}]99;\(metadata);x\u{1B}\\"]).count == 1)
+    }
+
+    @Test func aKeyWithAnEmptyValueIsNoTitleOrBody() {
+        #expect(Self.notifications(in: ["\u{1B}]99;p=;x\u{1B}\\", "\u{1B}]99;x=;y\u{1B}\\"]) == [nil, "y"])
+    }
+
+    /// A command cut short at each byte, or split in two pieces there, is
+    /// safe, and a split gives the same result as one piece.
+    @Test func aCommandCutAtEachByteIsSafe() {
+        let whole = Array("\u{1B}]99;i=1:e=1:d=1:p=body;RG9uZSDinJM=\u{1B}\\".utf8)
+        for cut in 0...whole.count {
+            var scanner = KittyNotificationScanner()
+            _ = scanner.notification(in: whole[..<cut])
+            _ = scanner.notification(in: Array("\u{1B}\\".utf8)[...])
+            var split = KittyNotificationScanner()
+            let pieces = [split.notification(in: whole[..<cut]), split.notification(in: whole[cut...])]
+            #expect(pieces.compactMap { $0 } == ["Done ✓"], "cut at \(cut)")
+        }
+    }
+
     @Test func keepsAtMostTheLimitOfACommand() {
         let long = String(repeating: "x", count: 100_000)
         let found = Self.notifications(in: ["\u{1B}]99;;" + long + "\u{1B}\\"])

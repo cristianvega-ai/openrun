@@ -30,6 +30,19 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// A program chose the metadata of OSC 99, and a pair that is only
+        /// "=" once stopped the whole session process.
+        @Test func brokenMetadataOfKittyKeepsTheProcessRunning() async throws {
+            try await RunningSessionProcess.run { process in
+                let watcher = try SessionChangeWatcher(process)
+                let script = #"printf '\033]99;=;x\033\\\033]99;==:=x:x=:;y\007\033]2;after the metadata\007'; exec sleep 60"#
+                let identifier = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(watcher.summary(of: identifier) { $0.title == "after the metadata" } != nil)
+                #expect(process.isRunning)
+                #expect(try process.listedIdentifiers() == [identifier])
+            }
+        }
+
         /// The progress report of ConEmu shares OSC 9 and is no notification.
         @Test func aProgressReportRaisesNoAlert() async throws {
             try await RunningSessionProcess.run { process in

@@ -77,8 +77,10 @@ public struct KittyNotificationScanner: Sendable {
         let separator = content.firstIndex(of: UInt8(ascii: ";")) ?? content.endIndex
         var metadata: [String: String] = [:]
         for pair in content[..<separator].split(separator: UInt8(ascii: ":")) {
-            let parts = pair.split(separator: UInt8(ascii: "="), maxSplits: 1)
-            metadata[String(decoding: parts[0], as: UTF8.self)] = parts.count > 1 ? String(decoding: parts[1], as: UTF8.self) : ""
+            // The program chose the pair, so it can be "=" or "==" alone. The
+            // key and the value are slices that are valid for any bytes.
+            let equals = pair.firstIndex(of: UInt8(ascii: "=")) ?? pair.endIndex
+            metadata[String(decoding: pair[..<equals], as: UTF8.self)] = String(decoding: pair[equals...].dropFirst(), as: UTF8.self)
         }
         guard ["title", "body"].contains(metadata["p"] ?? "title") else { return nil }
         var payload = Array(content[separator...].dropFirst())
