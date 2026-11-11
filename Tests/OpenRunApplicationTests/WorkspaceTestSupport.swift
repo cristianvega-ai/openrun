@@ -26,11 +26,13 @@ struct TestWorkspace {
     let notifier = RecordingNotifier()
     private let defaultsName = "OpenRunTests-\(UUID().uuidString)"
 
-    init() throws {
+    /// - Parameter process: A session process of the test, such as one
+    ///   whose threads run the fake agent. `nil` starts a plain one.
+    init(process: RunningSessionProcess? = nil) throws {
         _ = NSApplication.shared
-        process = try RunningSessionProcess()
+        self.process = try process ?? RunningSessionProcess()
         defaults = try #require(UserDefaults(suiteName: defaultsName))
-        workspace = Self.makeHost(socket: try SocketLocation(path: process.socketPath), defaults: defaults, notifier: notifier)
+        workspace = Self.makeHost(socket: try SocketLocation(path: self.process.socketPath), defaults: defaults, notifier: notifier)
     }
 
     /// A host that keeps no frame, takes no focus and changes no Dock icon.
