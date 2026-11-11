@@ -19,6 +19,17 @@ import Testing
         #expect(terminal.selectedText() == "0123456789abcde")
     }
 
+    @Test func selectAllTakesTheScrollbackAndTheScreen() throws {
+        let terminal = try makeTerminal(columns: 10, rows: 3)
+        terminal.write((1...8).map { "line \($0)" }.joined(separator: "\r\n"))
+        #expect(terminal.scrollbackLineCount == 5)
+        try terminal.selectAll()
+        #expect(terminal.selectedText() == (1...8).map { "line \($0)" }.joined(separator: "\n"))
+        terminal.write("\u{1B}[?1049h\u{1B}[Halternate")
+        try terminal.selectAll()
+        #expect(terminal.selectedText() == "alternate")
+    }
+
     @Test func readsTheLinkUnderACell() throws {
         let terminal = try makeTerminal(columns: 20, rows: 2)
         terminal.write("\u{1B}]8;;https://example.com\u{07}link\u{1B}]8;;\u{07} plain")

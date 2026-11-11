@@ -101,6 +101,7 @@ import TerminalView
         #expect(!application.validateMenuItem(registerAgain))
         #expect(edit.item(withTitle: "Copy")?.action == Selector(("copy:")))
         #expect(edit.item(withTitle: "Paste")?.action == Selector(("paste:")))
+        #expect(edit.item(withTitle: "Select All")?.action == Selector(("selectAll:")) && edit.item(withTitle: "Select All")?.keyEquivalent == "a")
         for (title, action, key) in [
             ("Make Text Bigger", "increaseFontSize:", "="),
             ("Make Text Smaller", "decreaseFontSize:", "-"),

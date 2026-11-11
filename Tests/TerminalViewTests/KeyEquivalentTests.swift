@@ -24,6 +24,7 @@ import Testing
         #expect(route(kVK_ANSI_0, .command) == .menuFirst(fallback: #selector(TerminalView.resetFontSize(_:))))
         #expect(route(kVK_ANSI_C, .command) == .menuFirst(fallback: #selector(TerminalView.copy(_:))))
         #expect(route(kVK_ANSI_V, .command) == .menuFirst(fallback: #selector(TerminalView.paste(_:))))
+        #expect(route(kVK_ANSI_A, .command) == .menuFirst(fallback: #selector(TerminalView.selectAll(_:))))
         #expect(route(kVK_ANSI_Equal, [.command, .option]) == .menuFirst(fallback: nil))
     }
 

@@ -36,6 +36,7 @@ enum MainMenu {
         let edit = submenu("Edit", in: menu)
         edit.addItem(item("Copy", Selector(("copy:")), "c"))
         edit.addItem(item("Paste", Selector(("paste:")), "v"))
+        edit.addItem(item("Select All", Selector(("selectAll:")), "a"))
         let view = submenu("View", in: menu)
         view.addItem(item("Make Text Bigger", Selector(("increaseFontSize:")), "="))
         view.addItem(item("Make Text Smaller", Selector(("decreaseFontSize:")), "-"))

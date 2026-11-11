@@ -23,6 +23,26 @@ extension Terminal {
         try select(&selection)
     }
 
+    /// Selects the scrollback and the screen, as Select All does. The alternate
+    /// screen has no scrollback, so there it selects the screen only.
+    public func selectAll() throws {
+        let size = size
+        let lastRow = UInt32(isAlternateScreenActive ? 0 : scrollbackLineCount) + UInt32(size.rows) - 1
+        var selection = GhosttySelection()
+        selection.size = MemoryLayout<GhosttySelection>.size
+        for (coordinate, end) in [(GhosttyPointCoordinate(x: 0, y: 0), \GhosttySelection.start),
+                                  (GhosttyPointCoordinate(x: size.columns - 1, y: lastRow), \GhosttySelection.end)] {
+            var point = GhosttyPoint()
+            point.tag = GHOSTTY_POINT_TAG_SCREEN
+            point.value.coordinate = coordinate
+            var reference = GhosttyGridRef()
+            reference.size = MemoryLayout<GhosttyGridRef>.size
+            try TerminalEmulationError.check(ghostty_terminal_grid_ref(handle, point, &reference), from: "ghostty_terminal_grid_ref")
+            selection[keyPath: end] = reference
+        }
+        try select(&selection)
+    }
+
     /// The hyperlink (OSC 8) of a cell, or `nil`.
     public func hyperlink(at cell: ViewportCell) -> String? {
         guard var reference = try? gridReference(at: cell) else { return nil }

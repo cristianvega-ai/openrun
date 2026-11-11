@@ -21,6 +21,17 @@ import Testing
         #expect(board.plainTextReads == 0)
     }
 
+    @Test func selectAllSelectsTheScrollbackAndTheScreenForCopy() throws {
+        let view = try TerminalView(initialGrid: TerminalSize(columns: 10, rows: 2))
+        let board = FakePasteboard()
+        view.pasteboard = board
+        view.terminal.write("first\r\nsecond\r\nthird")
+        #expect(view.validateMenuItem(NSMenuItem(title: "Select All", action: #selector(TerminalView.selectAll(_:)), keyEquivalent: "a")))
+        view.selectAll(nil)
+        view.copy(nil)
+        #expect(board.text == "first\nsecond\nthird")
+    }
+
     @Test func theSystemPasteboardReportsTextFromItsTypes() {
         let pasteboard = NSPasteboard.withUniqueName()
         defer { pasteboard.releaseGlobally() }

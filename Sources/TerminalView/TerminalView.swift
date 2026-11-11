@@ -397,6 +397,16 @@ public final class TerminalView: NSView {
         pasteboard.write(plainText: text)
     }
 
+    /// Command-A: selects the scrollback and the screen.
+    @objc public override func selectAll(_ sender: Any?) {
+        do {
+            try terminal.selectAll()
+        } catch {
+            logger.error("Select All failed: \(String(describing: error), privacy: .private)")
+        }
+        requestFrame()
+    }
+
     /// Command-V: sends the plain text of the pasteboard to the program. Text that could run
     /// commands waits for a yes from the delegate. A view with no delegate cannot ask, so it sends nothing.
     @objc public func paste(_ sender: Any?) {
