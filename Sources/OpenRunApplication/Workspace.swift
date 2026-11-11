@@ -1,3 +1,4 @@
+import AlertNotifications
 import AppKit
 import DataStorage
 import ListContent
@@ -23,6 +24,7 @@ final class Workspace: NSObject {
     let requests: SessionRequests
     let layoutStore: WindowLayoutStore
     let panes: SessionPanes
+    let notifier: any AlertNotifier
     /// The rows, the selection, the filter and the order, as `layout.json` keeps them.
     var layout: WindowLayout
     var savedLayout: WindowLayout
@@ -35,6 +37,14 @@ final class Workspace: NSObject {
     /// sessions whose program ended before the feed said so.
     var lostSessions: Set<UUID> = []
     var exitedSessions: Set<UUID> = []
+    /// The time of the alert of each session that the host asked to end.
+    var clearedAlerts: [UUID: Date] = [:]
+    /// The number on the Dock icon: the rows that need the user.
+    var badgeCount = 0
+    /// Puts the number on the Dock icon. Tests set it.
+    var setBadge: (Int) -> Void = { NSApp.dockTile.badgeLabel = $0 > 0 ? String($0) : nil }
+    /// Brings the app to the front. Tests set it, so a test takes no focus.
+    var activateApplication: () -> Void = { NSApp.activate() }
     /// Whether the window is key and the keyboard focus is in the third pane.
     var isContentActive = false
     /// A session that the user asked for. Its row takes the selection
@@ -63,8 +73,11 @@ final class Workspace: NSObject {
     /// - Parameters:
     ///   - defaults: Where the window keeps the widths of its panes.
     ///   - frameName: The name under which AppKit keeps the frame of the window, or `nil` to keep none.
-    init(socket: SocketLocation, defaults: UserDefaults = .standard, frameName: String? = "OpenRun Main Window") {
-        self.socket = socket
+    init(
+        socket: SocketLocation, defaults: UserDefaults = .standard, frameName: String? = "OpenRun Main Window",
+        notifier: any AlertNotifier = SystemAlertNotifier()
+    ) {
+        (self.socket, self.notifier) = (socket, notifier)
         window = MainWindowController(defaults: defaults, frameName: frameName)
         connection = SessionOverviewConnection(socket: socket)
         requests = SessionRequests(socket: socket)
@@ -84,6 +97,7 @@ final class Workspace: NSObject {
         window.delegate = self
         connection.overviewChanged = { [weak self] in self?.overviewChanged(from: $0) }
         connection.statusChanged = { [weak self] in self?.statusChanged() }
+        notifier.opened = { [weak self] in self?.openNotification($0) }
     }
 
     /// Shows the window and starts to follow the session process. The

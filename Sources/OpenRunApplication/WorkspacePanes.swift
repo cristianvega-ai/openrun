@@ -51,12 +51,19 @@ extension Workspace: SessionPaneDelegate, MainWindowDelegate {
 
     func mainWindowContentDidBecomeActive(_ window: MainWindowController) {
         isContentActive = true
-        if let shownSession { panes.existing(shownSession)?.activate() }
+        if let shownSession {
+            panes.existing(shownSession)?.activate()
+            clearAlert(of: shownSession)
+        }
+        // The session in view shows no mark. The window also reports
+        // this while a refresh changes the content, and that refresh goes on.
+        if !isRefreshing { refresh() }
     }
 
     func mainWindowContentDidResignActive(_ window: MainWindowController) {
         isContentActive = false
         if let shownSession { panes.existing(shownSession)?.deactivate() }
+        if !isRefreshing { refresh() }
     }
 
     /// The sessions go on. The panes detach, so no pane reads output for

@@ -9,7 +9,7 @@ import WindowLayout
 /// plain text.
 public enum SessionRowFacts {
     /// What a row with no text in its alert says, such as after the bell.
-    static let alertWithoutText = "Needs your attention"
+    public static let alertWithoutText = "Needs your attention"
 
     /// The row, or nil when none of its sessions runs.
     ///
@@ -33,7 +33,7 @@ public enum SessionRowFacts {
 
     /// The name that the user gave, or the title that the program set, or
     /// the program with the last name of its folder, such as `zsh — openrun`.
-    static func title(of session: SessionSummary, home: String) -> String {
+    public static func title(of session: SessionSummary, home: String) -> String {
         if let name = session.name, !name.isEmpty { return name }
         if let title = session.title, !title.isEmpty { return title }
         let program = session.foregroundProgram ?? session.command.first.map { ($0 as NSString).lastPathComponent } ?? ""

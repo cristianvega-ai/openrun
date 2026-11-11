@@ -52,6 +52,7 @@ extension Workspace {
         panes.close(session)
         lostSessions.remove(session)
         exitedSessions.remove(session)
+        clearedAlerts[session] = nil
         if shownSession == session { shownIsStale = true }
     }
 

@@ -13,6 +13,7 @@ extension Workspace {
         // Before the first list, no session is known, and the kept rows stay.
         if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
         if overview.settings != previous.settings { settingsChanged() }
+        alertsChanged(from: previous)
         for session in previous.sessions where overview.session(session.identifier) == nil { sessionEnded(session.identifier) }
         if let wanted = sessionToSelect, let row = layout.row(showing: wanted) {
             layout.selectedRow = row.identifier
@@ -41,6 +42,7 @@ extension Workspace {
         window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry), terminalCommands: commands))
         window.sessionsList.select(layout.selectedRow)
         showSelectedRow()
+        updateBadge(content.projects.needsYouCount)
         if layout != savedLayout {
             savedLayout = layout
             layoutStore.save(layout)

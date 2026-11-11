@@ -45,8 +45,11 @@ extension Workspace: SessionsListDelegate {
         refresh()
     }
 
+    /// Selects a row for the user. An alert ends when the user selects
+    /// its session (decision of 2026-11-10).
     func select(row identifier: UUID) {
         layout.selectedRow = identifier
+        for session in layout.row(identifier)?.pane.sessions ?? [] { clearAlert(of: session) }
         refresh()
     }
 
