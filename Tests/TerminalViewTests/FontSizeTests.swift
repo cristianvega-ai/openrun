@@ -23,6 +23,17 @@ import TerminalEmulation
         #expect(!again)
     }
 
+    @Test func aNewStandardSizeStaysInsideTheLimitsAndResetGoesBackToIt() {
+        var control = FontSizeControl()
+        let first = control.setStandard(15)
+        #expect(first && control.pointSize == 15)
+        _ = control.larger()
+        let reset = control.reset()
+        #expect(reset && control.pointSize == 15)
+        let large = control.setStandard(200), again = control.setStandard(72)
+        #expect(large && !again && control.standardSize == 72 && control.pointSize == 72)
+    }
+
     @Test func theSizeStopsAtTheLimits() {
         var control = FontSizeControl()
         for _ in 0..<100 { _ = control.larger() }
@@ -94,5 +105,31 @@ import TerminalEmulation
         #expect(!view.performKeyEquivalent(with: try key("=", [])))
         #expect(view.performKeyEquivalent(with: try key("c", .command)))
         #expect(view.renderer.fonts.pointSize == 13)
+    }
+
+    @Test func aNamedFontAndAStandardSizeTakeEffectAtOnceAndKeepTheScreen() throws {
+        let (view, delegate) = try makeView()
+        view.terminal.write("hello")
+        try view.terminal.selectWord(at: ViewportCell(column: 1, row: 0))
+        view.fontName = "Menlo"
+        #expect(view.renderer.fonts.fontName == "Menlo" && view.renderer.fonts.pointSize == 13)
+        #expect(view.terminal.selectedText() == "hello" && delegate.sizes.last == view.gridSize)
+        let menloGrid = view.gridSize
+        view.standardFontSize = 20
+        #expect(view.renderer.fonts.pointSize == 20 && view.gridSize.columns < menloGrid.columns)
+        view.increaseFontSize(nil)
+        view.resetFontSize(nil)
+        #expect(view.renderer.fonts.pointSize == 20 && view.renderer.fonts.fontName == "Menlo")
+        view.fontName = nil
+        #expect(view.renderer.fonts.fontName == nil && view.terminal.selectedText() == "hello")
+    }
+
+    @Test func theEstimatesFollowTheFontAndTheSize() {
+        let size = CGSize(width: 800, height: 400)
+        let standard = TerminalView.estimatedGrid(for: size, scale: 2)
+        #expect(TerminalView.estimatedGrid(for: size, scale: 2, pointSize: 26).columns < standard.columns)
+        let grid = TerminalSize(columns: 80, rows: 24)
+        #expect(TerminalView.estimatedSize(holding: grid, scale: 2, fontName: "Menlo", pointSize: 20).width
+            > TerminalView.estimatedSize(holding: grid, scale: 2).width)
     }
 }

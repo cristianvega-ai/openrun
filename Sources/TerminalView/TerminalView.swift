@@ -194,19 +194,23 @@ public final class TerminalView: NSView {
     /// The size of the grid, which fits the size of the view.
     public var gridSize: TerminalSize { terminal.size }
 
-    /// The grid that a view of `size` has at the standard text size. A window
-    /// attaches with it before its view exists, because the view comes from
-    /// the snapshot that the attach brings.
-    public static func estimatedGrid(for size: CGSize, scale: CGFloat) -> TerminalSize {
-        let fonts = FontSet(pointSize: FontSizeControl.standard, scale: scale)
+    /// The grid that a view of `size` has at a text size, 13 points of SF Mono
+    /// unless the caller names others. A window attaches with it before its
+    /// view exists, because the view comes from the snapshot that the attach brings.
+    public static func estimatedGrid(
+        for size: CGSize, scale: CGFloat, fontName: String? = nil, pointSize: CGFloat = 13
+    ) -> TerminalSize {
+        let fonts = FontSet(pointSize: pointSize, scale: scale, fontName: fontName)
         // The renderer puts 8 points of padding around the grid.
         return GridFit.grid(for: size, scale: scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: Int((8 * scale).rounded()))
     }
 
-    /// The size of a view that holds exactly `grid` at the standard text
-    /// size, for a window before its view exists.
-    public static func estimatedSize(holding grid: TerminalSize, scale: CGFloat) -> CGSize {
-        let fonts = FontSet(pointSize: FontSizeControl.standard, scale: scale)
+    /// The size of a view that holds exactly `grid` at a text size, for a
+    /// window before its view exists.
+    public static func estimatedSize(
+        holding grid: TerminalSize, scale: CGFloat, fontName: String? = nil, pointSize: CGFloat = 13
+    ) -> CGSize {
+        let fonts = FontSet(pointSize: pointSize, scale: scale, fontName: fontName)
         return GridFit.size(holding: grid, scale: scale, cell: (fonts.cellWidth, fonts.cellHeight), padding: Int((8 * scale).rounded()))
     }
 
@@ -399,6 +403,20 @@ public final class TerminalView: NSView {
             guard approved, self.pasteGeneration == generation, self.delegate === delegate else { return }
             sendTyped(PasteInput.bytes(for: text, terminal: terminal))
         }
+    }
+
+    /// The font of the view: the PostScript name or the family name of an installed
+    /// monospaced font. `nil`, or a name that matches no such font, gives SF Mono.
+    /// A change takes effect at once and keeps the screen, the selection and marked text.
+    public var fontName: String? {
+        didSet { if fontName != oldValue { rebuildRenderer(scale: renderer.fonts.scale) } }
+    }
+
+    /// The text size that Command-0 goes back to, from 6 to 72 points. A new
+    /// value also becomes the text size of the view at once.
+    public var standardFontSize: CGFloat {
+        get { fontSize.standardSize }
+        set { changeFontSize { $0.setStandard(newValue) } }
     }
 
     // The menu of a later unit sends these actions through the responder chain.
@@ -599,7 +617,7 @@ public final class TerminalView: NSView {
     /// New cells need a new renderer with its atlas, and a new grid.
     func rebuildRenderer(scale: CGFloat) {
         do {
-            let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale)
+            let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale, fontName: fontName)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
             (new.isFocused, new.markedText, new.isCursorShown, new.isFlashing) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown, renderer.isFlashing)
             new.markedTextSelection = renderer.markedTextSelection
