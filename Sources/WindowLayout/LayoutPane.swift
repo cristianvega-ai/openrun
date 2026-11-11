@@ -20,6 +20,16 @@ public indirect enum LayoutPane: Equatable, Sendable {
         }
     }
 
+    /// The thread that the pane shows first, when its first leaf is a
+    /// thread. The row then looks like that thread.
+    public var leadingThread: UUID? {
+        switch self {
+        case .session: nil
+        case .thread(let identifier): identifier
+        case .split(let split): split.first.leadingThread
+        }
+    }
+
     /// The threads of the pane in reading order.
     public var threads: [UUID] {
         switch self {

@@ -2,6 +2,7 @@ import Foundation
 import ProjectsList
 import SessionOverview
 import SessionProtocol
+import SessionsList
 import Testing
 import WindowLayout
 @testable import ListContent
@@ -51,6 +52,27 @@ import WindowLayout
         let projects = ListContent(overview: overview, layout: layout, inView: sessions[0].identifier, home: "/Users/ana").projects
         #expect(first.projects.needsYouCount == 2)
         #expect(projects.needsYouCount == 1 && projects.projects[0].attentionCount == 0)
+    }
+
+    @Test func aThreadShowsAsARowOfItsAgentWithItsStateAndItsProject() {
+        var thread = ThreadSummary(identifier: UUID(), agent: "claude-code", folder: "/Users/ana/Projects/app", model: "claude-opus-5-5", permissionMode: "default",
+                                   title: "Repair the resize", createdAt: Date(timeIntervalSince1970: 10), lastActivityAt: Date(timeIntervalSince1970: 90))
+        (thread.state, thread.projectIdentifier) = ("needsUser", app.identifier)
+        let layout = WindowLayout(rows: [LayoutRow(thread: thread.identifier)])
+        func content(inView: UUID? = nil) -> ListContent {
+            ListContent(overview: SessionOverview(projects: [app], threads: [thread]), layout: layout, inView: inView, home: "/Users/ana")
+        }
+        let row = content().rows(of: .project(app.identifier)).first
+        #expect(row == SessionRowDisplay(
+            identifier: thread.identifier, title: "Repair the resize", folder: "~/Projects/app", kind: .agentThread(agent: "Claude Code", model: "Opus", account: nil),
+            alert: "Waits for your answer", lastActivity: thread.lastActivityAt, startTime: thread.createdAt))
+        #expect(content().projects.needsYouCount == 1 && content(inView: thread.identifier).projects.needsYouCount == 0)
+        thread.name = "Resize"
+        thread.state = "inProgress"
+        #expect(ThreadRowFacts.title(of: thread) == "Resize" && ThreadRowFacts.shortModelName("gpt-6") == "gpt-6")
+        #expect(ThreadRowFacts.display(of: layout.rows[0], thread: thread, inView: false, home: "/").isInProgress)
+        // A thread that the overview does not hold gives no row.
+        #expect(ListContent(overview: SessionOverview(), layout: layout, inView: nil).rows(of: .allSessions).isEmpty)
     }
 
     @Test func theTitleOfAnEntryIsItsName() {

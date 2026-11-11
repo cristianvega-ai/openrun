@@ -26,7 +26,13 @@ public struct ListContent {
         let sessions = Dictionary(overview.sessions.map { ($0.identifier, $0) }, uniquingKeysWith: { first, _ in first })
         // A session can name a project that a newer list no longer holds.
         let known = Set(overview.projects.filter { $0.folder != nil }.map(\.identifier))
+        let threads = Dictionary(overview.threads.map { ($0.identifier, $0) }, uniquingKeysWith: { first, _ in first })
         rows = layout.rows.compactMap { row in
+            if let identifier = row.pane.leadingThread {
+                guard let thread = threads[identifier] else { return nil }
+                let display = ThreadRowFacts.display(of: row, thread: thread, inView: identifier == inView, home: home)
+                return (display, thread.projectIdentifier.flatMap { known.contains($0) ? $0 : nil })
+            }
             guard let display = SessionRowFacts.display(of: row, sessions: { sessions[$0] }, inView: inView, home: home) else { return nil }
             let project = row.pane.sessions.lazy.compactMap { sessions[$0] }.first?.projectIdentifier
             return (display, project.flatMap { known.contains($0) ? $0 : nil })
