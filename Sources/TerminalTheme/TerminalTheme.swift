@@ -9,13 +9,16 @@ public struct TerminalTheme: Equatable, Sendable {
     public var selection: TerminalColor
     /// Colors 0 to 15 of the palette. Colors 16 to 255 stay standard.
     public var firstSixteenColors: [TerminalColor]
+    /// The colors of the panes and lists around the terminal.
+    public var window: WindowColors
 
-    init(background: UInt32, foreground: UInt32, cursor: UInt32, selection: UInt32, firstSixteenColors: [UInt32]) {
+    init(background: UInt32, foreground: UInt32, cursor: UInt32, selection: UInt32, firstSixteenColors: [UInt32], window: WindowColors) {
         self.background = TerminalColor(hexadecimal: background)
         self.foreground = TerminalColor(hexadecimal: foreground)
         self.cursor = TerminalColor(hexadecimal: cursor)
         self.selection = TerminalColor(hexadecimal: selection)
         self.firstSixteenColors = firstSixteenColors.map(TerminalColor.init(hexadecimal:))
+        self.window = window
     }
 
     /// The version of the Graphite theme that fits a macOS appearance.
