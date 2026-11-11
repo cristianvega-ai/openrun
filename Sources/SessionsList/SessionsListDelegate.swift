@@ -11,6 +11,10 @@ public protocol SessionsListDelegate: AnyObject {
     func sessionsList(_ list: SessionsListController, didOpen identifier: UUID)
     /// The user wants a new thread or a new terminal.
     func sessionsList(_ list: SessionsListController, didRequest request: NewSessionRequest)
+    /// The user gave a row a new name in place. The name is not empty.
+    func sessionsList(_ list: SessionsListController, didRename identifier: UUID, to name: String)
+    /// The user closed a row from its context menu.
+    func sessionsList(_ list: SessionsListController, didClose identifier: UUID)
     /// The user chose a filter or an order. The host keeps them for the next start.
     func sessionsList(_ list: SessionsListController, didChange filter: SessionsFilter, order: SessionsOrder)
 }

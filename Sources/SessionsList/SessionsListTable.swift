@@ -10,6 +10,7 @@ extension SessionsListController: NSTableViewDataSource, NSTableViewDelegate {
             guard let self, let selection else { return }
             delegate?.sessionsList(self, didOpen: selection)
         }
+        table.menu = contextMenu()
         scroll.documentView = table
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true
