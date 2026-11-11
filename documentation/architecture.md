@@ -707,6 +707,7 @@ A folder that a caller named gets mode 0700 only when `create` makes it. Otherwi
 | `project-folders.json` | The folder of each project on this Mac, by identifier | This Mac |
 | `settings.json` | The settings that differ from their defaults, each a key beside `format`, and the settings of a later build | Can sync |
 | `layout.json` | The rows of the sessions list and their splits, which the app keeps | This Mac |
+| `threads.json` | The agent threads: the agent, the conversation, the account, the folder, the model, the permission mode, the name and the title of each one. The conversation itself stays in the history of the agent | This Mac |
 
 Data that can sync and data of this Mac never share a file, so a later sync takes whole files.
 Each file is one JSON object with its keys sorted and one key on each line.

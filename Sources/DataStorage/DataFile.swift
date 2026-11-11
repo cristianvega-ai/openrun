@@ -22,7 +22,10 @@ public struct DataFile: Hashable, Sendable, CustomStringConvertible {
     /// The rows of the sessions list and their splits, which the app keeps.
     public static let layout = DataFile(name: "layout.json", scope: .thisMac)
 
-    public static let all: [DataFile] = [.projects, .projectFolders, .settings, .layout]
+    /// The agent threads: their agents, conversations, accounts and folders.
+    public static let threads = DataFile(name: "threads.json", scope: .thisMac)
+
+    public static let all: [DataFile] = [.projects, .projectFolders, .settings, .layout, .threads]
 
     public var description: String { name }
 }
