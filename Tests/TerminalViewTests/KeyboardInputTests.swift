@@ -96,6 +96,19 @@ import Testing
         #expect(delegate.takeSent() == "\u{1B}[98;3u©")
     }
 
+    @Test func theOwnerChoosesWhichOptionKeysAreAlt() throws {
+        let (view, delegate) = try makeView()
+        let left = ModifierReader.DeviceBit.leftOption, right = ModifierReader.DeviceBit.rightOption
+        view.optionKeyRule = .both
+        view.keyDown(with: keyEvent(kVK_ANSI_B, .option, deviceBits: right))
+        view.keyDown(with: keyEvent(kVK_ANSI_B, .option, deviceBits: left))
+        #expect(delegate.takeSent() == "\u{1B}b\u{1B}b")
+        view.optionKeyRule = .neither
+        view.keyDown(with: keyEvent(kVK_ANSI_G, .option, deviceBits: left))
+        view.keyDown(with: keyEvent(kVK_ANSI_G, .option, deviceBits: right))
+        #expect(delegate.takeSent() == "©©")
+    }
+
     @Test func aKeyThatSendsBytesMovesTheViewportToTheBottom() throws {
         let (view, delegate) = try makeView()
         view.terminal.write(String(repeating: "line\r\n", count: 100))

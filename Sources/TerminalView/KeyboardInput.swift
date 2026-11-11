@@ -9,6 +9,8 @@ final class KeyboardInput {
     /// The marked text and the texts of the key now handled.
     var textInput = TextInputState()
     var layout = KeyboardLayoutWatch()
+    /// Which Option keys are Alt. The owner of the view can change it at any time.
+    var optionKeyRule = OptionKeyRule.left
     private let terminal: Terminal
     private let encoder: KeyEncoder
     private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "KeyboardInput")
@@ -41,15 +43,15 @@ final class KeyboardInput {
             let keyFollows = !textInput.hasMarkedText && !key.texts.isEmpty && !key.commands.isEmpty
             return key.texts.flatMap { Array($0.utf8) } + (keyFollows ? encode(event, action: action, text: nil) : [])
         }
-        if key.texts.isEmpty { return encode(event, action: action, text: KeyboardEventReader.layoutText(of: event)) }
+        if key.texts.isEmpty { return encode(event, action: action, text: KeyboardEventReader.layoutText(of: event, optionKeyRule: optionKeyRule)) }
         return key.texts.flatMap { encode(event, action: action, text: $0) }
     }
 
-    /// The text input system sees the key without the left Option key, so
-    /// that Alt does not make a dead key. A copy is made only when the flags
+    /// The text input system sees the key without an Option key that is Alt,
+    /// so that Alt does not make a dead key. A copy is made only when the flags
     /// differ, because some input methods need the original event.
     private func translationEvent(for event: NSEvent) -> NSEvent {
-        let flags = ModifierReader.translationFlags(event.modifierFlags)
+        let flags = ModifierReader.translationFlags(event.modifierFlags, rule: optionKeyRule)
         guard flags != event.modifierFlags else { return event }
         return NSEvent.keyEvent(
             with: event.type, location: event.locationInWindow, modifierFlags: flags, timestamp: event.timestamp,
@@ -77,12 +79,12 @@ final class KeyboardInput {
     }
 
     private func encode(_ event: NSEvent, action: KeyEvent.Action, text: String?) -> [UInt8] {
-        encode(KeyboardEventReader.keyEvent(from: event, action: action, text: text))
+        encode(KeyboardEventReader.keyEvent(from: event, action: action, text: text, optionKeyRule: optionKeyRule))
     }
 
     private func encode(_ key: KeyEvent) -> [UInt8] {
-        // The program can change its modes at any time, and the left Option key is Alt.
-        encoder.update(from: terminal, optionAsAlternate: .leftOnly)
+        // The program can change its modes at any time, and so can the rule of the Option keys.
+        encoder.update(from: terminal, optionAsAlternate: optionKeyRule.encoderRule)
         do {
             return try encoder.encode(key)
         } catch {

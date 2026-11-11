@@ -6,11 +6,14 @@ enum KeyboardEventReader {
     /// - Parameters:
     ///   - text: The text that the key made, from the text input system or from the layout.
     ///   - isComposing: Whether an input method holds marked text.
-    static func keyEvent(from event: NSEvent, action: KeyEvent.Action, text: String?, isComposing: Bool = false) -> KeyEvent {
+    ///   - optionKeyRule: Which Option keys are Alt and make no text.
+    static func keyEvent(
+        from event: NSEvent, action: KeyEvent.Action, text: String?, isComposing: Bool = false, optionKeyRule: OptionKeyRule = .left
+    ) -> KeyEvent {
         let flags = event.modifierFlags
-        // Control and Command never make text on a Mac. Shift and the right
-        // Option key do, so the encoder must not count them a second time.
-        let consumed = ModifierReader.translationFlags(flags).subtracting([.control, .command, .capsLock])
+        // Control and Command never make text on a Mac. Shift and an Option
+        // key that is not Alt do, so the encoder must not count them a second time.
+        let consumed = ModifierReader.translationFlags(flags, rule: optionKeyRule).subtracting([.control, .command, .capsLock])
         // Only key events have characters. AppKit raises an exception for the others.
         let isKey = event.type == .keyDown || event.type == .keyUp
         return KeyEvent(
@@ -20,11 +23,11 @@ enum KeyboardEventReader {
             isComposing: isComposing)
     }
 
-    /// The text of the key in the current layout. It leaves out the left Option
-    /// key, which is Alt, and Control, because the encoder makes the control
+    /// The text of the key in the current layout. It leaves out an Option key
+    /// that is Alt, and Control, because the encoder makes the control
     /// characters from the key.
-    static func layoutText(of event: NSEvent) -> String? {
-        event.characters(byApplyingModifiers: ModifierReader.translationFlags(event.modifierFlags).subtracting(.control))
+    static func layoutText(of event: NSEvent, optionKeyRule: OptionKeyRule = .left) -> String? {
+        event.characters(byApplyingModifiers: ModifierReader.translationFlags(event.modifierFlags, rule: optionKeyRule).subtracting(.control))
     }
 
     /// libghostty-vt wants no control characters as text. It wants no function

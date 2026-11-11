@@ -405,6 +405,12 @@ public final class TerminalView: NSView {
         }
     }
 
+    /// Which Option keys act as Alt. A change applies to the next key.
+    public var optionKeyRule: OptionKeyRule {
+        get { keyboard.optionKeyRule }
+        set { keyboard.optionKeyRule = newValue }
+    }
+
     /// The font of the view: the PostScript name or the family name of an installed
     /// monospaced font. `nil`, or a name that matches no such font, gives SF Mono.
     /// A change takes effect at once and keeps the screen, the selection and marked text.

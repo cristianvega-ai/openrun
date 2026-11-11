@@ -35,17 +35,26 @@ enum ModifierReader {
         return modifiers
     }
 
-    /// Whether Option acts as Alt. When both Option keys are down, the right
-    /// key wins, and the key types a character.
+    /// Whether the left Option key is down and the right one is not. When both
+    /// Option keys are down, the right key wins.
     static func isLeftOption(_ flags: NSEvent.ModifierFlags) -> Bool {
         flags.contains(.option) && flags.rawValue & DeviceBit.rightOption == 0
     }
 
+    /// Whether the Option key that is down acts as Alt under `rule`.
+    static func isAlternate(_ flags: NSEvent.ModifierFlags, rule: OptionKeyRule) -> Bool {
+        switch rule {
+        case .left: isLeftOption(flags)
+        case .both: flags.contains(.option)
+        case .neither: false
+        }
+    }
+
     /// The flags that the keyboard layout and the input methods see. They do
-    /// not see the left Option key, because Alt must not change the text.
-    static func translationFlags(_ flags: NSEvent.ModifierFlags) -> NSEvent.ModifierFlags {
-        guard isLeftOption(flags) else { return flags }
-        return flags.subtracting([.option, NSEvent.ModifierFlags(rawValue: DeviceBit.leftOption)])
+    /// not see an Option key that is Alt, because Alt must not change the text.
+    static func translationFlags(_ flags: NSEvent.ModifierFlags, rule: OptionKeyRule = .left) -> NSEvent.ModifierFlags {
+        guard isAlternate(flags, rule: rule) else { return flags }
+        return flags.subtracting([.option, NSEvent.ModifierFlags(rawValue: DeviceBit.leftOption | DeviceBit.rightOption)])
     }
 
     /// Whether the modifier key with this key code is down, or `nil` for a key that is no modifier.
