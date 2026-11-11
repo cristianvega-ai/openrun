@@ -1,12 +1,6 @@
 import TerminalEmulation
 import TerminalRendering
 
-/// A web address in the plain text of the screen, and the cells that it covers.
-struct PlainLink: Equatable {
-    let address: String
-    let runs: [ViewportCellRun]
-}
-
 /// Finds a plain `http` or `https` address under a cell (decision of
 /// 2026-11-10). It reads only the row of the cell and the rows that a soft wrap
 /// joins to it, and only when the view asks, so no frame scans the screen.
