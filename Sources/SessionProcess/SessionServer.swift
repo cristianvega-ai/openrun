@@ -329,8 +329,8 @@ actor SessionServer {
                 })
             case .listSettings:
                 client.send(.settingList(SettingKeeper.summaries(of: await settings.values)))
-            case .changeSetting:
-                client.send(Self.refusal("This session process does not change the settings yet."))
+            case .changeSetting(let name, let text):
+                client.send(await changeSetting(name, to: text, for: peer))
             }
             client.markHandled(received)
         }
@@ -420,6 +420,25 @@ actor SessionServer {
     private func changeProjects(_ change: () async throws -> (answer: ServerMessage, list: ProjectList, version: Int)) async -> ServerMessage {
         do {
             return try await change().answer
+        } catch {
+            return Self.refusal("\(error)")
+        }
+    }
+
+    /// Changes a setting. Any client may change a setting that is not
+    /// protected. A protected one changes only for OpenRun.app: the program
+    /// that also may answer the questions (decision of 2026-10-27).
+    private func changeSetting(_ name: String, to text: String, for peer: PeerProcess) async -> ServerMessage {
+        var requester = SettingRequester.otherClient
+        // The check of the signature costs a call of the system, so only a
+        // protected setting makes it.
+        if SettingName(rawValue: name)?.isProtected == true,
+           Self.acceptsAnswerer(at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)) {
+            requester = .application
+        }
+        do {
+            _ = try await settings.change(name: name, to: text, requestedBy: requester)
+            return .acknowledged
         } catch {
             return Self.refusal("\(error)")
         }
