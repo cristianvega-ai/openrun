@@ -36,5 +36,32 @@ extension SessionProcessIntegration {
                 #expect(try !process.screenText(of: target).contains("typed-from-elsewhere"))
             }
         }
+
+        @Test func aProgramActsFreelyOnItsOwnSession() async throws {
+            try await RunningSessionProcess.run { process in
+                let script = [
+                    "\(openrun(process, "send \"$OPENRUN_SESSION\" typed-into-itself")); echo send=$?",
+                    "\(openrun(process, "read \"$OPENRUN_SESSION\"")) >/dev/null; echo read=$?",
+                    "exec sleep 60",
+                ].joined(separator: "; ")
+                let caller = try process.createSession(program: ["/bin/sh", "-c", script])
+                #expect(await process.waitForScreen(of: caller, containing: "read="))
+                let screen = try process.screenText(of: caller)
+                #expect(screen.contains("send=0") && screen.contains("read=0"), "\(screen)")
+                // The terminal echoes the typed text, which no program reads.
+                #expect(screen.contains("typed-into-itself"))
+            }
+        }
+
+        /// The test process runs in no session of the process, as Terminal
+        /// does, so it may act on any session.
+        @Test func aProgramOutsideEverySessionActsFreely() async throws {
+            try await RunningSessionProcess.run { process in
+                let target = try process.createSession(program: ["/bin/sh"])
+                #expect(try process.runCommand(["send", target, "--enter", "echo outside-$((6*7))"]).status == 0)
+                #expect(await process.waitForScreen(of: target, containing: "outside-42"))
+                #expect(try process.runCommand(["kill", target]).status == 0)
+            }
+        }
     }
 }
