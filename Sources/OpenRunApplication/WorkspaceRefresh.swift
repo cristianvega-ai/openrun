@@ -11,7 +11,11 @@ extension Workspace {
         let overview = connection.overview
         let (shownRows, selectedBefore) = (window.sessionsList.shownIdentifiers, layout.selectedRow)
         // Before the first list, no session is known, and the kept rows stay.
-        if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
+        if connection.hasSessionList {
+            // Before the first list of the threads, the rows of the threads stay.
+            layout.follow(sessions: overview.sessions.map(\.identifier), threads: connection.hasThreadList ? overview.threads.map(\.identifier) : nil)
+        }
+        threadsChanged(from: previous)
         if overview.settings != previous.settings { settingsChanged() }
         alertsChanged(from: previous)
         let isFirstList = showsSessionAtStart && connection.hasSessionList
@@ -54,7 +58,7 @@ extension Workspace {
         showSelectedRow()
         // The third pane has the title of its row, so the user reads one
         // name for a session in both places.
-        if shownSession != nil, let row = content.rows(of: .allSessions).first(where: { $0.identifier == layout.selectedRow }) {
+        if shownSession != nil || shownThread != nil, let row = content.rows(of: .allSessions).first(where: { $0.identifier == layout.selectedRow }) {
             window.updateContentTitle(row.title)
         }
         updateBadge(content.projects.needsYouCount)
@@ -64,10 +68,16 @@ extension Workspace {
         }
     }
 
-    /// The session that the user looks at and types into: the one in the
-    /// third pane, while the window is key and the focus is in that pane.
+    /// The session or the thread that the user looks at and types into:
+    /// the one in the third pane, while the window is key and the focus
+    /// is in that pane.
     var sessionInView: UUID? {
-        isContentActive ? shownSession : nil
+        isContentActive ? shownSession ?? shownThread : nil
+    }
+
+    /// The thread whose chat the third pane shows.
+    var shownThread: UUID? {
+        if case .thread(let thread) = shown { thread } else { nil }
     }
 
     /// The session whose pane the third pane shows.

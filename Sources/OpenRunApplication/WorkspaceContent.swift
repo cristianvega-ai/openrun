@@ -8,7 +8,9 @@ import SessionPane
 extension Workspace {
     /// What the third pane must show now.
     var wantedContent: ShownContent {
-        guard let session = layout.selectedRow.flatMap({ layout.row($0) })?.pane.sessions.first, !exitedSessions.contains(session) else {
+        let row = layout.selectedRow.flatMap { layout.row($0) }
+        if let thread = row?.pane.leadingThread, connection.overview.thread(thread) != nil { return .thread(thread) }
+        guard let session = row?.pane.sessions.first, !exitedSessions.contains(session) else {
             if case .disconnected(let reason) = connection.status { return .notice(.noSessionProcess(reason: reason)) }
             return .nothing
         }
@@ -21,7 +23,8 @@ extension Workspace {
     /// session.
     func showSelectedRow() {
         let wanted = wantedContent
-        let takesFocus = isContentActive || (sessionToSelect != nil && wanted == sessionToSelect.map(ShownContent.session))
+        let asked = sessionToSelect.map { [ShownContent.session($0), .thread($0)].contains(wanted) } ?? false
+        let takesFocus = isContentActive || asked
         if takesFocus { sessionToSelect = nil }
         guard wanted != shown || shownIsStale else { return }
         if let shownSession { panes.existing(shownSession)?.deactivate() }
@@ -33,6 +36,8 @@ extension Workspace {
             let view = PaneNoticeView(notice)
             view.action = { [weak self] in self?.connectAgain() }
             window.showContent(PaneContent(view: view, title: "", minimumSize: PaneNoticeView.minimumSize))
+        case .thread(let thread):
+            showChat(of: thread)
         case .session(let session):
             let (pane, isNew) = panes.pane(for: session)
             window.showContent(PaneContent(pane.content))
