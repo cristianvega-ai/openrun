@@ -55,6 +55,11 @@ struct UnifiedDiff: Equatable {
         addedCount = newLines.count - start - end
     }
 
+    /// Changes the text of each line, such as to show hidden characters.
+    mutating func mapText(_ transform: (Substring) -> Substring) {
+        for index in lines.indices { lines[index].text = transform(lines[index].text) }
+    }
+
     mutating func append(_ other: UnifiedDiff) {
         lines += other.lines
         addedCount += other.addedCount

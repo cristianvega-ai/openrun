@@ -8,6 +8,8 @@ struct PermissionRequestWords: Equatable {
     enum Part: Equatable {
         /// Text in full in a box of code, such as a command.
         case text(String)
+        /// A change of a file.
+        case diff(UnifiedDiff)
         /// A quiet line of prose, such as a path or a reason.
         case note(String)
     }
@@ -26,6 +28,10 @@ struct PermissionRequestWords: Equatable {
             action = "run a command"
             subject = input.text("command") ?? ""
             parts = [.text(subject)]
+        case "Edit", "MultiEdit", "Write", "NotebookEdit":
+            subject = input.text("file_path") ?? input.text("notebook_path") ?? ""
+            parts = [.note(subject)]
+            action = Self.fileParts(of: request.toolName, &input, into: &parts)
         case "WebFetch":
             action = "read a web page"
             subject = input.text("url") ?? ""
@@ -41,10 +47,38 @@ struct PermissionRequestWords: Equatable {
         parts = parts.map(Self.visible)
     }
 
+    /// The parts of a change of a file, and the words for the action.
+    private static func fileParts(of tool: String, _ input: inout PermissionRequestInput, into parts: inout [Part]) -> String {
+        switch tool {
+        case "Write":
+            parts.append(.text(input.text("content") ?? ""))
+            return "write a file"
+        case "NotebookEdit":
+            parts.append(.text(input.text("new_source") ?? ""))
+            return "edit a notebook"
+        case "MultiEdit":
+            let edits = input.value("edits")?.array ?? []
+            var diff = UnifiedDiff(old: "", new: "", title: nil)
+            for (index, edit) in edits.enumerated() {
+                let every = edit["replace_all"]?.bool == true ? ", every place" : ""
+                diff.append(UnifiedDiff(old: edit["old_string"]?.string ?? "", new: edit["new_string"]?.string ?? "",
+                                        title: "Edit \(index + 1) of \(edits.count)\(every)"))
+            }
+            parts.append(.diff(diff))
+        default:
+            parts.append(.diff(UnifiedDiff(old: input.text("old_string") ?? "", new: input.text("new_string") ?? "", title: nil)))
+            if input.value("replace_all")?.bool == true { parts.append(.note("It changes every place where the old text occurs.")) }
+        }
+        return "edit a file"
+    }
+
     private static func visible(_ part: Part) -> Part {
         switch part {
-        case .text(let text): .text(visible(text))
-        case .note(let text): .note(visible(text))
+        case .text(let text): return .text(visible(text))
+        case .note(let text): return .note(visible(text))
+        case .diff(var diff):
+            diff.mapText { Substring(visible(String($0))) }
+            return .diff(diff)
         }
     }
 

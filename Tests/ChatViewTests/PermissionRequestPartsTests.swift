@@ -9,6 +9,31 @@ struct PermissionRequestPartsTests {
         PermissionRequestWords(PermissionRequestItem(request: PermissionRequest(identifier: "p", toolName: tool, input: .object(input))), agentName: "Claude Code")
     }
 
+    @Test func aWriteShowsTheContentOfTheFile() {
+        let request = words("Write", ["file_path": .string("/tmp/x.sh"), "content": .string("#!/bin/sh\nrm -rf /")])
+        #expect(request.subject == "/tmp/x.sh")
+        #expect(request.parts == [.note("/tmp/x.sh"), .text("#!/bin/sh\nrm -rf /")])
+    }
+
+    @Test func anEditShowsItsOldAndNewTextAsADiff() {
+        let request = words("Edit", ["file_path": .string("a.swift"), "old_string": .string("let a = 1"), "new_string": .string("let a = 2"),
+                                     "replace_all": .bool(true)])
+        #expect(request.parts == [
+            .note("a.swift"), .diff(UnifiedDiff(old: "let a = 1", new: "let a = 2", title: nil)),
+            .note("It changes every place where the old text occurs."),
+        ])
+    }
+
+    @Test func aListOfEditsShowsEachEdit() {
+        let edits: JSONValue = .array([
+            .object(["old_string": .string("a"), "new_string": .string("b")]),
+            .object(["old_string": .string("c"), "new_string": .string("d")]),
+        ])
+        var diff = UnifiedDiff(old: "a", new: "b", title: "Edit 1 of 2")
+        diff.append(UnifiedDiff(old: "c", new: "d", title: "Edit 2 of 2"))
+        #expect(words("MultiEdit", ["file_path": .string("f"), "edits": edits]).parts == [.note("f"), .diff(diff)])
+    }
+
     @Test func aCommandShowsTheRestOfItsInputToo() {
         let request = words("Bash", ["command": .string("make"), "dangerouslyDisableSandbox": .bool(true)])
         #expect(request.parts == [.text("make"), .note("More input:"), .text("dangerouslyDisableSandbox: true")])
