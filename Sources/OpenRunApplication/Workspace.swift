@@ -55,6 +55,7 @@ final class Workspace: NSObject {
         panes = SessionPanes { SessionPaneController(start: .runningSession($0), socket: socket) }
         super.init()
         window.sessionsList.arrange(filter: SessionsFilter(rawValue: layout.filter) ?? .all, order: SessionsOrder(rawValue: layout.order) ?? .manual)
+        connection.overviewChanged = { [weak self] in self?.overviewChanged(from: $0) }
     }
 
     /// Shows the window and starts to follow the session process. The
