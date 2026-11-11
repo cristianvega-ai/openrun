@@ -8,14 +8,14 @@ import Synchronization
 import TerminalEmulation
 import Testing
 
-private enum SocketError: Error {
+enum SocketError: Error {
     case connectFailed(code: Int32)
 }
 
 /// A Unix socket connected to the session process. The test keeps the
 /// descriptor, so it can write bytes by hand and see when the session process
 /// closes its side.
-private func connectedSocket(to path: String) throws -> Int32 {
+func connectedSocket(to path: String) throws -> Int32 {
     let descriptor = socket(AF_UNIX, SOCK_STREAM, 0)
     // Set before connecting: once the other side has closed, the system
     // refuses the option, and a write would end the test with SIGPIPE.

@@ -552,7 +552,8 @@ extension SessionProcessIntegration {
                 let identifierText = SessionSummary.text(for: identifier)
                 #expect(await process.waitForScreen(of: identifierText, containing: "ready", timeout: .seconds(60)))
 
-                let connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
+                let descriptor = try connectedSocket(to: process.socketPath)
+                let connection = MessageConnection(descriptor: descriptor)
                 defer { connection.shutdown() }
                 try connection.greetSessionProcess()
                 try connection.send(ClientMessage.attach(identifier: identifier, size: size))
@@ -562,16 +563,50 @@ extension SessionProcessIntegration {
                     return
                 }
 
-                // The client stops reading. 7 MiB of output wait for it, below the limit.
+                // The client stops reading. 7 MiB of output wait for it, below
+                // the limit. The session ends a write that takes no byte for 10
+                // seconds, and a busy Mac took 12.9 seconds to show zeros-done.
+                // One byte each 100 ms keeps the connection and the 7 MiB. Each
+                // look at the screen copies 1.9 MB, so the wait is 60 seconds.
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
-                #expect(await process.waitForScreen(of: identifierText, containing: "zeros-done", timeout: .seconds(30)))
+                let stopsTrickle = Mutex(false)
+                defer { stopsTrickle.withLock { $0 = true } }
+                let trickle = Task { await BlockingWork.onNewThread { () -> Data in
+                    var taken = Data()
+                    while !stopsTrickle.withLock({ $0 }) {
+                        var byte: UInt8 = 0
+                        if recv(descriptor, &byte, 1, MSG_DONTWAIT) == 1 { taken.append(byte) }
+                        usleep(100_000)
+                    }
+                    return taken
+                } }
+                #expect(await process.waitForScreen(of: identifierText, containing: "zeros-done", timeout: .seconds(60)))
                 try connection.send(ClientMessage.readScreen(identifier: identifier, includeScrollback: true))
                 try await Task.sleep(for: .milliseconds(300))
+                stopsTrickle.withLock { $0 = true }
+                let taken = await trickle.value
 
                 let (outputByteCount, screen, problem) = await BlockingWork.onNewThread { () -> (Int, String?, String?) in
-                    var outputByteCount = 0
+                    var outputByteCount = 0, pending = taken
+                    // The trickle took the first bytes of a frame, so the test
+                    // reads the frames itself, after the bytes that it took.
+                    func read(_ count: Int) -> Data? {
+                        var chunk = [UInt8](repeating: 0, count: 65536)
+                        while pending.count < count {
+                            let got = recv(descriptor, &chunk, chunk.count, 0)
+                            guard got > 0 else { return nil }
+                            pending.append(contentsOf: chunk[0..<got])
+                        }
+                        defer { pending = Data(pending.dropFirst(count)) }
+                        return Data(pending.prefix(count))
+                    }
+                    let watchdog = DispatchWorkItem { connection.shutdown() }
+                    DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: watchdog)
+                    defer { watchdog.cancel() }
                     do {
-                        while let message = try receiveMessage(connection, within: 30) {
+                        while let field = read(MessageFrame.lengthFieldSize) {
+                            guard let body = read(try MessageFrame.bodyLength(fromLengthField: field)) else { break }
+                            let message = try ServerMessage(frame: MessageFrame(body: body))
                             switch message {
                             case .output(let bytes): outputByteCount += bytes.count
                             case .screen(let text): return (outputByteCount, text, nil)
