@@ -55,9 +55,10 @@ final class Workspace: NSObject {
     var projectToSelect: UUID?
     /// Whether the host follows the session process.
     private(set) var isStarted = false
-    /// Whether the app starts a login shell when the first list of the
-    /// feed holds no session, so a new user gets a terminal at once.
-    var opensFirstSession = false
+    /// Whether the window shows a session after the first list of the
+    /// feed, so the user gets a terminal at once: the kept row, or else
+    /// the first row, or else a new login shell when no session runs.
+    var showsSessionAtStart = false
     /// The lists report a selection while they take new content, and that
     /// is no choice of the user.
     var isRefreshing = false

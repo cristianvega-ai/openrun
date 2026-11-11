@@ -26,7 +26,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         self.socket = socket
         self.makeLaunchAgentSetup = makeLaunchAgentSetup
         self.workspace = workspace ?? Workspace(socket: socket)
-        self.workspace.opensFirstSession = true
+        self.workspace.showsSessionAtStart = true
         approvalQuestions = ApprovalQuestionConnection(socket: socket)
         super.init()
     }

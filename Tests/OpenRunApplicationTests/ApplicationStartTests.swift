@@ -42,8 +42,10 @@ import Testing
         let running = try test.createShell()
         let application = makeApplication(test)
         application.applicationDidFinishLaunching(launch)
-        #expect(await waitUntil { test.shownRows == [running] })
+        // The window shows the session that runs, and starts no other one.
+        #expect(await waitUntil { test.workspace.shownSession == running })
         try await Task.sleep(for: .milliseconds(300))
-        #expect(try test.process.listedIdentifiers().count == 1 && !test.workspace.opensFirstSession)
+        #expect(try test.process.listedIdentifiers().count == 1 && !test.workspace.showsSessionAtStart)
+        #expect(test.workspace.layout.selectedRow == running && test.workspace.connection.overview.session(running)?.alert == nil)
     }
 }

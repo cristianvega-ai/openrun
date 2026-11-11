@@ -38,7 +38,7 @@ import Testing
 
         // Each session command is on only when it can act.
         #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[3]) && !workspace.validateMenuItem(session[2]))
-        workspace.opensFirstSession = false
+        workspace.showsSessionAtStart = false
         application.applicationDidFinishLaunching(launch)
         let shell = try test.createShell()
         #expect(await waitUntil { test.shownRows == [shell] })

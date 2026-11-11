@@ -14,8 +14,9 @@ extension Workspace {
         if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
         if overview.settings != previous.settings { settingsChanged() }
         alertsChanged(from: previous)
-        if opensFirstSession, connection.hasSessionList {
-            opensFirstSession = false
+        let isFirstList = showsSessionAtStart && connection.hasSessionList
+        if isFirstList {
+            showsSessionAtStart = false
             if overview.sessions.isEmpty { newSession() }
         }
         for session in previous.sessions where overview.session(session.identifier) == nil { sessionEnded(session.identifier) }
@@ -26,6 +27,11 @@ extension Workspace {
             layout.selectedRow = RowNeighbor.of(selectedBefore, in: shownRows, remaining: Set(layout.rows.map(\.identifier)))
         }
         refresh()
+        // The first row is the first one that the list shows, after its filter and its order.
+        if isFirstList, layout.selectedRow == nil, let first = window.sessionsList.shownIdentifiers.first {
+            layout.selectedRow = first
+            refresh()
+        }
     }
 
     /// Gives the two lists their content, and the third pane the selected row.
