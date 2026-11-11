@@ -5,6 +5,7 @@ import SessionConnection
 import TerminalEmulation
 import TerminalRendering
 import Testing
+@testable import SessionPane
 @testable import SessionWindow
 @testable import TerminalView
 

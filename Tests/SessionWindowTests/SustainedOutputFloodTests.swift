@@ -4,6 +4,7 @@ import SessionProcessHarness
 import SessionProtocol
 import Synchronization
 import Testing
+@testable import SessionPane
 @testable import SessionWindow
 
 private final class FloodAttachment: AttachedSession {
