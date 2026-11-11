@@ -108,7 +108,7 @@ struct TerminalSessionProcesses {
     /// Every process identifier of the system. The list can change while it is
     /// read, so the buffer has room to spare, and grows when it fills up. Nil
     /// means that the list failed.
-    private static func allProcessIdentifiers() -> [pid_t]? {
+    static func allProcessIdentifiers() -> [pid_t]? {
         var capacity = Int(max(proc_listallpids(nil, 0), 0)) + 256
         for _ in 0..<4 {
             var identifiers = [pid_t](repeating: 0, count: capacity)
