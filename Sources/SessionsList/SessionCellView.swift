@@ -17,7 +17,7 @@ final class SessionCellView: NSTableCellView {
     let branchLabel = NSTextField(labelWithString: "")
     lazy var place = NSStackView(views: [modelLabel, folderLabel, branchLabel])
     let age = NSTextField(labelWithString: "")
-    let attention = NSImageView()
+    let attention = AttentionMarkView()
     let progress = ProgressMarkView()
 
     init() {
@@ -29,9 +29,6 @@ final class SessionCellView: NSTableCellView {
         (title.font, title.textColor, title.lineBreakMode) = (.systemFont(ofSize: NSFont.systemFontSize), PaneColor.text, .byTruncatingTail)
         (secondLine.font, secondLine.textColor, secondLine.lineBreakMode) = (.systemFont(ofSize: NSFont.smallSystemFontSize), PaneColor.quietText, .byTruncatingTail)
         (age.font, age.textColor) = (.monospacedDigitSystemFont(ofSize: NSFont.smallSystemFontSize, weight: .regular), PaneColor.quietText)
-        attention.image = NSImage(systemSymbolName: "circle.fill", accessibilityDescription: nil)
-        attention.symbolConfiguration = NSImage.SymbolConfiguration(pointSize: 7, weight: .regular)
-        attention.contentTintColor = PaneColor.attention
         for field in [title, secondLine, modelLabel, folderLabel, branchLabel] {
             field.cell?.usesSingleLineMode = true
             field.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
@@ -42,9 +39,8 @@ final class SessionCellView: NSTableCellView {
         folderLabel.lineBreakMode = .byTruncatingHead
         folderLabel.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
         place.spacing = 0
-        let marks = NSStackView(views: [age, attention, progress])
-        marks.setHuggingPriority(.required, for: .horizontal)
-        for view in [icon, title, secondLine, place, marks] as [NSView] {
+        age.setContentCompressionResistancePriority(.required, for: .horizontal)
+        for view in [icon, title, secondLine, place, age, attention, progress] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             addSubview(view)
         }
@@ -55,15 +51,21 @@ final class SessionCellView: NSTableCellView {
             title.leadingAnchor.constraint(equalTo: icon.trailingAnchor, constant: 8),
             title.topAnchor.constraint(equalTo: topAnchor, constant: 8),
             secondLine.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-            secondLine.trailingAnchor.constraint(equalTo: marks.trailingAnchor),
+            secondLine.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
             secondLine.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 2),
             place.leadingAnchor.constraint(equalTo: title.leadingAnchor),
-            place.trailingAnchor.constraint(lessThanOrEqualTo: marks.trailingAnchor),
+            place.trailingAnchor.constraint(lessThanOrEqualTo: trailingAnchor, constant: -18),
             place.firstBaselineAnchor.constraint(equalTo: secondLine.firstBaselineAnchor),
-            marks.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 6),
-            marks.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
-            marks.centerYAnchor.constraint(equalTo: title.centerYAnchor),
         ])
+        // The age, the dot and the arc end at one edge on the middle line of
+        // the title, so the eye reads them as one column.
+        for mark in [age, attention, progress] as [NSView] {
+            NSLayoutConstraint.activate([
+                mark.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -18),
+                mark.centerYAnchor.constraint(equalTo: title.centerYAnchor),
+                mark.leadingAnchor.constraint(greaterThanOrEqualTo: title.trailingAnchor, constant: 6),
+            ])
+        }
     }
 
     required init?(coder: NSCoder) {

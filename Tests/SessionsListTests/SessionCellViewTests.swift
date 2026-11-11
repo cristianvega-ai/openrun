@@ -38,4 +38,17 @@ import Testing
         #expect(cell.branchLabel.frame.width >= cell.branchLabel.intrinsicContentSize.width)
         #expect(cell.place.frame.maxX <= cell.bounds.maxX - 18)
     }
+
+    /// The age, the dot and the arc end at one edge and share the middle
+    /// line of the title. The alignment rectangle of a label holds its text.
+    @Test func theMarksShareOneEdgeAndOneMiddleLine() {
+        let cell = SessionCellView()
+        cell.show(row())
+        cell.layoutSubtreeIfNeeded()
+        let edge = cell.bounds.maxX - 18, middle = cell.title.frame.midY
+        #expect(cell.age.alignmentRect(forFrame: cell.age.frame).maxX == edge)
+        #expect(cell.attention.frame.maxX == edge && cell.progress.frame.maxX == edge)
+        #expect(cell.age.frame.midY == middle && cell.attention.frame.midY == middle && cell.progress.frame.midY == middle)
+        #expect(cell.attention.frame.size == cell.progress.frame.size)
+    }
 }
