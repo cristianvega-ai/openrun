@@ -1,6 +1,7 @@
 import Dispatch
 import Foundation
 import Projects
+import SessionProtocol
 
 /// The one owner of the projects (decision of 2026-11-10). It loads them
 /// when the session process starts, and saves each change at once, before
@@ -13,6 +14,7 @@ actor ProjectKeeper {
     private let queue = DispatchSerialQueue(label: "ai.cristianvega.openrun.projects")
     nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
     private let store: ProjectStore
+    private let changes: SessionChangeFeed?
     private(set) var list: ProjectList
     /// Rises with each change, so a reader that gets two lists out of order
     /// keeps the newer one (see `SessionRegistry.updateProjects`).
@@ -20,9 +22,14 @@ actor ProjectKeeper {
 
     /// Loads the projects. A file that cannot be read never stops the
     /// start: the list starts without it, and the log says so.
-    init(store: ProjectStore) {
+    ///
+    /// - Parameter changes: Gets the list now and after each change, in
+    ///   the step of the change, so the watchers get the changes in order.
+    init(store: ProjectStore, changes: SessionChangeFeed? = nil) {
         self.store = store
+        self.changes = changes
         list = Self.load(from: store)
+        changes?.replaceProjects(Self.summaries(of: list))
     }
 
     private static func load(from store: ProjectStore) -> ProjectList {
@@ -82,6 +89,14 @@ actor ProjectKeeper {
         }
         list = changed
         version += 1
+        changes?.replaceProjects(Self.summaries(of: list))
         return result
+    }
+
+    /// The list as the protocol sends it: the projects with a folder in the
+    /// user's order, then those whose folder this Mac does not know.
+    static func summaries(of list: ProjectList) -> [ProjectSummary] {
+        list.projects.map { ProjectSummary(identifier: $0.identifier, name: $0.name, folder: $0.folder) }
+            + list.projectsWithoutFolder.map { ProjectSummary(identifier: $0.identifier, name: $0.name, folder: nil) }
     }
 }

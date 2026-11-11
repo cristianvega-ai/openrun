@@ -1,4 +1,5 @@
 import Dispatch
+import SessionProtocol
 import Settings
 
 /// The one owner of the settings (decision of 2026-11-10). It loads them
@@ -11,6 +12,7 @@ actor SettingKeeper {
     private let queue = DispatchSerialQueue(label: "ai.cristianvega.openrun.settings")
     nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
     private let store: SettingsStore
+    private let changes: SessionChangeFeed?
     private(set) var values: SettingValues
     /// Rises with each change, so a reader that gets two sets of values
     /// out of order keeps the newer one (see `SessionRegistry.updateLimits`).
@@ -18,9 +20,14 @@ actor SettingKeeper {
 
     /// Loads the settings. A file that cannot be read and a value that
     /// falls back to its default never stop the start, and the log says so.
-    init(store: SettingsStore) {
+    ///
+    /// - Parameter changes: Gets the list now and after each change, in
+    ///   the step of the change, so the watchers get the changes in order.
+    init(store: SettingsStore, changes: SessionChangeFeed? = nil) {
         self.store = store
+        self.changes = changes
         values = Self.load(from: store)
+        changes?.replaceSettings(Self.summaries(of: values))
     }
 
     private static func load(from store: SettingsStore) -> SettingValues {
@@ -60,6 +67,12 @@ actor SettingKeeper {
         }
         values = changed
         version += 1
+        changes?.replaceSettings(Self.summaries(of: values))
         return (values, version)
+    }
+
+    /// Every setting as the protocol sends it, in the order of `SettingName`.
+    static func summaries(of values: SettingValues) -> [SettingSummary] {
+        SettingName.allCases.map { SettingSummary(name: $0.rawValue, text: values.text(of: $0), isProtected: $0.isProtected) }
     }
 }

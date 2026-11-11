@@ -44,7 +44,7 @@ public struct SessionProcess: Sendable {
         // Signal handling starts first, so a signal that arrives while the
         // socket opens is not lost.
         let signals = ShutdownSignals()
-        let server = try SessionServer(location: socketLocation, answererRequirement: answererRequirement)
+        let server = try SessionServer(location: socketLocation, dataFolder: dataFolder, answererRequirement: answererRequirement)
         await server.start()
         SessionLog.write("Listening on ", detail: socketLocation.path)
         let wakeService = machServiceName.flatMap(startWakeService)

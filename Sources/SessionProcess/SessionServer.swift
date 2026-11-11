@@ -1,5 +1,8 @@
+import DataStorage
 import Foundation
+import Projects
 import SessionProtocol
+import Settings
 import TerminalEmulation
 
 /// Accepts clients and answers their requests.
@@ -9,6 +12,8 @@ actor SessionServer {
     private let questions = ApprovalQuestions()
     private let changes = SessionChangeFeed()
     private let answererRequirement: AnswererRequirement
+    private let projects: ProjectKeeper
+    private let settings: SettingKeeper
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -17,9 +22,17 @@ actor SessionServer {
     private var isClosed = false
 
     /// Starts listening. Throws when another session process already does.
-    init(location: SocketLocation, answererRequirement: AnswererRequirement = AnswererRequirement(text: nil)) throws {
+    ///
+    /// - Parameter dataFolder: Where the projects and the settings are. Nil
+    ///   means the folder of the socket.
+    init(location: SocketLocation, dataFolder: DataFolder? = nil, answererRequirement: AnswererRequirement = AnswererRequirement(text: nil)) throws {
         self.answererRequirement = answererRequirement
         listener = try SocketListener(location: location)
+        // The lock of the socket is taken, so no other session process on
+        // this socket reads or writes the files now.
+        let dataFolder = dataFolder ?? DataFolder(path: location.folder)
+        projects = ProjectKeeper(store: ProjectStore(dataFolder: dataFolder), changes: changes)
+        settings = SettingKeeper(store: SettingsStore(dataFolder: dataFolder), changes: changes)
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
         registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes)
@@ -292,10 +305,14 @@ actor SessionServer {
                 client.send(await changeOwn(identifier, for: peer, verb: "alert") { $0.alert = SessionAlert(text: text, raisedAt: Date(), source: .notifyCommand) })
             case .clearSessionAlert(let identifier):
                 client.send(await changeOwn(identifier, for: peer, verb: "clear the alert of") { $0.alert = nil })
-            case .listProjects, .addProject, .removeProject, .renameProject, .moveProject:
-                client.send(Self.refusal("This session process keeps no projects yet."))
-            case .listSettings, .changeSetting:
-                client.send(Self.refusal("This session process keeps no settings yet."))
+            case .listProjects:
+                client.send(.projectList(ProjectKeeper.summaries(of: await projects.list)))
+            case .addProject, .removeProject, .renameProject, .moveProject:
+                client.send(Self.refusal("This session process does not change the projects yet."))
+            case .listSettings:
+                client.send(.settingList(SettingKeeper.summaries(of: await settings.values)))
+            case .changeSetting:
+                client.send(Self.refusal("This session process does not change the settings yet."))
             }
             client.markHandled(received)
         }
