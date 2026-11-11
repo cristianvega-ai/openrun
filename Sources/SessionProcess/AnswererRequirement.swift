@@ -14,12 +14,35 @@ struct AnswererRequirement: Sendable {
     /// The bundle identifier of OpenRun.app.
     static let applicationIdentifier = "ai.cristianvega.openrun"
 
-    /// OpenRun.app, signed by the team that signed this process. A build
-    /// with no team, such as an ad hoc one, accepts no program. Then each
-    /// request on another session is refused.
+    /// OpenRun.app, signed by the team that signed this process.
+    ///
+    /// A build with no team, such as an ad hoc one, accepts the app bundle
+    /// that holds this process, by the code hash of its main program
+    /// (decision of 2026-11-10). A Mac with no development certificate can
+    /// sign only ad hoc. A process outside an app bundle, such as a build
+    /// of `swift build`, accepts no program, so each request on another
+    /// session is refused.
     static func ofThisProcess() -> AnswererRequirement {
-        guard let team = teamIdentifierOfThisProcess() else { return AnswererRequirement(text: nil) }
-        return AnswererRequirement(text: "identifier \"\(applicationIdentifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(team)\"")
+        if let team = teamIdentifierOfThisProcess() {
+            return AnswererRequirement(text: "identifier \"\(applicationIdentifier)\" and anchor apple generic and certificate leaf[subject.OU] = \"\(team)\"")
+        }
+        guard let program = ApplicationBundle.executablePathOfThisProcess(),
+              let bundle = ApplicationBundle.path(holdingExecutableAt: program) else { return AnswererRequirement(text: nil) }
+        return ofApplication(atPath: bundle)
+    }
+
+    /// The main program of the app bundle at `path`, by its code hash, read
+    /// once. A later build of the app has another hash, and the session
+    /// process of that build reads it again. A bundle without a signature
+    /// accepts no program.
+    static func ofApplication(atPath path: String) -> AnswererRequirement {
+        var staticCode: SecStaticCode?
+        var information: CFDictionary?
+        guard SecStaticCodeCreateWithPath(URL(fileURLWithPath: path) as CFURL, [], &staticCode) == errSecSuccess, let staticCode,
+              SecCodeCopySigningInformation(staticCode, SecCSFlags(rawValue: kSecCSSigningInformation), &information) == errSecSuccess,
+              let hash = (information as? [String: Any])?[kSecCodeInfoUnique as String] as? Data
+        else { return AnswererRequirement(text: nil) }
+        return AnswererRequirement(text: "cdhash H\"" + hash.map { String(format: "%02x", $0) }.joined() + "\"")
     }
 
     /// Whether the running program with this audit token meets the

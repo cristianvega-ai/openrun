@@ -29,4 +29,18 @@ import Testing
         let requirement = AnswererRequirement(text: "cdhash H\"\(try codeHashOfThisProcess())\"")
         #expect(!requirement.isMet(byProgramWithAuditToken: Data(count: 32)))
     }
+
+    /// In an ad hoc build, the answerer is the app bundle that holds the
+    /// session process, by the code hash of its main program.
+    @Test func anAdHocBundleNamesItsMainProgramByItsCodeHash() throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let bundle = try AdHocBundle.make(named: "Test", in: folder, mainProgram: RunningSessionProcess.commandExecutable)
+        let requirement = AnswererRequirement.ofApplication(atPath: bundle.path)
+        #expect(requirement.text == "cdhash H\"\(try AdHocBundle.codeHash(of: bundle))\"")
+        #expect(AnswererRequirement.ofApplication(atPath: folder.path).text == nil)
+        let program = bundle.path + "/Contents/MacOS/openrun-session"
+        #expect(ApplicationBundle.path(holdingExecutableAt: program) == bundle.path)
+        #expect(ApplicationBundle.path(holdingExecutableAt: RunningSessionProcess.sessionExecutable.path) == nil)
+    }
 }
