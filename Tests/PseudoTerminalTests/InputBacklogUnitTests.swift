@@ -1,3 +1,4 @@
+import Darwin
 import Synchronization
 import Testing
 @testable import PseudoTerminal
@@ -217,8 +218,7 @@ private func drain(_ backlog: inout InputBacklog) -> [UInt8] {
         var backlog = InputBacklog()
         let owner = ObjectIdentifier(firstOwner)
         let count = 100_000
-        let clock = ContinuousClock()
-        let elapsed = clock.measure {
+        let elapsed = processorTimeOfThisThread {
             _ = backlog.addTyped(bytes(InputBacklog.typedLimit, 0), owner: owner, staysWithoutOwner: true) { _ in }
             for index in 0..<count {
                 _ = backlog.addTyped([UInt8(truncatingIfNeeded: index)], owner: owner, staysWithoutOwner: true) { _ in }
@@ -230,12 +230,22 @@ private func drain(_ backlog: inout InputBacklog) -> [UInt8] {
             #expect(!backlog.hasWaitingInput)
         }
         var taken: [UInt8] = []
-        let drained = clock.measure { taken = drain(&backlog) }
+        let drained = processorTimeOfThisThread { taken = drain(&backlog) }
         #expect(taken.count == count)
         #expect(taken == (0..<count).map { UInt8(truncatingIfNeeded: $0) })
         #expect(backlog.isEmpty)
-        // Far below the old cost of about four seconds for each step.
+        // Far below the old cost of about four seconds for each step. The test
+        // counts the processor time of its thread, because on a busy Mac the
+        // time on the clock also held the time that the thread waited to run.
         #expect(elapsed < .seconds(1), "waiting took \(elapsed)")
         #expect(drained < .seconds(1), "draining took \(drained)")
     }
+}
+
+/// The processor time that `work` uses on the calling thread. A busy Mac
+/// makes the work wait longer for a processor, but it does not add to this.
+private func processorTimeOfThisThread(_ work: () -> Void) -> Duration {
+    let start = clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID)
+    work()
+    return .nanoseconds(Int64(clock_gettime_nsec_np(CLOCK_THREAD_CPUTIME_ID) - start))
 }
