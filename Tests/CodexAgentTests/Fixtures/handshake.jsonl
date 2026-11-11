@@ -1,0 +1,5 @@
+{"client":"initialize","expect":{"capabilities":{"experimentalApi":true}}}
+{"server":{"id":"$request","result":{"userAgent":"openrun/0.100.0 (Mac OS 26.0.0; arm64) (openrun; 1)","codexHome":"/config/codex","platformFamily":"unix","platformOs":"macos"}}}
+{"client":"initialized"}
+{"server":{"method":"remoteControl/status/changed","params":{"status":"disabled","serverName":"example-mac.local","installationId":"00000000-0000-4000-8000-000000000105","environmentId":null},"emittedAtMs":1700000050536}}
+{"server":{"method":"account/updated","params":{"authMode":"chatgpt","planType":"plus"},"emittedAtMs":1700000050892}}

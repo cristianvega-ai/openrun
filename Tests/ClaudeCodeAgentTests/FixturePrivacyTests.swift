@@ -11,15 +11,18 @@ import Testing
     static let scannedFolders = [
         "Sources/AgentConversation", "Sources/ClaudeCodeAgent", "Sources/AgentProgram", "Tests/AgentConversationTests",
         "Tests/ClaudeCodeAgentTests", "Tests/AgentProgramTests", "Tests/AgentProgramProbe", "Tests/FakeAgent", "Tests/FakeAgentTests",
+        "Sources/CodexAgent", "Tests/CodexAgentTests",
     ]
 
     /// The first 16 hexadecimal digits of the SHA-256 of each word that
     /// was removed from the recordings, in lower case: names of the owner,
-    /// of the owner's folders, tools and plan, and of the recording folder.
+    /// of the owner's folders, tools, terminal, Mac and plan, and of the
+    /// recording folder.
     /// Hashes, so that this file does not name them either.
     static let removedWordHashes: Set<String> = [
         "1a5d2f594e9073e1", "1505e1f8fa878cdc", "313ce7d71787960e", "072a626ed2d6cc7d", "282a6dc5066d4725", "8c3908175a49e353",
         "7827e8eb2cb3b95f", "7f2fe580edb35154", "edb4ce8ba5473ec9", "9dde9cf87d682b7b", "4e8c59ec19506cb5", "425ed264c86619b9",
+        "da9e96b401da78ec", "26b47209413e5776",
     ]
 
     /// Long values that were checked and describe nothing: the red square of
