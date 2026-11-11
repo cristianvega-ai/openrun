@@ -18,6 +18,9 @@ actor ApprovalQuestions {
         case noAnswerer
         /// The program that asked left.
         case withdrawn
+        /// Another question of the same session waits. Each alert holds the
+        /// app, so one session cannot pile them up.
+        case anotherQuestionWaits
     }
 
     typealias Send = @Sendable (ServerMessage) -> Void
@@ -60,6 +63,8 @@ actor ApprovalQuestions {
     /// withdraws its question.
     func ask(_ question: ApprovalQuestion) async -> Outcome {
         guard !answerers.isEmpty else { return .noAnswerer }
+        let asking = question.askingSession.identifier
+        guard !waiting.values.contains(where: { $0.question.askingSession.identifier == asking }) else { return .anotherQuestionWaits }
         let identifier = question.identifier
         return await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in

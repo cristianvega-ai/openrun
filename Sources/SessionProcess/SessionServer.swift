@@ -329,6 +329,7 @@ actor SessionServer {
         case .timedOut: return Self.refusal("\(start), and the user did not answer in time.")
         case .noAnswerer: return Self.refusal("\(start). This needs the user's approval, and no signed OpenRun app is open to ask.")
         case .withdrawn: return Self.refusal("\(start), and then it left.")
+        case .anotherQuestionWaits: return Self.refusal("\(start) while another question of that session waits for the user.")
         }
     }
 

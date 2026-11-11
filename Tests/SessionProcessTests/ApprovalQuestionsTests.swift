@@ -55,6 +55,27 @@ private func makeQuestion() -> ApprovalQuestion {
         #expect(app.messages == [.approvalQuestion(question), .approvalQuestionEnded(identifier: question.identifier)])
     }
 
+    /// One session cannot pile up alerts. A question of another session
+    /// still reaches the app.
+    @Test func eachSessionHasOneQuestionAtATime() async {
+        let questions = ApprovalQuestions()
+        let app = Answerer()
+        await questions.addAnswerer(app.key, send: app.send)
+        let first = makeQuestion()
+        var second = makeQuestion()
+        second.askingSession = first.askingSession
+        let outcome = Task { await questions.ask(first) }
+        #expect(await eventually { !app.messages.isEmpty })
+        #expect(await questions.ask(second) == .anotherQuestionWaits)
+        let other = makeQuestion()
+        let otherOutcome = Task { await questions.ask(other) }
+        #expect(await eventually { app.messages.count == 2 })
+        await questions.answer(first.identifier, allows: false, from: app.key)
+        await questions.answer(other.identifier, allows: false, from: app.key)
+        let outcomes = (await outcome.value, await otherOutcome.value)
+        #expect(outcomes == (.denied, .denied))
+    }
+
     @Test func aCallerThatLeavesWithdrawsItsQuestion() async {
         let questions = ApprovalQuestions()
         let app = Answerer()
