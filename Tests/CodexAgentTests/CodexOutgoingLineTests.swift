@@ -20,7 +20,7 @@ import Testing
         let accept = try CodexOutgoingLine.response(to: .number(0), result: .object(["decision": .string("accept")]))
         #expect(text(accept) == #"{"id":0,"result":{"decision":"accept"}}"# + "\n")
         let refusal = try CodexOutgoingLine.failure(to: .text("r-1"), code: -32601, message: "not served")
-        #expect(text(refusal) == #"{"error":{"code":-32601,"message":"not served"},"id":"r-1"}"# + "\n")
+        #expect(text(refusal) == #"{"id":"r-1","error":{"code":-32601,"message":"not served"}}"# + "\n")
     }
 
     @Test func aLineEndInsideTextStaysInsideTheLine() throws {

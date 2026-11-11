@@ -42,7 +42,7 @@ struct CodexMessageReader: Sendable {
             guard let value = try? JSONValue(decoding: Data(bytes)), value.object != nil else {
                 return unreadable(.notJSON, kind: nil, source)
             }
-            guard let message = CodexMessage(value) else { return unreadable(.unknownKind, kind: value["method"]?.string, source) }
+            guard let message = CodexMessage(value, line: bytes) else { return unreadable(.unknownKind, kind: value["method"]?.string, source) }
             return .message(message, source)
         case .tooLong(let start, let byteCount):
             return unreadable(.tooLong, kind: nil, SourceLine(text: BoundedText.prefix(of: start, byteLimit: SourceLine.byteLimit), byteCount: byteCount))

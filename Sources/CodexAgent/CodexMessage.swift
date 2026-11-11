@@ -13,11 +13,15 @@ enum CodexMessage: Sendable, Hashable {
     /// waits for the answer.
     case request(CodexRequestIdentifier, method: String, parameters: JSONValue)
 
-    /// Nil for a JSON value that is none of the four forms.
-    init?(_ value: JSONValue) {
+    /// Nil for a JSON value that is none of the four forms. With its line,
+    /// the identifier is the JSON text of the line, exactly.
+    init?(_ value: JSONValue, line: [UInt8]? = nil) {
         guard value.object != nil else { return nil }
         let identifierValue = value["id"] ?? .null
-        let identifier = CodexRequestIdentifier(identifierValue)
+        var identifier = CodexRequestIdentifier(identifierValue)
+        if let line, identifierValue.number != nil || identifierValue.string != nil {
+            identifier = CodexIdentifierToken.find(in: line).flatMap(CodexRequestIdentifier.init(token:))
+        }
         guard identifier != nil || identifierValue == .null else { return nil }
         if let method = value["method"]?.string {
             let parameters = value["params"] ?? .null

@@ -85,10 +85,12 @@ actor CodexConnection {
     /// Gives an answer to its request. Returns false for any other line.
     private func resolve(_ incoming: CodexMessageReader.Incoming) -> Bool {
         switch incoming {
-        case .message(.response(.number(let identifier), let result), _) where waiting[identifier] != nil:
-            finish(identifier, with: .success(result))
-        case .message(.failure(.number(let identifier)?, let code, let message), _) where waiting[identifier] != nil:
-            finish(identifier, with: .failure(CodexRequestError.refused(code: code, message: message)))
+        case .message(.response(let identifier, let result), _):
+            guard let number = identifier.number, waiting[number] != nil else { return false }
+            finish(number, with: .success(result))
+        case .message(.failure(let identifier?, let code, let message), _):
+            guard let number = identifier.number, waiting[number] != nil else { return false }
+            finish(number, with: .failure(CodexRequestError.refused(code: code, message: message)))
         default:
             return false
         }

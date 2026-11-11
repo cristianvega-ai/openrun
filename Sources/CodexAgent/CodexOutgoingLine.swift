@@ -7,7 +7,7 @@ import Foundation
 /// line end inside a string, so a message never spans two lines.
 enum CodexOutgoingLine {
     static func request(_ identifier: CodexRequestIdentifier, method: String, parameters: JSONValue) throws -> [UInt8] {
-        try line(["id": identifier.jsonValue, "method": .string(method), "params": parameters])
+        try line(identifier, ["method": .string(method), "params": parameters])
     }
 
     static func notification(method: String, parameters: JSONValue) throws -> [UInt8] {
@@ -16,12 +16,19 @@ enum CodexOutgoingLine {
 
     /// The answer to a request of the server, with its identifier as it came.
     static func response(to identifier: CodexRequestIdentifier, result: JSONValue) throws -> [UInt8] {
-        try line(["id": identifier.jsonValue, "result": result])
+        try line(identifier, ["result": result])
     }
 
     /// The refusal of a request of the server that OpenRun does not serve.
     static func failure(to identifier: CodexRequestIdentifier, code: Int, message: String) throws -> [UInt8] {
-        try line(["id": identifier.jsonValue, "error": .object(["code": .number(Double(code)), "message": .string(message)])])
+        try line(identifier, ["error": .object(["code": .number(Double(code)), "message": .string(message)])])
+    }
+
+    /// A line whose identifier comes first, as its JSON text, so that no
+    /// number changes on its way through a `Double`.
+    private static func line(_ identifier: CodexRequestIdentifier, _ members: [String: JSONValue]) throws -> [UInt8] {
+        let rest = try line(members)
+        return Array(#"{"id":\#(identifier.token),"#.utf8) + rest.dropFirst()
     }
 
     /// Fails only for a number that JSON cannot hold, such as infinity.
