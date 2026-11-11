@@ -38,6 +38,7 @@ let package = Package(
         // Where OpenRun keeps its data as readable JSON, and the safe write
         // and read of each file.
         .target(name: "DataStorage"),
+        .testTarget(name: "DataStorageTests", dependencies: ["DataStorage", "SessionProtocol"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
