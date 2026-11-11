@@ -11,4 +11,12 @@ struct MarkdownInlineTests {
         #expect(spans(#"\*escaped\* \\ \a"#) == [MarkdownSpan(#"*escaped* \ \a"#)])
         #expect(spans("").isEmpty)
     }
+
+    @Test func codeSpansKeepTheirMarksAndLoseOneSpace() {
+        #expect(spans("`` a ` b `` and `**x**`") == [
+            MarkdownSpan("a ` b", style: .code), MarkdownSpan(" and "), MarkdownSpan("**x**", style: .code),
+        ])
+        #expect(spans("`not closed") == [MarkdownSpan("`not closed")])
+        #expect(spans("run `swift bu", streaming: true) == [MarkdownSpan("run "), MarkdownSpan("swift bu", style: .code)])
+    }
 }

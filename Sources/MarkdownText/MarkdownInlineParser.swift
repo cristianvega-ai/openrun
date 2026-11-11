@@ -24,6 +24,7 @@ public struct MarkdownInlineParser {
         while index < end {
             let next: Int? = switch characters[index] {
             case "\\": escape(at: index, end, style, link)
+            case "`": codeSpan(at: index, end, style, link)
             default: nil
             }
             if let next {
@@ -45,10 +46,51 @@ public struct MarkdownInlineParser {
         }
     }
 
+    /// Whether a construct that has not closed by `end` shows as closed.
+    func closesOptimistically(_ end: Int) -> Bool {
+        isStreaming && end == characters.count
+    }
+
+    /// The length of the run of `character` that starts at `index`.
+    func runLength(of character: Character, at index: Int, _ end: Int) -> Int {
+        var length = 0
+        while index + length < end, characters[index + length] == character { length += 1 }
+        return length
+    }
+
     private mutating func escape(at index: Int, _ end: Int, _ style: MarkdownSpan.Style, _ link: String?) -> Int? {
         guard index + 1 < end, characters[index + 1].isASCII, characters[index + 1].isPunctuation || characters[index + 1].isSymbol
         else { return nil }
         emit(String(characters[index + 1]), style, link)
         return index + 2
+    }
+
+    private mutating func codeSpan(at index: Int, _ end: Int, _ style: MarkdownSpan.Style, _ link: String?) -> Int? {
+        let length = runLength(of: "`", at: index, end)
+        var search = index + length
+        while search < end {
+            let run = runLength(of: "`", at: search, end)
+            if run == length {
+                emit(Self.codeText(characters[(index + length)..<search]), style.union(.code), link)
+                return search + run
+            }
+            search += max(run, 1)
+        }
+        guard closesOptimistically(end) else {
+            emit(String(repeating: "`", count: length), style, link)
+            return index + length
+        }
+        emit(Self.codeText(characters[(index + length)..<end]), style.union(.code), link)
+        return end
+    }
+
+    /// The content of a code span: line ends become spaces, and one space
+    /// at each end goes when both ends have one.
+    private static func codeText(_ characters: ArraySlice<Character>) -> String {
+        var text = String(characters.map { $0 == "\n" ? " " : $0 })
+        if text.count >= 2, text.first == " ", text.last == " ", text.contains(where: { $0 != " " }) {
+            text = String(text.dropFirst().dropLast())
+        }
+        return text
     }
 }
