@@ -44,6 +44,7 @@ extension MainWindowController: NSMenuItemValidation {
         (layout.projectsHidden, layout.sessionsHidden) = (projectsItem.isCollapsed, sessionsItem.isCollapsed)
         layout.save(to: defaults)
         updateTopRowSpaces()
+        keepMinimumSize()
     }
 
     /// The traffic lights sit in the top row of the first visible pane, so

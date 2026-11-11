@@ -35,6 +35,9 @@ public final class MainWindowController: NSObject {
         contentItem = NSSplitViewItem(viewController: Self.holder(of: contentPane.view))
         super.init()
         configurePanes()
+        paneWindow.delegate = self
+        contentPane.minimumSizeChanged = { [weak self] in self?.keepMinimumSize() }
+        keepMinimumSize()
         paneWindow.center()
         if let frameName { paneWindow.setFrameAutosaveName(frameName) }
     }
