@@ -112,6 +112,7 @@ public final class TerminalView: NSView {
             guard let self, let delegate else { return false }
             return await delegate.terminalView(self, shouldOpenLink: address)
         }
+        registerForDraggedTypes([.fileURL, .string])
         addSubview(scrollBar)
         scrollBar.onScroll = { [weak self] scroll in
             self?.terminal.scrollViewport(scroll)
@@ -401,6 +402,30 @@ public final class TerminalView: NSView {
     @objc public func paste(_ sender: Any?) {
         guard let text = pasteboard.plainText() else { return }
         deliverText(text, from: .paste)
+    }
+
+    public override func draggingEntered(_ sender: any NSDraggingInfo) -> NSDragOperation {
+        dropText(from: sender.draggingPasteboard) == nil ? [] : .copy
+    }
+
+    /// A drop types its text through the path of a paste, so bracketed paste
+    /// applies, and text with a line break asks first. Nothing runs by itself.
+    public override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        drop(from: sender.draggingPasteboard)
+    }
+
+    func drop(from pasteboard: NSPasteboard) -> Bool {
+        guard let text = dropText(from: pasteboard) else { return false }
+        window?.makeFirstResponder(self)
+        deliverText(text, from: .paste)
+        return true
+    }
+
+    /// The quoted paths of the dropped files, or the dropped text.
+    func dropText(from pasteboard: NSPasteboard) -> String? {
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        if !files.isEmpty { return DroppedFiles.text(for: files.map(\.path)) }
+        return pasteboard.string(forType: .string).flatMap { $0.isEmpty ? nil : $0 }
     }
 
     func deliverText(_ text: String, from source: UnsafeTextSource) {
