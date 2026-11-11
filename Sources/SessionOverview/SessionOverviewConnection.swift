@@ -17,6 +17,9 @@ public final class SessionOverviewConnection {
     /// Whether a list of the sessions came since the start. Before it, the
     /// overview holds no session, and that does not mean that none runs.
     public private(set) var hasSessionList = false
+    /// Whether a list of the agent threads came since the start. A
+    /// session process of an older build sends none.
+    public private(set) var hasThreadList = false
     /// Called after each batch that changed the overview, with the
     /// overview before the batch.
     public var overviewChanged: ((_ previous: SessionOverview) -> Void)?
@@ -96,6 +99,7 @@ public final class SessionOverviewConnection {
             overview.apply(event)
             switch event {
             case .sessions: hasSessionList = true
+            case .threads: hasThreadList = true
             case .closed: end = "\(SessionConnectionError.connectionClosed)"
             case .failed(let error): end = "\(error)"
             default: break

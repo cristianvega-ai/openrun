@@ -24,6 +24,7 @@ final class Workspace: NSObject {
     let requests: SessionRequests
     let layoutStore: WindowLayoutStore
     let panes: SessionPanes
+    let threadPanes = ThreadPanes()
     let notifier: any AlertNotifier
     /// The rows, the selection, the filter and the order, as `layout.json` keeps them.
     var layout: WindowLayout
@@ -124,6 +125,7 @@ final class Workspace: NSObject {
     func stop() {
         connection.stop()
         panes.closeAll()
+        threadPanes.closeAll()
         layoutStore.save(layout)
         layoutStore.finishWrites()
     }

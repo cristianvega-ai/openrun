@@ -70,6 +70,7 @@ extension Workspace: SessionPaneDelegate, MainWindowDelegate {
     /// a window that is closed. The feed stays, for the alerts.
     func mainWindowWillClose(_ window: MainWindowController) {
         panes.closeAll()
+        threadPanes.closeAll()
         (shown, shownIsStale, isContentActive) = (.nothing, false, false)
         window.showContent(nil)
     }
