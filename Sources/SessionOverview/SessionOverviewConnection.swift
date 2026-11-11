@@ -7,7 +7,9 @@ import SessionProtocol
 ///
 /// A thread of its own receives the feed, so the main thread never waits
 /// for the socket. The changes reach the main thread in batches, in order.
-/// When the connection ends, the last facts stay.
+/// When the connection ends, the last facts stay, and the next try comes
+/// after a wait that grows. On the default socket a try also wakes the
+/// launch agent, so the session process runs while the app runs.
 @MainActor
 public final class SessionOverviewConnection {
     public private(set) var overview = SessionOverview()
@@ -18,6 +20,11 @@ public final class SessionOverviewConnection {
     public var statusChanged: (() -> Void)?
     /// Opens the feed. Tests give their own.
     var open: @Sendable (SocketLocation) throws -> SessionChangeReceiver = SessionOverviewConnection.openFeed
+    /// The wait before the second try. Each later wait is twice as long,
+    /// up to `longestRetryDelay`.
+    var firstRetryDelay = Duration.milliseconds(500)
+    static let longestRetryDelay = Duration.seconds(10)
+    private lazy var retryDelay = firstRetryDelay
     private let socket: SocketLocation
     private var receiver: SessionChangeReceiver?
     /// The number of the present connection or try. An event of an older
@@ -29,11 +36,18 @@ public final class SessionOverviewConnection {
         self.socket = socket
     }
 
-    /// Connects. Later calls do nothing.
+    /// Connects, and connects again after each end. Later calls do nothing.
     public func start() {
         guard !isStarted else { return }
         isStarted = true
         connect()
+    }
+
+    /// Ends the connection for good, such as when the app quits.
+    public func stop() {
+        generation += 1
+        receiver?.shutdown()
+        receiver = nil
     }
 
     nonisolated static func openFeed(at socket: SocketLocation) throws -> SessionChangeReceiver {
@@ -59,6 +73,7 @@ public final class SessionOverviewConnection {
         switch result {
         case .success(let receiver):
             self.receiver = receiver
+            retryDelay = firstRetryDelay
             setStatus(.connected)
             let pending = PendingChanges()
             receiver.startReceiving { [weak self] event in
@@ -89,6 +104,13 @@ public final class SessionOverviewConnection {
     private func lostConnection(reason: String) {
         receiver = nil
         setStatus(.disconnected(reason: reason))
+        let (delay, generation) = (retryDelay, generation)
+        retryDelay = min(retryDelay * 2, Self.longestRetryDelay)
+        Task { [weak self] in
+            try? await Task.sleep(for: delay)
+            guard let self, generation == self.generation else { return }
+            self.connect()
+        }
     }
 
     private func setStatus(_ new: ConnectionStatus) {

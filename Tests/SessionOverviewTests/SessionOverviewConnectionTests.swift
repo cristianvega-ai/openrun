@@ -37,4 +37,28 @@ import Testing
         guard case .disconnected(let reason) = connection.status else { Issue.record("\(connection.status)"); return }
         #expect(reason.contains("No session process answers"))
     }
+
+    /// The sessions of a session process end with it. The next session
+    /// process on the socket brings a new list.
+    @Test func theConnectionComesBackAfterTheSessionProcessStartsAgain() async throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let first = try RunningSessionProcess(directory: folder)
+        let connection = SessionOverviewConnection(socket: try SocketLocation(path: first.socketPath))
+        connection.firstRetryDelay = .milliseconds(20)
+        connection.start()
+        _ = try first.createSession(program: ["/bin/sh"])
+        #expect(await waitUntil { connection.overview.sessions.count == 1 })
+        first.stop()
+        // A session process that stops ends its sessions and says so.
+        #expect(await waitUntil { connection.status != .connected && connection.overview.sessions.isEmpty })
+        let second = try RunningSessionProcess(directory: folder, logName: "log2")
+        defer { second.stop() }
+        _ = try second.createSession(program: ["/bin/sh"])
+        #expect(await waitUntil { connection.status == .connected && connection.overview.sessions.count == 1 })
+        connection.stop()
+        _ = try second.createSession(program: ["/bin/sh"])
+        try await Task.sleep(for: .milliseconds(300))
+        #expect(connection.overview.sessions.count == 1)
+    }
 }
