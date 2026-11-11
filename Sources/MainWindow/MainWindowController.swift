@@ -62,6 +62,7 @@ public final class MainWindowController: NSObject {
     /// Shows the content in the third pane, or its empty state for `nil`.
     public func showContent(_ content: PaneContent?) {
         contentPane.show(content)
+        updateTopRowSpaces()
     }
 
     public func updateContentTitle(_ title: String) {

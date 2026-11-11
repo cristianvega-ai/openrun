@@ -61,7 +61,7 @@ extension MainWindowController: NSMenuItemValidation {
         let rows = [projectsItem.isCollapsed ? nil : projectsList.topRow, sessionsItem.isCollapsed ? nil : sessionsList.topRow, contentPane.topRow]
         let first = rows.compactMap { $0 }[0]
         for row in [projectsList.topRow, sessionsList.topRow, contentPane.topRow] {
-            row.leadingSpace = row === first ? lights : 16
+            row.leadingSpace = row === first ? lights : row === contentPane.topRow ? contentPane.content?.textInset ?? 16 : 16
         }
         listsButton.removeFromSuperview()
         first.leadingItems.insertArrangedSubview(listsButton, at: 0)

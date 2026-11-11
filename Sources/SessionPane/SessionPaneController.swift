@@ -33,6 +33,9 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     public private(set) var title = ""
     /// The view that a host puts in its layout.
     public let paneView = SessionPaneView()
+    /// The terminal view draws its grid 8 points inside its edges. A host
+    /// lines up its own text, such as a title, with the grid.
+    public let textInset: CGFloat = 8
     var hiddenGridLabel: HiddenGridLabel { paneView.hiddenGridLabel }
     private var window: NSWindow? { paneView.window }
     var ask: @MainActor (UserQuestion, NSWindow) async -> Bool = { await $0.ask(in: $1) }

@@ -36,4 +36,15 @@ import Testing
         #expect(view.superview === controller.contentPane.contentArea && controller.contentPane.titleLabel.stringValue == "vim")
         #expect(controller.contentPane.minimumSize.width == 500)
     }
+
+    /// The title of the third pane starts where the text of its content starts.
+    @Test func theTitleStartsAtTheTextOfTheContent() {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        #expect(controller.contentPane.topRow.leadingSpace == 16)
+        controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: .zero, textInset: 8))
+        #expect(controller.contentPane.topRow.leadingSpace == 8)
+        controller.showContent(nil)
+        #expect(controller.contentPane.topRow.leadingSpace == 16)
+    }
 }

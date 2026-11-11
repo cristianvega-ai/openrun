@@ -19,14 +19,18 @@ public struct PaneContent {
     public var topRowItems: [NSView]
     /// The view that takes the keyboard focus when the pane gets it.
     public var focusView: NSView
+    /// The distance from the leading edge of the view to its text. The title
+    /// of the pane starts at the same distance, so the two line up.
+    public var textInset: CGFloat
 
-    public init(view: NSView, title: String, minimumSize: CGSize, topRowItems: [NSView] = [], focusView: NSView? = nil) {
+    public init(view: NSView, title: String, minimumSize: CGSize, topRowItems: [NSView] = [], focusView: NSView? = nil, textInset: CGFloat = 16) {
         (self.view, self.title, self.minimumSize, self.topRowItems) = (view, title, minimumSize, topRowItems)
-        self.focusView = focusView ?? view
+        (self.focusView, self.textInset) = (focusView ?? view, textInset)
     }
 
-    public init(viewController: NSViewController, title: String, minimumSize: CGSize, topRowItems: [NSView] = [], focusView: NSView? = nil) {
-        self.init(view: viewController.view, title: title, minimumSize: minimumSize, topRowItems: topRowItems, focusView: focusView)
+    public init(viewController: NSViewController, title: String, minimumSize: CGSize, topRowItems: [NSView] = [],
+                focusView: NSView? = nil, textInset: CGFloat = 16) {
+        self.init(view: viewController.view, title: title, minimumSize: minimumSize, topRowItems: topRowItems, focusView: focusView, textInset: textInset)
         self.viewController = viewController
     }
 }
