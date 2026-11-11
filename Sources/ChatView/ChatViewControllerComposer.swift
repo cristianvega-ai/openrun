@@ -62,7 +62,9 @@ extension ChatViewController {
             conditionView.frame = NSRect(x: column.x, y: bottom - height - 8, width: column.width, height: height)
             bottom = conditionView.frame.minY - 4
         }
-        scrollView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: bottom)
+        let top = findBar.isHidden ? 0 : FindBarView.height
+        findBar.frame = NSRect(x: 0, y: 0, width: bounds.width, height: FindBarView.height)
+        scrollView.frame = NSRect(x: 0, y: top, width: bounds.width, height: bottom - top)
         emptyView.frame = scrollView.frame
         let side = JumpToNewestButton.side
         jumpButton.frame = NSRect(x: ((bounds.width - side) / 2).rounded(), y: bottom - side - 12, width: side, height: side)

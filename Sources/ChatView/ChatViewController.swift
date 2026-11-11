@@ -22,6 +22,9 @@ import AppKit
     let conditionView = ThreadConditionView()
     let emptyView = EmptyThreadView()
     let jumpButton = JumpToNewestButton()
+    let findBar = FindBarView()
+    var findMatches: [TranscriptSearch.Match] = []
+    var findIndex: Int?
     let agentLabel = NSTextField(labelWithString: "")
     lazy var terminalButton = NSButton(title: "Open in Terminal", target: self, action: #selector(openInTerminal))
     private var builder = TranscriptRowBuilder()
@@ -39,6 +42,7 @@ import AppKit
         context.actions = self
         context.hasEarlierHistory = facts.hasEarlierHistory
         scrollView.reachedTop = { [weak self] in self?.loadEarlierHistory() }
+        findBar.isHidden = true
         showThreadState()
     }
 
@@ -54,7 +58,7 @@ import AppKit
     public override func loadView() {
         let root = ChatRootView(palette: context.palette)
         root.addSubview(scrollView)
-        for subview in [composer, conditionView, emptyView, jumpButton] as [NSView] { root.addSubview(subview) }
+        for subview in [composer, conditionView, emptyView, jumpButton, findBar] as [NSView] { root.addSubview(subview) }
         view = root
     }
 
