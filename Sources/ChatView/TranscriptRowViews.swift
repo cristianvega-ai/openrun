@@ -5,6 +5,7 @@
         case .userMessage: UserMessageRowView()
         case .agentText: AgentTextRowView()
         case .agentCode: CodeBlockRowView()
+        case .toolCalls: ToolCallsRowView()
         default: TranscriptRowView()
         }
     }
