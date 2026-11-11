@@ -300,7 +300,7 @@ Each line goes to standard error and to the unified log, with the subsystem `ai.
 ### CommandLineTool
 
 `CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects with `SessionClient` of `SessionConnection`, and runs one command. It turns a `SessionConnectionError` into a `CommandLineToolError` with the words of the tool.
-`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand` and `KillCommand` hold the commands. `RawTerminalMode` switches the terminal to raw mode and back.
+`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand`, `KillCommand`, `RenameCommand` and `NotifyCommand` hold the commands. `ListedSession` is the shape of one session in `openrun list --json`. `RawTerminalMode` switches the terminal to raw mode and back.
 `openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them through `SessionAttachment`. `AttachSignals` turns signals into requests for the writer.
 
 ## Requests on another session
@@ -799,21 +799,29 @@ A session process that runs from OpenRun.app also puts the folder `Contents/Help
 
 ```
 openrun new [--folder PATH] [-- PROGRAM ARGUMENTS...]
-openrun list
+openrun list [--json]
 openrun attach IDENTIFIER
 openrun read IDENTIFIER [--scrollback]
 openrun send IDENTIFIER [--enter] TEXT
 openrun kill IDENTIFIER
+openrun rename IDENTIFIER [NAME]
+openrun notify [--session IDENTIFIER] TEXT
 openrun help
 ```
 
 Every command takes `--socket PATH`. Errors go to standard error with exit code 1. Wrong arguments exit with code 2: this includes `openrun help` with arguments, `openrun COMMAND-THAT-DOES-NOT-EXIST --help`, and an empty session identifier. The tool checks the arguments before it connects, so these exit with 2 whether or not a session process runs. `--help` after a real command (`openrun read abc --help`) shows the help.
 `list` prints one line per session: the identifier, the folder and the command, separated by tabs. A client chose the folder and the arguments, so each field is escaped with `PrintableText.escaping`: a backslash becomes two backslashes, a tab `\t`, a new line `\n`, a carriage return `\r`, and any other control character `\u{XX}` in upper-case hexadecimal. Each session is exactly one line, and the tabs split exactly three columns. The arguments of the command are joined by one space.
+`list --json` prints an object with one key, `sessions`, a list oldest first. Each session has every one of these keys, with `null` for a fact that the session process does not know: `identifier` (lower case), `name`, `title`, `folder`, `currentFolder`, `branch`, `command`, `foregroundProgram`, `isInProgress`, `alert` (`raisedAt`, `source`, `text`), `size` (`columns`, `rows`), `createdAt`, `lastOutputAt` and `lastInputAt`. Times are text in ISO 8601, such as `2026-11-10T09:30:00Z`. JSON escapes every control character, so the output never drives a terminal.
+`rename` joins the words after the identifier, and the words after `--`, with one space. Without a name, it removes the name.
+`notify` raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`, with the words of TEXT joined by one space. It is for the hooks of an agent. When there is no such session, no session process answers within 5 seconds of `hello`, or the session process does not know the session, it writes `ESC ] 777 ; notify ; OpenRun ; TEXT ESC \` to `/dev/tty` instead, without waiting. OpenRun and other terminals show that as a notification. A refusal by the rule for callers is an error, with no write to the terminal. `notify` exits with 0 when the alert went out and with 1 otherwise. It never exits with 2, also not for wrong arguments, because exit code 2 from a hook of Claude Code blocks the action of the agent.
 Every error message that `openrun` prints is escaped the same way, including failures that the session process reports, so text from a client never drives the terminal of the caller. The tool's own line breaks stay. A message with a list, such as the sessions that start with the typed identifier, is a heading and one line for each entry (`CommandLineToolError.failureWithList`). The tool escapes each line on its own, so every entry is on its own line, and a line break inside client text shows as `\n`.
 
 ## Limits
 
 - When a shell's prompt and input take more rows than the grid has, the shell draws part of them into the scrollback, and parts of old prompts can stay there. A window's minimum grid of 60 by 12 makes this rare. Another client can still set a smaller grid. A size from an attach applies at once, so the shell's drawing after it can still leave parts of the old prompt. So can an answer that comes after the limit of 500 ms. A shell without its line editor, such as `bash --noediting`, whose prompt turns on bracketed paste makes each new width wait for that limit. A shell in an SSH login is not the foreground program, so its prompt gets no help.
+- The session process runs at most 100 sessions. See "Facts of a session".
+- The session process sees a change of folder or terminal mode only while output or input comes, and up to two seconds after it. A command that turns line mode off or on without output after that keeps its old `isInProgress` until the next output or input.
+- A shell without its line editor that reads in line mode and does not lead the terminal session, such as `bash --noediting` inside another shell, counts as a command in progress.
 - The session process does not survive a Mac restart. launchd starts it again at the next wake.
 - A program in an SSH login is not in the launchd domain of the user's desktop and probably cannot reach the Mach service. Over SSH, `openrun` then reaches only a session process that already runs. The owner accepted this for version 1. It was not tested.
 - `openrun attach` draws only the visible screen into the terminal. The scrollback of the session stays in the session. `openrun read --scrollback` prints it.
