@@ -1,4 +1,4 @@
-import DataStorage
+@testable import DataStorage
 import Darwin
 import Foundation
 import SessionProtocol
@@ -24,11 +24,24 @@ import Testing
         #expect(Self.mode(of: folder.path) == 0o700)
     }
 
-    @Test func createGivesMode0700ToAFolderThatExists() throws {
+    /// A mode that a caller chose can be what keeps a file from being
+    /// replaced, so only the default folder gets mode 0700 when it exists.
+    @Test func createKeepsTheModeOfANamedFolderThatExists() throws {
         let temporary = try TemporaryFolder()
         #expect(chmod(temporary.path, 0o755) == 0)
         try DataFolder(path: temporary.path).create()
-        #expect(Self.mode(of: temporary.path) == 0o700)
+        #expect(Self.mode(of: temporary.path) == 0o755)
+        #expect(chmod(temporary.path, 0o500) == 0)
+        defer { chmod(temporary.path, 0o700) }
+        try DataFolder(path: temporary.path).create()
+        #expect(Self.mode(of: temporary.path) == 0o500)
+    }
+
+    @Test func onlyTheDefaultFolderIsTheDefault() throws {
+        let temporary = try TemporaryFolder()
+        #expect(DataFolder.default.isDefault)
+        #expect(DataFolder(path: NSHomeDirectory() + "/Library/./Application Support/OpenRun").isDefault == FileManager.default.fileExists(atPath: DataFolder.defaultPath))
+        #expect(!DataFolder(path: temporary.path).isDefault)
     }
 
     @Test func createTwiceKeepsTheFolderAndItsFiles() throws {

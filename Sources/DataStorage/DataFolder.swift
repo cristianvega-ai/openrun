@@ -32,8 +32,10 @@ public struct DataFolder: Equatable, Sendable {
     ///
     /// The files hold the folders of the user's projects, and later the
     /// sessions. Other users must not read them or put files of their own
-    /// here. A folder that already exists gets mode 0700 too, because the
-    /// folder belongs to OpenRun.
+    /// here. The default folder gets mode 0700 also when it exists, because
+    /// it belongs to OpenRun. A folder that a caller named keeps its mode,
+    /// as the folder of a socket chosen with `--socket` does: its mode can
+    /// be what keeps a file from being replaced.
     public func create() throws {
         var status = stat()
         if stat(path, &status) != 0 {
@@ -52,10 +54,23 @@ public struct DataFolder: Equatable, Sendable {
         guard (status.st_mode & S_IFMT) == S_IFDIR else {
             throw DataStorageError.notAFolder(path: path)
         }
-        if status.st_mode & 0o777 != 0o700 {
+        if isDefault, status.st_mode & 0o777 != 0o700 {
             guard chmod(path, 0o700) == 0 else { throw DataStorageError.failure(of: "chmod") }
         }
         removeTemporaryFiles(olderThan: Date(timeIntervalSinceNow: -60))
+    }
+
+    /// Whether this is the default folder, also through another spelling,
+    /// such as one through a symbolic link to the home folder.
+    var isDefault: Bool {
+        func resolved(_ path: String) -> String? {
+            guard let real = realpath(path, nil) else { return nil }
+            defer { free(real) }
+            return String(cString: real)
+        }
+        if path == Self.defaultPath { return true }
+        guard let mine = resolved(path), let theirs = resolved(Self.defaultPath) else { return false }
+        return mine == theirs
     }
 
     /// A crash in the middle of a write leaves its temporary file. Only old
