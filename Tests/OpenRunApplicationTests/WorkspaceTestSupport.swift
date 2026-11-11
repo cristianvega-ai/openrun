@@ -3,6 +3,7 @@ import SessionProcessHarness
 import SessionProtocol
 import Testing
 @testable import OpenRunApplication
+@testable import TerminalView
 
 /// Waits on the main actor until the condition holds or the time passes.
 /// The sleep lets go of the main queue, so the feed and the panes can work.
@@ -46,4 +47,9 @@ struct TestWorkspace {
         process.stop()
         UserDefaults().removePersistentDomain(forName: defaultsName)
     }
+}
+
+extension TerminalView {
+    /// The text on the screen of the view.
+    var screenText: String { String(decoding: (try? terminal.formatted(.plainText)) ?? [], as: UTF8.self) }
 }

@@ -74,8 +74,3 @@ extension NSView {
         return nil
     }
 }
-
-extension TerminalView {
-    /// The text on the screen of the view.
-    var screenText: String { String(decoding: (try? terminal.formatted(.plainText)) ?? [], as: UTF8.self) }
-}
