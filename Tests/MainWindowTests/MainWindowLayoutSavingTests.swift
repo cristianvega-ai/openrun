@@ -22,20 +22,6 @@ final class CountingDefaults: UserDefaults, @unchecked Sendable {
         return defaults
     }
 
-    /// The completion of an animation runs only when the test lets go of the
-    /// main queue, and under load it comes late, so the wait has a condition.
-    private func turns(seconds: Double, until condition: () -> Bool = { false }) async {
-        let end = Date().addingTimeInterval(seconds)
-        while !condition(), Date() < end {
-            runLoopTurn()
-            try? await Task.sleep(for: .milliseconds(5))
-        }
-    }
-
-    private func runLoopTurn() {
-        RunLoop.main.run(until: Date().addingTimeInterval(0.01))
-    }
-
     @Test func anAnimatedToggleSavesOnce() async throws {
         let defaults = try makeDefaults()
         let controller = makeMainWindow(defaults: defaults)
