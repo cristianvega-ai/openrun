@@ -5,9 +5,15 @@
 \*
 \* Each request comes from a caller that runs in another session.  A caller
 \* in the target session, or outside every session, needs no question, so the
-\* model leaves those callers out.  The session process finds the session of
-\* the caller when it accepts the connection.  A caller that has already
-\* ended then has no session that the process can find.
+\* model leaves those callers out.  The session process reads the terminal
+\* session of the caller when it accepts the connection, and finds the session
+\* at each request.  A caller that has already ended then has no session that
+\* the process can find.  SessionRegistry keeps the terminal session of an
+\* ended session while a process of it lives, so the caller of a session that
+\* ends counts as unknown and never as a caller outside every session.  The
+\* model therefore takes the place of a caller as fixed.  The refusal of a
+\* second question of one session comes before the question, so it is one
+\* more way to the "refused" phase.
 \*
 \* An answerer is a connection that asks to receive the questions.  The
 \* signed OpenRun.app makes such a connection.  Any other program of the user
