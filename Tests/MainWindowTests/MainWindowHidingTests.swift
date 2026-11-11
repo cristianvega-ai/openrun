@@ -27,9 +27,10 @@ import Testing
         defer { controller.window.close() }
         controller.reducesMotion = { true }
         let items = controller.paneMenuItems()
-        #expect(items.map(\.title) == ["Hide Projects", "Hide Sessions"] && items.allSatisfy { $0.keyEquivalentModifierMask == [.command, .control] })
+        #expect(items.map(\.title) == ["Hide Projects", "Hide Sessions", "Move Focus to Next Pane", "Move Focus to Previous Pane"])
+        #expect(items.prefix(2).allSatisfy { $0.keyEquivalentModifierMask == [.command, .control] })
         controller.toggleSessionsList(nil)
         _ = items.map(controller.validateMenuItem)
-        #expect(items.map(\.title) == ["Hide Projects", "Show Sessions"])
+        #expect(items.prefix(2).map(\.title) == ["Hide Projects", "Show Sessions"])
     }
 }

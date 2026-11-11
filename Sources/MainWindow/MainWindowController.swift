@@ -11,6 +11,7 @@ import SessionsList
 public final class MainWindowController: NSObject {
     public let projectsList = ProjectsListController()
     public let sessionsList = SessionsListController()
+    public weak var delegate: MainWindowDelegate?
     let paneWindow: PaneWindow
     let contentPane = ContentPaneController()
     let splitController = NSSplitViewController()
@@ -21,6 +22,7 @@ public final class MainWindowController: NSObject {
     let sessionsShadow = SheetShadowView()
     let defaults: UserDefaults
     var layout: PaneLayout
+    var isContentActive = false
     /// The setting of Reduce Motion. Tests set it.
     var reducesMotion = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 
@@ -36,6 +38,7 @@ public final class MainWindowController: NSObject {
         super.init()
         configurePanes()
         paneWindow.delegate = self
+        paneWindow.firstResponderChanged = { [weak self] in self?.updateContentActivity() }
         contentPane.minimumSizeChanged = { [weak self] in self?.keepMinimumSize() }
         keepMinimumSize()
         paneWindow.center()

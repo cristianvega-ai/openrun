@@ -12,13 +12,18 @@ extension MainWindowController: NSMenuItemValidation {
     }
 
     /// The items for the View menu of the host, with their key equivalents.
+    /// Control-Tab moves the focus between the panes, as between tabs.
     public func paneMenuItems() -> [NSMenuItem] {
         let projects = NSMenuItem(title: "Hide Projects", action: #selector(toggleProjectsList), keyEquivalent: "1")
         let sessions = NSMenuItem(title: "Hide Sessions", action: #selector(toggleSessionsList), keyEquivalent: "2")
         for item in [projects, sessions] {
             (item.target, item.keyEquivalentModifierMask) = (self, [.command, .control])
         }
-        return [projects, sessions]
+        let next = NSMenuItem(title: "Move Focus to Next Pane", action: #selector(focusNextPane), keyEquivalent: "\t")
+        let previous = NSMenuItem(title: "Move Focus to Previous Pane", action: #selector(focusPreviousPane), keyEquivalent: "\t")
+        (next.target, next.keyEquivalentModifierMask) = (self, [.control])
+        (previous.target, previous.keyEquivalentModifierMask) = (self, [.control, .shift])
+        return [projects, sessions, next, previous]
     }
 
     /// The title of each item says what it does now.
