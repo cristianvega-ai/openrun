@@ -1,16 +1,17 @@
 import AppKit
 
-/// The open diff of a file change: at most 200 lines in a quiet box that
-/// scrolls sideways, with the count of the other lines.
+/// The open diff of a file change: every line, in a quiet box of bounded
+/// height that scrolls inside, up and down and sideways.
 final class DiffBoxView: RoundedBoxView, MeasurableView {
-    static let lineLimit = 200
     static let padding: CGFloat = 6
-    let scrollView = SidewaysScrollView()
+    static let maximumHeight: CGFloat = 360
+    let scrollView = InnerScrollView()
     let linesView = DiffLinesView()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         cornerRadius = 6
+        scrollView.hasHorizontalScroller = true
         scrollView.documentView = linesView
         addSubview(scrollView)
     }
@@ -20,14 +21,12 @@ final class DiffBoxView: RoundedBoxView, MeasurableView {
 
     func show(_ diff: UnifiedDiff, palette: ChatPalette) {
         fillColor = palette.codeBackground
-        let hidden = diff.lines.count - Self.lineLimit
-        let note = hidden <= 0 ? nil : hidden == 1 ? "1 more line" : "\(hidden) more lines"
-        linesView.show(Array(diff.lines.prefix(Self.lineLimit)), note: note, palette: palette)
+        linesView.show(diff.lines, note: nil, palette: palette)
         needsLayout = true
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        linesView.contentHeight + 2 * Self.padding
+        min(Self.maximumHeight, linesView.contentHeight) + 2 * Self.padding
     }
 
     override func layout() {

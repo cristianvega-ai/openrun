@@ -13,5 +13,6 @@ struct InnerScrollViewTests {
     @Test func aBoxThatFitsAndASidewaysScrollHandOn() {
         #expect(InnerScrollView.handsOn(deltaX: 0, deltaY: -5, offset: 0, maximumOffset: 0))
         #expect(InnerScrollView.handsOn(deltaX: 8, deltaY: 1, offset: 40, maximumOffset: 100))
+        #expect(!InnerScrollView.handsOn(deltaX: 8, deltaY: 1, offset: 40, maximumOffset: 100, maximumOffsetX: 30))
     }
 }
