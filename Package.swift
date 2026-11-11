@@ -58,6 +58,8 @@ let package = Package(
         .target(name: "SessionConnection", dependencies: ["SessionProtocol", "SessionLaunch"]),
         .testTarget(name: "SessionConnectionTests", dependencies: ["SessionConnection", "SessionProtocol", "SessionLaunch"]),
         .target(name: "PseudoTerminal"),
+        // The git branch of a folder, read from the files of its repository.
+        .target(name: "GitBranch"),
         // How launchd starts the session process when a client needs it:
         // the names of the launch agent, its wake service, and the wake.
         .target(name: "SessionLaunch"),
