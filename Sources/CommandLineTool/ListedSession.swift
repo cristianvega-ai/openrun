@@ -11,7 +11,7 @@ struct ListedSession: Encodable {
 
     private enum Key: String, CodingKey {
         case identifier, name, title, folder, currentFolder, branch, command, foregroundProgram
-        case isInProgress, alert, size, createdAt, lastOutputAt, lastInputAt
+        case isInProgress, alert, size, createdAt, lastOutputAt, lastInputAt, projectIdentifier
     }
 
     func encode(to encoder: any Encoder) throws {
@@ -31,6 +31,8 @@ struct ListedSession: Encodable {
         try container.encode(summary.createdAt, forKey: .createdAt)
         try container.encode(summary.lastOutputAt, forKey: .lastOutputAt)
         try container.encode(summary.lastInputAt, forKey: .lastInputAt)
+        // In lower case, as `openrun project list` shows it.
+        try container.encode(summary.projectIdentifier.map(SessionSummary.text(for:)), forKey: .projectIdentifier)
     }
 
     /// The whole output: an object with the list, so that a later version
