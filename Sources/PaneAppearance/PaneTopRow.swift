@@ -30,6 +30,10 @@ public final class PaneTopRow: NSView {
         }
         leadingItems.setHuggingPriority(.defaultLow, for: .horizontal)
         leadingInset = leadingItems.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 16)
+        // A window can push the controls further, such as past its traffic
+        // lights, with a constraint of a higher priority. It stays below the
+        // layout of a split view, so the row never holds its pane in place.
+        leadingInset?.priority = .init(449)
         NSLayoutConstraint.activate([
             leadingInset!,
             trailingItems.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -10),

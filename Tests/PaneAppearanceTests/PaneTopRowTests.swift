@@ -46,6 +46,22 @@ import Testing
         #expect(close.map { $0.convert($0.bounds, to: nil).midY } == row.convert(row.bounds, to: nil).midY)
     }
 
+    /// A window keeps the controls clear of its traffic lights with a
+    /// constraint of its own, which moves them past the inset of the row.
+    @Test func aStrongerConstraintPushesTheControlsPastTheInset() {
+        let holder = NSView(frame: NSRect(x: 0, y: 0, width: 300, height: 52))
+        let row = PaneTopRow(background: .white)
+        row.frame = holder.bounds
+        holder.addSubview(row)
+        row.leadingItems.addArrangedSubview(NSButton())
+        // Below the layout of a split view, so the row never holds its pane in place.
+        let clearance = row.leadingItems.leadingAnchor.constraint(greaterThanOrEqualTo: holder.leadingAnchor, constant: 90)
+        clearance.priority = .init(450)
+        clearance.isActive = true
+        holder.layoutSubtreeIfNeeded()
+        #expect(row.leadingItems.frame.minX == 90)
+    }
+
     @Test func aSymbolButtonHasNoBorderAQuietColorAndAName() {
         let button = PaneButton.make(symbol: "folder.badge.plus", label: "Add Project", target: nil, action: nil)
         #expect(!button.isBordered && button.contentTintColor == PaneColor.quietText)
