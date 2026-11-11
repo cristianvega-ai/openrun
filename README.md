@@ -128,7 +128,7 @@ openrun notify "Waiting for input"          # raise the alert of your own sessio
 openrun help
 ```
 
-`openrun notify` is for the hooks of an agent. It raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`. When no session process knows that session, it writes OSC 777 to the terminal instead. It exits with 0 when the alert went out and with 1 otherwise, never with 2, so it never blocks a hook of Claude Code.
+`openrun notify` is for the hooks of an agent. It raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`. When no session process answers, or none knows the session in `OPENRUN_SESSION`, it writes OSC 777 to the terminal instead. A session after `--session` must exist. It exits with 0 when the alert went out and with 1 otherwise, never with 2, so it never blocks a hook of Claude Code.
 A program in a session may rename or alert only its own session. The session process refuses at once when it tries another one.
 
 Every program in a session gets `OPENRUN_SESSION` (its identifier), `OPENRUN_SOCKET`, `TERM=xterm-256color`, `COLORTERM=truecolor` and `TERM_PROGRAM=OpenRun`.

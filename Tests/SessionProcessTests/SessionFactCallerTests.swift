@@ -61,6 +61,29 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// A session that the user named must exist. A session from the
+        /// environment can belong to another session process, so the alert
+        /// then goes to the terminal.
+        @Test func anUnknownSessionAfterTheOptionIsAnError() async throws {
+            try await RunningSessionProcess.run { process in
+                let errors = process.directory.appendingPathComponent("errors").path
+                let unknown = UUID().uuidString.lowercased()
+                let script = [
+                    "\(openrun(process, "notify --session \(unknown) named")) 2>'\(errors)'; echo named=$?",
+                    "OPENRUN_SESSION=\(unknown) \(openrun(process, "notify from the environment")); echo environment=$?",
+                    "exec sleep 60",
+                ].joined(separator: "; ")
+                let watcher = try SessionChangeWatcher(process)
+                let caller = try process.createSession(program: ["/bin/sh", "-c", script])
+                let alerted = watcher.summary(of: caller) { $0.alert != nil }
+                #expect(alerted?.alert?.text == "from the environment" && alerted?.alert?.source == .terminalNotification)
+                #expect(await process.waitForScreen(of: caller, containing: "environment="))
+                let screen = try process.screenText(of: caller)
+                #expect(screen.contains("named=1") && screen.contains("environment=0"), "\(screen)")
+                #expect(try String(contentsOfFile: errors, encoding: .utf8).contains("No session has an identifier that starts with \(unknown)."))
+            }
+        }
+
         /// Exit code 2 would block the action of a hook of Claude Code.
         @Test func wrongArgumentsOfNotifyExitWithOne() async throws {
             try await RunningSessionProcess.run { process in

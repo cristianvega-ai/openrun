@@ -17,7 +17,10 @@ struct NotifyCommand {
     }
 
     /// Whether the session process took the alert. A refusal by the rule
-    /// for callers is an error: the terminal belongs to another session.
+    /// for callers is an error: the terminal belongs to another session. So
+    /// is a session after `--session` that the session process does not
+    /// know, because the user named it. A session from `OPENRUN_SESSION` can
+    /// belong to another session process, and its alert goes to the terminal.
     private func raiseAlert(socketFlag: String?, environment: [String: String]) throws -> Bool {
         guard let typed = identifier ?? environment[SessionEnvironment.sessionName],
               let location = try? SocketLocation.resolve(flag: socketFlag, environment: environment) else { return false }
@@ -27,14 +30,23 @@ struct NotifyCommand {
             let session = try client.session(matching: typed)
             try client.raiseAlert(session: session.identifier, text: text)
             return true
-        } catch let error as SessionConnectionError where Self.meansNoSession(error) {
+        } catch let error as SessionConnectionError where Self.meansNoSessionProcess(error) {
+            return false
+        } catch let error as SessionConnectionError where identifier == nil && Self.meansUnknownSession(error) {
             return false
         }
     }
 
-    private static func meansNoSession(_ error: SessionConnectionError) -> Bool {
+    private static func meansNoSessionProcess(_ error: SessionConnectionError) -> Bool {
         switch error {
-        case .noSessionProcess, .wakeFailed, .protocolFailure, .connectionClosed, .noMatchingSession: true
+        case .noSessionProcess, .wakeFailed, .protocolFailure, .connectionClosed: true
+        default: false
+        }
+    }
+
+    private static func meansUnknownSession(_ error: SessionConnectionError) -> Bool {
+        switch error {
+        case .noMatchingSession: true
         case .requestFailed(let failure): failure.reason == .unknownSession
         default: false
         }
