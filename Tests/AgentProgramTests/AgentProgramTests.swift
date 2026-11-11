@@ -66,4 +66,13 @@ func runs(_ processIdentifier: pid_t) -> Bool {
             try AgentProgram(launching: AgentProgramLaunch(executablePath: "/bin/cat", folder: "/", environment: ["A=B": "c"]))
         }
     }
+
+    @Test func standardErrorKeepsItsNewestBytes() async throws {
+        let program = try startProgram("sh", ["-c", "head -c 200000 /dev/zero | tr '\\0' a >&2; echo end >&2"])
+        _ = await readAll(program)
+        _ = await program.waitForExit()
+        let text = program.standardErrorText
+        #expect(text.utf8.count == AgentProgram.standardErrorLimit)
+        #expect(text.hasSuffix("aaa\nend\n") || text.hasSuffix("aaaend\n"))
+    }
 }

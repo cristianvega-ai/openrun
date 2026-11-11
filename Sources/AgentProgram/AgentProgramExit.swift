@@ -32,14 +32,16 @@ extension AgentProgram {
         // Output that the program wrote before it ended can still wait in
         // the pipe. It comes before the stream finishes.
         readOutput(honoringBackpressure: false)
+        readStandardError()
         outputContinuation.finish()
         exit = reason
-        for descriptor in [errorDescriptor, inputDescriptor] { close(descriptor) }
+        close(inputDescriptor)
         if outputSourceIsSuspended {
             outputSource?.resume()
             outputSourceIsSuspended = false
         }
         outputSource?.cancel()
+        errorSource?.cancel()
         for waiter in exitWaiters { waiter.resume(returning: reason) }
         exitWaiters.removeAll()
     }

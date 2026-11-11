@@ -26,6 +26,8 @@ public final class AgentProgram: @unchecked Sendable {
     /// Reading stops above the high mark and starts again below the low mark.
     static let unconsumedHighMark = 4 * 1024 * 1024
     static let unconsumedLowMark = 1 * 1024 * 1024
+    /// The most bytes of standard error that the object keeps: the newest.
+    public static let standardErrorLimit = 64 * 1024
 
     let queue = DispatchQueue(label: "AgentProgram")
     let outputContinuation: AsyncStream<[UInt8]>.Continuation
@@ -37,6 +39,8 @@ public final class AgentProgram: @unchecked Sendable {
     var outputSource: DispatchSourceRead?
     var outputSourceIsSuspended = false
     var unconsumedBytes = 0
+    var errorSource: DispatchSourceRead?
+    var standardError: [UInt8] = []
     var reaper: ProcessGroupReaper?
     var exit: ProgramExit?
     var exitWaiters: [CheckedContinuation<ProgramExit, Never>] = []
@@ -67,6 +71,11 @@ public final class AgentProgram: @unchecked Sendable {
         reader.setCancelHandler { [self] in close(outputDescriptor); outputDescriptor = -1 }
         outputSource = reader
         reader.resume()
+        let errorReader = DispatchSource.makeReadSource(fileDescriptor: errorDescriptor, queue: queue)
+        errorReader.setEventHandler { [self] in readStandardError() }
+        errorReader.setCancelHandler { [self] in close(errorDescriptor); errorDescriptor = -1 }
+        errorSource = errorReader
+        errorReader.resume()
         reaper = ProcessGroupReaper(processIdentifier: processIdentifier, queue: queue) { [self] in programEnded($0) }
         reaper?.start()
     }
