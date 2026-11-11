@@ -122,14 +122,20 @@ openrun send 3f2a --enter "ls -l"           # type into a session without attach
 openrun read 3f2a                           # print the screen as plain text
 openrun read 3f2a --scrollback              # include the lines above the screen
 openrun kill 3f2a                           # end the session and every process in it
+openrun list --json                         # every fact of each session, as JSON
+openrun rename 3f2a Release build           # name the session; no name removes it
+openrun notify "Waiting for input"          # raise the alert of your own session
 openrun help
 ```
+
+`openrun notify` is for the hooks of an agent. It raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`. When no session process knows that session, it writes OSC 777 to the terminal instead. It exits with 0 when the alert went out and with 1 otherwise, never with 2, so it never blocks a hook of Claude Code.
+A program in a session may rename or alert only its own session. The session process refuses at once when it tries another one.
 
 Every program in a session gets `OPENRUN_SESSION` (its identifier), `OPENRUN_SOCKET`, `TERM=xterm-256color`, `COLORTERM=truecolor` and `TERM_PROGRAM=OpenRun`.
 
 Input that a program has not read yet waits in the session process, up to 8 MiB. Past that, `openrun send` waits until the program reads, and it fails with a message when the program ends first. Nothing that `openrun send` was told has arrived is dropped. Keys that `openrun attach` typed and that have not reached the program yet are dropped when it detaches, so a client that leaves holds no memory.
 
-The session process serves at most 64 clients at once and refuses more with a message. A client counts until its socket is closed. A request that the session process cannot read gets a failure that names the problem, and the connection closes. A client must say hello within 5 seconds, and a frame that stops halfway for 30 seconds, or a write to a client that takes nothing for 10 seconds, ends that client. A client may fall 8 MiB of output behind. Snapshots and screens do not count toward that, so a large scrollback can always be attached. A snapshot travels in one frame of at most 64 MiB, so a very wide session with a full, colorful scrollback sends only the newest lines that fit. At shutdown each client gets up to 2 seconds to take its program's last output and exit status. `documentation/architecture.md` lists every limit.
+The session process runs at most 100 sessions, and serves at most 64 clients at once and refuses more with a message. A client counts until its socket is closed. A request that the session process cannot read gets a failure that names the problem, and the connection closes. A client must say hello within 5 seconds, and a frame that stops halfway for 30 seconds, or a write to a client that takes nothing for 10 seconds, ends that client. A client may fall 8 MiB of output behind. Snapshots and screens do not count toward that, so a large scrollback can always be attached. A snapshot travels in one frame of at most 64 MiB, so a very wide session with a full, colorful scrollback sends only the newest lines that fit. At shutdown each client gets up to 2 seconds to take its program's last output and exit status. `documentation/architecture.md` lists every limit.
 
 To stop the session process, press Control-C in its window, or send it SIGTERM.
 It removes the socket file, ends every program and every other process in the terminal session of each program, and exits with status 0.
