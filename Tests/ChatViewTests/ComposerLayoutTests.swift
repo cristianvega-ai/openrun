@@ -19,5 +19,8 @@ import Testing
         #expect(full.height == plain.height + ComposerLayout.noteHeight + ImagePreviewsView.height + 8)
         #expect(full.field.minY > (full.previews?.maxY ?? 0))
         #expect(full.box.maxX <= 360 - ChatColumn.minimumMargin)
+        let held = ComposerLayout(width: 360, textHeight: 18, lineHeight: 18, hasNote: false, hasImages: false, heldHeight: 50)
+        #expect(held.held?.height == 50)
+        #expect(held.box.minY == 56)
     }
 }

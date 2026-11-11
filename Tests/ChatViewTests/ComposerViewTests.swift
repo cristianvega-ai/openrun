@@ -38,12 +38,14 @@ import Testing
         composer.submit()
         #expect(sent.isEmpty)
         #expect(composer.textView.string.isEmpty)
-        #expect(!composer.noteButton.isHidden)
+        #expect(!composer.heldView.isHidden)
+        #expect(composer.heldView.text.stringValue == "Then commit.")
+        #expect(composer.noteButton.isHidden)
         composer.sendOrStop()
         #expect(stops == 1)
         composer.setBusy(false)
         #expect(sent == ["Then commit."])
-        #expect(composer.noteButton.isHidden)
+        #expect(composer.heldView.isHidden)
     }
 
     @Test func escapeTwiceStopsAndCommandPeriodStopsAtOnce() {
@@ -56,6 +58,19 @@ import Testing
         #expect(stops == 1)
         composer.textView.stopAction?(true)
         #expect(stops == 2)
+    }
+
+    @Test func aHeldMessageCanBeEditedOrDeleted() {
+        composer.setBusy(true)
+        composer.textView.string = "First"
+        composer.submit()
+        composer.heldView.editButton.performClick(nil)
+        #expect(composer.textView.string == "First")
+        #expect(composer.heldView.isHidden)
+        composer.submit()
+        composer.heldView.deleteButton.performClick(nil)
+        #expect(composer.logic.heldMessage == nil)
+        #expect(composer.textView.string.isEmpty)
     }
 
     @Test func commandPeriodOnAnIdleThreadStopsNothing() {

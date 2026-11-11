@@ -93,4 +93,12 @@ struct ChatPictureTests {
             controller.view.window?.makeFirstResponder(line)
         }
     }
+
+    @Test func aMessageThatWaitsAboveTheComposer() throws {
+        try picture("held", Transcript(events: SampleConversation.firstTurn + SampleConversation.streamingTurn), size: NSSize(width: 820, height: 700)) {
+            $0.composer.textView.string = "When the test passes, run the whole suite once and commit the change with a short message."
+            $0.composer.submit()
+            $0.view.layoutSubtreeIfNeeded()
+        }
+    }
 }

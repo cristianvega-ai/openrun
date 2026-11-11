@@ -9,8 +9,11 @@ extension ComposerView {
             images.remove(at: index)
             refresh()
         }
-        noteButton.target = self
-        noteButton.action = #selector(takeHeldMessage)
+        heldView.editAction = { [weak self] in self?.takeHeldMessage() }
+        heldView.deleteAction = { [weak self] in
+            _ = self?.logic.takeHeldMessage()
+            self?.refresh()
+        }
     }
 
     /// Adds the images that can go, and tells why another one cannot.

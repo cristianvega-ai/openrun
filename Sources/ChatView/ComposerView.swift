@@ -12,6 +12,7 @@ final class ComposerView: NSView {
     let sendButton = RowSymbol.button("arrow.up.circle", label: "Send", target: nil, action: nil)
     let noteButton = NSButton(title: "", target: nil, action: nil)
     let footer = ComposerFooterView()
+    let heldView = HeldMessageView()
     var logic = ComposerLogic()
     var images: [MessageImage] = []
     /// A message about an image that could not go, until the next edit.
@@ -37,7 +38,7 @@ final class ComposerView: NSView {
         noteButton.isBordered = false
         noteButton.alignment = .left
         for view in [previews, scrollView, sendButton] as [NSView] { box.addSubview(view) }
-        for view in [noteButton, box, footer] as [NSView] { addSubview(view) }
+        for view in [noteButton, heldView, box, footer] as [NSView] { addSubview(view) }
         connectSending()
         connectImages()
     }
@@ -57,7 +58,8 @@ final class ComposerView: NSView {
             layoutManager.ensureLayout(for: container)
             textHeight = ceil(layoutManager.usedRect(for: container).height)
         }
-        return ComposerLayout(width: width, textHeight: textHeight, lineHeight: lineHeight, hasNote: !noteButton.isHidden, hasImages: !images.isEmpty)
+        return ComposerLayout(width: width, textHeight: textHeight, lineHeight: lineHeight, hasNote: !noteButton.isHidden, hasImages: !images.isEmpty,
+                              heldHeight: heldView.isHidden ? 0 : heldView.height(forWidth: ChatColumn.frame(inWidth: width).width))
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
@@ -68,6 +70,7 @@ final class ComposerView: NSView {
         super.layout()
         let layout = composerLayout(forWidth: bounds.width)
         noteButton.frame = layout.note ?? .zero
+        heldView.frame = layout.held ?? .zero
         box.frame = layout.box
         previews.isHidden = layout.previews == nil
         previews.frame = layout.previews ?? .zero

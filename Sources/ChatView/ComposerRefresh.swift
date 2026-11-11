@@ -25,10 +25,10 @@ extension ComposerView {
         sendButton.toolTip = logic.isBusy ? "Stop (Command-Period)" : "Send (Return)"
         let canSend = !textView.string.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || !images.isEmpty
         sendButton.contentTintColor = logic.isBusy || canSend ? palette.text : palette.secondaryText.withAlphaComponent(0.5)
-        let held = logic.heldMessage.map { _ in "Your message goes when \(agentName) finishes. Click to change it." }
-        let note = problem ?? held
-        noteButton.isHidden = note == nil
-        noteButton.attributedTitle = NSAttributedString(string: note ?? "", attributes: [
+        heldView.isHidden = logic.heldMessage == nil
+        if let held = logic.heldMessage { heldView.show(held, agentName: agentName, palette: palette) }
+        noteButton.isHidden = problem == nil
+        noteButton.attributedTitle = NSAttributedString(string: problem ?? "", attributes: [
             .font: palette.smallFont, .foregroundColor: palette.secondaryText,
         ])
         previews.show(images, palette: palette)
