@@ -34,6 +34,21 @@ final class RecordingWindowHost: MainWindowDelegate {
         #expect(window.firstResponder === controller.sessionsList.focusView)
     }
 
+    /// A session pane gives its focus to the terminal view that the attach adds,
+    /// so the pane view itself refuses the focus after the attach.
+    @Test func theFocusReachesAViewInsideAFocusViewThatRefusesIt() async throws {
+        try await withHostedSession { controller, pane in
+            let terminal = try #require(pane.terminalView)
+            controller.focusNextPane(nil)
+            #expect(controller.window.firstResponder !== terminal)
+            controller.focusContent()
+            #expect(controller.window.firstResponder === terminal)
+            controller.focusNextPane(nil)
+            controller.focusPreviousPane(nil)
+            #expect(controller.window.firstResponder === terminal)
+        }
+    }
+
     @Test func theHostLearnsWhenTheContentIsActiveAndWhenTheWindowCloses() {
         let controller = makeMainWindow(), host = RecordingWindowHost()
         controller.delegate = host

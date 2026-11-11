@@ -17,7 +17,8 @@ public struct PaneContent {
     public var minimumSize: CGSize
     /// A small set of controls, such as a switch between chat and terminal, or split buttons.
     public var topRowItems: [NSView]
-    /// The view that takes the keyboard focus when the pane gets it.
+    /// The view that takes the keyboard focus when the pane gets it. When it
+    /// refuses the focus, the first view inside it that takes the focus gets it.
     public var focusView: NSView
     /// The distance from the leading edge of the view to its text. The title
     /// of the pane starts at the same distance, so the two line up.

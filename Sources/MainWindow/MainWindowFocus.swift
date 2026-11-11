@@ -22,7 +22,16 @@ extension MainWindowController {
 
     /// Moves the focus to the content, such as after Return in the sessions list.
     public func focusContent() {
-        if let content = contentPane.content { paneWindow.makeFirstResponder(content.focusView) }
+        if let content = contentPane.content { focus(content.focusView) }
+    }
+
+    /// A view such as a session pane refuses the focus after it adds the view
+    /// that takes it. So the focus goes to the first view inside that takes it.
+    private func focus(_ view: NSView) {
+        func firstTaker(in view: NSView) -> NSView? {
+            view.acceptsFirstResponder ? view : view.subviews.lazy.compactMap(firstTaker).first
+        }
+        paneWindow.makeFirstResponder(firstTaker(in: view) ?? view)
     }
 
     private func moveFocus(by step: Int) {
@@ -31,7 +40,7 @@ extension MainWindowController {
         let responder = paneWindow.firstResponder as? NSView
         let current = targets.firstIndex { responder?.isDescendant(of: $0) == true }
         let next = current.map { ($0 + step + targets.count) % targets.count } ?? (step > 0 ? 0 : targets.count - 1)
-        paneWindow.makeFirstResponder(targets[next])
+        focus(targets[next])
     }
 
     /// The content is active while the window is key and the focus is in the content.
