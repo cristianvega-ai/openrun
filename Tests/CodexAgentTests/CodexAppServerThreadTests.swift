@@ -9,7 +9,7 @@ import Testing
         let harness = try await CodexServerHarness()
         async let played = harness.play("thread-start")
         let thread = try await harness.server.startThread(CodexThreadStart(folder: "/work/project"))
-        try await played
+        _ = try await played
         #expect(thread.identifier == main)
         var events = thread.events.makeAsyncIterator()
         #expect(await events.next()?.kind == .agentStarted(AgentStart(
@@ -24,7 +24,7 @@ import Testing
         let harness = try await CodexServerHarness()
         async let played = harness.play("thread-start")
         let thread = try await harness.server.startThread(CodexThreadStart(folder: "/work/project"))
-        try await played
+        _ = try await played
         let close = Task { await thread.close() }
         let unsubscribe = await harness.nextWritten()
         #expect(unsubscribe?["method"] == .string("thread/unsubscribe"))
@@ -42,6 +42,6 @@ import Testing
         await #expect(throws: CodexRequestError.self) {
             try await harness.server.resumeThread(identifier: "00000000-0000-7000-8000-000000000019", CodexThreadStart(folder: "/work/project"))
         }
-        try await played
+        _ = try await played
     }
 }

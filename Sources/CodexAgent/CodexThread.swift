@@ -14,6 +14,12 @@ public struct CodexThread: Sendable {
     /// Runs after the close, so that a pool can end an idle server.
     let closed: (@Sendable () async -> Void)?
 
+    /// Sends a user message, which starts a turn. Returns when Codex took
+    /// the turn. The events of the turn follow.
+    public func startTurn(_ turn: CodexTurn) async throws {
+        try await server.startTurn(turn, thread: identifier)
+    }
+
     /// Ends the thread on the app-server. Its events end. The app-server
     /// stays for its other threads.
     public func close() async {
