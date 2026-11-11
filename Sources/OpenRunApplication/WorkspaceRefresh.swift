@@ -14,6 +14,10 @@ extension Workspace {
         if connection.hasSessionList { layout.follow(sessions: overview.sessions.map(\.identifier)) }
         if overview.settings != previous.settings { settingsChanged() }
         alertsChanged(from: previous)
+        if opensFirstSession, connection.hasSessionList {
+            opensFirstSession = false
+            if overview.sessions.isEmpty { newSession() }
+        }
         for session in previous.sessions where overview.session(session.identifier) == nil { sessionEnded(session.identifier) }
         if let wanted = sessionToSelect, let row = layout.row(showing: wanted) {
             layout.selectedRow = row.identifier

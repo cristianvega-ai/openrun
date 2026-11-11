@@ -53,6 +53,11 @@ final class Workspace: NSObject {
     /// A project that takes the selection of the first pane when the feed
     /// brings it: one that the user added, or the kept one at the start.
     var projectToSelect: UUID?
+    /// Whether the host follows the session process.
+    private(set) var isStarted = false
+    /// Whether the app starts a login shell when the first list of the
+    /// feed holds no session, so a new user gets a terminal at once.
+    var opensFirstSession = false
     /// The lists report a selection while they take new content, and that
     /// is no choice of the user.
     var isRefreshing = false
@@ -104,6 +109,7 @@ final class Workspace: NSObject {
     /// window comes at once, and the lists fill when the feed answers.
     func start() {
         showWindow()
+        isStarted = true
         connection.start()
     }
 
