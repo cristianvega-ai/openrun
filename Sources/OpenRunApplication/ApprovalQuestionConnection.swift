@@ -50,9 +50,12 @@ final class ApprovalQuestionConnection {
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.received(event) } }
             }
         case .failure(SessionConnectionError.requestFailed(let failure)):
-            // A build that is not signed by a team: no answer can count, so
-            // each request on another session is refused.
+            // A build with no team, or an app whose bundle a rebuild replaced
+            // while it ran. Each request on another session is refused until
+            // a later try works.
             logger.error("The session process refused the approval questions: \(failure.message, privacy: .public)")
+            retryDelay = .seconds(30)
+            connectLater()
         case .failure(let error):
             logger.error("No connection for approval questions: \(String(describing: error), privacy: .private)")
             connectLater()
