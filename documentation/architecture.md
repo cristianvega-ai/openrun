@@ -42,15 +42,15 @@ A module uses another module only through its public types.
 | `TerminalRendering` | Draws a terminal with Metal and CoreText: fonts, glyph textures, shaders, rows, cursor, selection and marked text | `TerminalRenderer`, `FontSet`, `FrameStatistics`, `RenderTarget`, `OffscreenTarget`, `DrawableTarget`, `RenderingError`, `ViewportCellRun` |
 | `TerminalView` | The AppKit view that shows one terminal and handles its input, selection and scrollback | `TerminalView`, `TerminalViewDelegate`, `OptionKeyRule`, `AppearanceThemes` |
 | `PseudoTerminal` | Runs one program on a new pseudo terminal, and names the program in its foreground, its folder and its terminal mode | `PseudoTerminal`, `ForegroundProgram`, `ForegroundState`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
-| `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionAlert`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
-| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, the attach conversation, and the session changes | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionChangeReceiver`, `SessionIdentifierMatch`, `SessionConnectionError` |
+| `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `ProjectSummary`, `SettingSummary`, `SessionAlert`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
+| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, the attach conversation, the session changes, and the requests of the projects and the settings | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionChangeReceiver`, `SessionIdentifierMatch`, `SessionConnectionError` |
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
 | `UntrustedText` | The rule for a name that a client or a file gives, and the escape of such text in a message, a log or a terminal | `PlainName`, `QuotedText`, `PrintableText` |
 | `DataStorage` | The data folder: its location, its files, and the safe write and read of a JSON document | `DataFolder`, `DataFile`, `DataFileScope`, `DataDocument`, `DataReadResult`, `DataStorageError` |
 | `Projects` | The folders that the user adds as projects, their order and names, and the project of a session's start folder | `Project`, `ProjectWithoutFolder`, `ProjectList`, `ProjectFolderPath`, `ProjectStore`, `LoadedProjects`, `ProjectListError` |
 | `Settings` | The settings of version 1: their names, kinds, defaults and text forms, the rule for protected settings, and their file | `SettingName`, `SettingValues`, `SettingRequester`, `OptionKeyBehavior`, `LinkDestination`, `NewSessionCommand`, `SettingsStore`, `LoadedSettings`, `SettingError` |
 | `GitBranch` | Reads the git branch of a folder from the files of git, with no git program | `GitBranch` |
-| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
+| `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent, and the one owner of the projects and the settings | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
 | `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneContent`, `SessionPaneDelegate`, `SessionStart` |
 | `SessionWindow` | One window around one session pane, and a session picker | `SessionWindowController`, `SessionList` |
@@ -75,6 +75,7 @@ openrun             -> CommandLineTool -> SessionConnection -> SessionProtocol
                                                               -> SessionLaunch
                                        -> SessionProtocol
                                        -> TerminalEmulation -> libghostty-vt
+                                       -> Projects, Settings, UntrustedText
 openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> SessionLaunch
                                        -> PseudoTerminal
@@ -82,6 +83,7 @@ openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> TerminalTheme -> TerminalEmulation
                                        -> TerminalEmulation -> libghostty-vt
 openrun-application -> OpenRunApplication -> SessionWindow -> SessionPane -> TerminalView
+                                       -> Projects, Settings, DataStorage, UntrustedText
                                           -> SessionConnection
                                           -> SessionLaunch
 MainWindow        -> ProjectsList -> PaneAppearance -> TerminalTheme
@@ -98,7 +100,8 @@ ClaudeCodeAgent   -> AgentConversation
 AgentProgram      -> PseudoTerminal
 ```
 
-No program uses `Projects` and `Settings` yet. The session process will own both.
+The session process owns the projects and the settings. Every client reads and changes them through the socket. The tool uses `Projects` only for `ProjectFolderPath`, to find the project of a folder that the user typed, and `Settings` only for the message about an unknown name.
+`SessionProtocol` does not use `Projects` or `Settings`. It has its own plain types, `ProjectSummary` and `SettingSummary`, so a client needs no other module to read them.
 `UntrustedText`, `DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
 No program uses `AgentConversation`, `ClaudeCodeAgent` and `AgentProgram` yet. The session process will join them.
 `AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. None of the three uses AppKit (proposal 13 of 2026-11-10).
@@ -267,6 +270,7 @@ The client side of the socket, for the command-line tool and the window of the a
 - `SessionClient.receiveApprovalQuestions` turns the connection into an `ApprovalQuestionReceiver`. Its thread hands each question, the end of each question, and last `closed` or `failed` to a handler. `answer(_:allows:)` sends the user's answer from any thread.
 - `SessionClient.receiveSessionChanges` turns the connection into a `SessionChangeReceiver`. Its thread hands `sessions` first, then each `sessionChanged` and `sessionEnded`, and last `closed` or `failed`. Check `capabilities.sessionChanges` first.
 - `rename(session:to:)`, `raiseAlert(session:text:)` and `clearAlert(session:)` change the facts of a session. See "Facts of a session".
+- `projects()`, `addProject(folder:name:currentFolder:)`, `removeProject(_:)`, `renameProject(_:to:)` and `moveProject(_:to:)` read and change the projects. `settings()` and `changeSetting(named:to:)` read and change the settings. Check `capabilities.projectsAndSettings` first. A `SessionChangeReceiver` hands `projects` and `settings` right after `sessions`, and again after each change of them. See "Projects and settings".
 - `SessionClient(location:helloTimeLimit:)` gives each `hello` a time limit. A `hello` that takes longer throws `protocolFailure(.timedOut)` and sends no wake. The other initializers keep no limit, so `openrun` and the windows wait as long as the session process takes. Only the setup of the app passes a limit.
 
 ### SessionPane
@@ -336,14 +340,18 @@ Once setup is ready, `ApprovalQuestionConnection` opens the connection for appro
 | `SocketListener.SocketLock` | The lock file next to the socket, held for the life of the process, so that two processes that start together cannot both pass the checks. It uses only a regular file of the user, opened without following a symbolic link, and sets its mode to 0600 |
 | `SessionServer` | An actor. Refuses clients past the limit, reads each client's messages and answers them. A client keeps its place until its socket is closed. It asks the user before a request on another session |
 | `CallerPlace` | Where the program of a client runs: in a session, outside every session, or unknown. See "Requests on another session" |
-| `AnswererRequirement` | The code requirement that a program must meet to receive and answer approval questions |
+| `AnswererRequirement` | The code requirement that a program must meet to receive and answer approval questions, and to change a protected setting |
+| `ApplicationBundle` | The app bundle that holds a program, found from the path of the program. `AnswererRequirement` and `HelperSearchPath` use it |
 | `ApprovalQuestions` | An actor. The questions that wait, and the connections of the app that hold them |
 | `ClientConnection` | One client. A thread reads from it, and a serial queue writes to it. It ends the connection when a deadline or a limit is missed, answers a request that it cannot decode, tells the server when the client has left, and closes the socket once neither the thread nor the queue uses it |
 | `ReadAhead` | Holds the reading thread of a client while the frames that were read and not handled are too many. Keeps room for one small control frame, so a client can detach while its input waits |
 | `ConnectionLimits` | Every limit and deadline of a client, in one place. See "Limits and deadlines of a client" |
-| `SessionRegistry` | An actor. The sessions, found by identifier. It refuses a session past the limit of 100 |
+| `SessionRegistry` | An actor. The sessions, found by identifier. It refuses a session past the limit of the setting `session-limit`, and gives each session the project of its start folder |
+| `ProjectKeeper` | An actor on a serial queue of its own. The one owner of the projects: it loads them at the start, saves each change at once, and keeps a change only after its save. See "Projects and settings" |
+| `SettingKeeper` | The same for the settings |
+| `DataSaveFailure` | The message of a save that failed |
 | `Session` | An actor. One program, one `Terminal`, the attached clients, and the facts of the session |
-| `SessionChangeFeed` | The latest summary of each session and the connections that watch them. It sends each change under one lock, so every watcher gets the same order |
+| `SessionChangeFeed` | The latest summary of each session, the projects, the settings, and the connections that watch them. It sends each change under one lock, so every watcher gets the same order |
 | `SessionActivity` | Decides whether a session is in progress, and whether a bell raises the alert |
 | `TerminalEvents` | Keeps the bell, the title and the notifications that the terminal reported during one write |
 | `InteractiveShell` | Tells a shell that reads commands from the terminal from a shell that runs a command or a script |
@@ -358,7 +366,7 @@ Each line goes to standard error and to the unified log, with the subsystem `ai.
 ### CommandLineTool
 
 `CommandLineTool.run` parses the arguments (`CommandLineArguments`), connects with `SessionClient` of `SessionConnection`, and runs one command. It turns a `SessionConnectionError` into a `CommandLineToolError` with the words of the tool.
-`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand`, `KillCommand`, `RenameCommand` and `NotifyCommand` hold the commands. `ListedSession` is the shape of one session in `openrun list --json`. `RawTerminalMode` switches the terminal to raw mode and back.
+`NewCommand`, `ListCommand`, `AttachCommand`, `ReadCommand`, `SendCommand`, `KillCommand`, `RenameCommand`, `NotifyCommand`, `ProjectListCommand`, `ProjectChangeCommand` and `SettingsCommand` hold the commands. `ProjectMatch` finds the project that the user typed. `ListedSession` is the shape of one session in `openrun list --json`. `RawTerminalMode` switches the terminal to raw mode and back.
 `openrun attach` has three more types. `TerminalWriter` is the one writer of the terminal. `KeySender` reads keys and sends them through `SessionAttachment`. `AttachSignals` turns signals into requests for the writer.
 
 ## Requests on another session
@@ -386,6 +394,7 @@ The session process keeps the facts of each session in its summary (decisions of
 | `isInProgress` | See below |
 | `lastOutputAt`, `lastInputAt` | The time of the last output of the program, and of the last input from any client |
 | `alert` | See below |
+| `projectIdentifier` | The deepest project whose folder holds the start folder of the session. The session process resolves the symbolic links of the start folder once, when the session starts. When the projects change, each session whose project changed sends a change |
 
 Every text fact holds no control character and at most 500 Unicode scalars (`SessionSummary.boundedText`), because a program chose it and a client shows it.
 
@@ -399,7 +408,25 @@ Every text fact holds no control character and at most 500 Unicode scalars (`Ses
 
 **The rule for callers.** `renameSession`, `raiseSessionAlert` and `clearSessionAlert` follow the place of the caller (see "Requests on another session"). A program outside every session, or a program in the session itself, may change it. Any other caller, also an unknown one, is refused at once with a `failure` with reason `invalidRequest`, and no question goes to the user. The message is "Only a program outside every session, or a program in the session itself, may rename session X." with "alert" or "clear the alert of" in place of "rename".
 
-**The limit.** The session process runs at most 100 sessions. `createSession` past that gets a `failure` with reason `launchFailed` and the message "The session process already runs 100 sessions, its limit. End a session and try again."
+**The limit.** The session process runs at most as many sessions as the setting `session-limit` allows, 100 by default. A change of the setting applies to the next `createSession`, and the sessions that run stay. `createSession` past the limit gets a `failure` with reason `launchFailed` and the message "The session process already runs 100 sessions, its limit. End a session and try again."
+
+## Projects and settings
+
+The session process is the one owner of the projects and the settings (decisions of 2026-11-10). It loads them when it starts, and it is the only program that writes their files. Every client reads and changes them through the socket.
+
+**The data folder.** It is the folder of the socket, unless `openrun-session --data-folder PATH` names another. A relative path starts at the current folder. So the default socket gives the default data folder, and a session process on a socket in a temporary folder never reads or writes the data of the user. The test harness refuses to start a session process whose data folder is the folder of the user (`UserDataGuard`).
+
+**The start.** A file that cannot be read is set aside (see "Data folder"), a setting that is not valid goes back to its default, and a project without a folder on this Mac holds no session. The log names each of them, with the paths and names private in the unified log. None of them stops the start. When the system cannot read the files at all, the session process starts with no projects or with the defaults, and each change fails until it can read them.
+
+**A change.** `ProjectKeeper` and `SettingKeeper` make each change on a copy, save the copy at once, and keep it only after the save. There is no timer. A save waits for `F_FULLFSYNC`, so a change that a client was told of survives a crash. When the save fails, the state in memory stays as it was, and so does the state on disk: a write replaces the file of the settings in one step, and `ProjectKeeper` writes the old list again, because the projects are two files. The client gets a `failure` with reason `invalidRequest` and the message "The change of the projects could not be saved, so nothing changed: REASON" (or "of the settings"). A change of a setting to its present value writes nothing. Each keeper is an actor on a serial queue of its own, so a save never takes a thread of Swift concurrency that serves output or input, and no attach or typed input waits for a write.
+
+**The feed.** A connection that sent `receiveSessionChanges` gets `sessionList`, then `projectList` and `settingList`, and then each change in the order in which it happened. A change of the projects or the settings sends the whole new list. The keepers give the new list to `SessionChangeFeed` in the step of the change, so every watcher gets the same order.
+
+**The rule for callers.** Any client may read both, add, remove, rename and move projects, and change a setting that is not protected. These are not requests on another session, so no question goes to the user. A protected setting (`session-limit` and `ask-before-unsafe-paste`) changes only for a program outside every session that meets `AnswererRequirement`, the same check as for approval questions. Every other caller gets "The setting NAME is protected. Change it in the settings window of OpenRun." An unknown name and a value that is not valid get the messages of `SettingError`.
+
+**The answerer of an ad hoc build** (decision of 2026-11-10). A session process with a team identifier keeps the rule of "Requests on another session". A session process with no team identifier that runs inside an app bundle, as `Contents/MacOS/openrun-session` of an OpenRun.app with an ad hoc signature does, accepts the main program of that bundle, by the code hash of that program (`cdhash H"..."`). It reads the hash once, at the start, so a later change of the bundle changes nothing until the next start. A program outside an app bundle, such as a development build, accepts nobody, unless `--answerer-requirement` names a program.
+
+**The settings that the session process uses.** It reads two settings itself. `session-limit` applies to the next `createSession`, and `scrollback-limit` to each session that starts after the change. A session that runs keeps its scrollback limit. Only the app uses the other settings: `theme`, `font-name`, `font-size`, `option-as-alt`, `new-session-commands`, `open-links-in`, `notifications` and `ask-before-unsafe-paste`. The theme of a session stays with the app for now.
 
 ## Process model
 
@@ -542,7 +569,7 @@ OpenRun.app registers the session process as a launch agent with SMAppService (`
 
 OpenRun keeps its data as readable JSON in `~/Library/Application Support/OpenRun`, the folder of the socket (`DataFolder.defaultPath`).
 A test keeps `DataFolder.defaultPath` and `SocketLocation.defaultPath` in step.
-Tests name a temporary folder instead.
+The session process keeps its data in the folder of its socket, or in the folder after `--data-folder`. See "Projects and settings". So the tests, which use a socket in a temporary folder, keep their data there.
 The default folder has mode 0700, also when it exists, and each file has mode 0600.
 A folder that a caller named gets mode 0700 only when `create` makes it. Otherwise it keeps its mode, as the folder of a socket from `--socket` does.
 
@@ -944,7 +971,7 @@ Every error message that `openrun` prints has each control character escaped in 
 ## Limits
 
 - When a shell's prompt and input take more rows than the grid has, the shell draws part of them into the scrollback, and parts of old prompts can stay there. A window's minimum grid of 60 by 12 makes this rare. Another client can still set a smaller grid. A size from an attach applies at once, so the shell's drawing after it can still leave parts of the old prompt. So can an answer that comes after the limit of 500 ms. A shell without its line editor, such as `bash --noediting`, whose prompt turns on bracketed paste makes each new width wait for that limit. A shell in an SSH login is not the foreground program, so its prompt gets no help.
-- The session process runs at most 100 sessions. See "Facts of a session".
+- The session process runs at most `session-limit` sessions, 100 by default. See "Facts of a session".
 - The session process sees a change of folder or terminal mode only while output or input comes, and up to two seconds after it. A command that turns line mode off or on without output after that keeps its old `isInProgress` until the next output or input.
 - A shell without its line editor that reads in line mode and does not lead the terminal session, such as `bash --noediting` inside another shell, counts as a command in progress.
 - The session process does not survive a Mac restart. launchd starts it again at the next wake.
@@ -953,7 +980,7 @@ Every error message that `openrun` prints has each control character escaped in 
 - Two clients that relay raw output (two `openrun attach` windows on one session) both answer each query, so the program gets two replies. See "Query replies".
 - A query that is pending when its relaying client detaches gets no reply.
 - A process that starts a session of its own (`setsid`), such as a daemon, outlives `openrun kill` and shutdown. A program that ends by itself leaves its background processes running. Both are owner decisions.
-- The scrollback holds about 10,000 lines. libghostty-vt prunes whole pages, so it keeps somewhat fewer after the first prune; a test measured 9,659.
+- The scrollback holds about `scrollback-limit` lines, 10,000 by default. libghostty-vt prunes whole pages, so it keeps somewhat fewer after the first prune; a test measured 9,659.
 - A frame carries at most 64 MiB. An unfinished escape sequence counts at most 32 MiB of that in a snapshot. A client can lose its connection when it falls behind. An opted-in window pauses output but can still be closed for a deadline or a faster viewer. An older session process ignores the opt-in. Snapshots and screens do not count toward the 8 MiB limit. A first control frame that is larger than 8 MiB is queued whole, and the limit for a write that stalls (10 seconds) ends a client that does not read it.
 - A snapshot larger than 64 MiB loses its oldest scrollback. So a client of a very wide session with a full, colorful scrollback gets only the newest lines that fit. A client cannot attach at a size at which the screens alone pass 64 MiB.
 - At most 64 clients are connected at once, counting clients whose last messages still go out after they detached. While 64 such clients close, a new client is refused for up to 2 seconds. Other limits and deadlines are in "Limits and deadlines of a client". A client may still send one frame of up to 64 MiB, so 64 clients can make the session process hold 4 GiB for a moment.
