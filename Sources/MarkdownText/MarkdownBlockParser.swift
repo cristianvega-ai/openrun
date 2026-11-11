@@ -35,6 +35,8 @@ struct MarkdownBlockParser {
             } else if MarkdownLine.isRule(line) {
                 append(.rule)
                 index += 1
+            } else if let table = tableStart() {
+                parseTable(table)
             } else {
                 parseParagraph()
             }

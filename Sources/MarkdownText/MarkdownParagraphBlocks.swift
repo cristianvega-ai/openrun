@@ -5,7 +5,7 @@ extension MarkdownBlockParser {
         while index < lines.count {
             let line = lines[index]
             if MarkdownLine.isBlank(line) { break }
-            if !collected.isEmpty, Self.interruptsParagraph(line) { break }
+            if !collected.isEmpty, Self.interruptsParagraph(line) || startsTableHere() { break }
             collected.append(MarkdownLine.trimmed(line))
             index += 1
         }

@@ -32,4 +32,22 @@ struct MarkdownBlockTests {
         #expect(kinds("````\n```\n````") == [.code(language: nil, text: "```", isClosed: true)])
         #expect(kinds("Text\n```\ncode\n```") == [.paragraph("Text"), .code(language: nil, text: "code", isClosed: true)])
     }
+
+    @Test func tablesReadTheirAlignmentsAndFitTheirRows() {
+        let table = MarkdownTable(
+            header: ["Name", "Size", "Note"], alignments: [.leading, .trailing, .center],
+            rows: [["a", "1", ""], ["b `|` c", "2", "x"]])
+        #expect(kinds("| Name | Size | Note |\n|---|--:|:-:|\n| a | 1 |\n| b `|` c | 2 | x | extra |\n\nText") == [
+            .table(table), .paragraph("Text"),
+        ])
+        #expect(kinds("a | b\n--|--\n1 | 2") == [.table(MarkdownTable(header: ["a", "b"], alignments: [.leading, .leading], rows: [["1", "2"]]))])
+        #expect(kinds("a | b\nno delimiter") == [.paragraph("a | b\nno delimiter")])
+        #expect(kinds("Text\n| a |\n|---|") == [.paragraph("Text"), .table(MarkdownTable(header: ["a"], alignments: [.leading], rows: []))])
+    }
+
+    @Test func aTableThatStreamsShowsAsATableFromItsFirstRow() {
+        var parser = MarkdownBlockParser(lines: ["| a | b |", "|--"], isComplete: false)
+        parser.run()
+        #expect(parser.blocks.map(\.kind) == [.table(MarkdownTable(header: ["a", "b"], alignments: [.leading, .leading], rows: []))])
+    }
 }
