@@ -63,6 +63,7 @@ A module uses another module only through its public types.
 | `AgentConversation` | The model of an agent thread: the events of every agent, the transcript that a chat shows, and the state of the thread | `ConversationEvent`, `ConversationEventKind`, `SourceLine`, `Transcript`, `TranscriptItem`, `TranscriptItemContent`, `TranscriptChange`, `TranscriptLimits`, `ThreadState`, `AgentMessage`, `AgentStart`, `AgentStatus`, `AgentText`, `AgentTextDelta`, `BoundedText`, `FileChange`, `JSONValue`, `LineSplitter`, `MessageImage`, `Notice`, `PermissionEnd`, `PermissionRequest`, `PermissionRequestItem`, `ProcessEnd`, `TaskEnd`, `TaskItem`, `TaskMessage`, `TaskStart`, `Thinking`, `TokenUsage`, `ToolCallInput`, `ToolCallInputDelta`, `ToolCallItem`, `ToolCallOutput`, `ToolCallRefusal`, `ToolCallResult`, `ToolCallStart`, `TurnEnd`, `TurnStart`, `UnknownLine`, `UsageReading`, `UsageWindow`, `UserMessage` |
 | `ClaudeCodeAgent` | Claude Code in a thread: its command line and environment, the user message line, the decoder of its output, its permission hook, and its history | `ClaudeCodeEnvironment`, `ClaudeCodeHistoryLocation`, `ClaudeCodeHistoryReader`, `ClaudeCodeLaunch`, `ClaudeCodeLaunchError`, `ClaudeCodeOutputDecoder`, `ClaudeCodePermissionHookAnswer`, `ClaudeCodePermissionHookError`, `ClaudeCodePermissionHookRequest`, `ClaudeCodePermissionMode`, `ClaudeCodeToolCallMatcher`, `ClaudeCodeUserMessage`, `ClaudeCodeUserMessageError` |
 | `AgentProgram` | Runs an agent program on pipes in a process group of its own, with flow control, and reads the environment of the user's login shell | `AgentProgram`, `AgentProgramError`, `AgentProgramLaunch`, `LoginShellEnvironment` |
+| `CodexAgent` | Codex in a thread: the client of `codex app-server`, one app-server for each account, the events of its threads, their approvals, stop, usage and history | `CodexAccount`, `CodexAccountServers`, `CodexAppServer`, `CodexHistoryPage`, `CodexPermissionAnswer`, `CodexRequestError`, `CodexSandbox`, `CodexServerLaunch`, `CodexServerOptions`, `CodexStop`, `CodexThread`, `CodexThreadStart`, `CodexTurn` |
 
 The programs in `Sources/openrun`, `Sources/openrun-session` and `Sources/openrun-application` read their start-up input and call `CommandLineTool`, `SessionProcess` and `OpenRunApplication`. They hold no other logic.
 
@@ -97,14 +98,17 @@ Projects          -> DataStorage -> UntrustedText
 Settings          -> DataStorage -> UntrustedText
                   -> UntrustedText
 ClaudeCodeAgent   -> AgentConversation
+CodexAgent        -> AgentConversation
+                  -> AgentProgram -> PseudoTerminal
+                  -> PseudoTerminal
 AgentProgram      -> PseudoTerminal
 ```
 
 The session process owns the projects and the settings. Every client reads and changes them through the socket. The tool uses `Projects` only for `ProjectFolderPath`, to find the project of a folder that the user typed, and `Settings` only for the message about an unknown name.
 `SessionProtocol` does not use `Projects` or `Settings`. It has its own plain types, `ProjectSummary` and `SettingSummary`, so a client needs no other module to read them.
 `UntrustedText`, `DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
-No program uses `AgentConversation`, `ClaudeCodeAgent` and `AgentProgram` yet. The session process will join them.
-`AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. None of the three uses AppKit (proposal 13 of 2026-11-10).
+No program uses `AgentConversation`, `ClaudeCodeAgent`, `CodexAgent` and `AgentProgram` yet. The session process will join them.
+`AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. `CodexAgent` starts its app-server through `AgentProgram`, and uses only `ProgramExit` of `PseudoTerminal`. None of the four uses AppKit (proposal 13 of 2026-11-10).
 
 `SessionPane` and `SessionWindow` also use `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionPane` and `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color. `MainWindow` also uses `PaneAppearance`, and `PaneAppearance` uses `TerminalEmulation` for the colors. No app module uses `MainWindow` yet: the app still opens one `SessionWindow` for each session. `MainWindow` does not use `SessionPane`: a host gives the third pane any view, such as `paneView` of a `SessionPaneController`.
 
@@ -489,7 +493,7 @@ A write uses the socket's send timeout (`SO_SNDTIMEO`) for its deadline, because
 ## Agent threads
 
 An agent thread is a chat with one agent, one account and one model (proposal 1 of 2026-11-10).
-Three modules hold the parts that the session process will join: `AgentConversation`, the model; `ClaudeCodeAgent`, the adapter of Claude Code; and `AgentProgram`, the process on pipes.
+Four modules hold the parts that the session process will join: `AgentConversation`, the model; `ClaudeCodeAgent`, the adapter of Claude Code; `CodexAgent`, the adapter of Codex; and `AgentProgram`, the process on pipes.
 No program uses them yet.
 
 ### The event model
