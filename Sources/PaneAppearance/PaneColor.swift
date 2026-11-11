@@ -23,15 +23,21 @@ public enum PaneColor {
     }
 
     /// The window colors for an appearance. With Increase Contrast, the
-    /// quiet text and the inactive selection take the strong versions, and
-    /// the dividers take the quiet text.
+    /// dividers and the quiet text take the color of the text, and the
+    /// selection moves a quarter of the way to the text, so each is clearly stronger.
     nonisolated static func colors(for appearance: NSAppearance, increasesContrast: Bool? = nil) -> WindowColors {
         var colors = TerminalTheme.graphite(for: scheme(of: appearance)).window
         if increasesContrast ?? isContrastIncreased(for: appearance) {
-            (colors.divider, colors.quietText) = (colors.quietText, colors.text)
+            (colors.divider, colors.quietText) = (colors.text, colors.text)
+            colors.rowSelection = mix(colors.rowSelection, colors.text, share: 0.25)
             colors.inactiveRowSelection = colors.rowSelection
         }
         return colors
+    }
+
+    nonisolated static func mix(_ first: TerminalColor, _ second: TerminalColor, share: Double) -> TerminalColor {
+        func channel(_ one: UInt8, _ other: UInt8) -> UInt8 { UInt8((Double(one) * (1 - share) + Double(other) * share).rounded()) }
+        return TerminalColor(red: channel(first.red, second.red), green: channel(first.green, second.green), blue: channel(first.blue, second.blue))
     }
 
     /// A fixed Increase Contrast setting in place of the system's. The

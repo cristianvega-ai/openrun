@@ -27,13 +27,20 @@ import Testing
         }
     }
 
-    /// Increase Contrast gives the quiet parts the strong colors.
+    /// The distance of two colors from 0 to 765, as a measure of contrast.
+    private func distance(_ first: TerminalColor, _ second: TerminalColor) -> Int {
+        zip(channels(first), channels(second)).map { abs($0 - $1) }.reduce(0, +)
+    }
+
+    /// Increase Contrast gives the dividers and the quiet text the color of
+    /// the text, and makes the selection clearly stronger.
     @Test func increaseContrastMakesTheQuietPartsStrong() throws {
         for (name, scheme) in [(NSAppearance.Name.aqua, TerminalColorScheme.light), (.darkAqua, .dark)] {
             let window = TerminalTheme.graphite(for: scheme).window
             let strong = PaneColor.colors(for: try #require(NSAppearance(named: name)), increasesContrast: true)
-            #expect(strong.quietText == window.text && strong.divider == window.quietText)
-            #expect(strong.inactiveRowSelection == window.rowSelection && strong.text == window.text)
+            #expect(strong.quietText == window.text && strong.divider == window.text && strong.text == window.text)
+            #expect(distance(strong.rowSelection, window.secondPane) >= 2 * distance(window.rowSelection, window.secondPane) + 60)
+            #expect(strong.inactiveRowSelection == strong.rowSelection)
             #expect(PaneColor.colors(for: try #require(NSAppearance(named: name)), increasesContrast: false) == window)
         }
     }
