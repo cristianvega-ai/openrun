@@ -8,4 +8,7 @@ public protocol ProjectsListDelegate: AnyObject {
     func projectsList(_ list: ProjectsListController, didSelect entry: ProjectsListEntry)
     /// The user wants a new project. The host asks for a folder.
     func projectsListDidRequestNewProject(_ list: ProjectsListController)
+    func projectsList(_ list: ProjectsListController, didRemoveProject identifier: UUID)
+    /// The user gave a project a new name in place. The name is not empty.
+    func projectsList(_ list: ProjectsListController, didRenameProject identifier: UUID, to name: String)
 }

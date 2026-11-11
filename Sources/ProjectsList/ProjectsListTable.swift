@@ -6,6 +6,9 @@ extension ProjectsListController: NSTableViewDataSource, NSTableViewDelegate {
     func configureTable() {
         table.dataSource = self
         table.delegate = self
+        table.renameSelected = { [weak self] in self?.renameSelectedProject() }
+        table.removeSelected = { [weak self] in self?.removeSelectedProject() }
+        table.menu = contextMenu()
         scroll.documentView = table
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true

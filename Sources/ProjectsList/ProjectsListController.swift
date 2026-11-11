@@ -67,6 +67,16 @@ public final class ProjectsListController: NSObject {
         table.scrollRowToVisible(index)
     }
 
+    /// Starts the edit of a project's name in its row.
+    public func beginRename(of project: UUID) {
+        guard let index = rows.firstIndex(where: { $0.entry == .project(project) }) else { return }
+        table.scrollRowToVisible(index)
+        guard let cell = table.view(atColumn: 0, row: index, makeIfNecessary: true) as? ProjectCellView else { return }
+        cell.name.isEditable = true
+        cell.name.delegate = self
+        view.window?.makeFirstResponder(cell.name)
+    }
+
     @objc func requestNewProject() {
         delegate?.projectsListDidRequestNewProject(self)
     }

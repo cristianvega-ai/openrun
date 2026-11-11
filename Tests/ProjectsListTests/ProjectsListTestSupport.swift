@@ -6,9 +6,13 @@ import AppKit
 final class RecordingProjectsHost: ProjectsListDelegate {
     var selections: [ProjectsListEntry] = []
     var newProjectRequests = 0
+    var removals: [UUID] = []
+    var renames: [(UUID, String)] = []
 
     func projectsList(_ list: ProjectsListController, didSelect entry: ProjectsListEntry) { selections.append(entry) }
     func projectsListDidRequestNewProject(_ list: ProjectsListController) { newProjectRequests += 1 }
+    func projectsList(_ list: ProjectsListController, didRemoveProject identifier: UUID) { removals.append(identifier) }
+    func projectsList(_ list: ProjectsListController, didRenameProject identifier: UUID, to name: String) { renames.append((identifier, name)) }
 }
 
 /// A first pane in a window, with three projects.
