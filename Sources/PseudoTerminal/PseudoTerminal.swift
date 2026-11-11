@@ -218,6 +218,23 @@ public final class PseudoTerminal: @unchecked Sendable {
         queue.sync { exit == nil ? ForegroundProgram.find(inSessionOf: processIdentifier) : nil }
     }
 
+    /// The program that reads the keys, its current folder, and the mode of
+    /// the terminal. Nil when the system does not say, or when the program
+    /// has ended.
+    public var foregroundState: ForegroundState? {
+        queue.sync {
+            guard exit == nil, master >= 0, let (group, program) = ForegroundProgram.findGroup(inSessionOf: processIdentifier) else { return nil }
+            // Both sides of a pseudo terminal share its settings, so the
+            // controlling side reads the mode that the program set.
+            var settings = termios()
+            let isInLineMode = tcgetattr(master, &settings) == 0 && settings.c_lflag & tcflag_t(ICANON) != 0
+            return ForegroundState(
+                program: program, leadsSession: group == processIdentifier,
+                currentFolder: ForegroundProgram.currentFolder(of: group), isInLineMode: isInLineMode
+            )
+        }
+    }
+
     /// Tells the program its terminal has a new size. The kernel sends it
     /// SIGWINCH.
     public func resize(to size: PseudoTerminalSize) throws {

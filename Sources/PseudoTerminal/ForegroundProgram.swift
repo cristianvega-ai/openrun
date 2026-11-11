@@ -20,6 +20,11 @@ public struct ForegroundProgram: Equatable, Sendable {
     /// The foreground program of the terminal that `sessionLeader` controls.
     /// Nil when the system does not say, as when the group's leader has ended.
     static func find(inSessionOf sessionLeader: pid_t) -> ForegroundProgram? {
+        findGroup(inSessionOf: sessionLeader)?.program
+    }
+
+    /// The foreground program, and its process, which leads its group.
+    static func findGroup(inSessionOf sessionLeader: pid_t) -> (group: pid_t, program: ForegroundProgram)? {
         var information = proc_bsdinfo()
         let size = Int32(MemoryLayout<proc_bsdinfo>.size)
         guard proc_pidinfo(sessionLeader, PROC_PIDTBSDINFO, 0, &information, size) == size else { return nil }
@@ -29,7 +34,16 @@ public struct ForegroundProgram: Equatable, Sendable {
         guard group > 0, getpgid(group) == group, getsid(group) == sessionLeader else { return nil }
         var buffer = [CChar](repeating: 0, count: Int(MAXCOMLEN) * 2 + 1)
         guard proc_name(group, &buffer, UInt32(buffer.count)) > 0, let arguments = arguments(of: group) else { return nil }
-        return ForegroundProgram(name: String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self), arguments: arguments)
+        return (group, ForegroundProgram(name: String(decoding: buffer.prefix { $0 != 0 }.map { UInt8(bitPattern: $0) }, as: UTF8.self), arguments: arguments))
+    }
+
+    /// The current folder of a process, or nil when the system does not say.
+    static func currentFolder(of process: pid_t) -> String? {
+        var information = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(process, PROC_PIDVNODEPATHINFO, 0, &information, size) == size else { return nil }
+        let path = withUnsafeBytes(of: &information.pvi_cdir.vip_path) { String(decoding: $0.prefix { $0 != 0 }, as: UTF8.self) }
+        return path.isEmpty ? nil : path
     }
 
     /// Reads the arguments from `KERN_PROCARGS2`: the count, the path of the
