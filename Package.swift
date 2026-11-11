@@ -113,6 +113,7 @@ let package = Package(
         .testTarget(name: "PaneAppearanceTests", dependencies: ["PaneAppearance", "TerminalTheme", "TerminalEmulation"]),
         // The first pane of the main window: All Sessions, the projects, and No Project.
         .target(name: "ProjectsList", dependencies: ["PaneAppearance", "ListUpdates"]),
+        .testTarget(name: "ProjectsListTests", dependencies: ["ProjectsList", "PaneAppearance"]),
         // One window for one session pane, and the picker of running sessions.
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
