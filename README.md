@@ -97,6 +97,7 @@ To use another socket, give `--socket PATH` to every program, or set `OPENRUN_SO
 The folder of the socket must belong to you, and other users must not be able to write to it, neither through its mode nor through an access control list, so `/tmp` does not work. Both programs refuse such a folder with a message that names it.
 Only one session process runs on a socket. It holds a lock file next to the socket, `PATH.lock`, for as long as it runs, so a second one refuses to start. The lock file must be a regular file of yours, and the session process sets its mode to 0600. The lock file stays when the process ends.
 Both programs talk only to a program of the same user at the other end of the socket.
+The session process keeps the projects and the settings in the folder of the socket, or in the folder after `--data-folder PATH`. So a session process on a test socket never touches your projects and settings.
 
 In the second window, start a session and attach to it.
 
@@ -125,17 +126,24 @@ openrun kill 3f2a                           # end the session and every process 
 openrun list --json                         # every fact of each session, as JSON
 openrun rename 3f2a Release build           # name the session; no name removes it
 openrun notify "Waiting for input"          # raise the alert of your own session
+openrun project add ~/Projects/app --name App   # add a project and print its identifier
+openrun project list                        # identifier, name and folder of each project
+openrun project rename ~/Projects/app       # a folder or an identifier start; no name shows the folder's name
+openrun settings list                       # the name and the value of each setting
+openrun settings set font-size 14           # change a setting
 openrun help
 ```
 
 `openrun notify` is for the hooks of an agent. It raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`. When no session process answers, or none knows the session in `OPENRUN_SESSION`, it writes OSC 777 to the terminal instead. A session after `--session` must exist. It exits with 0 when the alert went out and with 1 otherwise, never with 2, so it never blocks a hook of Claude Code.
 A program in a session may rename or alert only its own session. The session process refuses at once when it tries another one.
 
+Every client may read and change the projects and the settings. A protected setting, such as `session-limit`, changes only for OpenRun.app outside every session; every other program gets a message that says so. A change is saved at once. When the save fails, the client gets the reason, and nothing changes. The session process uses two settings itself: `session-limit` applies to the next new session, and `scrollback-limit` to the sessions that start after the change.
+
 Every program in a session gets `OPENRUN_SESSION` (its identifier), `OPENRUN_SOCKET`, `TERM=xterm-256color`, `COLORTERM=truecolor` and `TERM_PROGRAM=OpenRun`.
 
 Input that a program has not read yet waits in the session process, up to 8 MiB. Past that, `openrun send` waits until the program reads, and it fails with a message when the program ends first. Nothing that `openrun send` was told has arrived is dropped. Keys that `openrun attach` typed and that have not reached the program yet are dropped when it detaches, so a client that leaves holds no memory.
 
-The session process runs at most 100 sessions, and serves at most 64 clients at once and refuses more with a message. A client counts until its socket is closed. A request that the session process cannot read gets a failure that names the problem, and the connection closes. A client must say hello within 5 seconds, and a frame that stops halfway for 30 seconds, or a write to a client that takes nothing for 10 seconds, ends that client. A client may fall 8 MiB of output behind. Snapshots and screens do not count toward that, so a large scrollback can always be attached. A snapshot travels in one frame of at most 64 MiB, so a very wide session with a full, colorful scrollback sends only the newest lines that fit. At shutdown each client gets up to 2 seconds to take its program's last output and exit status. `documentation/architecture.md` lists every limit.
+The session process runs at most as many sessions as the setting `session-limit` allows, 100 by default, and serves at most 64 clients at once and refuses more with a message. A client counts until its socket is closed. A request that the session process cannot read gets a failure that names the problem, and the connection closes. A client must say hello within 5 seconds, and a frame that stops halfway for 30 seconds, or a write to a client that takes nothing for 10 seconds, ends that client. A client may fall 8 MiB of output behind. Snapshots and screens do not count toward that, so a large scrollback can always be attached. A snapshot travels in one frame of at most 64 MiB, so a very wide session with a full, colorful scrollback sends only the newest lines that fit. At shutdown each client gets up to 2 seconds to take its program's last output and exit status. `documentation/architecture.md` lists every limit.
 
 To stop the session process, press Control-C in its window, or send it SIGTERM.
 It removes the socket file, ends every program and every other process in the terminal session of each program, and exits with status 0.
@@ -156,6 +164,8 @@ When `openrun new` is given a program name without a slash, the session process 
 | `Sources/SessionProtocol` | The socket protocol that the session process and its clients share |
 | `Sources/SessionConnection` | Connects clients to the session process and attaches them to sessions |
 | `Sources/SessionProcess` | The background process that owns the sessions |
+| `Sources/Projects`, `Sources/Settings` | The projects and the settings, and their files in the data folder |
+| `Sources/DataStorage`, `Sources/UntrustedText` | Safe writes to the data folder, and text from a client made safe to show |
 | `Sources/SessionLaunch` | How launchd starts the session process: the launch agent, its wake, and its registration |
 | `Sources/CommandLineTool` | The `openrun` commands |
 | `Sources/SessionWindow` | Connects one terminal view to one session and owns its window |

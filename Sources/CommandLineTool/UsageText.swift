@@ -25,6 +25,21 @@ enum UsageText {
                           after --session. Without a session process, tell the
                           terminal with OSC 777. Exits with 0 when the alert went
                           out, and with 1 otherwise, also for wrong arguments.
+          project list [--json]
+                          Show every project: identifier, name and folder. With --json,
+                          print each project as JSON.
+          project add PATH [--name NAME]
+                          Add a folder as a project, and print its identifier.
+          project remove PROJECT
+                          Remove a project. The folder and the sessions stay.
+          project rename PROJECT [NAME]
+                          Give a project a name. Without NAME, show the folder's name.
+          settings list   Show every setting: the name, a tab, and the value. A third
+                          column says "protected" for a setting that only the app changes.
+          settings get NAME
+                          Print the value of a setting.
+          settings set NAME VALUE
+                          Change a setting.
           help            Show this text.
 
         Options for every command:
@@ -33,6 +48,7 @@ enum UsageText {
                           ~/Library/Application Support/OpenRun/session.socket.
 
         An IDENTIFIER can be any unique start of a session identifier.
+        A PROJECT can be any unique start of a project identifier, or the project's folder.
         A program in a session may rename or alert only its own session.
         """
 
