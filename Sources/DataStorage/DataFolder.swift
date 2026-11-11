@@ -23,6 +23,11 @@ public struct DataFolder: Equatable, Sendable {
 
     public static var `default`: DataFolder { DataFolder(path: defaultPath) }
 
+    /// The path of one file of this folder.
+    public func path(of file: DataFile) -> String {
+        path + "/" + file.name
+    }
+
     /// Makes the folder when it does not exist, and gives it mode 0700.
     ///
     /// The files hold the folders of the user's projects, and later the
