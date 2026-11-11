@@ -112,6 +112,13 @@ The time that a test shows includes its wait for a slot and for the lock.
 `ThroughputTests` run with no other integration test beside them.
 So do the two tests that run a `SocketListener` in the test process, because it sets the umask of the whole process while it binds the socket.
 
+`Tests/LiveDisplay` is support code for the tests that need a drawn frame or a picture of a window.
+While the screen is locked or the display sleeps, display links do not step and a window capture gives nothing.
+The trait `.needsLiveDisplay` skips such a test then, and the test log gives the reason.
+It reads `CGDisplayIsAsleep` and the key `CGSSessionScreenIsLocked` of `CGSessionCopyCurrentDictionary`.
+`DisplayScheduleTests`, `TerminalViewTests.aViewInAWindowDrawsItsOutputAndThenWaits` and the two opt-in screenshot tests use it.
+A test that only needs pixels draws into an `OffscreenTarget` and runs without a screen.
+
 ### TerminalEmulation
 
 `Terminal` parses output bytes and keeps the state of the screen.

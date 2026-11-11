@@ -1,4 +1,5 @@
 import AppKit
+import LiveDisplay
 import Metal
 import QuartzCore
 import TerminalEmulation
@@ -18,7 +19,7 @@ import Testing
 }
 
 @MainActor @Suite struct DisplayScheduleTests {
-    @Test(.enabled(if: NSScreen.main != nil))
+    @Test(.needsLiveDisplay)
     func aRequestGivesOneFrameAndThenTheLinkWaits() throws {
         let view = NSView(frame: NSRect(x: 0, y: 0, width: 200, height: 100))
         var frames = 0
@@ -81,7 +82,7 @@ import Testing
         #expect(target.pixel(horizontalPosition: size.width - 1, verticalPosition: size.height - 1) == view.theme.background)
     }
 
-    @Test(.enabled(if: NSScreen.main != nil))
+    @Test(.needsLiveDisplay)
     func aViewInAWindowDrawsItsOutputAndThenWaits() throws {
         let view = try TerminalView()
         let window = show(view)

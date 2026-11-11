@@ -1,4 +1,5 @@
 import AppKit
+import LiveDisplay
 import TerminalEmulation
 import Testing
 @testable import TerminalView
@@ -176,7 +177,7 @@ import Testing
 
     /// Run with `OPENRUN_RENDER_OUTPUT=<folder>` to save a screenshot of a window with the scroll bar for a review.
     /// `screencapture` takes the window from the screen, because the knob of the overlay style is not in a bitmap of the view.
-    @Test(.enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil && NSScreen.main != nil))
+    @Test(.enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil), .needsLiveDisplay)
     func theScreenshotOfAWindowWithTheScrollBar() throws {
         let folder = ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] ?? ""
         let view = try TerminalView(initialGrid: TerminalSize(columns: 50, rows: 10))

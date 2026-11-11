@@ -34,7 +34,9 @@ let package = Package(
         .target(name: "TerminalRendering", dependencies: ["TerminalEmulation"]),
         .testTarget(name: "TerminalRenderingTests", dependencies: ["TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
         .target(name: "TerminalView", dependencies: ["TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
-        .testTarget(name: "TerminalViewTests", dependencies: ["TerminalView", "TerminalRendering", "TerminalTheme", "TerminalEmulation"]),
+        // Support code for the tests that need a drawn frame on a real screen.
+        .target(name: "LiveDisplay", path: "Tests/LiveDisplay"),
+        .testTarget(name: "TerminalViewTests", dependencies: ["TerminalView", "TerminalRendering", "TerminalTheme", "TerminalEmulation", "LiveDisplay"]),
         // Text from a client or a file that OpenRun shows: the check of a
         // name and the escape of text in a message.
         .target(name: "UntrustedText"),
@@ -102,7 +104,7 @@ let package = Package(
         ),
         // One window for one session: the attach, the size rules, the title and the questions.
         .target(name: "SessionWindow", dependencies: ["TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
-        .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness"]),
+        .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
         // The app. In milestone 2 it registers the launch agent at its start.
         .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol", "SessionWindow"]),
         .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionWindow", "SessionProcessHarness", "TerminalView"]),

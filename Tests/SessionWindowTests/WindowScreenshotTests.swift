@@ -1,4 +1,5 @@
 import AppKit
+import LiveDisplay
 import SessionProcessHarness
 import SessionProtocol
 import TerminalEmulation
@@ -7,7 +8,7 @@ import Testing
 @testable import TerminalView
 
 /// Opt in with OPENRUN_RENDER_OUTPUT to save pictures of a real session window.
-@MainActor @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil))
+@MainActor @Suite(.serialized, .enabled(if: ProcessInfo.processInfo.environment["OPENRUN_RENDER_OUTPUT"] != nil), .needsLiveDisplay)
 struct WindowScreenshotTests {
     @Test func picturesOfTheSessionWindow() async throws {
         _ = NSApplication.shared
