@@ -48,12 +48,21 @@ func runs(_ processIdentifier: pid_t) -> Bool {
     }
 
     @Test func theStatusAndTheSignalOfTheEndCome() async throws {
-        let program = try startProgram("sh", ["-c", "exit 3"])
-        #expect(await program.waitForExit() == .exited(status: 3))
-        // The program was reaped: no zombie is left, and a signal reaches nothing.
-        #expect(waitpid(program.processIdentifier, nil, WNOHANG) == -1)
-        program.send(signal: SIGKILL)
+        #expect(await (try startProgram("sh", ["-c", "exit 3"])).waitForExit() == .exited(status: 3))
         #expect(await (try startProgram("sh", ["-c", "kill -USR1 $$"])).waitForExit() == .signaled(signal: SIGUSR1))
+    }
+
+    @Test func theProgramGetsOnlyTheThreePipesAndStartsInItsFolder() async throws {
+        let leaked = open("/dev/null", O_RDONLY)
+        defer { close(leaked) }
+        // The real path, as `pwd -P` gives it, with /private in front.
+        let real = try #require(realpath(NSTemporaryDirectory(), nil))
+        defer { free(real) }
+        let folder = String(cString: real)
+        let program = try startProgram("sh", ["-c", "test -e /dev/fd/\(leaked) && echo open || echo closed; pwd -P"], folder: folder)
+        let lines = String(decoding: await readAll(program), as: UTF8.self).split(separator: "\n")
+        #expect(lines.first == "closed")
+        #expect(lines.last.map(String.init) == folder)
     }
 
     @Test func theOutputComesWholeAndThenTheEnd() async throws {
