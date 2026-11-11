@@ -6,6 +6,8 @@
 public struct Transcript: Sendable, Hashable {
     public let limits: TranscriptLimits
     var storage = TranscriptStorage()
+    /// The thinking that goes on now, or nil.
+    public private(set) var thinking: Thinking?
     /// The newest facts of the agent's process.
     public private(set) var agentStart: AgentStart?
     /// The newest usage reading of the account.
@@ -13,6 +15,9 @@ public struct Transcript: Sendable, Hashable {
     /// The events applied so far. An item with no identifier of its own,
     /// such as a notice, takes the number of its event.
     public private(set) var eventCount = 0
+    /// Items that the end of a turn closes: text that streams, tool calls
+    /// that run, and permission requests that wait.
+    var openItems: Set<String> = []
     public init(limits: TranscriptLimits = TranscriptLimits()) {
         self.limits = limits
     }
@@ -37,6 +42,13 @@ public struct Transcript: Sendable, Hashable {
         var change = TranscriptChange()
         switch event.kind {
         case .agentStarted(let start): agentStart = start
+        case .userMessage(let message): applyUserMessage(message, &change)
+        case .agentTextDelta(let delta): applyText(delta.text, of: delta.itemIdentifier, isComplete: false, &change)
+        case .agentText(let text): applyText(text.text, of: text.itemIdentifier, isComplete: true, &change)
+        case .thinking(let new):
+            thinking = new.isComplete ? nil : Thinking(
+                itemIdentifier: new.itemIdentifier ?? thinking?.itemIdentifier,
+                estimatedTokens: new.estimatedTokens ?? thinking?.estimatedTokens, isComplete: false)
         case .usage(let reading): usage = reading
         case .notice(let notice): insertNotice(notice.level, notice.text, &change)
         case .unknown(var line):
@@ -48,6 +60,36 @@ public struct Transcript: Sendable, Hashable {
         return change
     }
 
+    // MARK: - Messages
+
+    private mutating func applyUserMessage(_ message: UserMessage, _ change: inout TranscriptChange) {
+        var new = message
+        new.text = BoundedText.prefix(of: message.text, byteLimit: limits.messageByteLimit)
+        new.isAccepted = false
+        update("user:" + message.identifier, create: .userMessage(new), &change) { content in
+            content.modifyUserMessage { $0.isAccepted = $0.isAccepted || message.isAccepted }
+        }
+    }
+
+    private mutating func applyText(_ text: String, of itemIdentifier: String, isComplete: Bool, _ change: inout TranscriptChange) {
+        let identifier = "text:" + itemIdentifier
+        let limit = limits.messageByteLimit
+        update(identifier, create: .agentMessage(AgentMessage(text: "", isComplete: false)), isOpen: true, &change) { content in
+            content.modifyAgentMessage { message in
+                if isComplete {
+                    message.text = BoundedText.prefix(of: text, byteLimit: limit)
+                    message.isComplete = true
+                } else if !message.isComplete {
+                    message.text += BoundedText.prefix(of: text, byteLimit: limit - message.text.utf8.count)
+                }
+            }
+        }
+        if isComplete {
+            openItems.remove(identifier)
+            thinking = nil
+        }
+    }
+
     // MARK: - Items
 
     mutating func insertNotice(_ level: Notice.Level, _ text: String, _ change: inout TranscriptChange) {
@@ -55,15 +97,16 @@ public struct Transcript: Sendable, Hashable {
         insert("notice:\(eventCount)", .notice(Notice(level: level, text: bounded)), &change)
     }
 
-    mutating func insert(_ identifier: String, _ content: TranscriptItemContent, _ change: inout TranscriptChange) {
+    mutating func insert(_ identifier: String, _ content: TranscriptItemContent, isOpen: Bool = false, _ change: inout TranscriptChange) {
         storage.insert(TranscriptItem(identifier: identifier, content: content))
         change.inserted.append(identifier)
+        if isOpen { openItems.insert(identifier) }
     }
 
     /// Changes the item in place, or adds it made by `create` and then
     /// changed. Without `create`, a missing item stays missing.
     mutating func update(
-        _ identifier: String, create: TranscriptItemContent? = nil,
+        _ identifier: String, create: TranscriptItemContent? = nil, isOpen: Bool = false,
         _ change: inout TranscriptChange, _ body: (inout TranscriptItemContent) -> Void
     ) {
         if storage.modify(identifier, body) {
@@ -72,7 +115,7 @@ public struct Transcript: Sendable, Hashable {
             }
         } else if var content = create {
             body(&content)
-            insert(identifier, content, &change)
+            insert(identifier, content, isOpen: isOpen, &change)
         }
     }
 }
