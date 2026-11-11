@@ -113,7 +113,9 @@ private final class TracedAttachment: AttachedSession {
         #expect(process.isRunning)
     }
 
-    @Test func closeReleasesARealBlockedWriterAndWithdrawsItsInput() async throws {
+    /// The program reads 4 MiB of input through its terminal at the end, so
+    /// the test takes the lock for floods of terminal input.
+    @Test(.isolatedThread, .tags(.floodsTerminalInput)) func closeReleasesARealBlockedWriterAndWithdrawsItsInput() async throws {
         _ = NSApplication.shared
         let process = try RunningSessionProcess()
         defer { process.stop() }
@@ -169,7 +171,8 @@ private final class TracedAttachment: AttachedSession {
         FileManager.default.createFile(atPath: go.path, contents: Data())
         let marker = "END-OF-INPUT-MARK"
         #expect(try process.runCommand(["send", identifier, marker]).status == 0)
-        await waitOnMainThread(seconds: 20) { ((try? Data(contentsOf: received)) ?? Data()).suffix(marker.utf8.count) == Data(marker.utf8) }
+        // 4 MiB through a terminal took more than 20 seconds on a busy Mac.
+        await waitOnMainThread(seconds: 60) { ((try? Data(contentsOf: received)) ?? Data()).suffix(marker.utf8.count) == Data(marker.utf8) }
         let data = try Data(contentsOf: received)
         try #require(data.suffix(marker.utf8.count) == Data(marker.utf8), "The session must take new input after the old client leaves.")
         print("window-backpressure: started \(before.started), finished \(after.finished), received \(data.count) bytes, baseline descriptors \(baseline)")
