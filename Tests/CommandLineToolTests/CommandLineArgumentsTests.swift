@@ -58,6 +58,10 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(!CommandLineArguments.namesNotify(["--socket", "notify", "list"]))
         #expect(usageMessage("rename") != nil && usageMessage("rename", "abc", "--enter") != nil)
         #expect(try parse("help").command == .help)
+        #expect(try parse("project", "list").command == .projectList(printsJSON: false))
+        #expect(try parse("project", "list", "--json").command == .projectList(printsJSON: true))
+        #expect(usageMessage("project") != nil && usageMessage("project", "list", "x") != nil)
+        #expect(usageMessage("project", "bogus") == "Unknown project command bogus.")
         #expect(try parse("--help").command == .help)
     }
 

@@ -60,6 +60,8 @@ public enum CommandLineTool {
             try KillCommand(identifier: identifier).run(location: location)
         case .rename(let identifier, let name):
             try RenameCommand(identifier: identifier, name: name).run(location: location)
+        case .projectList(let printsJSON):
+            write(try ProjectListCommand(printsJSON: printsJSON).run(location: location), to: .standardOutput)
         case .notify, .help:
             break
         }

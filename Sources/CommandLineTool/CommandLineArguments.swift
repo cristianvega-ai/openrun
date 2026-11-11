@@ -73,7 +73,9 @@ struct CommandLineArguments: Equatable {
             throw CommandLineToolError.usage("Missing command.")
         }
         let rest = Array(positional.dropFirst())
-        if printsJSON, name != "list" { throw CommandLineToolError.usage("--json does not belong to \(name). It works with list.") }
+        if printsJSON, name != "list", name != "project" {
+            throw CommandLineToolError.usage("--json does not belong to \(name). It works with list and project list.")
+        }
         if session != nil, name != "notify" { throw CommandLineToolError.usage("--session does not belong to \(name). It works with notify.") }
 
         func allow(_ flag: String, used: Bool, in commands: String) throws {
@@ -124,6 +126,9 @@ struct CommandLineArguments: Equatable {
             let text = (rest + (afterSeparator ?? [])).joined(separator: " ")
             guard !text.isEmpty else { throw CommandLineToolError.usage("notify needs the text of the alert.") }
             command = .notify(identifier: session, text: text)
+        case "project":
+            try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
+            command = try Self.projectCommand(rest + (afterSeparator ?? []), printsJSON: printsJSON)
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -132,6 +137,22 @@ struct CommandLineArguments: Equatable {
             throw CommandLineToolError.usage("Unknown command \(name).")
         }
         self.init(socketPath: socketPath, command: command)
+    }
+
+    /// The words after `project`: the action, and what it acts on.
+    private static func projectCommand(_ words: [String], printsJSON: Bool) throws -> ToolCommand {
+        guard let action = words.first else { throw CommandLineToolError.usage("project needs list.") }
+        let rest = words.dropFirst()
+        if printsJSON, action != "list" {
+            throw CommandLineToolError.usage("--json does not belong to project \(action). It works with list and project list.")
+        }
+        switch action {
+        case "list":
+            guard rest.isEmpty else { throw CommandLineToolError.usage("project list takes no arguments.") }
+            return .projectList(printsJSON: printsJSON)
+        default:
+            throw CommandLineToolError.usage("Unknown project command \(action).")
+        }
     }
 
     private static func value(of option: String, from remaining: inout ArraySlice<String>) throws -> String {
@@ -155,7 +176,7 @@ struct CommandLineArguments: Equatable {
         if word.isEmpty { throw CommandLineToolError.usage("The session identifier is empty.") }
     }
 
-    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "help"]
+    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "project", "help"]
 
     /// Whether the command is `notify`, also when the arguments are wrong.
     static func namesNotify(_ arguments: [String]) -> Bool {

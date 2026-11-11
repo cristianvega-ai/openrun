@@ -21,4 +21,9 @@ public struct ProjectSummary: Codable, Equatable, Sendable {
         self.name = name
         self.folder = folder
     }
+
+    /// The identifier in lower case, as for a session.
+    public var identifierText: String {
+        SessionSummary.text(for: identifier)
+    }
 }
