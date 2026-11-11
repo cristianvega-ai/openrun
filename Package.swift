@@ -116,6 +116,7 @@ let package = Package(
         .testTarget(name: "ProjectsListTests", dependencies: ["ProjectsList", "PaneAppearance"]),
         // The second pane of the main window: the threads and terminal sessions, as vertical tabs.
         .target(name: "SessionsList", dependencies: ["PaneAppearance", "ListUpdates"]),
+        .testTarget(name: "SessionsListTests", dependencies: ["SessionsList", "PaneAppearance"]),
         // One window for one session pane, and the picker of running sessions.
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
