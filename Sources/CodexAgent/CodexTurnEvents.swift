@@ -49,15 +49,21 @@ extension CodexEventMapper {
     mutating func tokenUsageUpdated(_ parameters: JSONValue) -> [ConversationEventKind] {
         let usage = parameters["tokenUsage"] ?? .null
         let total = usage["total"] ?? .null
-        let cached = total["cachedInputTokens"]?.integer ?? 0
+        let cached = Self.count(total["cachedInputTokens"])
         // Codex counts the input from the cache in the input. The model
         // counts it apart, as Claude Code does.
         tokensNow = TokenUsage(
-            inputTokens: max(0, (total["inputTokens"]?.integer ?? 0) - cached), outputTokens: total["outputTokens"]?.integer ?? 0,
-            cacheReadInputTokens: cached, cacheCreationInputTokens: total["cacheWriteInputTokens"]?.integer ?? 0)
+            inputTokens: max(0, Self.count(total["inputTokens"]) - cached), outputTokens: Self.count(total["outputTokens"]),
+            cacheReadInputTokens: cached, cacheCreationInputTokens: Self.count(total["cacheWriteInputTokens"]))
         let window = usage["modelContextWindow"]?.integer.map { " of \($0)" } ?? ""
         let detail = (usage["last"]?["totalTokens"]?.integer).map { "\($0) tokens in the context\(window)" }
         return [.agentStatus(AgentStatus(kind: "thread/tokenUsage/updated", detail: detail))]
+    }
+
+    /// A count of tokens from 0 to 2^53, so that no subtraction of two
+    /// counts can overflow, whatever number the app-server writes.
+    static func count(_ value: JSONValue?) -> Int {
+        min(max(value?.integer ?? 0, 0), 1 << 53)
     }
 
     /// The tokens between two totals of a thread, never below zero.
