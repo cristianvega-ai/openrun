@@ -84,4 +84,44 @@ public struct DataFolder: Equatable, Sendable {
         data.append(UInt8(ascii: "\n"))
         try AtomicFileWriter.write(data, to: path(of: Document.file))
     }
+
+    /// A file larger than this is not a file that OpenRun wrote, and reading
+    /// it would only take memory.
+    public static let fileSizeLimit = 16 * 1024 * 1024
+
+    /// The key of `Decoder.userInfo` that holds the format number of the
+    /// file, so a document can decode an older format.
+    public static let formatKey = CodingUserInfoKey(rawValue: "format")!
+
+    /// Reads a document. A file that is not JSON, that has no format number
+    /// or a format of a later build, or that does not decode, is set aside
+    /// and never written over.
+    ///
+    /// - Throws: `DataStorageError` when the file exists but the system
+    ///   cannot read or move it. The caller must then not write the file,
+    ///   or it would replace data that it did not read.
+    public func read<Document: DataDocument>(_ type: Document.Type) throws -> DataReadResult<Document> {
+        let path = path(of: Document.file)
+        var status = stat()
+        guard stat(path, &status) == 0 else {
+            if errno == ENOENT { return .missing }
+            throw DataStorageError.failure(of: "stat")
+        }
+        guard (status.st_mode & S_IFMT) == S_IFREG, status.st_size <= Self.fileSizeLimit else {
+            return .setAside(path: try UnreadableFile.setAside(path))
+        }
+        guard let data = FileManager.default.contents(atPath: path) else {
+            throw DataStorageError.failure(of: "read")
+        }
+        let decoder = JSONDecoder()
+        guard let header = try? decoder.decode(FormatHeader.self, from: data),
+              (1...Document.format).contains(header.format) else {
+            return .setAside(path: try UnreadableFile.setAside(path))
+        }
+        decoder.userInfo[Self.formatKey] = header.format
+        guard let document = try? decoder.decode(Document.self, from: data) else {
+            return .setAside(path: try UnreadableFile.setAside(path))
+        }
+        return .document(document)
+    }
 }
