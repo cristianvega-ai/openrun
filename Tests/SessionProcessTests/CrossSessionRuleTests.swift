@@ -44,9 +44,18 @@ extension SessionProcessIntegration {
             try await RunningSessionProcess.run { process in
                 let target = try process.createSession(program: ["/bin/sh"])
                 let result = process.directory.appendingPathComponent("result").path
-                let background = "(trap '' HUP; sleep 1; \(openrun(process, "send \(target) typed-after-the-end")) 2>'\(result)'; echo status=$? >>'\(result)') </dev/null >/dev/null 2>&1 &"
-                _ = try process.createSession(program: ["/bin/sh", "-c", background])
-                let finished = await eventually { ((try? String(contentsOfFile: result, encoding: .utf8)) ?? "").contains("status=") }
+                let go = process.directory.appendingPathComponent("go").path
+                // The shell ignores the hang-up before it starts the background
+                // process, which inherits that. A trap inside the background
+                // process came too late when the shell ended first, and the
+                // hang-up of the ended session killed it. The request waits
+                // until the test has seen the session end. The waits are long
+                // because each command can take seconds on a busy Mac.
+                let background = "trap '' HUP; (while [ ! -e '\(go)' ]; do sleep 0.02; done; \(openrun(process, "send \(target) typed-after-the-end")) 2>'\(result)'; echo status=$? >>'\(result)') </dev/null >/dev/null 2>&1 &"
+                let ended = try process.createSession(program: ["/bin/sh", "-c", background])
+                try #require(await eventually(timeout: .seconds(60)) { (try? process.listedIdentifiers()).map { !$0.contains(ended) } ?? false })
+                FileManager.default.createFile(atPath: go, contents: Data())
+                let finished = await eventually(timeout: .seconds(60)) { ((try? String(contentsOfFile: result, encoding: .utf8)) ?? "").contains("status=") }
                 let output = (try? String(contentsOfFile: result, encoding: .utf8)) ?? ""
                 #expect(finished && output.contains("status=1"), "\(output)")
                 #expect(try !process.screenText(of: target).contains("typed-after-the-end"))
