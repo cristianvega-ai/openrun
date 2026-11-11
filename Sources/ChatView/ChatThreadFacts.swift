@@ -13,9 +13,9 @@ public struct ChatThreadFacts: Equatable, Hashable, Sendable {
     public var model: ChatChoice?
     public var models: [ChatChoice]
     public var permissionMode: ChatChoice?
-    /// The modes that the menu offers: the present mode and the stricter
-    /// ones (proposal 9 of 2026-11-10). A wider mode changes only in the
-    /// settings window.
+    /// The modes that the menu offers: each mode up to the one of the
+    /// settings (proposal 9 of 2026-11-10). A wider mode changes only in
+    /// the settings window.
     public var permissionModes: [ChatChoice]
     /// The folder, as the user reads it, such as `~/Projects/openrun`.
     public var folder: String?

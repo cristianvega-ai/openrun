@@ -38,9 +38,17 @@ final class ThreadPaneController: NSObject {
     static func facts(of summary: ThreadSummary, home: String) -> ChatThreadFacts {
         ChatThreadFacts(
             threadIdentifier: summary.identifierText, title: ThreadRowFacts.title(of: summary), agentName: ThreadRowFacts.agentName(summary.agent),
-            accountName: summary.accountName, model: ChatChoice(identifier: summary.model, title: ThreadRowFacts.shortModelName(summary.model)),
-            permissionMode: ChatChoice(identifier: summary.permissionMode, title: summary.permissionMode.capitalized),
+            accountName: summary.accountName, model: model(summary.model), models: (summary.models ?? []).map(model),
+            permissionMode: mode(summary.permissionMode), permissionModes: (summary.permissionModes ?? []).map(mode),
             folder: FolderText.shown(summary.folder, home: home))
+    }
+
+    private static func model(_ identifier: String) -> ChatChoice {
+        ChatChoice(identifier: identifier, title: ThreadRowFacts.modelTitle(identifier))
+    }
+
+    private static func mode(_ identifier: String) -> ChatChoice {
+        ChatChoice(identifier: identifier, title: ThreadRowFacts.permissionModeTitle(identifier))
     }
 
     /// The thread has new facts, such as a name.

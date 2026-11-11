@@ -39,6 +39,29 @@ import Testing
         #expect(await waitUntil { row(test, thread)?.title == "Notes" && pane.chat.facts.title == "Notes" })
     }
 
+    @Test func theMenusOfTheChatChangeTheModelAndTheModeOfTheThread() async throws {
+        let test = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        var failures: [String] = []
+        workspace.showFailure = { failures.append($1) }
+        workspace.newThread()
+        #expect(await waitUntil { workspace.shownThread.flatMap { workspace.threadPanes.existing($0) }?.isReplayComplete == true })
+        let thread = try #require(workspace.shownThread), pane = try #require(workspace.threadPanes.existing(thread))
+        #expect(pane.chat.facts.models.map(\.title) == ["Fable", "Opus", "Sonnet", "Haiku"] && pane.chat.facts.model?.title == "Opus")
+        #expect(pane.chat.facts.permissionModes.map(\.title) == ["Plan Only", "Rules Only", "Ask First"] && pane.chat.facts.permissionMode?.title == "Ask First")
+
+        pane.chatViewController(pane.chat, selectModel: "sonnet")
+        pane.chatViewController(pane.chat, selectPermissionMode: "plan")
+        #expect(await waitUntil { pane.chat.facts.model?.identifier == "sonnet" && pane.chat.facts.permissionMode?.identifier == "plan" })
+        #expect(row(test, thread)?.kind == .agentThread(agent: "Claude Code", model: "Sonnet", account: nil) && failures.isEmpty)
+        // Only the settings window gives a wider mode than the one of the settings.
+        pane.chatViewController(pane.chat, selectPermissionMode: "auto")
+        #expect(await waitUntil { failures.count == 1 })
+        #expect(failures.first?.contains("A thread can take these permission modes: plan, dontAsk, default.") == true)
+        #expect(pane.chat.facts.permissionMode?.identifier == "plan")
+    }
+
     @Test func aCloseOfAThreadAsksFirstAndThenRemovesItsRow() async throws {
         let test = try await start()
         defer { test.stop() }

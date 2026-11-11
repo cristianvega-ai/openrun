@@ -9,7 +9,7 @@
     func chatViewController(_ controller: ChatViewController, answerPermissionRequest identifier: String, with answer: ChatPermissionAnswer)
     func chatViewController(_ controller: ChatViewController, selectModel identifier: String)
     /// The identifier is one of the facts' permission modes, so it is never
-    /// wider than the present mode.
+    /// wider than the mode of the settings.
     func chatViewController(_ controller: ChatViewController, selectPermissionMode identifier: String)
     func chatViewControllerOpenInTerminal(_ controller: ChatViewController)
     func chatViewControllerReturnFromTerminal(_ controller: ChatViewController)

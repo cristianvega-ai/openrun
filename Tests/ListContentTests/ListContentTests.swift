@@ -70,6 +70,9 @@ import WindowLayout
         thread.name = "Resize"
         thread.state = "inProgress"
         #expect(ThreadRowFacts.title(of: thread) == "Resize" && ThreadRowFacts.shortModelName("gpt-6") == "gpt-6")
+        #expect(ThreadRowFacts.modelTitle("opus") == "Opus" && ThreadRowFacts.modelTitle("claude-opus-5-5") == "claude-opus-5-5")
+        #expect(["plan", "dontAsk", "default", "acceptEdits", "auto", "later"].map(ThreadRowFacts.permissionModeTitle)
+            == ["Plan Only", "Rules Only", "Ask First", "Accept Edits", "Auto", "later"])
         #expect(ThreadRowFacts.display(of: layout.rows[0], thread: thread, inView: false, home: "/").isInProgress)
         // A thread that the overview does not hold gives no row.
         #expect(ListContent(overview: SessionOverview(), layout: layout, inView: nil).rows(of: .allSessions).isEmpty)

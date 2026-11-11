@@ -38,9 +38,27 @@ extension ThreadPaneController: ChatViewControllerDelegate {
         NSWorkspace.shared.open(url)
     }
 
+    func chatViewController(_ controller: ChatViewController, selectModel identifier: String) {
+        change { try $0.changeThread($1, model: identifier) }
+    }
+
+    /// The session process refuses a mode that is wider than the setting allows.
+    func chatViewController(_ controller: ChatViewController, selectPermissionMode identifier: String) {
+        change { try $0.changeThread($1, permissionMode: identifier) }
+    }
+
+    /// Sends a change of the thread on a connection of its own, in order
+    /// and off the main thread. The feed brings the new facts.
+    private func change(_ call: @escaping @Sendable (SessionClient, UUID) throws -> Void) {
+        let (socket, thread) = (socket, thread)
+        work.async { [weak self] in
+            do { try call(try SessionClient(location: socket), thread) } catch {
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.failed?("\(error)") } }
+            }
+        }
+    }
+
     // These parts of the chat arrive with later work on the threads.
-    func chatViewController(_ controller: ChatViewController, selectModel identifier: String) {}
-    func chatViewController(_ controller: ChatViewController, selectPermissionMode identifier: String) {}
     func chatViewControllerOpenInTerminal(_ controller: ChatViewController) {}
     func chatViewControllerReturnFromTerminal(_ controller: ChatViewController) {}
     func chatViewControllerLoadEarlierHistory(_ controller: ChatViewController) {}

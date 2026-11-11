@@ -39,6 +39,26 @@ public enum ThreadRowFacts {
         }
     }
 
+    /// The words of a menu for a model: the family for a name of a
+    /// family, such as `opus`, and the name itself for any other model.
+    public static func modelTitle(_ model: String) -> String {
+        modelFamilies.contains(model.lowercased()) ? shortModelName(model) : model
+    }
+
+    /// The words of a menu for a permission mode of Claude Code. They
+    /// tell what the agent does, because its own words, such as
+    /// `dontAsk`, do not.
+    public static func permissionModeTitle(_ mode: String) -> String {
+        switch mode {
+        case "plan": "Plan Only"
+        case "dontAsk": "Rules Only"
+        case "default", "manual": "Ask First"
+        case "acceptEdits": "Accept Edits"
+        case "auto": "Auto"
+        default: mode
+        }
+    }
+
     /// The short name of a model, such as `Opus` for `claude-opus-5-5`,
     /// so the second line of a row keeps room for the folder.
     public static func shortModelName(_ model: String) -> String {
