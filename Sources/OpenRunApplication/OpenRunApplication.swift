@@ -1,19 +1,14 @@
 import AppKit
 import SessionConnection
 import SessionLaunch
-import SessionPane
 import SessionProtocol
-import SessionWindow
 
-/// The application delegate starts the session process and its windows.
+/// The application delegate starts the session process and the main window.
 @MainActor
 public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let socket: SocketLocation
-    let windows: WindowList
     /// The main window and its link to the session process.
     let workspace: Workspace
-    var makeNewSession: () -> SessionStart = { .newSessionInHomeFolder() }
-    var chooseSession: @MainActor (SocketLocation, NSWindow?) async -> UUID? = { await SessionList.choose(at: $0, in: $1) }
     private var setupIsReady = false
     private var setupIsRunning = false
     private let makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)?
@@ -31,7 +26,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         self.socket = socket
         self.makeLaunchAgentSetup = makeLaunchAgentSetup
         self.workspace = workspace ?? Workspace(socket: socket)
-        windows = WindowList(socket: socket)
+        self.workspace.opensFirstSession = true
         approvalQuestions = ApprovalQuestionConnection(socket: socket)
         super.init()
     }
@@ -70,8 +65,11 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         UserDefaults.standard.register(defaults: ["ApplePressAndHoldEnabled": false])
     }
 
+    /// The window comes at once. Its lists fill when the session process
+    /// is ready and the feed answers.
     public func applicationDidFinishLaunching(_ notification: Notification) {
         NSApp.activate()
+        workspace.showWindow()
         guard ownsLaunchAgent else { return finishSetup(.ready) }
         startSetup()
     }
@@ -95,12 +93,12 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         setupIsRunning = false
         guard outcome != .canceled else { return }
         // A new registration can fail after the app was ready. Then the app is
-        // not ready, and File > Retry Session Process is on. The windows that
-        // exist stay, so a later success opens no second one.
-        let wasReady = setupIsReady
+        // not ready, and File > Retry Session Process is on. The window and
+        // its connection stay, and the connection tries again by itself.
         setupIsReady = outcome == .ready
-        if setupIsReady, !wasReady, windows.controllers.isEmpty { windows.open(makeNewSession()) }
-        if setupIsReady { approvalQuestions.start() }
+        guard setupIsReady else { return }
+        workspace.start()
+        approvalQuestions.start()
     }
 
     @objc func retrySessionProcess(_ sender: Any?) { startSetup() }
@@ -110,34 +108,23 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         startSetup(registeringAgain: true)
     }
 
-    @objc func newSession(_ sender: Any?) {
-        if setupIsReady { windows.open(makeNewSession()) }
-    }
-
-    @objc func attachToSession(_ sender: Any?) {
-        guard setupIsReady else { return }
-        Task { [weak self] in
-            guard let self, let identifier = await chooseSession(socket, NSApp.keyWindow) else { return }
-            windows.open(.runningSession(identifier))
-        }
-    }
-
     public func validateMenuItem(_ item: NSMenuItem) -> Bool {
         switch item.action {
-        case #selector(newSession(_:)), #selector(attachToSession(_:)): setupIsReady
         case #selector(retrySessionProcess(_:)): !setupIsReady && !setupIsRunning
         case #selector(registerSessionProcessAgain(_:)): ownsLaunchAgent && !setupIsRunning
         default: true
         }
     }
 
+    /// A click on the Dock icon shows the main window again after a close.
     public func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if setupIsReady, windows.controllers.isEmpty { windows.open(makeNewSession()) }
+        if !flag { workspace.showWindow() }
         return true
     }
 
+    /// A close of the window leaves the app and every session running.
     public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { false }
-    public func applicationWillTerminate(_ notification: Notification) { windows.closeAll() }
+    public func applicationWillTerminate(_ notification: Notification) { workspace.stop() }
 
     /// Connects as each client does, so a wake goes out only when nothing
     /// listens on the socket. Every failure reaches the setup question.

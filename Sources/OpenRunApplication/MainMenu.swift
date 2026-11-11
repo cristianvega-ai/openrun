@@ -40,13 +40,17 @@ enum MainMenu {
     }
 
     private static func addFileMenu(to menu: NSMenu, target: OpenRunApplication) {
-        let file = submenu("File", in: menu)
-        file.addItem(item("New Window", #selector(OpenRunApplication.newSession(_:)), "n", target: target))
-        file.addItem(item("Attach to Session…", #selector(OpenRunApplication.attachToSession(_:)), target: target))
+        let file = submenu("File", in: menu), workspace = target.workspace
+        file.addItem(item("New Session", #selector(Workspace.newSession(_:)), "n", target: workspace))
+        let commands = submenu("New Session With", in: file)
+        commands.delegate = workspace
+        file.addItem(.separator())
+        // Command-W ends the work of a row, so the window closes with Shift.
+        file.addItem(item("Close Session", #selector(Workspace.closeSession(_:)), "w", target: workspace))
+        file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command, .shift]))
+        file.addItem(.separator())
         file.addItem(item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)), target: target))
         file.addItem(item("Register Session Process Again", #selector(OpenRunApplication.registerSessionProcessAgain(_:)), target: target))
-        file.addItem(.separator())
-        file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
     }
 
     private static func addSessionMenu(to menu: NSMenu, workspace: Workspace) {

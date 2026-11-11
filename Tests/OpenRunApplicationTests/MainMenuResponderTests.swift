@@ -1,7 +1,6 @@
 import AppKit
 import SessionProcessHarness
 import SessionProtocol
-@testable import SessionWindow
 import TerminalView
 import XCTest
 @testable import OpenRunApplication
@@ -26,7 +25,6 @@ final class MainMenuResponderTests: XCTestCase {
         let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
         defer { defaults.removePersistentDomain(forName: defaultsName) }
         let application = OpenRunApplication(socket: socket, workspace: TestWorkspace.makeHost(socket: socket, defaults: defaults))
-        application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer {
             application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
             sharedApplication.mainMenu = oldMenu
@@ -86,7 +84,7 @@ final class MainMenuResponderTests: XCTestCase {
 
     /// The terminal view of the first session of the app.
     @MainActor private func shownTerminal(of application: OpenRunApplication) -> TerminalView? {
-        application.windows.controllers.first?.terminalView
+        application.workspace.shownSession.flatMap { application.workspace.panes.existing($0)?.terminalView }
     }
 
     @MainActor private func key(_ characters: String, _ flags: NSEvent.ModifierFlags, in window: NSWindow, code: UInt16) throws -> NSEvent {

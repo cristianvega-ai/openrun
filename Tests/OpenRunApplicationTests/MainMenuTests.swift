@@ -22,9 +22,12 @@ import Testing
         let file = try #require(menu.item(withTitle: "File")?.submenu)
         let edit = try #require(menu.item(withTitle: "Edit")?.submenu)
         let view = try #require(menu.item(withTitle: "View")?.submenu)
-        #expect(file.item(withTitle: "New Window")?.keyEquivalent == "n")
-        #expect(file.item(withTitle: "Attach to Session…")?.target === application)
-        #expect(file.item(withTitle: "Close Window")?.keyEquivalent == "w")
+        let newSession = try #require(file.item(withTitle: "New Session")), closeSession = try #require(file.item(withTitle: "Close Session"))
+        #expect(newSession.keyEquivalent == "n" && newSession.target === application.workspace)
+        // Command-W ends the work of a row, so the window closes with Shift.
+        #expect(closeSession.keyEquivalent == "w" && closeSession.keyEquivalentModifierMask == .command && closeSession.target === application.workspace)
+        #expect(file.item(withTitle: "Close Window")?.keyEquivalentModifierMask == [.command, .shift])
+        #expect(file.item(withTitle: "New Session With")?.submenu?.delegate === application.workspace)
         let titles = file.items.map(\.title)
         #expect(titles.firstIndex(of: "Register Session Process Again") == (titles.firstIndex(of: "Retry Session Process") ?? -2) + 1)
         let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
@@ -45,7 +48,8 @@ import Testing
             #expect(item.action == Selector(action) && item.keyEquivalent == key)
             #expect(item.keyEquivalentModifierMask == .command && item.target == nil)
         }
-        #expect(!application.validateMenuItem(try #require(file.item(withTitle: "New Window"))))
+        // No session process answers on this socket, so no session can start.
+        #expect(!application.workspace.validateMenuItem(newSession) && !application.workspace.validateMenuItem(closeSession))
     }
 
     @Test func theStandardNewSessionUsesTheHomeFolder() {

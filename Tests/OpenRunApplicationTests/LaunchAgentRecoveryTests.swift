@@ -2,7 +2,6 @@ import AppKit
 import SessionLaunch
 import SessionProcessHarness
 import SessionProtocol
-@testable import SessionWindow
 import Synchronization
 import Testing
 @testable import OpenRunApplication
@@ -135,7 +134,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
         let retry = try #require(file.item(withTitle: "Retry Session Process"))
         let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
-        let newSession = try #require(file.item(withTitle: "New Window"))
+        let newSession = try #require(file.item(withTitle: "New Session"))
 
         application.registerSessionProcessAgain(nil)
         await waitForRecovery { firstShellShows(application) }
@@ -145,11 +144,12 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         await waitForRecovery { application.validateMenuItem(retry) }
         #expect(questions.withLock { $0 }.last == .failed(detail: "launchd refused the agent."))
         #expect(sessionCount(application) == 1 && application.validateMenuItem(registerAgain))
-        #expect(!canStartSession(application, newSession))
+        // The window keeps its connection, so a new session still starts.
+        #expect(canStartSession(application, newSession))
 
         registration.state.withLock { $0.refuses = false }
         application.retrySessionProcess(nil)
-        await waitForRecovery { canStartSession(application, newSession) }
+        await waitForRecovery { !application.validateMenuItem(retry) }
         #expect(sessionCount(application) == 1)
     }
 
@@ -185,29 +185,30 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(showsNoSession(application) && registration.state.withLock { $0.calls }.isEmpty)
     }
 
-    /// An application whose first session reads no start file of the user.
+    /// An application whose host keeps no frame and reads no start file of the user.
     @MainActor private func makeApplication(at socket: SocketLocation, makeLaunchAgentSetup: @escaping @Sendable () -> LaunchAgentSetup) throws -> OpenRunApplication {
+        let name = "OpenRunTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: name))
+        defaults.removePersistentDomain(forName: name)
         FileManager.default.createFile(atPath: socket.folder + "/.zshrc", contents: Data())
-        let application = OpenRunApplication(socket: socket, makeLaunchAgentSetup: makeLaunchAgentSetup)
-        application.makeNewSession = { .newSession(folder: socket.folder, environment: ["HOME": socket.folder, "ZDOTDIR": socket.folder, "PATH": "/usr/bin:/bin"]) }
-        return application
+        return OpenRunApplication(socket: socket, makeLaunchAgentSetup: makeLaunchAgentSetup, workspace: TestWorkspace.makeHost(socket: socket, defaults: defaults))
     }
 
     /// Whether the shell of the first start runs and its pane shows it.
     @MainActor private func firstShellShows(_ application: OpenRunApplication) -> Bool {
-        application.windows.controllers.first?.terminalView != nil
+        application.workspace.shownSession.flatMap { application.workspace.panes.existing($0)?.terminalView } != nil
     }
 
     @MainActor private func showsNoSession(_ application: OpenRunApplication) -> Bool {
-        application.windows.controllers.isEmpty
+        !application.workspace.isStarted
     }
 
     @MainActor private func sessionCount(_ application: OpenRunApplication) -> Int {
-        application.windows.controllers.count
+        application.workspace.connection.overview.sessions.count
     }
 
     @MainActor private func canStartSession(_ application: OpenRunApplication, _ item: NSMenuItem) -> Bool {
-        application.validateMenuItem(item)
+        application.workspace.validateMenuItem(item)
     }
 
     @MainActor private func waitForRecovery(_ condition: () -> Bool) async {
