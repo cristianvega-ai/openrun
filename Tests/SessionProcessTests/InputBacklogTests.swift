@@ -201,7 +201,9 @@ private final class MessageFlood: Sendable {
     }
 
     /// Waits until no message went out for `steadyFor`, or the flood finished.
-    func waitUntilStalled(timeout: Duration, steadyFor: Duration = .seconds(1)) async {
+    /// A pause counts only after `minimum` bytes went out: on a busy Mac the
+    /// thread of the flood can wait longer than `steadyFor` to run at all.
+    func waitUntilStalled(timeout: Duration, steadyFor: Duration = .seconds(1), minimum: Int = 0) async {
         let deadline = ContinuousClock.now + timeout
         var last = -1
         var steadySince = ContinuousClock.now
@@ -210,7 +212,7 @@ private final class MessageFlood: Sendable {
             if now != last {
                 last = now
                 steadySince = ContinuousClock.now
-            } else if ContinuousClock.now - steadySince > steadyFor {
+            } else if now >= minimum && ContinuousClock.now - steadySince > steadyFor {
                 return
             }
             try? await Task.sleep(for: .milliseconds(25))
@@ -448,7 +450,7 @@ extension SessionProcessIntegration {
                     let client = try RawClient(socketPath: process.socketPath)
                     try client.attach(to: identifier)
                     let flood = MessageFlood(client: client, frameSize: 64 * 1024, total: 8 * 1024 * 1024)
-                    await flood.waitUntilStalled(timeout: .seconds(10), steadyFor: .milliseconds(150))
+                    await flood.waitUntilStalled(timeout: .seconds(10), steadyFor: .milliseconds(150), minimum: 512 * 1024)
                     sentPerCycle.append(flood.sentBytes.load(ordering: .sequentiallyConsistent))
                     client.vanish()
                     #expect(await eventually(timeout: .seconds(5)) { flood.isFinished.load(ordering: .sequentiallyConsistent) })
@@ -459,10 +461,16 @@ extension SessionProcessIntegration {
                         descriptorsAtStart = try measured(process.descriptorCount, "the descriptor count")
                     }
                 }
-                try await Task.sleep(for: .milliseconds(500))
-                let footprintAtEnd = try measured(process.memoryFootprint, "the memory footprint")
-                let threadsAtEnd = try measured(process.threadCount, "the thread count")
-                let descriptorsAtEnd = try measured(process.descriptorCount, "the descriptor count")
+                // The threads and descriptors of the last clients go away soon
+                // after they leave. A fixed wait of 500 ms was too short on a
+                // busy Mac, so the test waits for them with a long limit.
+                var footprintAtEnd = 0, threadsAtEnd = 0, descriptorsAtEnd = 0
+                _ = try await eventually(timeout: .seconds(30)) {
+                    footprintAtEnd = try measured(process.memoryFootprint, "the memory footprint")
+                    threadsAtEnd = try measured(process.threadCount, "the thread count")
+                    descriptorsAtEnd = try measured(process.descriptorCount, "the descriptor count")
+                    return footprintAtEnd - footprintAtStart < 12 * 1024 * 1024 && threadsAtEnd <= threadsAtStart + 4 && descriptorsAtEnd <= descriptorsAtStart + 2
+                }
                 print("flood-and-leave: sent per cycle \(sentPerCycle); footprint \(footprintAtStart) then \(footprintAtEnd); threads \(threadsAtStart) then \(threadsAtEnd); descriptors \(descriptorsAtStart) then \(descriptorsAtEnd)")
 
                 // Each client met backpressure: the read-ahead filled and the
