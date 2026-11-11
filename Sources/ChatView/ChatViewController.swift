@@ -42,6 +42,7 @@ import AppKit
         context.actions = self
         context.hasEarlierHistory = facts.hasEarlierHistory
         scrollView.reachedTop = { [weak self] in self?.loadEarlierHistory() }
+        transcriptView.viewsPlaced = { [weak self] in self?.connectKeyViews() }
         findBar.isHidden = true
         showThreadState()
     }

@@ -19,6 +19,8 @@ import AppKit
     private(set) var isTiling = false
     /// Whether the view keeps the newest row in sight.
     var isFollowingBottom = true
+    /// Runs after the views of the rows near the screen change.
+    var viewsPlaced: (() -> Void)?
     /// A row whose top stays where it is on the screen at the next tile.
     private var pinnedAnchor: RowLayout.Anchor?
 
@@ -102,6 +104,7 @@ import AppKit
             scrollView.reflectScrolledClipView(clip)
         }
         placeViews(near: origin, viewport: viewport, width: width)
+        viewsPlaced?()
     }
 
     private func placeViews(near origin: CGFloat, viewport: CGFloat, width: CGFloat) {

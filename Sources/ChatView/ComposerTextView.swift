@@ -43,6 +43,9 @@ final class ComposerTextView: NSTextView {
         switch selector {
         case #selector(insertNewline(_:)) where !hasMarkedText():
             if modifiers.contains(.shift) || modifiers.contains(.option) { insertNewlineIgnoringFieldEditor(nil) } else { sendAction?() }
+        // Tab moves the focus, as in a form. Option-Tab types a tab.
+        case #selector(insertTab(_:)): window?.selectNextKeyView(self)
+        case #selector(insertBacktab(_:)): window?.selectPreviousKeyView(self)
         case #selector(cancelOperation(_:)) where !hasMarkedText():
             stopAction?(modifiers.contains(.command))
         default:
