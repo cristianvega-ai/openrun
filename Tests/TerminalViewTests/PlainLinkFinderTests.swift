@@ -35,6 +35,23 @@ import TerminalRendering
         #expect(try link(output, column: 9, columns: 20) == fromSecondRow)
     }
 
+    @Test func anAddressThatGoesOnOutsideTheViewportIsNoLink() throws {
+        let terminal = try Terminal(size: TerminalSize(columns: 13, rows: 2), scrollbackLimit: 100)
+        // 52 characters fill four rows of 13 columns, and a short line follows.
+        terminal.write("https://a.b/" + String(repeating: "x", count: 40) + "\r\nend")
+        terminal.scrollViewport(.byRows(-3))
+        #expect(terminal.viewportRowText(at: 0)?.cells.prefix(5).joined() == "https")
+        #expect(PlainLinkFinder.link(at: ViewportCell(column: 2, row: 0), in: terminal) == nil)
+        #expect(PlainLinkFinder.link(at: ViewportCell(column: 2, row: 1), in: terminal) == nil)
+        terminal.scrollViewport(.byRows(2))
+        #expect(PlainLinkFinder.link(at: ViewportCell(column: 2, row: 0), in: terminal) == nil)
+        // With the whole line in view, the whole address is the link.
+        try terminal.resize(to: TerminalSize(columns: 13, rows: 5))
+        terminal.scrollViewport(.toBottom)
+        let row = try #require((0..<5).first { terminal.viewportRowText(at: UInt32($0))?.cells.prefix(5).joined() == "https" })
+        #expect(PlainLinkFinder.link(at: ViewportCell(column: 2, row: UInt32(row) + 1), in: terminal)?.address.count == 52)
+    }
+
     @Test func wideCharactersBeforeTheAddressKeepTheColumns() throws {
         let found = try #require(try link("日本 https://a.b/日 x", column: 6))
         #expect(found.address == "https://a.b/" && found.runs == [ViewportCellRun(row: 0, columns: 5..<17)])

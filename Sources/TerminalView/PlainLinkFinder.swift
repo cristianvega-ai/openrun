@@ -24,8 +24,12 @@ enum PlainLinkFinder {
         return link(in: rows, firstRow: first, at: (Int(cell.column), Int(cell.row)))
     }
 
-    /// - Parameter rows: The rows of one line that soft wraps join, from the top.
+    /// - Parameter rows: The rows of one line that soft wraps join, from the top. When
+    ///   the line goes on above the first row or below the last, outside the viewport
+    ///   or past the limit of rows, an address that reaches that end is no link,
+    ///   because a part of an address can open another page.
     static func link(in rows: [ViewportRowText], firstRow: Int, at cell: (column: Int, row: Int)) -> PlainLink? {
+        let isCutAbove = rows.first?.continuesPreviousRow ?? false, isCutBelow = rows.last?.wrapsToNextRow ?? false
         var characters: [Character] = [], places: [(row: Int, column: Int)] = []
         for (offset, row) in rows.enumerated() {
             for (column, text) in row.cells.enumerated() {
@@ -38,6 +42,7 @@ enum PlainLinkFinder {
         var start = target, end = target + 1
         while start > 0, !isDelimiter(characters[start - 1]) { start -= 1 }
         while end < characters.count, !isDelimiter(characters[end]) { end += 1 }
+        guard !(isCutAbove && start == 0), !(isCutBelow && end == characters.count) else { return nil }
         let word = Array(characters[start..<end])
         // The last scheme that starts at or before the cell, so `(see https://a.b)` gives the address only.
         let schemeStarts = word.indices.filter { index in
