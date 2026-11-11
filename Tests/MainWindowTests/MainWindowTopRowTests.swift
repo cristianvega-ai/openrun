@@ -22,14 +22,18 @@ import Testing
         let controller = makeMainWindow()
         defer { controller.window.close() }
         let row = controller.sessionsList.topRow, pane = controller.sessionsList.view
-        let split = controller.splitController.view, width = controller.frame(of: pane).minX
+        let split = controller.splitController.view, full = split.frame.width, width = controller.frame(of: pane).minX
         for hides in [true, false] {
             controller.layout.projectsHidden = hides
             controller.updateTopRowSpaces()
             for step in 0...10 {
-                // A hide moves the pane from its place to the edge; a show moves it back.
-                split.frame.origin.x = (hides ? -width : 0) * CGFloat(step) / 10 + (hides ? 0 : -width) * CGFloat(10 - step) / 10
+                // A hide moves the pane from its place to the edge; a show moves
+                // it back. The content keeps its right edge at the window.
+                let shift = width * CGFloat(hides ? step : 10 - step) / 10
+                split.frame = NSRect(x: -shift, y: 0, width: full + shift, height: split.frame.height)
                 controller.window.layoutIfNeeded()
+                // A row moves its controls, but it never holds a pane open.
+                #expect(abs(controller.frame(of: pane).minX - (width - shift)) <= 1, "hides \(hides), step \(step)")
                 #expect(abs(start(of: row, controller) - expectedStart(of: pane, controller)) <= 1, "hides \(hides), step \(step)")
                 #expect((row.leadingItems.arrangedSubviews.first === controller.listsButton) == hides, "hides \(hides), step \(step)")
             }

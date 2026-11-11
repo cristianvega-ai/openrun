@@ -54,9 +54,9 @@ import Testing
         row.frame = holder.bounds
         holder.addSubview(row)
         row.leadingItems.addArrangedSubview(NSButton())
-        // Below the layout of a split view, so the row never holds its pane in place.
+        // Below the hold of the panes of a split view, so a row never changes their widths.
         let clearance = row.leadingItems.leadingAnchor.constraint(greaterThanOrEqualTo: holder.leadingAnchor, constant: 90)
-        clearance.priority = .init(450)
+        clearance.priority = .init(240)
         clearance.isActive = true
         holder.layoutSubtreeIfNeeded()
         #expect(row.leadingItems.frame.minX == 90)

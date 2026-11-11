@@ -84,8 +84,8 @@ extension MainWindowController: NSMenuItemValidation {
             lightsClearances = [projectsList.topRow, sessionsList.topRow, contentPane.topRow].map { row in
                 let clearance = row.leadingItems.leadingAnchor.constraint(greaterThanOrEqualTo: root.leadingAnchor)
                 // A pane that slides away can be too narrow for the clearance.
-                // Then the clearance gives way to the layout of the split view.
-                clearance.priority = .init(450)
+                // Below the hold of every pane, the clearance never holds a pane open.
+                clearance.priority = .init(240)
                 clearance.isActive = true
                 return clearance
             }
