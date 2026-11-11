@@ -59,6 +59,8 @@ public struct Transcript: Sendable, Hashable {
             insert("turn:\(eventCount)", .turnEnd(end), &change)
             closeOpenItems(&change)
         case .processEnded(let end): applyProcessEnd(end, &change)
+        case .toolCallStarted, .toolCallInputDelta, .toolCallInput, .toolCallOutput, .toolCallResult, .toolCallRefused, .fileChange:
+            applyToolCallEvent(event.kind, &change)
         case .usage(let reading): usage = reading
         case .notice(let notice): insertNotice(notice.level, notice.text, &change)
         case .unknown(var line):
