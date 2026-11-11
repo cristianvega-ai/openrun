@@ -51,6 +51,7 @@ let package = Package(
         // What the main window keeps between two runs of the app: the rows
         // of the sessions list, their splits, and the selection.
         .target(name: "WindowLayout", dependencies: ["DataStorage"]),
+        .testTarget(name: "WindowLayoutTests", dependencies: ["WindowLayout", "DataStorage"]),
         // The typed settings, their text forms for the tool, and the rule
         // for protected settings.
         .target(name: "Settings", dependencies: ["DataStorage", "UntrustedText"]),
