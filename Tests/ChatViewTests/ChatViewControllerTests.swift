@@ -69,6 +69,17 @@ import Testing
         controller.facts.threadIdentifier = "thread"
         #expect(controller.composer.textView.string == "Half")
         #expect(controller.focusView === controller.composer.textView)
+        let image = MessageImage(mediaType: "image/png", data: Data([1]))
+        controller.composer.images = [image]
+        controller.facts.threadIdentifier = "other"
+        #expect(controller.composer.images.isEmpty)
+        controller.facts.threadIdentifier = "thread"
+        #expect(controller.composer.images == [image])
+        // The thread closes while the chat shows another one.
+        controller.facts.threadIdentifier = "other"
+        ChatViewController.forgetDraft(ofThread: "thread")
+        controller.facts.threadIdentifier = "thread"
+        #expect(controller.composer.draft.isEmpty)
     }
 
     @Test func theStateOfTheThreadShowsAroundTheTranscript() {

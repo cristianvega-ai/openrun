@@ -6,7 +6,7 @@ extension ChatViewController {
     public var focusView: NSView { composer.textView }
 
     func connectComposer() {
-        composer.textView.string = ComposerDrafts.shared.draft(for: facts.threadIdentifier).text
+        composer.draft = ComposerDrafts.shared.draft(for: facts.threadIdentifier)
         composer.show(facts, palette: context.palette)
         composer.sendAction = { [weak self] message in
             guard let self else { return }
@@ -38,17 +38,24 @@ extension ChatViewController {
         composer.heightChanged = { [weak self] in self?.viewIfLoaded?.needsLayout = true }
         // The draft is saved at each edit, because a host can close the
         // chat of a thread at any time.
-        composer.textChanged = { [weak self] text in
+        composer.draftChanged = { [weak self] draft in
             guard let self else { return }
-            ComposerDrafts.shared.save(ComposerDrafts.Draft(text: text), for: facts.threadIdentifier)
+            ComposerDrafts.shared.save(draft, for: facts.threadIdentifier)
         }
+    }
+
+    /// Forgets the unsent text and images of a thread. The host calls it
+    /// when the thread closes, because a draft otherwise stays while the
+    /// app runs.
+    public static func forgetDraft(ofThread identifier: String) {
+        ComposerDrafts.shared.forget(identifier)
     }
 
     /// Keeps the draft of the thread that the chat leaves, and shows the
     /// draft of the new one.
     func switchDraft(from oldThread: String) {
-        ComposerDrafts.shared.save(ComposerDrafts.Draft(text: composer.textView.string), for: oldThread)
-        composer.textView.string = ComposerDrafts.shared.draft(for: facts.threadIdentifier).text
+        ComposerDrafts.shared.save(composer.draft, for: oldThread)
+        composer.draft = ComposerDrafts.shared.draft(for: facts.threadIdentifier)
     }
 
     func layoutChat() {

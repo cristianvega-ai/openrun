@@ -14,7 +14,9 @@ final class ComposerView: NSView {
     let footer = ComposerFooterView()
     let heldView = HeldMessageView()
     var logic = ComposerLogic()
-    var images: [MessageImage] = []
+    var images: [MessageImage] = [] {
+        didSet { draftChanged?(draft) }
+    }
     /// A message about an image that could not go, until the next edit.
     var problem: String?
     var palette: ChatPalette
@@ -24,8 +26,18 @@ final class ComposerView: NSView {
     var closedReason: String?
     var sendAction: ((ChatOutgoingMessage) -> Void)?
     var stopAction: (() -> Void)?
-    /// Gives the text of the field after each change.
-    var textChanged: ((String) -> Void)?
+    /// Gives the draft after each change.
+    var draftChanged: ((ComposerDrafts.Draft) -> Void)?
+
+    /// The unsent text and images.
+    var draft: ComposerDrafts.Draft {
+        get { ComposerDrafts.Draft(text: textView.string, images: images) }
+        set {
+            textView.string = newValue.text
+            images = newValue.images
+            refresh()
+        }
+    }
     /// Tells the controller to lay out again when the height changes.
     var heightChanged: (() -> Void)?
 

@@ -33,7 +33,7 @@ extension ComposerView {
         guard let held = logic.takeHeldMessage() else { return }
         textView.string = held.text + (textView.string.isEmpty ? "" : "\n\n" + textView.string)
         images = held.images + images
-        textChanged?(textView.string)
+        draftChanged?(draft)
         refresh()
     }
 }

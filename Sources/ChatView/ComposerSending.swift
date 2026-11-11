@@ -29,7 +29,7 @@ extension ComposerView: NSTextViewDelegate {
         if effect != .none || logic.heldMessage != nil, !message.text.isEmpty || !images.isEmpty {
             textView.string = ""
             images = []
-            textChanged?("")
+            draftChanged?(draft)
         }
         refresh()
     }
@@ -47,7 +47,7 @@ extension ComposerView: NSTextViewDelegate {
 
     func textDidChange(_ notification: Notification) {
         problem = nil
-        textChanged?(textView.string)
+        draftChanged?(draft)
         refresh()
     }
 }
