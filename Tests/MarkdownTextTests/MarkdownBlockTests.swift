@@ -50,4 +50,28 @@ struct MarkdownBlockTests {
         parser.run()
         #expect(parser.blocks.map(\.kind) == [.table(MarkdownTable(header: ["a", "b"], alignments: [.leading, .leading], rows: []))])
     }
+
+    @Test func listsNestAndKeepTheirMarkers() {
+        let blocks = blocks("- one\n  - two\n    more\n1. first\n2) second\n- [ ] open\n- [x] done")
+        #expect(blocks.map(\.kind) == [
+            .listItem(.bullet, text: "one"), .listItem(.bullet, text: "two\nmore"), .listItem(.number(1), text: "first"),
+            .listItem(.number(2), text: "second"), .listItem(.task(isDone: false), text: "open"),
+            .listItem(.task(isDone: true), text: "done"),
+        ])
+        #expect(blocks.map(\.listDepth) == [1, 2, 1, 1, 1, 1])
+        #expect(kinds("Text\n- item\nlazy\n\nafter") == [.paragraph("Text"), .listItem(.bullet, text: "item\nlazy"), .paragraph("after")])
+    }
+
+    @Test func aListItemHoldsCodeAndASecondParagraph() {
+        let blocks = blocks("1. Run:\n\n   ```sh\n   swift build\n   ```\n\n   Then test.\n\nAfter")
+        #expect(blocks.map(\.kind) == [
+            .listItem(.number(1), text: "Run:"), .code(language: "sh", text: "swift build", isClosed: true),
+            .paragraph("Then test."), .paragraph("After"),
+        ])
+        #expect(blocks.map(\.listDepth) == [1, 1, 1, 0])
+    }
+
+    @Test func aNestedListUnderANumberCanUseTwoSpaces() {
+        #expect(blocks("1. Step\n  - detail\n2. Next").map(\.listDepth) == [1, 2, 1])
+    }
 }

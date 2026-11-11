@@ -20,6 +20,13 @@ struct MarkdownBlockParser {
         self.quoteDepth = quoteDepth
     }
 
+    /// The blocks of `lines`, for a container inside the text.
+    static func blocks(of lines: [Substring], isComplete: Bool, listDepth: Int, quoteDepth: Int) -> [MarkdownBlock] {
+        var parser = MarkdownBlockParser(lines: lines, isComplete: isComplete, listDepth: listDepth, quoteDepth: quoteDepth)
+        parser.run()
+        return parser.blocks
+    }
+
     mutating func run() {
         while index < lines.count {
             let line = lines[index]
@@ -35,6 +42,8 @@ struct MarkdownBlockParser {
             } else if MarkdownLine.isRule(line) {
                 append(.rule)
                 index += 1
+            } else if let item = MarkdownListItemStart(line) {
+                parseListItem(item)
             } else if let table = tableStart() {
                 parseTable(table)
             } else {
@@ -54,6 +63,8 @@ struct MarkdownBlockParser {
 
     /// Whether the line starts a block and so ends a paragraph before it.
     static func interruptsParagraph(_ line: Substring) -> Bool {
-        MarkdownFence(line) != nil || MarkdownLine.heading(line) != nil || MarkdownLine.isRule(line)
+        if MarkdownFence(line) != nil || MarkdownLine.heading(line) != nil || MarkdownLine.isRule(line) { return true }
+        if let item = MarkdownListItemStart(line) { return !item.isEmpty }
+        return false
     }
 }
