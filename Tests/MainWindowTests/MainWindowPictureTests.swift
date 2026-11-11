@@ -36,7 +36,9 @@ struct MainWindowPictureTests {
         let pane = SessionPaneController(start: .runningSession(try #require(UUID(uuidString: identifier))), socket: try SocketLocation(path: process.socketPath))
         defer { pane.close() }
         let split = PaneButton.make(symbol: "rectangle.split.2x1", label: "Split", target: nil, action: nil)
-        controller.showContent(PaneContent(view: pane.paneView, title: "Repair the resize", minimumSize: pane.minimumSize, topRowItems: [split], textInset: pane.textInset))
+        var content = PaneContent(pane.content, topRowItems: [split])
+        content.title = "Repair the resize"
+        controller.showContent(content)
         controller.showWindow()
         controller.window.layoutIfNeeded()
         pane.attach()

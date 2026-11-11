@@ -52,7 +52,7 @@ A module uses another module only through its public types.
 | `GitBranch` | Reads the git branch of a folder from the files of git, with no git program | `GitBranch` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
-| `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneDelegate`, `SessionStart` |
+| `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneContent`, `SessionPaneDelegate`, `SessionStart` |
 | `SessionWindow` | One window around one session pane, and a session picker | `SessionWindowController`, `SessionList` |
 | `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, the selected row and the scroll view of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView`, `OverlayScrollView` |
 | `ListUpdates` | The rows of a list that changed between two contents, so a table updates them in place | `RowChanges` |
@@ -273,7 +273,7 @@ The client side of the socket, for the command-line tool and the window of the a
 
 ### SessionPane
 
-`SessionStart` selects a new login shell or a running session. `SessionPaneController` owns one `SessionPaneView`, its terminal view and its attachment. A host puts `paneView` in its layout and calls `attach()`, which estimates the grid from the size of the pane, so the host lays the pane out first. The host calls `activate()` when its window is key and the pane has the keyboard focus, `deactivate()` when either ends, and `close()` when it removes the pane. `SessionPaneDelegate` tells the host of a new title, a new `minimumSize` and the end of the session. The terminal view takes the keyboard focus at the attach only when the pane or nothing in the window had it.
+`SessionStart` selects a new login shell or a running session. `SessionPaneController` owns one `SessionPaneView`, its terminal view and its attachment. A host puts `paneView` in its layout and calls `attach()`, which estimates the grid from the size of the pane, so the host lays the pane out first. The host calls `activate()` when its window is key and the pane has the keyboard focus, `deactivate()` when either ends, and `close()` when it removes the pane. `SessionPaneDelegate` tells the host of a new title, a new `minimumSize` and the end of the session. The terminal view takes the keyboard focus at the attach only when the pane or nothing in the window had it. `content` gives, in one `SessionPaneContent` value, all that a host needs to show the pane: the view, the title, the minimum size, the focus view and the inset of the text. The module does not depend on a host, so a host maps that value to its own type.
 `AttachedSession` is the pane's interface to an attachment. `SessionAttachment` and a test stand-in implement it.
 The window connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order.
 The relay admits at most 1 MiB of output and 128 events until the view applies them. One larger frame can enter an empty relay. The receiver can hold one more frame, and the parser makes a copy of each admitted output frame. A frame can hold at most 64 MiB. When the relay is full, the receiver waits and the socket holds later frames. The window asks the session process to pause output when its queue fills, within the limits in "Slow clients". A program exit or connection failure waits for earlier output to be applied. Closing the window cancels the relay, wakes its receiver and discards pending view output.
@@ -305,6 +305,18 @@ The title comes from the terminal's title, or the session folder when the title 
 ### MainWindow
 
 `MainWindowController` owns `PaneWindow`, which has no tabs and no title strip, and an `NSSplitViewController` with the three panes. The host gives the two lists their content through `projectsList` and `sessionsList`, and the third pane a `PaneContent` through `showContent(_:)`: any view or view controller, its title, its minimum size, the controls for its top row, and the inset of its text, where the title of the pane starts. While the panes change their widths in an animation or a drag, the pane holds the width of the view, and the view gets the final width in one layout at the end. So a session sends one size request for each change, and the window saves the `PaneLayout` once. `ContentPaneController` holds the content in one place, `contentArea`, where a split tree goes later. `PaneLayout` keeps the widths of the lists and whether each one is hidden, in the defaults that the host gives. Menu items from `paneMenuItems()` hide and show the lists and move the keyboard focus between the panes. A `sidebar.left` button sits first in the top row of the first visible pane, after the room of the traffic lights, and hides and shows the projects list. In full screen the traffic lights hide, so that row gives their room to its controls. The window keeps the minimum size of the visible lists and the content, as `SessionWindowController` does for one pane. `MainWindowDelegate` learns when the content becomes active, so a `SessionPaneController` can take its grid size back, and when the window closes.
+
+A view that refuses the keyboard focus, such as a session pane after its attach, passes it to the first view inside it that takes it. The window grows to the minimum of the final layout before a list moves, so an animation never asks for a width that the minimum refuses. After a resize or a move to another screen, the window checks its minimum later, outside the layout pass.
+
+A host that shows a `SessionPaneController` in the third pane shows `PaneContent` mapped from `content`, and it forwards these calls:
+
+- `sessionPane(_:didChangeTitle:)`: call `updateContentTitle(_:)` with the title.
+- `sessionPaneDidChangeMinimumSize(_:)`: call `updateContentMinimumSize(_:)` with `minimumSize`. Without it, the window keeps the old minimum after the text size grows.
+- `sessionPaneDidEnd(_:)`: call `showContent(nil)` or show other content, and call `close()` on the pane.
+- `sessionPane(_:didFailWithMessage:)`: show the message where the user sees it, such as in the row of the session.
+- `mainWindowContentDidBecomeActive(_:)`: call `activate()` on the pane.
+- `mainWindowContentDidResignActive(_:)`: call `deactivate()` on the pane.
+- `mainWindowWillClose(_:)`: call `close()` on the pane.
 
 ### OpenRunApplication
 

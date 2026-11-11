@@ -219,6 +219,11 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         view?.size(holding: Self.minimumGrid) ?? TerminalView.estimatedSize(holding: Self.minimumGrid, scale: scale)
     }
 
+    /// What a host needs to show the pane, in one value.
+    public var content: SessionPaneContent {
+        SessionPaneContent(view: paneView, title: title, minimumSize: minimumSize, focusView: paneView, textInset: textInset)
+    }
+
     public func terminalView(_ view: TerminalView, didChangeGridSize size: TerminalSize) {
         ownSizeRequests.append(size)
         showHiddenPart()

@@ -37,10 +37,18 @@ func withHostedSession(_ body: (MainWindowController, SessionPaneController) asy
     controller.window.setContentSize(NSSize(width: 1_280, height: 760))
     let pane = SessionPaneController(start: .runningSession(try #require(UUID(uuidString: identifier))), socket: try SocketLocation(path: process.socketPath))
     defer { pane.close() }
-    controller.showContent(PaneContent(view: pane.paneView, title: "zsh", minimumSize: pane.minimumSize))
+    controller.showContent(PaneContent(pane.content))
     controller.showWindow()
     pane.attach()
     await turns(seconds: 20) { pane.terminalView != nil }
     await turns(seconds: 0.5)
     try await body(controller, pane)
+}
+
+/// The map that a host of a session pane makes from the value of the pane.
+extension PaneContent {
+    init(_ session: SessionPaneContent, topRowItems: [NSView] = []) {
+        self.init(view: session.view, title: session.title, minimumSize: session.minimumSize, topRowItems: topRowItems,
+                  focusView: session.focusView, textInset: session.textInset)
+    }
 }

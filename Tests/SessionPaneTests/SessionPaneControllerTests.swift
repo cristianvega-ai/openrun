@@ -19,6 +19,19 @@ import Testing
         }
     }
 
+    @Test func theContentGivesAHostAllThatItShows() async throws {
+        try await withSessionProcess { process, folder in
+            let hosted = try await hostPane(in: process, folder: folder)
+            defer { hosted.pane.close() }
+            let before = hosted.pane.content
+            #expect(before.view === hosted.pane.paneView && before.focusView === hosted.pane.paneView)
+            #expect(before.title == hosted.pane.title && before.textInset == hosted.pane.textInset)
+            try #require(hosted.pane.terminalView).increaseFontSize(nil)
+            let after = hosted.pane.content
+            #expect(after.minimumSize == hosted.pane.minimumSize && after.minimumSize.width > before.minimumSize.width)
+        }
+    }
+
     @Test func theTerminalTakesTheFocusOnlyWhenThePaneHadIt() async throws {
         try await withSessionProcess { process, folder in
             let focused = try await hostPane(in: process, folder: folder)
