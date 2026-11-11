@@ -27,6 +27,13 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     private(set) var view: TerminalView?
     /// The terminal view, once the attach brought the snapshot.
     public var terminalView: TerminalView? { view }
+    /// Runs once with the terminal view, before the pane shows it. The
+    /// host gives the view its settings there, such as the font.
+    public var configureTerminalView: ((TerminalView) -> Void)?
+    /// Whether a paste that could run a command asks the user first (the
+    /// setting `ask-before-unsafe-paste`). Text that arrives without a key
+    /// press follows the same rule (decision of 2026-10-31).
+    public var asksBeforeUnsafePaste = true
     /// Hears of the title, the minimum size and the end of the session.
     public weak var delegate: SessionPaneDelegate?
     /// The program's title, or the session folder when there is no title.
@@ -104,6 +111,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         // (decision of 2026-10-25).
         view.waitsForSizeConfirmation = true
         view.delegate = self
+        configureTerminalView?(view)
         paneView.show(view)
         delegate?.sessionPaneDidChangeMinimumSize(self)
         // Complete the snapshot fit before a later size from another client arrives.
@@ -274,6 +282,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     }
 
     private func agrees(to question: UserQuestion) async -> Bool {
+        guard asksBeforeUnsafePaste else { return !isClosed }
         guard !isClosed, let window else { return false }
         let agreed = await ask(question, window)
         return !isClosed && agreed

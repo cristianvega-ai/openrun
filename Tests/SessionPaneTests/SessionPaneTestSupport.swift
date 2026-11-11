@@ -50,12 +50,15 @@ struct HostedPane {
 
 /// Starts a shell session and attaches a pane to it at the right of a text field.
 @MainActor
-func hostPane(in process: RunningSessionProcess, folder: URL, focusesPane: Bool = true) async throws -> HostedPane {
+func hostPane(
+    in process: RunningSessionProcess, folder: URL, focusesPane: Bool = true, prepare: (SessionPaneController) -> Void = { _ in }
+) async throws -> HostedPane {
     _ = NSApplication.shared
     let identifier = try process.createSession(program: ["/bin/sh", "-i"], folder: folder, environment: ["HOME": folder.path, "PATH": "/usr/bin:/bin", "PS1": "pane> "])
     let pane = SessionPaneController(start: .runningSession(try #require(UUID(uuidString: identifier))), socket: try SocketLocation(path: process.socketPath))
     let host = RecordingHost()
     pane.delegate = host
+    prepare(pane)
     let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 900, height: 500), styleMask: [.titled], backing: .buffered, defer: false)
     window.isReleasedWhenClosed = false
     let other = NSTextField(frame: NSRect(x: 0, y: 0, width: 200, height: 24))

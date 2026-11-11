@@ -32,6 +32,37 @@ import Testing
         }
     }
 
+    @Test func theHostGivesTheTerminalViewItsSettingsBeforeThePaneShowsIt() async throws {
+        try await withSessionProcess { process, folder in
+            let hosted = try await hostPane(in: process, folder: folder) { pane in
+                pane.configureTerminalView = { view in
+                    view.standardFontSize = 20
+                    view.optionKeyRule = .both
+                }
+            }
+            defer { hosted.pane.close() }
+            let view = try #require(hosted.pane.terminalView)
+            #expect(view.standardFontSize == 20 && view.optionKeyRule == .both)
+        }
+    }
+
+    @Test func aPasteThatCouldRunACommandAsksOnlyWhileTheSettingIsOn() async throws {
+        try await withSessionProcess { process, folder in
+            let hosted = try await hostPane(in: process, folder: folder)
+            defer { hosted.pane.close() }
+            let view = try #require(hosted.pane.terminalView)
+            var questions = 0
+            hosted.pane.ask = { _, _ in
+                questions += 1
+                return false
+            }
+            #expect(await hosted.pane.terminalView(view, shouldPasteUnsafeText: "one\ntwo") == false && questions == 1)
+            hosted.pane.asksBeforeUnsafePaste = false
+            #expect(await hosted.pane.terminalView(view, shouldPasteUnsafeText: "one\ntwo") && questions == 1)
+            #expect(await hosted.pane.terminalView(view, shouldInsertUnsafeText: "one\ntwo") && questions == 1)
+        }
+    }
+
     @Test func theTerminalTakesTheFocusOnlyWhenThePaneHadIt() async throws {
         try await withSessionProcess { process, folder in
             let focused = try await hostPane(in: process, folder: folder)
