@@ -68,6 +68,21 @@ import Testing
         await fixture.end()
     }
 
+    @Test func aHigherLimitOfTheSettingsStartsTheAgentThatWaits() async throws {
+        let fixture = try await Fixture(mode: "neverEnds")
+        try await fixture.firstRunner.send(text: "One.")
+        #expect(await eventually { await fixture.registry.summary(fixture.first)?.state == "inProgress" })
+        try await fixture.secondRunner.send(text: "Two.")
+        #expect(await fixture.runs() == [true, false])
+        await fixture.registry.updateSettings(model: "sonnet", permissionMode: "plan", processLimit: 2, version: 2)
+        #expect(await eventually { await fixture.runs() == [true, true] })
+        // The settings also give the model and the mode of the next thread. Older settings change nothing.
+        await fixture.registry.updateSettings(model: "haiku", permissionMode: "default", processLimit: 1, version: 1)
+        let third = try await fixture.registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil)
+        #expect(third.model == "sonnet" && third.permissionMode == "plan")
+        await fixture.end()
+    }
+
     @Test func theCloseOfAThreadGivesItsSlotToTheThreadThatWaits() async throws {
         let fixture = try await Fixture(mode: "neverEnds")
         try await fixture.firstRunner.send(text: "One.")

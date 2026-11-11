@@ -22,6 +22,17 @@ import Testing
         var hasTurnEnd: Bool { conversation.contains { if case .turnEnded = $0.kind { true } else { false } } }
     }
 
+    @Test func aNewThreadTakesTheModelOfTheSettings() throws {
+        let process = try FakeAgentSettings.sessionProcess()
+        defer { process.stop() }
+        let client = try SessionClient(location: try SocketLocation(path: process.socketPath))
+        try client.changeSetting(named: "claude-code-model", to: "sonnet")
+        let thread = try client.createThread(agent: "claude-code", folder: process.directory.path)
+        #expect(thread.model == "sonnet" && thread.permissionMode == "default")
+        // A thread that names its model keeps it.
+        #expect(try client.createThread(agent: "claude-code", folder: process.directory.path, model: "haiku").model == "haiku")
+    }
+
     @Test func aClientMakesAThreadSendsAMessageAndFollowsTheTurn() async throws {
         let process = try FakeAgentSettings.sessionProcess()
         defer { process.stop() }

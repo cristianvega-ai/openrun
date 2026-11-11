@@ -16,6 +16,7 @@ actor SessionServer {
     private let projects: ProjectKeeper
     private let settings: SettingKeeper
     let threads: ThreadRegistry
+    private let agents: AgentLaunchProvider
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -42,8 +43,12 @@ actor SessionServer {
         let settingStore = SettingsStore(dataFolder: dataFolder)
         let loadedSettings = SettingKeeper.load(from: settingStore)
         settings = SettingKeeper(store: settingStore, values: loadedSettings, changes: changes)
-        let agents = AgentLaunchProvider(options: agentOptions, socketPath: location.path)
-        threads = ThreadRegistry(store: ThreadStore(dataFolder: dataFolder), projects: loadedProjects, changes: changes) { await agents.settings() }
+        let agents = AgentLaunchProvider(options: agentOptions, socketPath: location.path, program: loadedSettings.claudeCodeProgram)
+        self.agents = agents
+        threads = ThreadRegistry(
+            store: ThreadStore(dataFolder: dataFolder), projects: loadedProjects, changes: changes, processLimit: loadedSettings.agentProcessLimit,
+            defaultModel: loadedSettings.claudeCodeModel, defaultPermissionMode: loadedSettings.claudeCodePermissionMode
+        ) { await agents.settings() }
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
         registry = SessionRegistry(
@@ -469,6 +474,9 @@ actor SessionServer {
         do {
             let (values, version) = try await settings.change(name: name, to: text, requestedBy: requester)
             await registry.updateLimits(sessionLimit: values.sessionLimit, scrollbackLimit: values.scrollbackLimit, version: version)
+            await threads.updateSettings(
+                model: values.claudeCodeModel, permissionMode: values.claudeCodePermissionMode, processLimit: values.agentProcessLimit, version: version)
+            await agents.setProgram(values.claudeCodeProgram)
             return .acknowledged
         } catch {
             return Self.refusal("\(error)")

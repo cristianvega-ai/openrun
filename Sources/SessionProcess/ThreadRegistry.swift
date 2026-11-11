@@ -26,18 +26,22 @@ actor ThreadRegistry {
     /// The threads that may run a process now, and the ones that wait.
     var slots: AgentProcessSlots
     let quietTime: Duration
-    /// The model and the permission mode of a thread that names none.
-    var defaultModel = "opus"
-    var defaultPermissionMode = "default"
+    /// The model and the permission mode of a thread that names none,
+    /// from the settings.
+    var defaultModel: String
+    var defaultPermissionMode: String
+    private var settingsVersion = 0
 
     /// Loads the threads. A file that cannot be read never stops the
     /// start: the list starts empty, and the log says so.
     init(
         store: ThreadStore, projects: ProjectList = ProjectList(), changes: SessionChangeFeed? = nil,
         processLimit: Int = AgentProcessSlots.defaultLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
+        defaultModel: String = "opus", defaultPermissionMode: String = "default",
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings
     ) {
         (self.store, self.projects, self.changes, self.launchSettings) = (store, projects, changes, launchSettings)
+        (self.defaultModel, self.defaultPermissionMode) = (defaultModel, defaultPermissionMode)
         (slots, self.quietTime) = (AgentProcessSlots(limit: processLimit), quietTime)
         var loaded = ThreadList()
         do {
@@ -51,6 +55,14 @@ actor ThreadRegistry {
         list = loaded
         summaries = Dictionary(first.map { ($0.identifier, $0) }, uniquingKeysWith: { summary, _ in summary })
         changes?.replaceThreads(first)
+    }
+
+    /// Takes newer settings. They apply to the next thread and to the
+    /// next start of an agent, and the agents that run stay.
+    func updateSettings(model: String, permissionMode: String, processLimit: Int, version: Int) async {
+        guard version > settingsVersion else { return }
+        (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
+        for thread in slots.setLimit(processLimit) { await runners[thread]?.sendNextMessage() }
     }
 
     /// Every thread, oldest first.

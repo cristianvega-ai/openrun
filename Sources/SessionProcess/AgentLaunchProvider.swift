@@ -10,9 +10,9 @@ import Foundation
 actor AgentLaunchProvider {
     /// What the command line of the session process can change.
     struct Options: Sendable, Equatable {
-        /// The program of Claude Code: a name to find in the `PATH` of
-        /// the environment of the agent, or a path. Tests name the fake agent.
-        var program = "claude"
+        /// A program in place of the one of the setting
+        /// `claude-code-program`. Tests name the fake agent.
+        var program: String?
         /// Whether the agents get the environment of the session process
         /// in place of the one of the login shell, for tests and for a
         /// session process that a terminal started.
@@ -24,10 +24,20 @@ actor AgentLaunchProvider {
     /// The `openrun` program of this build, which is the permission hook.
     private let toolPath: String
     private var environment: [String: String]?
+    /// The program of Claude Code: a name to find in the `PATH` of the
+    /// environment of the agent, or a path.
+    private var program: String
 
-    init(options: Options, socketPath: String, executablePath: String? = ApplicationBundle.executablePathOfThisProcess()) {
-        (self.options, self.socketPath) = (options, socketPath)
+    /// - Parameter program: The value of the setting `claude-code-program`.
+    init(options: Options, socketPath: String, program: String = "claude", executablePath: String? = ApplicationBundle.executablePathOfThisProcess()) {
+        (self.options, self.socketPath, self.program) = (options, socketPath, options.program ?? program)
         toolPath = Self.toolPath(forSessionProcessAt: executablePath ?? "")
+    }
+
+    /// Takes a new value of the setting. The next start of an agent uses
+    /// it, unless the command line named a program.
+    func setProgram(_ program: String) {
+        self.program = options.program ?? program
     }
 
     /// The tool is in the helper folder of the app bundle. In a build
@@ -39,7 +49,7 @@ actor AgentLaunchProvider {
 
     func settings() async -> AgentLaunchSettings {
         if environment == nil { environment = await readEnvironment() }
-        return AgentLaunchSettings(program: options.program, environment: environment ?? [:], hookCommand: toolPath, hookArguments: ["permission-request"])
+        return AgentLaunchSettings(program: program, environment: environment ?? [:], hookCommand: toolPath, hookArguments: ["permission-request"])
     }
 
     private func readEnvironment() async -> [String: String] {
