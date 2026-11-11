@@ -23,6 +23,20 @@ final class CodexEventChannel: Sendable {
         self.limit = limit
     }
 
+    /// Adds an event, and waits while too many wait. After the finish, the
+    /// event goes nowhere.
+    func send(_ event: ConversationEvent) async {
+        guard add(event) else { return }
+        await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+            let waits = state.withLock { state in
+                guard state.events.count > limit, !state.isFinished else { return false }
+                state.writers.append(continuation)
+                return true
+            }
+            if !waits { continuation.resume() }
+        }
+    }
+
     /// Adds an event without a wait, and tells if too many events wait.
     @discardableResult
     func add(_ event: ConversationEvent) -> Bool {
