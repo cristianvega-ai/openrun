@@ -1,7 +1,7 @@
 import AppKit
 import TerminalEmulation
 
-/// The small label that names the part of a grid that the window hides, such
+/// The small label that names the part of a grid that the pane hides, such
 /// as "40 rows hidden" (answer of the owner of 2026-10-27). The grid stays at
 /// the top left, so the hidden part is at the bottom and at the right.
 @MainActor

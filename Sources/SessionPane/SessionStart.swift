@@ -2,7 +2,7 @@ import Foundation
 import SessionConnection
 import SessionProtocol
 
-/// What a window shows: a new session, or a session that runs.
+/// What a pane shows: a new session, or a session that runs.
 public enum SessionStart: Equatable, Sendable {
     /// A new session that runs the login shell of the user in `folder`. The
     /// shell gets `environment`, as a program in any terminal gets the
@@ -21,7 +21,7 @@ public enum SessionStart: Equatable, Sendable {
     /// Connects, creates the session when it is new, and attaches with `size`.
     ///
     /// It blocks, and the first connection can wake the launch agent and wait
-    /// for it, so it never runs on the main thread. The window asks for size
+    /// for it, so it never runs on the main thread. The pane asks for size
     /// changes. It relays no raw output, so the session process answers the
     /// queries of the program.
     func attach(at location: SocketLocation, size: SessionSize) throws -> StartedSession {
@@ -46,7 +46,7 @@ public enum SessionStart: Equatable, Sendable {
     }
 }
 
-/// A session that a window attached to. The attachment holds the snapshot.
+/// A session that a pane attached to. The attachment holds the snapshot.
 struct StartedSession: Sendable {
     let summary: SessionSummary
     let attachment: any AttachedSession

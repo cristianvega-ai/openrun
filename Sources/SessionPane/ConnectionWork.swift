@@ -1,7 +1,7 @@
 import Dispatch
 import Synchronization
 
-/// Runs the calls of one window that wait for the socket, on a serial queue.
+/// Runs the calls of one pane that wait for the socket, on a serial queue.
 /// The main thread must never wait: a connection can wake the launch agent,
 /// and a send waits while the program reads no input. The queue keeps the
 /// order of keys and sizes. An independent shutdown can free a stalled send.

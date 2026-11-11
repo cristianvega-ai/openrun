@@ -1,6 +1,6 @@
 import AppKit
 
-/// A question that belongs to one session window.
+/// A question that belongs to one session pane. It shows as a sheet on the window of the pane.
 enum UserQuestion: Equatable, Sendable {
     case unsafePaste
     case unsafeInsertion

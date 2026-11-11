@@ -42,9 +42,9 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
     private var isClosed = false
     private var hasConnectionFailure = false
     private var folder = ""
-    /// The grids that the window asked for and the session has not applied
+    /// The grids that the pane asked for and the session has not applied
     /// yet, oldest first. Until then, the part of the grid that does not fit is
-    /// an old size of this window, not the grid of another client. During a
+    /// an old size of this pane, not the grid of another client. During a
     /// drag, the session confirms an older grid while newer ones still wait.
     private var ownSizeRequests: [TerminalSize] = []
 
@@ -70,7 +70,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
 
     private func attached(_ result: Result<StartedSession, any Error>) {
         isAttaching = false
-        // The user can close the window while it attaches.
+        // The host can close the pane while it attaches.
         guard !isClosed else {
             if case .success(let started) = result { detach(started.attachment) }
             return
@@ -90,8 +90,8 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         }
         (attachment, self.view, folder) = (started.attachment, view, started.summary.folder)
         terminalView(view, didChangeTitle: view.title)
-        // The first layout fits the grid to the window. When that grid differs
-        // from the snapshot, the view reports it, and the window sends it
+        // The first layout fits the grid to the pane. When that grid differs
+        // from the snapshot, the view reports it, and the pane sends it
         // (decision of 2026-10-25).
         view.waitsForSizeConfirmation = true
         view.delegate = self
@@ -174,7 +174,7 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         if let attachment { detach(attachment) }
     }
 
-    /// A blocked send cannot hold the window open.
+    /// A blocked send cannot hold the pane open.
     private func detach(_ attachment: any AttachedSession) {
         work.detach(attachment)
     }
@@ -212,9 +212,9 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         }
     }
 
-    /// A grid that the window asked for answers its older requests too. The
+    /// A grid that the pane asked for answers its older requests too. The
     /// session replaces a request with a newer one. Any other grid comes from
-    /// another client, and it replaced the requests of this window.
+    /// another client, and it replaced the requests of this pane.
     public func terminalView(_ view: TerminalView, didApplyGridSize size: TerminalSize) {
         if let index = ownSizeRequests.lastIndex(of: size) { ownSizeRequests.removeFirst(index + 1) } else { ownSizeRequests = [] }
         showHiddenPart()
