@@ -66,6 +66,7 @@ let package = Package(
         // A stand-in for `claude -p` that plays recorded turns, so that no
         // test runs the real agent.
         .executableTarget(name: "fake-agent", path: "Tests/FakeAgent"),
+        .testTarget(name: "FakeAgentTests", dependencies: ["fake-agent", "AgentProgram", "ClaudeCodeAgent", "AgentConversation"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
