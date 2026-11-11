@@ -25,6 +25,16 @@ extension ChatViewController {
             guard let self else { return }
             delegate?.chatViewController(self, selectPermissionMode: choice.identifier)
         }
+        jumpButton.action = { [weak self] in self?.scrollView.scrollToNewest() }
+        jumpButton.isHidden = true
+        scrollView.followingChanged = { [weak self] isFollowing in self?.jumpButton.isHidden = isFollowing }
+        conditionView.choiceAction = { [weak self] choice in
+            guard let self else { return }
+            switch choice {
+            case .returnFromTerminal: delegate?.chatViewControllerReturnFromTerminal(self)
+            case .newThread(let account): delegate?.chatViewController(self, startNewThreadOnAccount: account)
+            }
+        }
         composer.heightChanged = { [weak self] in self?.viewIfLoaded?.needsLayout = true }
         // The draft is saved at each edit, because a host can close the
         // chat of a thread at any time.
@@ -43,8 +53,18 @@ extension ChatViewController {
 
     func layoutChat() {
         let bounds = view.bounds
-        let composerHeight = composer.height(forWidth: bounds.width)
+        let composerHeight = composer.isHidden ? 12 : composer.height(forWidth: bounds.width)
         composer.frame = NSRect(x: 0, y: bounds.height - composerHeight, width: bounds.width, height: composerHeight)
-        scrollView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: bounds.height - composerHeight)
+        var bottom = composer.frame.minY
+        if !conditionView.isHidden {
+            let column = ChatColumn.frame(inWidth: bounds.width)
+            let height = conditionView.height(forWidth: column.width)
+            conditionView.frame = NSRect(x: column.x, y: bottom - height - 8, width: column.width, height: height)
+            bottom = conditionView.frame.minY - 4
+        }
+        scrollView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: bottom)
+        emptyView.frame = scrollView.frame
+        let side = JumpToNewestButton.side
+        jumpButton.frame = NSRect(x: ((bounds.width - side) / 2).rounded(), y: bottom - side - 12, width: side, height: side)
     }
 }

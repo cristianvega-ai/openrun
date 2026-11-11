@@ -70,4 +70,19 @@ import Testing
         #expect(controller.composer.textView.string == "Half")
         #expect(controller.focusView === controller.composer.textView)
     }
+
+    @Test func theStateOfTheThreadShowsAroundTheTranscript() {
+        let delegate = RecordingDelegate()
+        controller.delegate = delegate
+        controller.show(Transcript())
+        #expect(!controller.emptyView.isHidden)
+        #expect(controller.conditionView.isHidden)
+        controller.facts.accountName = "Work"
+        controller.facts.condition = .openInTerminal
+        #expect(controller.composer.isHidden && controller.terminalButton.isHidden && controller.emptyView.isHidden)
+        #expect(controller.agentLabel.stringValue == "Claude Code · Work")
+        controller.conditionView.buttons.first?.performClick(nil)
+        controller.terminalButton.performClick(nil)
+        #expect(delegate.requests == ["return", "terminal"])
+    }
 }

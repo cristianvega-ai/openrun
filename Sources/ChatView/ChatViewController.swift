@@ -19,6 +19,11 @@ import AppKit
     let transcriptView: TranscriptView
     let scrollView: TranscriptScrollView
     let composer: ComposerView
+    let conditionView = ThreadConditionView()
+    let emptyView = EmptyThreadView()
+    let jumpButton = JumpToNewestButton()
+    let agentLabel = NSTextField(labelWithString: "")
+    lazy var terminalButton = NSButton(title: "Open in Terminal", target: self, action: #selector(openInTerminal))
     private var builder = TranscriptRowBuilder()
 
     public init(facts: ChatThreadFacts, appearance: ChatAppearance = .graphite) {
@@ -48,7 +53,7 @@ import AppKit
     public override func loadView() {
         let root = ChatRootView(palette: context.palette)
         root.addSubview(scrollView)
-        root.addSubview(composer)
+        for subview in [composer, conditionView, emptyView, jumpButton] as [NSView] { root.addSubview(subview) }
         view = root
     }
 
@@ -83,12 +88,14 @@ import AppKit
         // names, so it shows again on each change.
         transcriptView.setRows(rows, changed: Set(changedRows.map(\.key) + ["activity"]))
         composer.setBusy(transcript.state == .inProgress || transcript.state == .needsUser)
+        showThreadState()
     }
 
     private func factsDidChange(from old: ChatThreadFacts) {
         context.agentName = facts.agentName
         if facts.threadIdentifier != old.threadIdentifier { switchDraft(from: old.threadIdentifier) }
         composer.show(facts, palette: context.palette)
+        showThreadState()
         context.hasEarlierHistory = facts.hasEarlierHistory
         context.isLoadingEarlierHistory = facts.isLoadingEarlierHistory
         if (facts.agentName, facts.hasEarlierHistory, facts.isLoadingEarlierHistory)
@@ -101,6 +108,7 @@ import AppKit
         context.palette = ChatPalette(appearance: appearance)
         (view as? ChatRootView)?.palette = context.palette
         composer.show(facts, palette: context.palette)
+        showThreadState()
         reloadRows(changedItems: nil)
     }
 }
