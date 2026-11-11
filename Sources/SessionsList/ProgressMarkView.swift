@@ -7,7 +7,7 @@ import PaneAppearance
 @MainActor
 final class ProgressMarkView: NSView {
     static let size: CGFloat = 10
-    private let arc = CAShapeLayer()
+    let arc = CAShapeLayer()
     /// The setting of Reduce Motion. Tests set it.
     var reducesMotion = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 

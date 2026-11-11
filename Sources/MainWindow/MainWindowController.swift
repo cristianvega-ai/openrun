@@ -51,6 +51,7 @@ public final class MainWindowController: NSObject {
         paneWindow.delegate = self
         paneWindow.firstResponderChanged = { [weak self] in self?.updateContentActivity() }
         contentPane.minimumSizeChanged = { [weak self] in self?.keepMinimumSize() }
+        observeDisplayOptions()
         keepMinimumSize()
         paneWindow.center()
         if let frameName { paneWindow.setFrameAutosaveName(frameName) }
