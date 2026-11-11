@@ -2,7 +2,7 @@ import AppKit
 import PaneAppearance
 
 /// The top row of the second pane: the name of the entry and the filter,
-/// and a menu for the filter and the order.
+/// a menu for the filter and the order, and the new-session menu.
 extension SessionsListController {
     func configureTopRow() {
         titleLabel.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
@@ -12,6 +12,7 @@ extension SessionsListController {
         topRow.leadingItems.addArrangedSubview(titleLabel)
         topRow.leadingItems.addArrangedSubview(filterLabel)
         topRow.trailingItems.addArrangedSubview(arrangementButton)
+        topRow.trailingItems.addArrangedSubview(newSessionButton)
     }
 
     /// The filter shows beside the name only when it hides rows.
@@ -37,8 +38,24 @@ extension SessionsListController {
         return menu
     }
 
+    /// A thread with each agent that the host offers, then a terminal.
+    func newSessionMenu() -> NSMenu {
+        let menu = NSMenu()
+        for agent in content.agents {
+            menu.addItem(withTitle: "New \(agent) Thread", action: #selector(requestThread), keyEquivalent: "").representedObject = agent
+        }
+        if !content.agents.isEmpty { menu.addItem(.separator()) }
+        menu.addItem(withTitle: "New Terminal", action: #selector(requestTerminal), keyEquivalent: "")
+        for item in menu.items { item.target = self }
+        return menu
+    }
+
     @objc func showArrangementMenu(_ sender: NSButton) {
         arrangementMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
+    }
+
+    @objc func showNewSessionMenu(_ sender: NSButton) {
+        newSessionMenu().popUp(positioning: nil, at: NSPoint(x: 0, y: sender.bounds.maxY + 4), in: sender)
     }
 
     @objc private func chooseFilter(_ item: NSMenuItem) {
@@ -55,5 +72,13 @@ extension SessionsListController {
     private func rearrange(filter: SessionsFilter, order: SessionsOrder) {
         arrange(filter: filter, order: order)
         delegate?.sessionsList(self, didChange: filter, order: order)
+    }
+
+    @objc private func requestThread(_ item: NSMenuItem) {
+        if let agent = item.representedObject as? String { delegate?.sessionsList(self, didRequest: .thread(agent: agent)) }
+    }
+
+    @objc func requestTerminal() {
+        delegate?.sessionsList(self, didRequest: .terminal)
     }
 }

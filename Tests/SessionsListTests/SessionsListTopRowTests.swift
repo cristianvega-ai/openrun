@@ -20,4 +20,16 @@ import Testing
         #expect(host.arrangements.map(\.0) == [.inProgress, .inProgress] && host.arrangements.map(\.1) == [.manual, .name])
         #expect(list.arrangementMenu().items.filter { $0.state == .on }.map(\.title) == ["In Progress", "Name"])
     }
+
+    @Test func theNewSessionMenuOffersEachAgentAndATerminal() throws {
+        let (list, host, window, _) = makeSessionsList()
+        defer { window.close() }
+        let menu = list.newSessionMenu()
+        #expect(menu.items.map(\.title) == ["New Claude Code Thread", "New Codex Thread", "", "New Terminal"])
+        try choose("New Codex Thread", in: menu)
+        try choose("New Terminal", in: menu)
+        #expect(host.requests == [.thread(agent: "Codex"), .terminal])
+        #expect(list.topRow.trailingItems.arrangedSubviews == [list.arrangementButton, list.newSessionButton])
+        #expect(list.newSessionButton.accessibilityLabel() == "New Session")
+    }
 }

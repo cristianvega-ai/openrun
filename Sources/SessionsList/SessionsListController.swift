@@ -18,6 +18,7 @@ public final class SessionsListController: NSObject {
     let titleLabel = NSTextField(labelWithString: "")
     let filterLabel = NSTextField(labelWithString: "")
     let arrangementButton: NSButton
+    let newSessionButton: NSButton
     let table = SessionsTableView()
     let scroll = NSScrollView()
     var rows: [SessionsListRow] = []
@@ -28,8 +29,10 @@ public final class SessionsListController: NSObject {
 
     public override init() {
         arrangementButton = PaneButton.make(symbol: "line.3.horizontal.decrease", label: "Filter and Order", target: nil, action: nil)
+        newSessionButton = PaneButton.make(symbol: "square.and.pencil", label: "New Session", target: nil, action: nil)
         super.init()
         (arrangementButton.target, arrangementButton.action) = (self, #selector(showArrangementMenu))
+        (newSessionButton.target, newSessionButton.action) = (self, #selector(showNewSessionMenu))
         configureTopRow()
         configureTable()
         layOut()

@@ -6,10 +6,12 @@ import AppKit
 final class RecordingSessionsHost: SessionsListDelegate {
     var selections: [UUID?] = []
     var opens: [UUID] = []
+    var requests: [NewSessionRequest] = []
     var arrangements: [(SessionsFilter, SessionsOrder)] = []
 
     func sessionsList(_ list: SessionsListController, didSelect identifier: UUID?) { selections.append(identifier) }
     func sessionsList(_ list: SessionsListController, didOpen identifier: UUID) { opens.append(identifier) }
+    func sessionsList(_ list: SessionsListController, didRequest request: NewSessionRequest) { requests.append(request) }
     func sessionsList(_ list: SessionsListController, didChange filter: SessionsFilter, order: SessionsOrder) { arrangements.append((filter, order)) }
 }
 
