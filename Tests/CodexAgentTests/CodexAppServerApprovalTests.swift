@@ -5,14 +5,14 @@ import Testing
 @Suite struct CodexAppServerApprovalTests {
     /// Starts a thread, plays a turn with one approval, gives the answer,
     /// and returns the events of the turn.
-    func turn(_ name: String, answer: CodexPermissionAnswer?, options: CodexServerOptions = CodexServerOptions()) async throws
+    func turn(_ name: String, answer: CodexPermissionAnswer?, options: CodexServerOptions = CodexServerOptions(), sandbox: CodexSandbox? = nil) async throws
         -> [ConversationEvent] {
         let harness = try await CodexServerHarness(options: options)
         async let started = harness.play("thread-start")
         let thread = try await harness.server.startThread(CodexThreadStart(folder: "/work/project"))
         _ = try await started
         async let played = harness.play(name)
-        try await thread.startTurn(CodexTurn(messageIdentifier: "message-1", text: "Run the command."))
+        try await thread.startTurn(CodexTurn(messageIdentifier: "message-1", text: "Run the command.", sandbox: sandbox))
         var events: [ConversationEvent] = []
         for await event in thread.events {
             events.append(event)
@@ -70,5 +70,26 @@ import Testing
         let unsubscribe = await harness.nextWritten()
         harness.serve(#"{"id":\#(unsubscribe?["id"]?.integer ?? 0),"result":{}}"#)
         await close.value
+    }
+
+    @Test func anAllowedFileChangeShowsItsDiffFirst() async throws {
+        let events = try await turn("file-change", answer: .allow, sandbox: .readOnly)
+        let request = events.compactMap { if case .permissionRequested(let request) = $0.kind { request } else { nil } }.first
+        #expect(request?.input["changes"]?.array?.first?["diff"] == .string("@@ -0,0 +1,1 @@\n+hi"))
+        #expect(events.contains { if case .permissionEnded(let end) = $0.kind { end.outcome == .allowed } else { false } })
+    }
+
+    @Test func aRequestBeforeTheStartOfItsItemShowsAgainWithTheDiff() async throws {
+        let harness = try await CodexServerHarness()
+        let channel = await harness.server.open("a", first: [])
+        harness.serve(#"{"id":4,"method":"item/fileChange/requestApproval","params":{"threadId":"a","itemId":"f"}}"#)
+        harness.serve(#"{"method":"item/started","params":{"threadId":"a","item":{"type":"fileChange","id":"f","changes":[{"path":"/work/project/a","kind":{"type":"add"},"diff":"x"}]}}}"#)
+        var requests: [PermissionRequest] = []
+        while requests.count < 2, let event = await channel.next() {
+            if case .permissionRequested(let request) = event.kind { requests.append(request) }
+        }
+        #expect(requests.map(\.identifier) == ["f/4", "f/4"])
+        #expect(requests.last?.input["changes"]?.array?.count == 1)
+        #expect(Transcript(events: requests.map { ConversationEvent(.permissionRequested($0)) }).items.count == 1)
     }
 }

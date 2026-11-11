@@ -42,6 +42,15 @@ extension CodexAppServer {
         await threads[approval.thread]?.send([.permissionEnded(end)], line: nil)
     }
 
+    /// Shows a request again when the start of its item comes after it,
+    /// so that the chat gets the diff of a file change.
+    func showApprovals(of item: String, line: SourceLine) async {
+        for (identifier, approval) in approvals where approval.item == item {
+            let request = approval.permissionRequest(identifier: identifier, startedItem: threads[approval.thread]?.mapper.startedItem(item))
+            await threads[approval.thread]?.send([.permissionRequested(request)], line: line)
+        }
+    }
+
     /// Codex withdrew a request, such as after an interrupt. No answer
     /// goes, and the request ends without one.
     func approvalResolved(_ parameters: JSONValue, thread: String) async {
