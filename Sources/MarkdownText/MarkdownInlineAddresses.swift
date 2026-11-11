@@ -29,6 +29,9 @@ extension MarkdownInlineParser {
         guard schemeLength > 0 else { return nil }
         var stop = index + schemeLength
         while stop < end, !characters[stop].isWhitespace, !"<>\"`".contains(characters[stop]) { stop += 1 }
+        // While the text streams, punctuation at its end may still belong
+        // to the address, so it waits.
+        let reachesEnd = closesOptimistically(end) && stop == end
         while stop > index + schemeLength {
             let last = characters[stop - 1]
             let opened = characters[index..<stop].filter { $0 == "(" }.count
@@ -39,6 +42,6 @@ extension MarkdownInlineParser {
         guard stop > index + schemeLength else { return nil }
         let address = String(characters[index..<stop])
         emit(address, style, address)
-        return stop
+        return reachesEnd ? end : stop
     }
 }

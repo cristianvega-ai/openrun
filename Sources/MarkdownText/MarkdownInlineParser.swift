@@ -13,9 +13,20 @@ public struct MarkdownInlineParser {
     /// The spans of `text`. Each span holds the text that a reader sees,
     /// without the marks of the syntax.
     public static func spans(of text: String, isStreaming: Bool = false) -> [MarkdownSpan] {
-        var parser = MarkdownInlineParser(characters: Array(text), isStreaming: isStreaming)
+        var characters = Array(text)
+        if isStreaming { characters.removeLast(partialAddressLength(characters)) }
+        var parser = MarkdownInlineParser(characters: characters, isStreaming: isStreaming)
         parser.parse(0..<parser.characters.count, style: [], link: nil)
         return parser.spans
+    }
+
+    /// The length of a last word that may become the start of an address,
+    /// such as `htt`. It waits for more text, because it would show as
+    /// plain text first and as a link later.
+    static func partialAddressLength(_ characters: [Character]) -> Int {
+        let start = characters.lastIndex { $0.isWhitespace || "(<[".contains($0) }.map { $0 + 1 } ?? 0
+        let word = String(characters[start...])
+        return !word.isEmpty && ("https://".hasPrefix(word) || "http://".hasPrefix(word)) ? word.count : 0
     }
 
     mutating func parse(_ range: Range<Int>, style: MarkdownSpan.Style, link: String?) {

@@ -40,6 +40,29 @@ struct MarkdownStreamingTests {
         #expect(document.blocks == MarkdownDocument(text: sample).blocks)
     }
 
+    /// Each character that a cut paragraph shows has the style that it
+    /// has in the whole paragraph. Only marks at the end can differ, while
+    /// the next character decides what they are.
+    @Test func eachCutOfAParagraphShowsTheFinalStyles() {
+        let paragraph = "I read **`Transcript.swift`** and *the* ~~old~~ [docs](https://example.com) at https://example.org now."
+        let final = Self.styledCharacters(MarkdownInlineParser.spans(of: paragraph))
+        for cut in paragraph.indices {
+            var shown = Self.styledCharacters(MarkdownInlineParser.spans(of: String(paragraph[..<cut]), isStreaming: true))
+            while let last = shown.last, "*_~`[]()<>!".contains(last.character) { shown.removeLast() }
+            #expect(Array(final.prefix(shown.count)) == shown, "cut at \(paragraph.distance(from: paragraph.startIndex, to: cut))")
+        }
+    }
+
+    private struct StyledCharacter: Equatable {
+        var character: Character
+        var style: MarkdownSpan.Style
+        var isLink: Bool
+    }
+
+    private static func styledCharacters(_ spans: [MarkdownSpan]) -> [StyledCharacter] {
+        spans.flatMap { span in span.text.map { StyledCharacter(character: $0, style: span.style, isLink: span.link != nil) } }
+    }
+
     /// The kind of a block without its content.
     static func form(_ block: MarkdownBlock) -> String {
         switch block.kind {
