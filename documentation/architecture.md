@@ -361,6 +361,41 @@ OpenRun.app registers the session process as a launch agent with SMAppService (`
 - **Bundle.** `scripts/build-application.sh FOLDER` builds OpenRun.app with `Contents/MacOS/OpenRun` (the program `openrun-application`), `Contents/MacOS/openrun-session`, `Contents/Helpers/openrun` and the property list of the agent. It signs with an Apple Development identity, or ad hoc with `OPENRUN_SIGNING_IDENTITY=-`. With an ad hoc signature, launchd ties the agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
 - **Settings for tests.** `OPENRUN_TEST_WAKE_SERVICE_NAME` names another Mach service, and `OPENRUN_TEST_IDLE_EXIT_MILLISECONDS` a shorter idle time. Only the tests and `scripts/check-launch-agent.sh` set them, so they never touch the agent of the installed app. The session process reads them only with `--launch-agent`, and a client reads the first one.
 
+## Data folder
+
+OpenRun keeps its data as readable JSON in `~/Library/Application Support/OpenRun`, the folder of the socket (`DataFolder.defaultPath`).
+A test keeps `DataFolder.defaultPath` and `SocketLocation.defaultPath` in step.
+Tests name a temporary folder instead.
+The folder has mode 0700, and each file has mode 0600.
+
+| File | What it holds | Scope |
+|---|---|---|
+| `projects.json` | The projects in the user's order: the identifier of each and the name that the user gave | Can sync |
+| `project-folders.json` | The folder of each project on this Mac, by identifier | This Mac |
+| `settings.json` | The settings that differ from their defaults, and the settings of a later build | Can sync |
+| `layout.json` | The rows of the sessions list and their splits, which the app keeps | This Mac |
+
+Data that can sync and data of this Mac never share a file, so a later sync takes whole files.
+Each file is one JSON object with its keys sorted and one key on each line.
+Its `format` key holds the format number, so a later build can still read an older file.
+
+A write goes to a temporary file in the same folder, `.NAME.UUID.writing`, with mode 0600 from the start.
+After a full flush of the disk (`F_FULLFSYNC`), a rename puts it in the place of the old file. So a reader sees the old file or the new file, never a part.
+`DataFolder.create` removes a temporary file that a crash left, once it is older than one minute.
+
+A file that this build cannot read is never deleted and never written over.
+That is a file that is not JSON, that has no format number or the format of a later build, that does not decode, or that is larger than 16 MiB.
+It gets the name `NAME.unreadable-TIME.json`, with the time in UTC such as `20261110T093000Z`, and the caller starts from the defaults.
+When the system cannot read or move a file, the load throws, and the caller must not save over it.
+
+`ProjectStore` writes `project-folders.json` first and `projects.json` second.
+A load adds a folder with no entry at the end of the list and leaves out an entry with no folder.
+So a crash between the two writes completes the last change, and the projects stay when only `projects.json` is lost.
+
+`SettingsStore` reads each setting alone.
+A value of the wrong type or out of range goes back to its default, and the load names it in `fallbackNames`.
+A setting that this build does not know stays in the file when the file is saved again.
+
 ## The socket protocol
 
 ### Frames
