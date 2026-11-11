@@ -78,7 +78,16 @@ InputBacklog InputBacklogWithoutWithdrawal invariant:NoByteAfterWithdraw quick
 InputBacklog InputBacklogLiveness no-error quick
 InputBacklog InputBacklogThreeOwners no-error quick
 LocalScreen LocalScreen no-error quick
-LocalScreen LocalScreenWithoutResize invariant:LocalCopyMatchesWindow quick"
+LocalScreen LocalScreenWithoutResize invariant:LocalCopyMatchesWindow quick
+ApprovalQuestion ApprovalQuestion no-error quick
+ApprovalQuestion ApprovalQuestionLiveness no-error quick
+ApprovalQuestion ApprovalQuestionWithoutSignatureCheck invariant:AllowsComeFromSignedAnswerers quick
+ApprovalQuestion ApprovalQuestionWithoutQuestionIdentifier invariant:AllowsApplyToTheirQuestion quick
+ApprovalQuestion ApprovalQuestionWithoutFinalAnswer invariant:NoAllowAfterDenial quick
+ApprovalQuestion ApprovalQuestionWithoutWithdrawal invariant:NoAllowForGoneCaller quick
+ApprovalQuestion ApprovalQuestionWithoutCallerCheck invariant:PerformedOnlyWithAllow quick
+ApprovalQuestion ApprovalQuestionWithoutAnswererCheck invariant:WaitingQuestionsHaveAnAnswerer quick
+ApprovalQuestion ApprovalQuestionWithoutTimeLimit temporal-violation quick"
 
 repository_root="$(cd "$(dirname "$0")/.." && pwd)"
 specifications_folder="$repository_root/specifications"
