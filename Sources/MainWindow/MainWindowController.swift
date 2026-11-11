@@ -17,6 +17,8 @@ public final class MainWindowController: NSObject {
     let projectsItem: NSSplitViewItem
     let sessionsItem: NSSplitViewItem
     let contentItem: NSSplitViewItem
+    let contentShadow = SheetShadowView()
+    let sessionsShadow = SheetShadowView()
     let defaults: UserDefaults
     var layout: PaneLayout
 
@@ -40,6 +42,20 @@ public final class MainWindowController: NSObject {
 
     public func showWindow() {
         paneWindow.makeKeyAndOrderFront(nil)
+    }
+
+    /// Shows the content in the third pane, or its empty state for `nil`.
+    public func showContent(_ content: PaneContent?) {
+        contentPane.show(content)
+    }
+
+    public func updateContentTitle(_ title: String) {
+        contentPane.updateTitle(title)
+    }
+
+    /// The content has a new minimum size, such as after a change of its text size.
+    public func updateContentMinimumSize(_ size: CGSize) {
+        contentPane.updateMinimumSize(size)
     }
 
     private static func holder(of view: NSView) -> NSViewController {
