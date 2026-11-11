@@ -26,18 +26,18 @@ import Testing
         return summary
     }
 
-    @Test func aShellAtItsPromptClosesWithNoQuestion() {
+    @Test func aShellThatReadsTheKeysClosesWithNoQuestion() {
         #expect(CloseQuestion(session: session(foreground: "zsh", isInProgress: false)) == nil)
+        // A shell is in progress for two seconds after it wrote its prompt.
+        #expect(CloseQuestion(session: session(foreground: "zsh", isInProgress: true)) == nil)
         #expect(CloseQuestion(session: session(foreground: "-bash")) == nil)
-        #expect(CloseQuestion(session: session(foreground: nil)) == nil)
+        #expect(CloseQuestion(session: session(foreground: nil, isInProgress: true)) == nil)
     }
 
-    @Test func aProgramOrACommandInProgressAsksFirstAndTheFirstButtonKeepsIt() throws {
+    @Test func aProgramOtherThanAShellAsksFirstAndTheFirstButtonKeepsIt() throws {
         let editor = try #require(CloseQuestion(session: session(foreground: "vim", isInProgress: false)))
         #expect(editor.program == "vim" && editor.message.hasPrefix("vim still runs in it."))
         #expect(editor.buttons == ["Cancel", "Close Session"])
-        #expect(CloseQuestion(session: session(foreground: "zsh", isInProgress: true))?.program == "A command")
-        #expect(CloseQuestion(session: session(foreground: nil, isInProgress: true))?.program == "A command")
         #expect(CloseQuestion(session: session(foreground: "claude"))?.program == "claude")
     }
 }

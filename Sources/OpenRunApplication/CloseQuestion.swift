@@ -11,14 +11,16 @@ struct CloseQuestion: Equatable {
     /// The name of the program that the close would end.
     let program: String
 
-    /// `nil` when the close needs no question: a shell waits at its
-    /// prompt, or the app does not know the program and sees no work.
+    /// `nil` when the close needs no question: a shell reads the keys,
+    /// or the app does not know the program.
+    ///
+    /// The work of the session does not count. A shell that just wrote
+    /// its prompt is in progress for two seconds, and a new session must
+    /// close at once.
     init?(session: SessionSummary) {
         let foreground = session.foregroundProgram.map { $0.hasPrefix("-") ? String($0.dropFirst()) : $0 } ?? ""
-        let isShell = Self.shells.contains(foreground)
-        guard session.isInProgress == true || (!foreground.isEmpty && !isShell) else { return nil }
-        // A shell in progress runs a command whose name the app does not know.
-        program = foreground.isEmpty || isShell ? "A command" : foreground
+        guard !foreground.isEmpty, !Self.shells.contains(foreground) else { return nil }
+        program = foreground
     }
 
     var title: String { "Close this session?" }
