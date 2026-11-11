@@ -13,4 +13,15 @@ import Testing
         shadow.updateLayer()
         #expect(light > 0 && shadow.edgeOpacity > light)
     }
+
+    /// In the dark the shadow must read as an edge, and it fades with a
+    /// curve, so it has no hard line.
+    @Test func theDarkShadowReadsAsASoftEdge() {
+        let shadow = SheetShadowView()
+        shadow.appearance = NSAppearance(named: .darkAqua)
+        shadow.updateLayer()
+        #expect(shadow.edgeOpacity >= 0.45 && SheetShadowView.width >= 14)
+        let middle = shadow.opacity(at: 0.5)
+        #expect(middle > 0 && middle < shadow.edgeOpacity / 3)
+    }
 }
