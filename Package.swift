@@ -147,6 +147,8 @@ let package = Package(
         // The main window: the three panes as stacked sheets, their widths, and the focus between them.
         .target(name: "MainWindow", dependencies: ["PaneAppearance", "ProjectsList", "SessionsList"]),
         .testTarget(name: "MainWindowTests", dependencies: ["MainWindow", "PaneAppearance", "ProjectsList", "SessionsList", "SessionPane", "SessionProcessHarness", "SessionProtocol"]),
+        // The notifications of macOS for sessions that need the user, behind a type that tests replace.
+        .target(name: "AlertNotifications"),
         // One window for one session pane, and the picker of running sessions.
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
@@ -154,6 +156,7 @@ let package = Package(
         .target(name: "OpenRunApplication", dependencies: [
             "SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "SessionWindow", "MainWindow", "ProjectsList", "SessionsList",
             "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "TerminalView", "PaneAppearance",
+            "AlertNotifications",
         ]),
         .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionWindow", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
