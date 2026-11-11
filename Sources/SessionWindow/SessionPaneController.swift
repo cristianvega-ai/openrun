@@ -32,6 +32,8 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     private(set) var view: TerminalView?
     /// The terminal view, once the attach brought the snapshot.
     public var terminalView: TerminalView? { view }
+    /// Hears of the title, the minimum size and the end of the session.
+    public weak var delegate: SessionPaneDelegate?
     /// The program's title, or the session folder when there is no title.
     public private(set) var title = ""
     /// The view that a host puts in its layout.
@@ -61,6 +63,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         window.contentView = paneView
         window.contentMinSize = minimumSize
         window.center()
+        delegate = self
     }
 
     /// Shows the window and attaches with the grid that its view will have.
@@ -111,7 +114,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         view.waitsForSizeConfirmation = true
         view.delegate = self
         paneView.show(view)
-        keepMinimumSize(of: view)
+        delegate?.sessionPaneDidChangeMinimumSize(self)
         // Complete the snapshot fit before a later size from another client arrives.
         view.layoutSubtreeIfNeeded()
         // A key event during the attach must follow any earlier foreign size.
@@ -139,7 +142,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
             let afterOutput: @MainActor @Sendable () -> Void = { [weak self] in
                 if let self, !self.isClosed {
                     switch event {
-                    case .exited: self.window.close()
+                    case .exited: self.delegate?.sessionPaneDidEnd(self)
                     case .closed: self.connectionFailed("The session process closed the connection.")
                     case .failed(let error): self.connectionFailed("The session connection failed. \(error)")
                     default: break
@@ -158,7 +161,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
         Task { [weak self] in
             guard let self, !isClosed else { return }
             _ = await ask(.connectionFailure(detail), window)
-            if !isClosed { window.close() }
+            if !isClosed { delegate?.sessionPaneDidEnd(self) }
         }
     }
 
@@ -210,38 +213,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     }
 
     public func terminalViewDidChangeCellSize(_ view: TerminalView) {
-        keepMinimumSize(of: view)
-    }
-
-    /// A window on a screen of another size can have another minimum.
-    public func windowDidChangeScreen(_ notification: Notification) {
-        if let view { keepMinimumSize(of: view) }
-    }
-
-    /// The window cannot become smaller than the minimum grid at the text size
-    /// of its view, or than its screen when that grid does not fit there
-    /// (decision of 2026-11-08). A user's drag stops there. A larger text size
-    /// can leave the window too small, so it grows, and it moves to stay on its
-    /// screen.
-    private func keepMinimumSize(of view: TerminalView) {
-        let screen = window.screen?.visibleFrame
-        var minimum = minimumSize
-        if let screen {
-            let room = window.contentRect(forFrameRect: screen).size
-            minimum = NSSize(width: min(minimum.width, room.width), height: min(minimum.height, room.height))
-        }
-        window.contentMinSize = minimum
-        let current = window.contentLayoutRect.size
-        guard current.width < minimum.width || current.height < minimum.height else { return }
-        let content = NSSize(width: max(current.width, minimum.width), height: max(current.height, minimum.height))
-        var frame = window.frameRect(forContentRect: NSRect(origin: .zero, size: content))
-        // The top left corner stays, as when the user drags the bottom right one.
-        frame.origin = NSPoint(x: window.frame.minX, y: window.frame.maxY - frame.height)
-        if let screen {
-            frame.origin.x = max(screen.minX, min(frame.origin.x, screen.maxX - frame.width))
-            frame.origin.y = max(screen.minY, min(frame.origin.y, screen.maxY - frame.height))
-        }
-        window.setFrame(frame, display: true)
+        delegate?.sessionPaneDidChangeMinimumSize(self)
     }
 
     /// The size that holds the smallest grid at the text size of the pane
@@ -282,7 +254,7 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
 
     public func terminalView(_ view: TerminalView, didChangeTitle title: String) {
         self.title = title.isEmpty ? folder : title
-        window.title = self.title
+        delegate?.sessionPane(self, didChangeTitle: self.title)
     }
 
     public func terminalView(_ view: TerminalView, shouldOpenLink address: String) async -> Bool {
@@ -306,6 +278,3 @@ public final class SessionPaneController: NSObject, NSWindowDelegate, TerminalVi
     }
 }
 
-/// The pane still owns its window. The next changes give the window a
-/// controller of its own around the pane.
-public typealias SessionWindowController = SessionPaneController
