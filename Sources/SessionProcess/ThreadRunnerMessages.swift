@@ -34,6 +34,17 @@ extension ThreadRunner {
         record.name = name
     }
 
+    /// The user chose another model or permission mode, which the
+    /// registry saved. Claude Code takes both only at its start. So a
+    /// process with no work ends now, and a process in a turn ends after
+    /// the turn. The next message starts a process with the new values.
+    func setLaunchFacts(model: String, permissionMode: String) async {
+        guard (record.model, record.permissionMode) != (model, permissionMode) else { return }
+        (record.model, record.permissionMode) = (model, permissionMode)
+        guard program != nil else { return }
+        if activeMessage == nil { await endProcess() } else { endsAfterTurn = true }
+    }
+
     /// Gives the next message that waits to the agent, when no turn runs.
     /// A process that OpenRun asked to end takes no message: its end
     /// brings the next call, which starts a new process.

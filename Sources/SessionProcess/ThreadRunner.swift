@@ -58,6 +58,9 @@ actor ThreadRunner {
     var isStartingProcess = false
     /// Whether a message waits because every slot for a process is taken.
     var waitsForProcessSlot = false
+    /// Whether the process must end after the turn that runs, because
+    /// the user chose another model or permission mode.
+    var endsAfterTurn = false
     /// The wait for the quiet time of the process.
     var quietTask: Task<Void, Never>?
     let quietTime: Duration

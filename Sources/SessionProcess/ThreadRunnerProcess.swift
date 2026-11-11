@@ -23,7 +23,7 @@ extension ThreadRunner {
         let started = try AgentProgram(launching: AgentProgramLaunch(
             executablePath: settings.program, arguments: launch.arguments, folder: record.folder,
             environment: ClaudeCodeEnvironment.make(base: settings.environment, additions: additions)))
-        (program, decoder, endWasRequested) = (started, ClaudeCodeOutputDecoder(), false)
+        (program, decoder, endWasRequested, endsAfterTurn) = (started, ClaudeCodeOutputDecoder(), false, false)
         Task { await self.read(started) }
         return started
     }
@@ -49,6 +49,13 @@ extension ThreadRunner {
         if turnEnded {
             // The agent has the conversation now, so each later start resumes it.
             (activeMessage, record.hasConversation, record.lastActivityAt) = (nil, true, Date())
+        }
+        if turnEnded, endsAfterTurn, let program {
+            // This call runs in the loop that reads the output, so it must
+            // not wait for the end. The end of the output brings the rest.
+            (endsAfterTurn, endWasRequested) = (false, true)
+            program.closeInput()
+            Task { await self.endAfterGrace(program) }
         }
         if turnEnded || transcript.state != stateBefore { await changed(self) }
         if turnEnded {
