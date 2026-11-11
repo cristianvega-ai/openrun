@@ -25,6 +25,7 @@ private func withTimeLimit<Result>(_ limit: TimeInterval, on connection: Message
 /// wait has a time limit.
 private final class ProtocolClient {
     let connection: MessageConnection
+    let descriptor: Int32
     let terminal: Terminal
     /// The bytes of the escape sequence or character that the snapshot ended
     /// in the middle of. Empty when the snapshot fell between two sequences.
@@ -32,7 +33,8 @@ private final class ProtocolClient {
 
     /// Attaches to a session and restores its snapshot.
     init(socketPath: String, identifier: String, size: SessionSize = SessionSize(columns: 80, rows: 24)) throws {
-        let connection = try MessageConnection.connect(to: SocketLocation(path: socketPath))
+        let descriptor = try connectedSocket(to: socketPath)
+        let connection = MessageConnection(descriptor: descriptor)
         let greeting = try withTimeLimit(30, on: connection) { try connection.greetSessionProcess() }
         if greeting.timedOut { throw ProtocolClientError.unexpected("The hello was not answered in time.") }
         try connection.send(ClientMessage.attach(identifier: UUID(uuidString: identifier)!, size: size))
@@ -44,6 +46,7 @@ private final class ProtocolClient {
         }
         let terminal = try TerminalSnapshot(bytes: Array(bytes)).restoreTerminal(scrollbackLimit: 10_000)
         self.connection = connection
+        self.descriptor = descriptor
         self.terminal = terminal
         unfinishedBytes = try UnfinishedSequence(of: terminal).bytes
     }
@@ -87,6 +90,47 @@ private final class ProtocolClient {
     func detach() {
         try? connection.send(ClientMessage.detach)
         connection.shutdown()
+    }
+}
+
+/// Stands between the session process and a client that does not read.
+/// The session ends a write that takes no byte for 10 seconds, and on a busy
+/// Mac a test waited longer than that. While the relay trickles, it moves one
+/// byte each 100 ms, so the connection stays and the output still waits in
+/// the session. After `flow`, it moves every byte.
+private final class TrickleRelay: Sendable {
+    /// The end that the test reads. It closes when the session closes.
+    let connection: MessageConnection
+    private let trickles = Mutex(true)
+
+    init(from source: Int32) throws {
+        var pair: [Int32] = [0, 0]
+        guard socketpair(AF_UNIX, SOCK_STREAM, 0, &pair) == 0 else { throw SocketError.connectFailed(code: errno) }
+        var enabled: Int32 = 1
+        setsockopt(pair[1], SOL_SOCKET, SO_NOSIGPIPE, &enabled, socklen_t(MemoryLayout<Int32>.size))
+        connection = MessageConnection(descriptor: pair[0])
+        Thread { [self, target = pair[1]] in move(from: source, to: target) }.start()
+    }
+
+    func flow() {
+        trickles.withLock { $0 = false }
+    }
+
+    private func move(from source: Int32, to target: Int32) {
+        var chunk = [UInt8](repeating: 0, count: 65536)
+        moving: while true {
+            let trickles = trickles.withLock { $0 }
+            let count = recv(source, &chunk, trickles ? 1 : chunk.count, trickles ? MSG_DONTWAIT : 0)
+            if count == 0 || (count < 0 && errno != EAGAIN && errno != EINTR) { break }
+            var sent = 0
+            while sent < count {
+                let written = chunk.withUnsafeBytes { send(target, $0.baseAddress! + sent, count - sent, 0) }
+                guard written > 0 else { break moving }
+                sent += written
+            }
+            if trickles { usleep(100_000) }
+        }
+        close(target)
     }
 }
 
@@ -270,11 +314,13 @@ extension SessionProcessIntegration {
                 let stuck = try ProtocolClient(socketPath: process.socketPath, identifier: identifier)
                 defer { stuck.detach() }
                 // The stuck client now never calls receive.
+                let relay = try TrickleRelay(from: stuck.descriptor)
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
 
                 // The session keeps working for others while the stuck client falls behind.
                 #expect(await process.waitForScreen(of: identifier, containing: "FLOOD-DONE", timeout: .seconds(120)))
                 #expect(try process.listedIdentifiers() == [identifier])
+                relay.flow()
 
                 // Now the client reads what it got, and the bytes are counted.
                 var outputBytes = 0
@@ -282,7 +328,7 @@ extension SessionProcessIntegration {
                 var sawExit = false
                 var closed = false
                 while !text.suffix(64).contains(Data("FLOOD-DONE".utf8)) {
-                    guard let message = try ProtocolClient.receive(on: stuck.connection, within: 60) else {
+                    guard let message = try ProtocolClient.receive(on: relay.connection, within: 60) else {
                         closed = true
                         break
                     }
@@ -564,49 +610,20 @@ extension SessionProcessIntegration {
                 }
 
                 // The client stops reading. 7 MiB of output wait for it, below
-                // the limit. The session ends a write that takes no byte for 10
-                // seconds, and a busy Mac took 12.9 seconds to show zeros-done.
-                // One byte each 100 ms keeps the connection and the 7 MiB. Each
-                // look at the screen copies 1.9 MB, so the wait is 60 seconds.
+                // the limit. A busy Mac took 12.9 seconds to show zeros-done, so
+                // a relay keeps the connection. Each look at the screen copies
+                // 1.9 MB, so the wait is 60 seconds.
+                let relay = try TrickleRelay(from: descriptor)
                 FileManager.default.createFile(atPath: goFile.path, contents: Data())
-                let stopsTrickle = Mutex(false)
-                defer { stopsTrickle.withLock { $0 = true } }
-                let trickle = Task { await BlockingWork.onNewThread { () -> Data in
-                    var taken = Data()
-                    while !stopsTrickle.withLock({ $0 }) {
-                        var byte: UInt8 = 0
-                        if recv(descriptor, &byte, 1, MSG_DONTWAIT) == 1 { taken.append(byte) }
-                        usleep(100_000)
-                    }
-                    return taken
-                } }
                 #expect(await process.waitForScreen(of: identifierText, containing: "zeros-done", timeout: .seconds(60)))
                 try connection.send(ClientMessage.readScreen(identifier: identifier, includeScrollback: true))
                 try await Task.sleep(for: .milliseconds(300))
-                stopsTrickle.withLock { $0 = true }
-                let taken = await trickle.value
+                relay.flow()
 
                 let (outputByteCount, screen, problem) = await BlockingWork.onNewThread { () -> (Int, String?, String?) in
-                    var outputByteCount = 0, pending = taken
-                    // The trickle took the first bytes of a frame, so the test
-                    // reads the frames itself, after the bytes that it took.
-                    func read(_ count: Int) -> Data? {
-                        var chunk = [UInt8](repeating: 0, count: 65536)
-                        while pending.count < count {
-                            let got = recv(descriptor, &chunk, chunk.count, 0)
-                            guard got > 0 else { return nil }
-                            pending.append(contentsOf: chunk[0..<got])
-                        }
-                        defer { pending = Data(pending.dropFirst(count)) }
-                        return Data(pending.prefix(count))
-                    }
-                    let watchdog = DispatchWorkItem { connection.shutdown() }
-                    DispatchQueue.global().asyncAfter(deadline: .now() + 60, execute: watchdog)
-                    defer { watchdog.cancel() }
+                    var outputByteCount = 0
                     do {
-                        while let field = read(MessageFrame.lengthFieldSize) {
-                            guard let body = read(try MessageFrame.bodyLength(fromLengthField: field)) else { break }
-                            let message = try ServerMessage(frame: MessageFrame(body: body))
+                        while let message = try receiveMessage(relay.connection, within: 30) {
                             switch message {
                             case .output(let bytes): outputByteCount += bytes.count
                             case .screen(let text): return (outputByteCount, text, nil)
