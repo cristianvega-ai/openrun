@@ -52,7 +52,8 @@ A module uses another module only through its public types.
 | `GitBranch` | Reads the git branch of a folder from the files of git, with no git program | `GitBranch` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
-| `SessionWindow` | Connects one terminal view to one session, owns its window, and offers a session picker | `SessionWindowController`, `SessionStart`, `SessionList` |
+| `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneDelegate`, `SessionStart` |
+| `SessionWindow` | One window around one session pane, and a session picker | `SessionWindowController`, `SessionList` |
 | `OpenRunApplication` | The app, its menus and windows, and setup of the launch agent at the start and on request | `OpenRunApplication` |
 | `AgentConversation` | The model of an agent thread: the events of every agent, the transcript that a chat shows, and the state of the thread | `ConversationEvent`, `ConversationEventKind`, `SourceLine`, `Transcript`, `TranscriptItem`, `TranscriptItemContent`, `TranscriptChange`, `TranscriptLimits`, `ThreadState`, `AgentMessage`, `AgentStart`, `AgentStatus`, `AgentText`, `AgentTextDelta`, `BoundedText`, `FileChange`, `JSONValue`, `LineSplitter`, `MessageImage`, `Notice`, `PermissionEnd`, `PermissionRequest`, `PermissionRequestItem`, `ProcessEnd`, `TaskEnd`, `TaskItem`, `TaskMessage`, `TaskStart`, `Thinking`, `TokenUsage`, `ToolCallInput`, `ToolCallInputDelta`, `ToolCallItem`, `ToolCallOutput`, `ToolCallRefusal`, `ToolCallResult`, `ToolCallStart`, `TurnEnd`, `TurnStart`, `UnknownLine`, `UsageReading`, `UsageWindow`, `UserMessage` |
 | `ClaudeCodeAgent` | Claude Code in a thread: its command line and environment, the user message line, the decoder of its output, its permission hook, and its history | `ClaudeCodeEnvironment`, `ClaudeCodeHistoryLocation`, `ClaudeCodeHistoryReader`, `ClaudeCodeLaunch`, `ClaudeCodeLaunchError`, `ClaudeCodeOutputDecoder`, `ClaudeCodePermissionHookAnswer`, `ClaudeCodePermissionHookError`, `ClaudeCodePermissionHookRequest`, `ClaudeCodePermissionMode`, `ClaudeCodeToolCallMatcher`, `ClaudeCodeUserMessage`, `ClaudeCodeUserMessageError` |
@@ -75,7 +76,7 @@ openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> GitBranch
                                        -> TerminalTheme -> TerminalEmulation
                                        -> TerminalEmulation -> libghostty-vt
-openrun-application -> OpenRunApplication -> SessionWindow -> TerminalView
+openrun-application -> OpenRunApplication -> SessionWindow -> SessionPane -> TerminalView
                                           -> SessionConnection
                                           -> SessionLaunch
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
@@ -93,7 +94,7 @@ No program uses `Projects` and `Settings` yet. The session process will own both
 No program uses `AgentConversation`, `ClaudeCodeAgent` and `AgentProgram` yet. The session process will join them.
 `AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. None of the three uses AppKit (proposal 13 of 2026-11-10).
 
-`SessionWindow` also uses `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
+`SessionPane` and `SessionWindow` also use `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionPane` and `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
 `PseudoTerminal`, `SessionProtocol`, `SessionLaunch` and `GitBranch` depend on no other OpenRun module. `SessionConnection` depends on `SessionProtocol` and `SessionLaunch`.
@@ -261,16 +262,19 @@ The client side of the socket, for the command-line tool and the window of the a
 - `rename(session:to:)`, `raiseAlert(session:text:)` and `clearAlert(session:)` change the facts of a session. See "Facts of a session".
 - `SessionClient(location:helloTimeLimit:)` gives each `hello` a time limit. A `hello` that takes longer throws `protocolFailure(.timedOut)` and sends no wake. The other initializers keep no limit, so `openrun` and the windows wait as long as the session process takes. Only the setup of the app passes a limit.
 
-### SessionWindow
+### SessionPane
 
-`SessionStart` selects a new login shell or a running session. `SessionWindowController` owns one window, its view and its attachment.
-`AttachedSession` is the window's interface to an attachment. `SessionAttachment` and a test stand-in implement it.
+`SessionStart` selects a new login shell or a running session. `SessionPaneController` owns one `SessionPaneView`, its terminal view and its attachment. A host puts `paneView` in its layout and calls `attach()`, which estimates the grid from the size of the pane, so the host lays the pane out first. The host calls `activate()` when its window is key and the pane has the keyboard focus, `deactivate()` when either ends, and `close()` when it removes the pane. `SessionPaneDelegate` tells the host of a new title, a new `minimumSize` and the end of the session. The terminal view takes the keyboard focus at the attach only when the pane or nothing in the window had it.
+`AttachedSession` is the pane's interface to an attachment. `SessionAttachment` and a test stand-in implement it.
 The window connects and attaches on `ConnectionWork`, a serial queue outside the main thread. The snapshot makes the view, and `AttachmentRelay` gives later events to the main thread in order.
 The relay admits at most 1 MiB of output and 128 events until the view applies them. One larger frame can enter an empty relay. The receiver can hold one more frame, and the parser makes a copy of each admitted output frame. A frame can hold at most 64 MiB. When the relay is full, the receiver waits and the socket holds later frames. The window asks the session process to pause output when its queue fills, within the limits in "Slow clients". A program exit or connection failure waits for earlier output to be applied. Closing the window cancels the relay, wakes its receiver and discards pending view output.
 Input and size requests go back through the serial connection queue. Each input event stays one frame.
 Closing schedules a detach behind ready work. A separate shutdown wakes a send that is still blocked after 200 ms and skips later queued sends.
 A whole input event that the session already started can still reach the program after the window closes.
-The title comes from the terminal's title, or the session folder when the title is empty. A small label reports grid rows or columns that do not fit. Closing the window detaches and leaves the session running; the exit of the program closes the window. A connection failure is shown to the user. The controller asks before an unsafe paste, before unsafe inserted text with a question of its own, and before a link that needs confirmation. The link question shows its complete target in a selectable, scrollable sheet. Cancel or a closed window prevents the open.
+The title comes from the terminal's title, or the session folder when the title is empty. A small label reports grid rows or columns that do not fit. `close()` detaches and leaves the session running. The exit of the program, and a connection failure after the user saw it, reach the host as the end of the session. The questions are sheets on the window of the pane. The controller asks before an unsafe paste, before unsafe inserted text with a question of its own, and before a link that needs confirmation. The link question shows its complete target in a selectable, scrollable sheet. Cancel or a closed window prevents the open.
+### SessionWindow
+
+`SessionWindowController` owns one window around one `SessionPaneController`. It tells the pane when the window becomes key, closes the pane with the window, shows the title of the pane, and closes when the session ends. It keeps the minimum size of the window: the minimum of the pane, or the screen when that does not fit, and it grows a window that a larger text size leaves too small.
 `SessionList` loads running sessions off the main thread. Its picker shows the folder and full identifier of each session. It handles an empty list and Cancel, and shows a connection failure instead of treating it as an empty list.
 
 ### OpenRunApplication
