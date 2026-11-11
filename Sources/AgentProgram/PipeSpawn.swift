@@ -25,10 +25,9 @@ enum PipeSpawn {
         for _ in 0..<3 {
             var descriptors: [Int32] = [-1, -1]
             guard pipe(&descriptors) == 0 else { throw AgentProgramError.systemCallFailed(function: "pipe", code: errno) }
-            pipes.append((descriptors[0], descriptors[1]))
-            // Programs that other threads start must not get these ends.
-            _ = fcntl(descriptors[0], F_SETFD, FD_CLOEXEC)
-            _ = fcntl(descriptors[1], F_SETFD, FD_CLOEXEC)
+            let ends = descriptors.map(raised)
+            pipes.append((ends[0], ends[1]))
+            guard !ends.contains(-1) else { throw AgentProgramError.systemCallFailed(function: "fcntl", code: errno) }
         }
         var actions: posix_spawn_file_actions_t?
         posix_spawn_file_actions_init(&actions)
@@ -73,6 +72,20 @@ enum PipeSpawn {
         _ = fcntl(started.outputDescriptor, F_SETFL, O_NONBLOCK)
         _ = fcntl(started.errorDescriptor, F_SETFL, O_NONBLOCK)
         return started
+    }
+
+    /// Moves a new pipe end above 2, with close-on-exec, so that programs
+    /// that other threads start do not get it. When the parent has 0, 1 or
+    /// 2 closed, `pipe` can return that number. An end at a target of the
+    /// `dup2` actions would then stay close-on-exec, because `dup2` onto
+    /// itself keeps the flag, or a later action would overwrite it.
+    /// Returns -1, with `errno` set, when the move fails.
+    private static func raised(_ descriptor: Int32) -> Int32 {
+        let moved = fcntl(descriptor, F_DUPFD_CLOEXEC, 3)
+        let code = errno
+        close(descriptor)
+        errno = code
+        return moved
     }
 
     private static func spawn(

@@ -62,7 +62,9 @@ let package = Package(
         // An agent program on pipes, such as `claude -p`, with its process
         // group, and the environment of the user's login shell.
         .target(name: "AgentProgram", dependencies: ["PseudoTerminal"]),
-        .testTarget(name: "AgentProgramTests", dependencies: ["AgentProgram", "PseudoTerminal"]),
+        // Starts a program on pipes after it closed a standard descriptor.
+        .executableTarget(name: "agent-program-probe", dependencies: ["AgentProgram"], path: "Tests/AgentProgramProbe"),
+        .testTarget(name: "AgentProgramTests", dependencies: ["AgentProgram", "PseudoTerminal", "agent-program-probe"]),
         // A stand-in for `claude -p` that plays recorded turns, so that no
         // test runs the real agent.
         .executableTarget(name: "fake-agent", path: "Tests/FakeAgent"),

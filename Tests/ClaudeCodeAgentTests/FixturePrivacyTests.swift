@@ -10,7 +10,7 @@ import Testing
     static let packageFolder = URL(fileURLWithPath: "../..", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
     static let scannedFolders = [
         "Sources/AgentConversation", "Sources/ClaudeCodeAgent", "Sources/AgentProgram", "Tests/AgentConversationTests",
-        "Tests/ClaudeCodeAgentTests", "Tests/AgentProgramTests", "Tests/FakeAgent", "Tests/FakeAgentTests",
+        "Tests/ClaudeCodeAgentTests", "Tests/AgentProgramTests", "Tests/AgentProgramProbe", "Tests/FakeAgent", "Tests/FakeAgentTests",
     ]
 
     /// The first 16 hexadecimal digits of the SHA-256 of each word that
