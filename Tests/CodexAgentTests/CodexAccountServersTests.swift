@@ -28,4 +28,15 @@ import Testing
         #expect(await servers.serverCount == 2)
         #expect(starts.accounts.withLock { $0 } == ["/config/a", "/config/a", nil])
     }
+
+    @Test func aReadWithoutThreadStartsAServerForTheReadAlone() async throws {
+        let servers = CodexAccountServers { _ in
+            let harness = try await CodexServerHarness()
+            Task { try await harness.play("usage") }
+            return harness.server
+        }
+        let account = try await servers.readAccount(account: "/config/a")
+        #expect(account.plan == "plus")
+        #expect(await servers.serverCount == 0)
+    }
 }

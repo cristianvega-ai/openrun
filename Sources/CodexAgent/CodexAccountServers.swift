@@ -19,6 +19,16 @@ public actor CodexAccountServers {
     var entries: [String?: Entry] = [:]
     var nextGeneration = 0
 
+    /// `launch` gives the program and the environment. Its account folder
+    /// is replaced by the account of each call.
+    public init(launch: CodexServerLaunch, options: CodexServerOptions = CodexServerOptions()) {
+        self.init { account in
+            var launch = launch
+            launch.accountFolder = account
+            return try await CodexAppServer.start(launch, options: options)
+        }
+    }
+
     init(start: @escaping Start) {
         self.start = start
     }
