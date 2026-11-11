@@ -14,6 +14,9 @@ final class DisclosureLineView: NSView {
         didSet { setAccessibilityExpanded(isOpen) }
     }
     private var isHovered = false { didSet { needsDisplay = true } }
+    /// Whether the line has the keyboard focus. The line draws its own
+    /// mark, as wide as its fill, so the mark follows its rounded shape.
+    private(set) var showsFocusMark = false { didSet { needsDisplay = true } }
 
     override init(frame: NSRect) {
         super.init(frame: frame)
@@ -22,6 +25,7 @@ final class DisclosureLineView: NSView {
         for view in [symbol, title, status] { addSubview(view) }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
+        focusRingType = .none
     }
 
     @available(*, unavailable)
@@ -58,10 +62,27 @@ final class DisclosureLineView: NSView {
         status.frame = NSRect(x: title.frame.maxX + 8, y: middle - 9, width: statusWidth, height: 18)
     }
 
+    override func becomeFirstResponder() -> Bool {
+        showsFocusMark = true
+        return true
+    }
+
+    override func resignFirstResponder() -> Bool {
+        showsFocusMark = false
+        return true
+    }
+
     override func draw(_ dirtyRect: NSRect) {
-        guard isHovered, action != nil else { return }
-        hoverColor.setFill()
-        NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        guard action != nil else { return }
+        if isHovered {
+            hoverColor.setFill()
+            NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill()
+        }
+        guard showsFocusMark, window?.isKeyWindow != false else { return }
+        let mark = NSBezierPath(roundedRect: bounds.insetBy(dx: 1.5, dy: 1.5), xRadius: 5, yRadius: 5)
+        mark.lineWidth = 2.5
+        NSColor.keyboardFocusIndicatorColor.setStroke()
+        mark.stroke()
     }
 
     override func updateTrackingAreas() {
@@ -83,6 +104,4 @@ final class DisclosureLineView: NSView {
         return action != nil
     }
 
-    override var focusRingMaskBounds: NSRect { bounds }
-    override func drawFocusRingMask() { NSBezierPath(roundedRect: bounds, xRadius: 6, yRadius: 6).fill() }
 }

@@ -1,3 +1,4 @@
+import AppKit
 import Testing
 
 @testable import ChatView
@@ -12,5 +13,19 @@ import Testing
         #expect(presses == 1)
         #expect(line.accessibilityLabel() == "Ran swift test, Exit code 1")
         #expect(line.acceptsFirstResponder)
+    }
+
+    @Test func theLineWithTheKeyboardFocusShowsAMark() {
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 300, height: 100), styleMask: [.titled], backing: .buffered, defer: false)
+        window.isReleasedWhenClosed = false
+        defer { window.close() }
+        let line = DisclosureLineView(frame: NSRect(x: 0, y: 0, width: 300, height: DisclosureLineView.height))
+        line.action = {}
+        window.contentView?.addSubview(line)
+        #expect(!line.showsFocusMark)
+        window.makeFirstResponder(line)
+        #expect(line.showsFocusMark)
+        window.makeFirstResponder(nil)
+        #expect(!line.showsFocusMark)
     }
 }
