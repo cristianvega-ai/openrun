@@ -598,8 +598,9 @@ extension SessionProcessIntegration {
                     return nil
                 }
                 print("detach-wake: chunks \(chunksAtTheStop) at the detach, \(String(describing: chunksAtTheClose)) at the close")
-                // Eight chunks, so the end of the chunk that waited is not enough.
-                #expect((chunksAtTheClose ?? 0) >= chunksAtTheStop + 8, "The detach must wake the session before the close.")
+                // 64 chunks, 4 MiB: a watcher that is 10 to 20 ms late cannot see
+                // that much output after the close. The real product wrote 361 or more.
+                #expect((chunksAtTheClose ?? 0) >= chunksAtTheStop + 64, "The detach must wake the session before the close.")
                 let active = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { active.connection.shutdown() }
                 let reader = FloodReader(active.connection)
@@ -654,8 +655,11 @@ extension SessionProcessIntegration {
                 }
                 print("stalled-viewers: the longest write took \(longest) seconds")
                 // The read-ahead of 4 MiB fills in a moment, so the write waits for
-                // nearly all of the pause. Waits in turn, or a longer limit, take 6 s.
-                #expect(longest >= 1.5 && longest < 4, "One pause of 2 seconds must stop the program.")
+                // nearly all of the pause. The program times its own write, so load
+                // adds only the time that the program and the session take to run
+                // again after the pause. The real product took 2.2 to 2.4 s. Waits
+                // in turn, or a longer limit, take 6 s.
+                #expect(longest >= 1.5 && longest < 3, "One pause of 2 seconds must stop the program.")
             }
         }
 
