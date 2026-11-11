@@ -1,0 +1,40 @@
+import AppKit
+import TerminalEmulation
+import TerminalTheme
+import Testing
+@testable import PaneAppearance
+
+@MainActor @Suite struct PaneColorTests {
+    private func components(_ color: NSColor, in name: NSAppearance.Name) throws -> [Int] {
+        var resolved: NSColor?
+        try #require(NSAppearance(named: name)).performAsCurrentDrawingAppearance {
+            resolved = color.usingColorSpace(.sRGB)
+        }
+        let srgb = try #require(resolved)
+        return [srgb.redComponent, srgb.greenComponent, srgb.blueComponent].map { Int(($0 * 255).rounded()) }
+    }
+
+    private func channels(_ color: TerminalColor) -> [Int] { [Int(color.red), Int(color.green), Int(color.blue)] }
+
+    @Test func eachColorFollowsTheAppearance() throws {
+        for (name, scheme) in [(NSAppearance.Name.aqua, TerminalColorScheme.light), (.darkAqua, .dark)] {
+            let window = TerminalTheme.graphite(for: scheme).window
+            #expect(try components(PaneColor.firstPane, in: name) == channels(window.firstPane))
+            #expect(try components(PaneColor.secondPane, in: name) == channels(window.secondPane))
+            #expect(try components(PaneColor.quietText, in: name) == channels(window.quietText))
+            #expect(try components(PaneColor.attention, in: name) == channels(window.attention))
+            #expect(try components(PaneColor.terminalBackground, in: name) == channels(TerminalTheme.graphite(for: scheme).background))
+        }
+    }
+
+    /// Increase Contrast gives the quiet parts the strong colors.
+    @Test func increaseContrastMakesTheQuietPartsStrong() throws {
+        for (name, scheme) in [(NSAppearance.Name.aqua, TerminalColorScheme.light), (.darkAqua, .dark)] {
+            let window = TerminalTheme.graphite(for: scheme).window
+            let strong = PaneColor.colors(for: try #require(NSAppearance(named: name)), increasesContrast: true)
+            #expect(strong.quietText == window.text && strong.divider == window.quietText)
+            #expect(strong.inactiveRowSelection == window.rowSelection && strong.text == window.text)
+            #expect(PaneColor.colors(for: try #require(NSAppearance(named: name)), increasesContrast: false) == window)
+        }
+    }
+}
