@@ -44,7 +44,7 @@ let package = Package(
         .target(name: "DataStorage"),
         .testTarget(name: "DataStorageTests", dependencies: ["DataStorage", "SessionProtocol"]),
         // The folders that the user adds as projects, and the project of a session.
-        .target(name: "Projects", dependencies: ["DataStorage"]),
+        .target(name: "Projects", dependencies: ["DataStorage", "UntrustedText"]),
         .testTarget(name: "ProjectsTests", dependencies: ["Projects", "DataStorage"]),
         // The typed settings, their text forms for the tool, and the rule
         // for protected settings.

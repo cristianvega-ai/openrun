@@ -1,4 +1,5 @@
 import Foundation
+import UntrustedText
 
 /// A folder that the user added, usually a repository. New sessions in the
 /// project start in its folder.
@@ -30,17 +31,13 @@ public struct Project: Hashable, Sendable {
     /// other characters, so the folder's name shows again.
     ///
     /// - Throws: `ProjectListError.invalidName` for a name that is too long
-    ///   or that holds a control character, which could change the lines
-    ///   around it where it shows.
+    ///   or that `PlainName` refuses, because the name shows in the app's
+    ///   list and in a terminal.
     static func validName(_ name: String?) throws -> String? {
         guard let trimmed = name?.trimmingCharacters(in: .whitespacesAndNewlines), !trimmed.isEmpty else {
             return nil
         }
-        guard trimmed.count <= nameLengthLimit,
-              !trimmed.unicodeScalars.contains(where: { $0.properties.generalCategory == .control
-                  || $0.properties.generalCategory == .lineSeparator
-                  || $0.properties.generalCategory == .paragraphSeparator })
-        else { throw ProjectListError.invalidName }
+        guard PlainName.isValid(trimmed, lengthLimit: nameLengthLimit) else { throw ProjectListError.invalidName }
         return trimmed
     }
 }

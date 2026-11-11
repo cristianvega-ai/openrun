@@ -39,7 +39,7 @@ import Testing
 
     @Test func addRefusesABadNameAndChangesNothing() throws {
         var list = ProjectList()
-        for name in [String(repeating: "x", count: 101), "one\ntwo", "bell\u{7}", "c1\u{9B}"] {
+        for name in [String(repeating: "x", count: 101), "one\ntwo", "bell\u{7}", "c1\u{9B}", "app\u{202E}gnp.exe", "a\u{2028}b"] {
             #expect(throws: ProjectListError.invalidName) { try list.add(folder: temporary.path + "/app", name: name) }
         }
         #expect(list.projects.isEmpty)
