@@ -327,7 +327,7 @@ actor SessionServer {
         case .allowed: return nil
         case .denied: return Self.refusal("\(start), and the user did not allow it.")
         case .timedOut: return Self.refusal("\(start), and the user did not answer in time.")
-        case .noAnswerer: return Self.refusal("\(start). This needs the user's approval, and OpenRun is not open to ask.")
+        case .noAnswerer: return Self.refusal("\(start). This needs the user's approval, and no signed OpenRun app is open to ask.")
         case .withdrawn: return Self.refusal("\(start), and then it left.")
         }
     }
