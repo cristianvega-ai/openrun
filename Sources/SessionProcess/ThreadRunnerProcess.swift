@@ -59,6 +59,7 @@ extension ThreadRunner {
     private func ended(_ ended: AgentProgram, exit: ProgramExit) async {
         guard program === ended else { return }
         program = nil
+        endPermissions()
         let (status, signal): (Int32?, Int32?) = switch exit {
         case .exited(let status): (status, nil)
         case .signaled(let signal): (nil, signal)

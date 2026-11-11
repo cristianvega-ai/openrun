@@ -64,6 +64,7 @@ extension ThreadRunner {
             emit(.notice(Notice(level: .information, text: "The stop removed \(waitingMessages.count) messages that waited for the agent.")))
             waitingMessages = []
         }
+        endPermissions()
         guard let program, activeMessage != nil else { return await changed(self) }
         endWasRequested = true
         program.send(signal: SIGINT)
@@ -74,6 +75,7 @@ extension ThreadRunner {
     func close() async {
         guard !isClosed else { return }
         (isClosed, waitingMessages, endWasRequested) = (true, [], true)
+        endPermissions()
         for listener in listeners.values { listener(.closed) }
         listeners = [:]
         if let program { await program.terminate(gracePeriod: .seconds(1)) }

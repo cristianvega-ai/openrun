@@ -22,6 +22,9 @@ actor ThreadRunner {
     /// How long a process may take to end after a stop or a closed input,
     /// before it gets SIGTERM and then SIGKILL.
     static let endGracePeriod = Duration.seconds(5)
+    /// The longest wait for the answer of the user to a permission
+    /// request: 24 hours, as long as the hook of the agent may wait.
+    static let permissionTimeLimit = Duration.seconds(ClaudeCodeLaunch.hookTimeoutSeconds)
 
     struct WaitingMessage {
         let identifier: UUID
@@ -36,6 +39,10 @@ actor ThreadRunner {
     var program: AgentProgram?
     var decoder = ClaudeCodeOutputDecoder()
     var waitingMessages: [WaitingMessage] = []
+    /// The permission requests that wait for the user, by identifier.
+    var waitingPermissions: [String: WaitingPermission] = [:]
+    /// Finds the tool call that a permission request is for.
+    var toolCalls = ClaudeCodeToolCallMatcher()
     /// The message whose turn runs, from its send to the end of its turn
     /// or of the process.
     var activeMessage: UUID?
@@ -69,6 +76,7 @@ actor ThreadRunner {
     func emit(_ kind: ConversationEventKind, sourceLine: SourceLine? = nil) {
         let event = ConversationEvent(kind, sourceLine: sourceLine)
         _ = transcript.apply(event)
+        toolCalls.observe(event)
         let data = buffer.append(event)
         for listener in listeners.values { listener(.event(data)) }
         lastUse = .now
