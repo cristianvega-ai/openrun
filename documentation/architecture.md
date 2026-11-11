@@ -602,7 +602,7 @@ The tests never start the real `claude`, because it spends the owner's subscript
 `Tests/FakeAgent` builds the program `fake-agent`. It refuses any command line that `ClaudeCodeLaunch` does not make, and the variable `CLAUDECODE`, with the exit status 64.
 It answers each user message line with a recorded turn from `Tests/ClaudeCodeAgentTests/Fixtures`. It puts in the identifier of the conversation and echoes the user message as Claude Code does. `FAKE_AGENT_MODE` selects a special case: a conversation that does not exist, a turn that waits for SIGINT, a line cut short, a crash, or a flood of text.
 `FakeAgentTests` run it through `AgentProgram`, the decoder and a transcript.
-The fixtures come from real runs of Claude Code 2.1.322, with everything that describes the owner removed. `FixturePrivacyTests` scans every file of the three modules, their tests and the fake agent for identifiers that are not made up, long opaque values, home folders, e-mail addresses and the words that were removed.
+The fixtures come from real runs of Claude Code 2.1.322, with everything that describes the owner removed. `FixturePrivacyTests` scans every file of the four modules, their tests, the fake agent and the fake app-server for identifiers that are not made up, long opaque values, home folders, e-mail addresses and the words that were removed.
 
 ### The fake app-server
 
@@ -612,7 +612,7 @@ The tests never start the real `codex`, because it spends the owner's subscripti
 Special steps play an answer that never comes, the end of the connection while an approval waits, a line cut short, and a crash. While an approval waits for the end, any line of OpenRun ends the fake with the status 3, so a test sees an answer that should not go.
 After the last step, each request gets an empty answer, and the end of its input ends the fake.
 The tests in `CodexAgentTests` run it through `AgentProgram`, the server and a transcript. Faster tests play the same fixtures on a transport in memory.
-The fixtures come from real runs of Codex 0.167.0, with everything that describes the owner removed. `FixturePrivacyTests` scans them too.
+The fixtures come from real runs of Codex 0.167.0, with everything that describes the owner removed. `FixturePrivacyTests` scans them too. Its rules for Codex allow only the made-up forms of the identifiers of reasoning items, credits and commands, and only the made-up date of a rollout file.
 
 ## Launch agent
 

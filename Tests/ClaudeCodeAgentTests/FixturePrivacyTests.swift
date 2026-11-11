@@ -4,14 +4,15 @@ import Testing
 
 /// The repository is public, and the fixtures and some test values come
 /// from runs on the owner's Mac. This test fails when a file of the agent
-/// thread modules, their tests or the fake agent describes the owner. It
+/// thread modules, their tests, the fake agent or the fake app-server
+/// describes the owner. It
 /// depends on nothing of the Mac that runs it.
 @Suite struct FixturePrivacyTests {
     static let packageFolder = URL(fileURLWithPath: "../..", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
     static let scannedFolders = [
         "Sources/AgentConversation", "Sources/ClaudeCodeAgent", "Sources/AgentProgram", "Tests/AgentConversationTests",
         "Tests/ClaudeCodeAgentTests", "Tests/AgentProgramTests", "Tests/AgentProgramProbe", "Tests/FakeAgent", "Tests/FakeAgentTests",
-        "Sources/CodexAgent", "Tests/CodexAgentTests",
+        "Sources/CodexAgent", "Tests/CodexAgentTests", "Tests/FakeCodex",
     ]
 
     /// The first 16 hexadecimal digits of the SHA-256 of each word that
@@ -63,6 +64,14 @@ import Testing
                 !value.contains(where: \.isNumber) || value.allSatisfy { $0 == "0" } || checkedLongValueHashes.contains(hash(String(value))) }),
             ("a home folder", "/Users/[A-Za-z0-9._-]+", { $0 == "/Users/example" }),
             ("an e-mail address", "[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}", { $0.hasSuffix("@example.com") }),
+            // Codex: reasoning items, credits and commands have opaque
+            // identifiers, and the rollout files have the date of the thread.
+            ("a real Codex reasoning or credit identifier", "\\b(rs|RateLimitResetCredit)_(?=[A-Za-z0-9]*[0-9])[A-Za-z0-9]{6,}",
+             { $0.wholeMatch(of: /(rs|RateLimitResetCredit)_01Fixture[0-9]+/) != nil }),
+            ("a real Codex command identifier", "exec-(?=[A-Za-z0-9-]*[0-9])[A-Za-z0-9-]+",
+             { $0.wholeMatch(of: /exec-([0-9]{1,3}|00000000-0000-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{4}-[0-9A-Fa-f]{12})/) != nil }),
+            ("a real Codex session date", "sessions/[0-9]{4}/[0-9]{2}/[0-9]{2}|rollout-[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}-[0-9]{2}-[0-9]{2}",
+             { $0 == "sessions/2000/01/01" || $0 == "rollout-2000-01-01T00-00-00" }),
         ]
         for rule in rules {
             let matches = text.matches(of: try Regex(rule.pattern))
@@ -90,6 +99,12 @@ import Testing
         #expect(try Self.problems(in: String(repeating: "Ab3/", count: 12)) == ["a long base64 value"])
         #expect(try Self.problems(in: "/Users/" + "someone/x /Users/example/x") == ["a home folder"])
         #expect(try Self.problems(in: "a@" + "mail.org b@example.com") == ["an e-mail address"])
+        #expect(try Self.problems(in: "rs_" + "0a1b2c3d4e5f") == ["a real Codex reasoning or credit identifier"])
+        #expect(try Self.problems(in: "RateLimitResetCredit_" + String(repeating: "0", count: 32)) == ["a real Codex reasoning or credit identifier"])
+        #expect(try Self.problems(in: "exec-" + "4f1c9a2e") == ["a real Codex command identifier"])
+        #expect(try Self.problems(in: "sessions/" + "2025/03/04 rollout-" + "2025-03-04T05-06-07") == ["a real Codex session date"])
+        let codex = "rs_01Fixture1 RateLimitResetCredit_01Fixture1 exec-1 exec-00000000-0000-7000-8000-000000000001 users_abc123"
+        #expect(try Self.problems(in: codex + " /codex/sessions/2000/01/01/rollout-2000-01-01T00-00-00-x.jsonl").isEmpty)
     }
 
     @Test func theHashOfAWordIsItsDigestInLowerCase() {
