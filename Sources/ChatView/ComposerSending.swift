@@ -10,7 +10,7 @@ extension ComposerView: NSTextViewDelegate {
         textView.sendAction = { [weak self] in self?.submit() }
         textView.stopAction = { [weak self] isImmediate in
             guard let self else { return }
-            if isImmediate || logic.escape(isFieldEmpty: textView.string.isEmpty) == .stop { stopAction?() }
+            if isImmediate ? logic.isBusy : logic.escape(isFieldEmpty: textView.string.isEmpty) == .stop { stopAction?() }
         }
     }
 

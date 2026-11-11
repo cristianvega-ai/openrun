@@ -58,6 +58,15 @@ import Testing
         #expect(stops == 2)
     }
 
+    @Test func commandPeriodOnAnIdleThreadStopsNothing() {
+        var stops = 0
+        composer.stopAction = { stops += 1 }
+        composer.textView.stopAction?(true)
+        composer.textView.stopAction?(false)
+        composer.textView.stopAction?(false)
+        #expect(stops == 0)
+    }
+
     @Test func imagesGoWithTheMessageAndAHeldMessageComesBack() {
         let png = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
         composer.textView.imagesAction?([png, Data("text".utf8)])
