@@ -4,6 +4,7 @@ import AgentConversation
 extension CodexEventMapper {
     mutating func turnStarted(_ parameters: JSONValue) -> [ConversationEventKind] {
         activeTurn = parameters["turn"]?["id"]?.string
+        if activeTurn == requestedTurn { requestedTurn = nil }
         tokensBeforeTurn = tokensNow
         return [.turnStarted(TurnStart())]
     }
@@ -11,6 +12,8 @@ extension CodexEventMapper {
     mutating func turnCompleted(_ parameters: JSONValue) -> [ConversationEventKind] {
         let turn = parameters["turn"] ?? .null
         if turn["id"]?.string == activeTurn { activeTurn = nil }
+        if turn["id"]?.string == requestedTurn { requestedTurn = nil }
+        lastEndedTurn = turn["id"]?.string
         var end = Self.turnEnd(turn)
         // A turn that made no request, such as one with an unknown model,
         // gives no new total.
@@ -24,6 +27,17 @@ extension CodexEventMapper {
         }
         return events
     }
+
+    /// Notes the turn that Codex took. Its `turn/started` can come after
+    /// the answer, and a stop in between must still end it.
+    mutating func noteRequestedTurn(_ turn: String) {
+        guard turn != activeTurn, turn != lastEndedTurn else { return }
+        requestedTurn = turn
+    }
+
+    /// The turn that a stop ends: the one that runs, or the one that Codex
+    /// took and did not start yet.
+    var turnToStop: String? { activeTurn ?? requestedTurn }
 
     /// The end of a turn from its status and error, without the tokens.
     static func turnEnd(_ turn: JSONValue) -> TurnEnd {

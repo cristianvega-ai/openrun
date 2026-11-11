@@ -569,7 +569,7 @@ Only `CodexThread.answerPermission` accepts a request: allow sends `accept`, and
 OpenRun declines a request after `approvalTimeLimit`, 10 minutes by default, at a stop, and at the close of its thread. When the app-server ends, no answer can go, and the request ends as declined. Codex runs nothing that waits (result 3 of the prototype). When Codex withdraws a request with `serverRequest/resolved`, it ends without an answer.
 Every other request of the app-server, such as a question for the user or a tool call of the client, gets the error -32601, and the thread gets a warning.
 
-`CodexThread.stop` declines the requests that wait and sends `turn/interrupt`. It waits at most 5 seconds for the end of the turn. A command that runs goes on after the interrupt as a background terminal (result 8 of the prototype), so the stop lists the background terminals of the thread and ends each one.
+`CodexThread.stop` declines the requests that wait and sends `turn/interrupt`. It also stops a turn whose `turn/started` has not come yet, by the identifier in the answer to `turn/start`. It waits at most 5 seconds for the end of the turn. A command that runs goes on after the interrupt as a background terminal (result 8 of the prototype), so the stop lists the background terminals of the thread and ends each one.
 These methods are experimental. When Codex refuses them, the turn still stopped, and the thread gets a warning that a command may still run.
 The output and the end of such a command come after the end of its turn. They become status events, so that the chat does not show the thread as busy again.
 

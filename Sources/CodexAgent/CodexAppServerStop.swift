@@ -6,13 +6,13 @@ extension CodexAppServer {
         guard threads[thread] != nil else { return CodexStop() }
         var stop = CodexStop()
         await endApprovals(of: { $0 == thread })
-        if let turn = threads[thread]?.mapper.activeTurn {
+        if let turn = threads[thread]?.mapper.turnToStop {
             let parameters = JSONValue.object(["threadId": .string(thread), "turnId": .string(turn)])
             stop.interruptedTurn = (try? await request("turn/interrupt", parameters)) != nil
             // A command that runs goes on after the interrupt, as a
             // background terminal. It can end only after the end of the turn.
             let deadline = ContinuousClock.now + options.stopTimeLimit
-            while threads[thread]?.mapper.activeTurn == turn, ContinuousClock.now < deadline {
+            while threads[thread]?.mapper.turnToStop == turn, ContinuousClock.now < deadline {
                 try? await Task.sleep(for: .milliseconds(20))
             }
         }

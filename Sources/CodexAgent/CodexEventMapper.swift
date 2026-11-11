@@ -29,6 +29,10 @@ struct CodexEventMapper: Sendable {
     var startedItems: [(identifier: String, item: JSONValue)] = []
     /// The turn that runs, from its start to its end.
     var activeTurn: String?
+    /// The turn that the answer to `turn/start` named, until it starts or
+    /// ends, and the last turn that ended.
+    var requestedTurn: String?
+    var lastEndedTurn: String?
     /// The tokens of the thread before the turn that runs, and now.
     var tokensBeforeTurn: TokenUsage?
     var tokensNow: TokenUsage?

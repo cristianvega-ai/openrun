@@ -86,4 +86,20 @@ import Testing
         #expect(mapper.events(method: "thread/status/changed", parameters: status)
             == [.agentStatus(AgentStatus(kind: "thread/status/changed", detail: "active waitingOnApproval"))])
     }
+
+    @Test func theTurnToStopIsTheOneThatRunsOrTheOneThatCodexTook() {
+        var mapper = CodexEventMapper()
+        func turn(_ identifier: String) -> JSONValue { .object(["turn": .object(["id": .string(identifier), "status": .string("completed")])]) }
+        _ = mapper.events(method: "turn/started", parameters: turn("a"))
+        mapper.noteRequestedTurn("a")
+        #expect(mapper.turnToStop == "a" && mapper.requestedTurn == nil)
+        _ = mapper.events(method: "turn/completed", parameters: turn("a"))
+        mapper.noteRequestedTurn("a")
+        #expect(mapper.turnToStop == nil)
+        mapper.noteRequestedTurn("b")
+        #expect(mapper.turnToStop == "b")
+        _ = mapper.events(method: "turn/started", parameters: turn("b"))
+        _ = mapper.events(method: "turn/completed", parameters: turn("b"))
+        #expect(mapper.turnToStop == nil)
+    }
 }

@@ -21,7 +21,7 @@ extension CodexAppServer {
         // A request waits for the reader, so the reader must not wait for it.
         Task {
             await endApprovals(of: { $0 == thread })
-            if let turn = state.mapper.activeTurn {
+            if let turn = state.mapper.turnToStop {
                 _ = try? await request("turn/interrupt", .object(["threadId": .string(thread), "turnId": .string(turn)]))
             }
             _ = try? await request("thread/unsubscribe", .object(["threadId": .string(thread)]))

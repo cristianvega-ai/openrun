@@ -15,7 +15,8 @@ extension CodexAppServer {
         }
         emit([.userMessage(turn.userMessage)], line: nil, to: thread)
         do {
-            _ = try await request("turn/start", turn.parameters(thread: thread))
+            let answer = try await request("turn/start", turn.parameters(thread: thread))
+            if let started = answer["turn"]?["id"]?.string { threads[thread]?.mapper.noteRequestedTurn(started) }
         } catch {
             threads[thread]?.mapper.pendingMessageIdentifiers.removeAll { $0 == turn.messageIdentifier }
             throw error
