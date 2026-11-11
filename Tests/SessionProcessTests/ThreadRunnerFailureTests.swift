@@ -51,8 +51,13 @@ import Testing
         #expect(await eventually { await runner.keptEvents.count >= 6 })
         await runner.attach(ObjectIdentifier(late), listener: late.listener)
         #expect(await eventually { await runner.state == .finishedTurn })
+        // A line of the agent can come after the end of the turn, so the
+        // test reads the three until they agree.
+        #expect(await eventually {
+            let kept = await runner.keptEvents
+            return early.events == kept && late.events == kept
+        })
         let kept = await runner.keptEvents
-        #expect(early.events == kept && late.events == kept)
         #expect(early.replayCount == 0 && (late.replayCount ?? 0) >= 6 && (late.replayCount ?? 0) < kept.count)
         await runner.detach(ObjectIdentifier(early))
         await runner.close()
