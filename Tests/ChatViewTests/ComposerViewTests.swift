@@ -16,4 +16,15 @@ import Testing
         composer.layout()
         #expect(composer.scrollView.frame.height == composer.composerLayout(forWidth: 600).field.height)
     }
+
+    @Test func theComposerShowsTheFactsAndAProblem() {
+        composer.show(ChatThreadFacts(threadIdentifier: "t", title: "T", agentName: "Codex"), palette: composer.palette)
+        #expect(composer.textView.placeholder == "Message Codex")
+        #expect(composer.noteButton.isHidden)
+        #expect(composer.sendButton.accessibilityLabel() == "Send")
+        composer.problem = "The image is too large."
+        composer.refresh()
+        #expect(!composer.noteButton.isHidden)
+        #expect(composer.noteButton.title == "The image is too large.")
+    }
 }
