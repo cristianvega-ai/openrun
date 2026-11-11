@@ -49,4 +49,32 @@ import Testing
         #expect(await fixture.registry.summary(fixture.first)?.state == "finishedTurn")
         await fixture.end()
     }
+
+    @Test func aMessageWaitsWhileEveryAgentWorksAndGoesOutWhenOneEnds() async throws {
+        let fixture = try await Fixture(mode: "neverEnds")
+        try await fixture.firstRunner.send(text: "One.")
+        #expect(await eventually { await fixture.registry.summary(fixture.first)?.state == "inProgress" })
+        try await fixture.secondRunner.send(text: "Two.")
+        try await fixture.secondRunner.send(text: "Three.")
+        let waiting = await fixture.registry.summary(fixture.second)
+        #expect(waiting?.waitingMessageCount == 2 && waiting?.isProcessRunning == false)
+        let notices = await fixture.secondRunner.keptEvents.compactMap { if case .notice(let notice) = $0.kind { notice.text } else { nil } }
+        #expect(notices.count == 1 && notices.first?.contains("at most 8 agents") == true)
+
+        await fixture.firstRunner.stop()
+        #expect(await eventually { await fixture.runs() == [false, true] })
+        #expect(await eventually { await fixture.registry.summary(fixture.second)?.state == "inProgress" })
+        #expect(await fixture.registry.summary(fixture.second)?.waitingMessageCount == 1)
+        await fixture.end()
+    }
+
+    @Test func theCloseOfAThreadGivesItsSlotToTheThreadThatWaits() async throws {
+        let fixture = try await Fixture(mode: "neverEnds")
+        try await fixture.firstRunner.send(text: "One.")
+        #expect(await eventually { await fixture.registry.summary(fixture.first)?.state == "inProgress" })
+        try await fixture.secondRunner.send(text: "Two.")
+        try await fixture.registry.close(fixture.first)
+        #expect(await eventually { await fixture.registry.summary(fixture.second)?.isProcessRunning == true })
+        await fixture.end()
+    }
 }
