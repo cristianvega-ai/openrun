@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import Testing
 @testable import MainWindow
 
 /// Defaults of their own for one test, so no test reads or changes the app's.
@@ -18,4 +19,20 @@ func makeMainWindow(defaults: UserDefaults = temporaryDefaults()) -> MainWindowC
     controller.window.setContentSize(NSSize(width: 1_100, height: 700))
     controller.window.layoutIfNeeded()
     return controller
+}
+
+/// Drags the edge between the sessions list and the third pane in twelve
+/// steps. A real drag runs in the tracking loop of mouseDown, which ended
+/// the test process when an async test ran beside it, so the steps call
+/// the drag hooks of the split view and then move the edge.
+@MainActor
+func dragSessionsEdge(of controller: MainWindowController, by distance: CGFloat) throws {
+    let splitView = try #require(controller.splitController.splitView as? PaneSplitView)
+    let start = controller.frame(of: controller.contentPane.view).minX - splitView.dividerThickness
+    splitView.dragStarted?()
+    for step in 1...12 {
+        splitView.setPosition(start + distance * CGFloat(step) / 12, ofDividerAt: 1)
+        controller.window.layoutIfNeeded()
+    }
+    splitView.dragEnded?()
 }

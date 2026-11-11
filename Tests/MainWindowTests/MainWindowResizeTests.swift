@@ -56,21 +56,9 @@ import Testing
     @Test func aDragOfAnEdgeSendsOneSize() async throws {
         try await withHostedSession { controller, pane in
             let before = pane.sentSizeRequests
-            let splitView = controller.splitController.splitView
-            let edge = controller.frame(of: controller.contentPane.view).minX - 1
-            let y = splitView.bounds.midY
-            let window = controller.window
-            func event(_ type: NSEvent.EventType, _ x: CGFloat) -> NSEvent {
-                NSEvent.mouseEvent(with: type, location: splitView.convert(NSPoint(x: x, y: y), to: nil), modifierFlags: [], timestamp: ProcessInfo.processInfo.systemUptime,
-                                   windowNumber: window.windowNumber, context: nil, eventNumber: 0, clickCount: 1, pressure: 1)!
-            }
-            for step in 1...12 { NSApplication.shared.postEvent(event(.leftMouseDragged, edge + CGFloat(step * 8)), atStart: false) }
-            NSApplication.shared.postEvent(event(.leftMouseUp, edge + 96), atStart: false)
-            splitView.mouseDown(with: event(.leftMouseDown, edge))
-            // An await here after the tracking loop of the split view
-            // ended the test process, so the wait stays synchronous.
-            for _ in 0..<1_000 where pane.sentSizeRequests == before { runLoopTurn() }
-            for _ in 0..<50 { runLoopTurn() }
+            try dragSessionsEdge(of: controller, by: 96)
+            await turns(seconds: 20) { pane.sentSizeRequests > before }
+            await turns(seconds: 0.5)
             #expect(abs(controller.sessionsList.view.frame.width - 396) < 2)
             #expect(pane.sentSizeRequests == before + 1)
             #expect(pane.paneView.frame.width == controller.contentPane.contentArea.frame.width)
