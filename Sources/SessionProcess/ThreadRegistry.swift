@@ -89,6 +89,11 @@ actor ThreadRegistry {
         summaries[identifier]
     }
 
+    func record(_ identifier: UUID) throws -> ThreadRecord {
+        guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
+        return record
+    }
+
     /// The thread whose agent is this process or one of its parents. Such
     /// a program runs for the agent, and not for the user.
     func thread(startedProcess process: pid_t) -> UUID? {

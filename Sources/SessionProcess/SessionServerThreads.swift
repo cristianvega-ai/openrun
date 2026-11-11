@@ -36,6 +36,12 @@ extension SessionServer {
             case .stopThread(let identifier):
                 try await threads.runner(for: identifier).stop()
                 return .acknowledged
+            case .readThreadHistory(let identifier, let before):
+                let (record, environment) = (try await threads.record(identifier), await agents.settings().environment)
+                // The read waits for the disk, so it runs off this actor.
+                let page = try await Task.detached { try ThreadHistory.page(of: record, environment: environment, before: before) }.value
+                for event in page.events { client.send(.threadEvent(event)) }
+                return .threadHistoryPage(before: page.before)
             case .attachThread(let identifier):
                 guard attached == nil else { return Self.refusal("This connection is already attached to a thread.") }
                 attached = try await attach(client, toThread: identifier)

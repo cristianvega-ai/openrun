@@ -70,6 +70,10 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// later event is new. `hasEarlierEvents` tells that older events
     /// went away, so the history of the agent holds more.
     case threadReplayComplete(hasEarlierEvents: Bool)
+    /// The page of the history is complete: its events came before this
+    /// message. `before` asks for the page before it, and it is absent
+    /// at the start of the history.
+    case threadHistoryPage(before: Int? = nil)
     /// The thread took the message. Its events carry the identifier.
     case threadMessageSent(identifier: UUID)
     /// A new thread, or new facts of a thread, on a connection that asked
@@ -154,6 +158,7 @@ extension ServerMessage {
         case .threadList: "threadList"
         case .threadAttached: "threadAttached"
         case .threadReplayComplete: "threadReplayComplete"
+        case .threadHistoryPage: "threadHistoryPage"
         case .threadMessageSent: "threadMessageSent"
         case .threadChanged: "threadChanged"
         case .threadEnded: "threadEnded"

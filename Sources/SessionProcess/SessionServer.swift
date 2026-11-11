@@ -16,7 +16,7 @@ actor SessionServer {
     private let projects: ProjectKeeper
     private let settings: SettingKeeper
     let threads: ThreadRegistry
-    private let agents: AgentLaunchProvider
+    let agents: AgentLaunchProvider
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -352,7 +352,8 @@ actor SessionServer {
                 client.send(.settingList(SettingKeeper.summaries(of: await settings.values)))
             case .changeSetting(let name, let text):
                 client.send(await changeSetting(name, to: text, for: peer))
-            case .createThread, .listThreads, .renameThread, .changeThread, .closeThread, .attachThread, .sendThreadMessage, .stopThread:
+            case .createThread, .listThreads, .renameThread, .changeThread, .closeThread, .attachThread, .readThreadHistory, .sendThreadMessage,
+                 .stopThread:
                 guard attachedSession == nil else {
                     client.send(Self.refusal("This connection is attached to a session."))
                     break
