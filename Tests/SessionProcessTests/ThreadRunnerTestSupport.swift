@@ -20,9 +20,11 @@ enum FakeAgentSettings {
 
     /// A real session process whose threads run the fake agent with the
     /// environment of the test, and never the login shell of the user.
-    static func sessionProcess(turns: [String] = ["plain-turn"], mode: String = "replay", environment: [String: String] = [:]) throws -> RunningSessionProcess {
+    static func sessionProcess(
+        turns: [String] = ["plain-turn"], mode: String = "replay", environment: [String: String] = [:], arguments: [String] = []
+    ) throws -> RunningSessionProcess {
         let settings = make(turns: turns, mode: mode, environment: environment)
-        return try RunningSessionProcess(arguments: ["--agent-program", executable, "--own-environment-for-agents"], environment: settings.environment)
+        return try RunningSessionProcess(arguments: ["--agent-program", executable, "--own-environment-for-agents"] + arguments, environment: settings.environment)
     }
 
     static func record(folder: String = NSTemporaryDirectory()) -> ThreadRecord {
