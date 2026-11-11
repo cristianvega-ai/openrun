@@ -46,6 +46,16 @@ actor Session {
     /// Where the watchers of the sessions hear of this session. Nil for a
     /// session that a test makes alone.
     private let changes: SessionChangeFeed?
+    /// What the terminal reported while it parsed the last piece of output.
+    private let terminalEvents = TerminalEvents()
+    /// The summary that the watchers have, and when it went out.
+    private var publishedSummary: SessionSummary?
+    private var publishedAt: ContinuousClock.Instant?
+    private var waitingPublish: Task<Void, Never>?
+    /// The shortest time between two changes of one session. A program can
+    /// set its title many times a second, and each change goes to each
+    /// watcher, so the watchers get the newest summary at most this often.
+    static let changeInterval: Duration = .milliseconds(250)
 
     /// Creates the terminal, then starts the program.
     ///
@@ -72,6 +82,7 @@ actor Session {
         replyGate = gate
         terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: Self.scrollbackLimit)
         prompts = ShellPromptTracker(terminal: terminal)
+        try terminal.setEventHandler(terminalEvents.handler)
         // The terminal answers queries such as "where is the cursor", unless a
         // client's real terminal answers them. A client's copy of the screen
         // has no handler, so the real terminal is the only other source.
@@ -122,6 +133,7 @@ actor Session {
 
     /// Starts reading the program's output. Call once, right after creating.
     func start() {
+        (publishedSummary, publishedAt) = (summary, .now)
         changes?.add(summary)
         runTask = Task { await self.run() }
     }
@@ -317,6 +329,7 @@ actor Session {
         clientsThatReceiveSizeChanges.removeAll()
         clientsThatWaitForOutputRoom.removeAll()
         updateReplyGate()
+        waitingPublish?.cancel()
         changes?.end(summary.identifier)
         await onFinish(summary.identifier)
     }
@@ -328,6 +341,44 @@ actor Session {
         parsedByteCount += bytes.count
         let message = ServerMessage.output(Data(bytes))
         for client in clients.values { client.send(message) }
+        summary.lastOutputAt = Date()
+        takeTerminalEvents()
+        publish()
+    }
+
+    /// Takes what the terminal reported while it parsed the output.
+    private func takeTerminalEvents() {
+        if terminalEvents.titleChanged {
+            let title = SessionSummary.boundedText(terminal.title)
+            summary.title = title.isEmpty ? nil : title
+        }
+        terminalEvents.reset()
+    }
+
+    /// Sends the summary to the watchers when a fact of the list changed: at
+    /// once, or after `changeInterval`, with the newest facts. The times of
+    /// the last output and input, and the size, go out with another change,
+    /// or when `includingTimes` says so, so not for each piece of output.
+    private func publish(includingTimes: Bool = false) {
+        guard let changes, let publishedSummary, waitingPublish == nil, !isFinished else { return }
+        guard includingTimes ? summary != publishedSummary : summary.differsInListedFacts(from: publishedSummary) else { return }
+        let earliest = (publishedAt ?? .now) + Self.changeInterval
+        guard earliest <= .now else {
+            waitingPublish = Task { [weak self] in
+                try? await Task.sleep(until: earliest, clock: .continuous)
+                await self?.publishWaitingSummary()
+            }
+            return
+        }
+        (self.publishedSummary, publishedAt) = (summary, .now)
+        changes.change(summary)
+    }
+
+    private func publishWaitingSummary() {
+        waitingPublish = nil
+        guard !isFinished, summary != publishedSummary else { return }
+        (publishedSummary, publishedAt) = (summary, .now)
+        changes?.change(summary)
     }
 
     private func updateReplyGate() {
@@ -541,6 +592,17 @@ extension TerminalSize {
 extension PseudoTerminalSize {
     fileprivate init(_ size: SessionSize) {
         self.init(columns: size.columns, rows: size.rows)
+    }
+}
+
+extension SessionSummary {
+    /// Whether a fact that the sessions list shows differs.
+    fileprivate func differsInListedFacts(from other: SessionSummary) -> Bool {
+        var (mine, theirs) = (self, other)
+        (mine.lastOutputAt, mine.lastInputAt, mine.size) = (nil, nil, theirs.size)
+        theirs.lastOutputAt = nil
+        theirs.lastInputAt = nil
+        return mine != theirs
     }
 }
 

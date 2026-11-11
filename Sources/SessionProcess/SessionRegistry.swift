@@ -59,7 +59,7 @@ actor SessionRegistry {
         }
         sessions[identifier] = session
         await session.start()
-        return summary
+        return await session.summary
     }
 
     var isEmpty: Bool { sessions.isEmpty }
