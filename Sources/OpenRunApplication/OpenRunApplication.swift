@@ -14,6 +14,8 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     private var setupIsReady = false
     private var setupIsRunning = false
     private let makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)?
+    /// Receives the questions of the rule that asks the user first.
+    let approvalQuestions: ApprovalQuestionConnection
 
     /// Only the default socket belongs to the launch agent. A nondefault socket
     /// with no injected setup would otherwise register the real agent of the
@@ -24,6 +26,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         self.socket = socket
         self.makeLaunchAgentSetup = makeLaunchAgentSetup
         windows = WindowList(socket: socket)
+        approvalQuestions = ApprovalQuestionConnection(socket: socket)
         super.init()
     }
 
@@ -91,6 +94,7 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
         let wasReady = setupIsReady
         setupIsReady = outcome == .ready
         if setupIsReady, !wasReady, windows.controllers.isEmpty { windows.open(makeNewSession()) }
+        if setupIsReady { approvalQuestions.start() }
     }
 
     @objc func retrySessionProcess(_ sender: Any?) { startSetup() }
