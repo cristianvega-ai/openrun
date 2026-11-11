@@ -51,9 +51,11 @@ public final class PaneTopRow: NSView {
     public override var isOpaque: Bool { true }
     public override var mouseDownCanMoveWindow: Bool { true }
 
+    /// Views do not clip to their bounds since macOS 14, so the dirty
+    /// rectangle can reach past the row and over the list below it.
     public override func draw(_ dirtyRect: NSRect) {
         background.setFill()
-        dirtyRect.fill()
+        dirtyRect.intersection(bounds).fill()
     }
 
     /// A press on an empty part moves the window, and a double click does

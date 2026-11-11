@@ -51,4 +51,18 @@ import Testing
         #expect(!button.isBordered && button.contentTintColor == PaneColor.quietText)
         #expect(button.accessibilityLabel() == "Add Project" && button.toolTip == "Add Project")
     }
+
+    /// A dirty rectangle can be larger than the row. The row must leave the
+    /// rest alone, or it hides the list under it.
+    @Test func theRowPaintsOnlyItsOwnBounds() throws {
+        let row = PaneTopRow(background: .black)
+        row.frame = NSRect(x: 0, y: 0, width: 20, height: PaneTopRow.height)
+        let image = try #require(NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: 20, pixelsHigh: 104, bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0))
+        NSGraphicsContext.saveGraphicsState()
+        NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: image)
+        row.draw(NSRect(x: 0, y: 0, width: 20, height: 104))
+        NSGraphicsContext.restoreGraphicsState()
+        #expect(image.colorAt(x: 10, y: 90)?.alphaComponent == 1)
+        #expect(image.colorAt(x: 10, y: 10)?.alphaComponent == 0)
+    }
 }
