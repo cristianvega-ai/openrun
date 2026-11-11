@@ -34,10 +34,7 @@ public struct SettingsStore: Sendable {
         var values = SettingValues()
         var fallbackNames: [SettingName] = []
         for (key, storedValue) in stored {
-            guard let name = SettingName(rawValue: key) else {
-                values.unknownSettings[key] = storedValue
-                continue
-            }
+            guard let name = SettingName(rawValue: key) else { continue }
             guard let value = SettingStoredForm.value(from: storedValue, as: name.kind) else {
                 fallbackNames.append(name)
                 continue
@@ -48,7 +45,7 @@ public struct SettingsStore: Sendable {
     }
 
     static func stored(_ values: SettingValues) -> [String: StoredValue] {
-        var stored = values.unknownSettings
+        var stored: [String: StoredValue] = [:]
         for (name, value) in values.values where value != name.defaultValue {
             stored[name.rawValue] = SettingStoredForm.stored(value)
         }

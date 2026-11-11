@@ -1,12 +1,9 @@
-/// The value of every setting, and the settings of a later build that this
-/// build keeps as they are.
+/// The value of every setting. The settings of a later build stay in the
+/// file, where `DataFolder` keeps them.
 public struct SettingValues: Hashable, Sendable {
     /// Holds every name. Each value is of the kind of its name and in its
     /// range, because each way in checks it.
     private(set) var values: [SettingName: SettingValue]
-    /// The settings in the file that this build does not know, by their
-    /// names. A save writes them back unchanged.
-    var unknownSettings: [String: StoredValue] = [:]
 
     /// Every setting at its default.
     public init() {

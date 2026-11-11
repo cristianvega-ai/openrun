@@ -43,32 +43,42 @@ import Testing
         try store.save(values)
         #expect(try String(contentsOfFile: folder.path(of: .settings), encoding: .utf8) == """
             {
-              "format" : 1,
-              "settings" : {
-                "font-size" : 15
-              }
+              "font-size" : 15,
+              "format" : 1
             }
 
             """)
     }
 
     @Test func anUnknownSettingStaysWhenTheFileIsSavedAgain() throws {
-        try writeFile(#"{"format": 1, "settings": {"later-setting": {"deep": [1, 2.5, "x", null]}, "font-size": 20}}"#)
+        try writeFile(#"""
+            {"format": 1, "later-setting": {"deep": [1, 2.5, "x", null], "large": 123456789012345678901234567890},
+             "later-limit": 18446744073709551615, "later-zero": -0.0, "font-size": 20, "theme": "dusk"}
+            """#)
         var values = try store.load().values
         #expect(values.fontSize == 20)
         try values.change(.fontSize, to: "21", requestedBy: .otherClient)
+        try values.change(.theme, to: "graphite", requestedBy: .otherClient)
         try store.save(values)
         let text = try String(contentsOfFile: folder.path(of: .settings), encoding: .utf8)
-        #expect(text.contains(#""later-setting" : {"#))
-        #expect(text.contains(#""font-size" : 21"#))
+        #expect(text == """
+            {
+              "font-size" : 21,
+              "format" : 1,
+              "later-limit" : 18446744073709551615,
+              "later-setting" : {"deep": [1, 2.5, "x", null], "large": 123456789012345678901234567890},
+              "later-zero" : -0.0
+            }
+
+            """)
         #expect(try store.load().values == values)
         #expect(throws: SettingError.unknownName("later-setting")) { try SettingName.named("later-setting") }
     }
 
     @Test func aBadValueFallsBackAloneToItsDefault() throws {
         try writeFile("""
-            {"format": 1, "settings": {"font-size": 500, "theme": 7, "notifications": "off",
-             "scrollback-limit": 0, "font-name": "Menlo", "option-as-alt": "right"}}
+            {"format": 1, "font-size": 500, "theme": 7, "notifications": "off",
+             "scrollback-limit": 0, "font-name": "Menlo", "option-as-alt": "right"}
             """)
         let loaded = try store.load()
         #expect(loaded.fallbackNames == [.fontSize, .showsNotifications, .optionAsAlt, .theme])
@@ -81,11 +91,11 @@ import Testing
     }
 
     @Test func aCorruptFileIsSetAside() throws {
-        try writeFile(#"{"format": 1, "settings": {"font-size": 2"#)
+        try writeFile(#"{"format": 1, "font-size": 2"#)
         let loaded = try store.load()
         #expect(loaded.values == SettingValues())
         let path = try #require(loaded.setAsidePath)
-        #expect(try String(contentsOfFile: path, encoding: .utf8) == #"{"format": 1, "settings": {"font-size": 2"#)
+        #expect(try String(contentsOfFile: path, encoding: .utf8) == #"{"format": 1, "font-size": 2"#)
         #expect(!FileManager.default.fileExists(atPath: folder.path(of: .settings)))
     }
 

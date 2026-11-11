@@ -1,7 +1,7 @@
-/// Any JSON value in `settings.json`.
-///
-/// A file can hold a setting of a later build, which this build must keep
-/// as it is when it saves the file again.
+/// The JSON value of a known setting in `settings.json`, or of the text
+/// of the commands. It tells the type of the value, so a value of the
+/// wrong type falls back to the default. The values of unknown settings
+/// never pass through it, because a Double loses digits.
 indirect enum StoredValue: Codable, Hashable, Sendable {
     case null
     case flag(Bool)
@@ -18,7 +18,7 @@ indirect enum StoredValue: Codable, Hashable, Sendable {
         } else if let flag = try? container.decode(Bool.self) {
             self = .flag(flag)
         } else if let integer = try? container.decode(Int64.self) {
-            // Before Double, so a large whole number keeps every digit.
+            // Before Double, so a whole number stays whole.
             self = .integer(integer)
         } else if let number = try? container.decode(Double.self) {
             self = .number(number)
