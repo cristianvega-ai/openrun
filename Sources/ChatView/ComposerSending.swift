@@ -10,7 +10,7 @@ extension ComposerView: NSTextViewDelegate {
         textView.sendAction = { [weak self] in self?.submit() }
         textView.stopAction = { [weak self] isImmediate in
             guard let self else { return }
-            if isImmediate ? logic.isBusy : logic.escape(isFieldEmpty: textView.string.isEmpty) == .stop { stopAction?() }
+            if isImmediate ? logic.isBusy : logic.escape(isFieldEmpty: textView.string.isEmpty) == .stop { stop() }
         }
     }
 
@@ -34,7 +34,14 @@ extension ComposerView: NSTextViewDelegate {
     }
 
     @objc func sendOrStop() {
-        if logic.isBusy { stopAction?() } else { submit() }
+        if logic.isBusy { stop() } else { submit() }
+    }
+
+    /// Stops the turn. A held message was written for the turn as it ran,
+    /// so it does not go by itself: it comes back into the field.
+    func stop() {
+        takeHeldMessage()
+        stopAction?()
     }
 
     func textDidChange(_ notification: Notification) {

@@ -30,9 +30,7 @@ import Testing
 
     @Test func aMessageWrittenWhileTheAgentWorksGoesAtTheEnd() {
         var sent: [String] = []
-        var stops = 0
         composer.sendAction = { sent.append($0.text) }
-        composer.stopAction = { stops += 1 }
         composer.setBusy(true)
         composer.textView.string = "Then commit."
         composer.submit()
@@ -41,8 +39,6 @@ import Testing
         #expect(!composer.heldView.isHidden)
         #expect(composer.heldView.text.stringValue == "Then commit.")
         #expect(composer.noteButton.isHidden)
-        composer.sendOrStop()
-        #expect(stops == 1)
         composer.setBusy(false)
         #expect(sent == ["Then commit."])
         #expect(composer.heldView.isHidden)
@@ -71,6 +67,21 @@ import Testing
         composer.heldView.deleteButton.performClick(nil)
         #expect(composer.logic.heldMessage == nil)
         #expect(composer.textView.string.isEmpty)
+    }
+
+    @Test func aStopPutsTheHeldMessageBackInTheField() {
+        var sent: [String] = []
+        var stops = 0
+        composer.sendAction = { sent.append($0.text) }
+        composer.stopAction = { stops += 1 }
+        composer.setBusy(true)
+        composer.textView.string = "Then commit."
+        composer.submit()
+        composer.sendOrStop()
+        #expect(stops == 1)
+        #expect(composer.textView.string == "Then commit.")
+        composer.setBusy(false)
+        #expect(sent.isEmpty)
     }
 
     @Test func commandPeriodOnAnIdleThreadStopsNothing() {
