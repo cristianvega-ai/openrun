@@ -299,22 +299,21 @@ extension SessionProcessIntegration {
         @Test(.tags(.takesEverySlot)) func aProgramThatEndsWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
                 // The program prints 10 MiB, more than the 7 MiB that fills the queue, and ends
-                // while the session waits. The large snapshot gives the client 30 seconds, so
-                // only the wake at the end of the program ends the wait in about 2 seconds.
+                // while the session waits. The large snapshot gives the client 30 seconds from
+                // the attach, so only the wake at the end of the program ends the wait sooner:
+                // 2 seconds after the queue is full. A busy Mac took up to 20 seconds to
+                // fill the queue, so the test now counts from the attach. Without the wake,
+                // the session ends no sooner than 30 seconds after the attach.
                 let size = SessionSize(columns: 240, rows: 50)
                 let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: #"print "x" x 65536 for 1 .. 160;"#)
+                let attached = ContinuousClock.now
                 let client = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { client.connection.shutdown() }
                 try #require(client.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
                 FileManager.default.createFile(atPath: go.path, contents: Data())
-                let start = ContinuousClock.now
-                let gone = await eventually(timeout: .seconds(5)) { (try? process.listedIdentifiers())?.isEmpty == true }
-                print("program-exit-wake: gone \(gone) after \(ContinuousClock.now - start)")
-                #expect(gone)
-                // The 2-second pause starts after the queue is full, so the wake ends
-                // the wait about 2.6 seconds after the go file. Without it, the client
-                // stays past 5 seconds.
-                #expect(ContinuousClock.now - start < .seconds(4))
+                let gone = await eventually(timeout: attached + .seconds(28) - ContinuousClock.now) { (try? process.listedIdentifiers())?.isEmpty == true }
+                print("program-exit-wake: gone \(gone) after \(ContinuousClock.now - attached) from the attach")
+                #expect(gone, "The session must end before the grace of 30 seconds.")
             }
         }
 
