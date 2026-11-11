@@ -23,6 +23,9 @@ actor ThreadRegistry {
     var projects: ProjectList
     /// The process of the agent of each thread whose agent runs.
     var agentProcesses: [pid_t: UUID] = [:]
+    /// The threads that may run a process now, and the ones that wait.
+    var slots: AgentProcessSlots
+    let quietTime: Duration
     /// The model and the permission mode of a thread that names none.
     var defaultModel = "opus"
     var defaultPermissionMode = "default"
@@ -31,9 +34,11 @@ actor ThreadRegistry {
     /// start: the list starts empty, and the log says so.
     init(
         store: ThreadStore, projects: ProjectList = ProjectList(), changes: SessionChangeFeed? = nil,
+        processLimit: Int = AgentProcessSlots.defaultLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings
     ) {
         (self.store, self.projects, self.changes, self.launchSettings) = (store, projects, changes, launchSettings)
+        (slots, self.quietTime) = (AgentProcessSlots(limit: processLimit), quietTime)
         var loaded = ThreadList()
         do {
             let result = try store.load()

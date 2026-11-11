@@ -48,13 +48,17 @@ extension ThreadRegistry {
         summaries[identifier] = nil
         changes?.threadEnded(identifier)
         await runners.removeValue(forKey: identifier)?.close()
+        if let next = slots.remove(identifier) { await runners[next]?.sendNextMessage() }
     }
 
     /// The runner of a thread, which starts with the first use.
     func runner(for identifier: UUID) throws -> ThreadRunner {
         if let runner = runners[identifier] { return runner }
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
-        let runner = ThreadRunner(record: record, launchSettings: launchSettings, changed: { [weak self] in await self?.runnerChanged($0) })
+        let runner = ThreadRunner(
+            record: record, quietTime: quietTime, launchSettings: launchSettings,
+            takeProcessSlot: { [weak self] in await self?.takeProcessSlot(for: $0) ?? false },
+            changed: { [weak self] in await self?.runnerChanged($0) })
         runners[identifier] = runner
         return runner
     }
@@ -62,8 +66,10 @@ extension ThreadRegistry {
     /// A runner has a new title, state or process. The record goes to the
     /// file when it changed, and the summary goes to the clients.
     func runnerChanged(_ runner: ThreadRunner) async {
-        let (record, state, process, waiting) = await (runner.record, runner.state, runner.program?.processIdentifier, runner.waitingMessages.count)
+        let (record, state, process, waiting, holdsProcessSlot) = await runner.facts
         guard runners[record.identifier] === runner, let kept = list.thread(record.identifier) else { return }
+        // The agent ended, so the thread that waited longest can start its agent.
+        if !holdsProcessSlot, let next = slots.release(record.identifier) { await runners[next]?.sendNextMessage() }
         agentProcesses = agentProcesses.filter { $0.value != record.identifier }
         if let process { agentProcesses[process] = record.identifier }
         let isRunning = process != nil
@@ -76,6 +82,27 @@ extension ThreadRegistry {
         guard summaries[record.identifier] != summary else { return }
         summaries[record.identifier] = summary
         changes?.threadChanged(summary)
+    }
+
+    /// A runner wants to start its agent. When every slot is taken, an
+    /// agent with no work ends to make room. When all of them work, the
+    /// thread waits in line (decision of 2026-11-10).
+    func takeProcessSlot(for thread: UUID) async -> Bool {
+        while !slots.take(for: thread), let idle = await idleRunner() {
+            await idle.endProcess()
+            await runnerChanged(idle)
+        }
+        return slots.holders.contains(thread)
+    }
+
+    /// The runner whose process has had no work for the longest time.
+    private func idleRunner() async -> ThreadRunner? {
+        var oldest: (runner: ThreadRunner, since: ContinuousClock.Instant)?
+        for thread in slots.holders {
+            guard let runner = runners[thread], let since = await runner.idleSince else { continue }
+            if oldest.map({ since < $0.since }) ?? true { oldest = (runner, since) }
+        }
+        return oldest?.runner
     }
 
     /// Sends the summary of a thread again after a change of its record.
