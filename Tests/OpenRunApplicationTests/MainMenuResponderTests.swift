@@ -20,7 +20,12 @@ final class MainMenuResponderTests: XCTestCase {
         FileManager.default.createFile(atPath: folder.appendingPathComponent(".zshrc").path, contents: Data())
         let process = try RunningSessionProcess()
         defer { process.stop() }
-        let application = OpenRunApplication(socket: try SocketLocation(path: process.socketPath))
+        let socket = try SocketLocation(path: process.socketPath)
+        FileManager.default.createFile(atPath: socket.folder + "/.zshrc", contents: Data())
+        let defaultsName = "OpenRunTests-\(UUID().uuidString)"
+        let defaults = try XCTUnwrap(UserDefaults(suiteName: defaultsName))
+        defer { defaults.removePersistentDomain(forName: defaultsName) }
+        let application = OpenRunApplication(socket: socket, workspace: TestWorkspace.makeHost(socket: socket, defaults: defaults))
         application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer {
             application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
@@ -35,13 +40,12 @@ final class MainMenuResponderTests: XCTestCase {
         let menu = MainMenu.make(target: application)
         sharedApplication.mainMenu = menu
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        await wait { application.windows.controllers.first?.terminalView != nil }
-        let controller = try XCTUnwrap(application.windows.controllers.first)
-        let view = try XCTUnwrap(controller.terminalView)
-        await wait { sharedApplication.isActive && sharedApplication.keyWindow === controller.window && controller.window.isKeyWindow }
-        try XCTSkipUnless(sharedApplication.isActive && sharedApplication.keyWindow === controller.window && controller.window.isKeyWindow,
+        await wait { self.shownTerminal(of: application) != nil }
+        let view = try XCTUnwrap(shownTerminal(of: application)), window = try XCTUnwrap(view.window)
+        await wait { sharedApplication.isActive && sharedApplication.keyWindow === window && window.isKeyWindow }
+        try XCTSkipUnless(sharedApplication.isActive && sharedApplication.keyWindow === window && window.isKeyWindow,
             "The test host did not become active with its OpenRun window key; AppKit cannot resolve its first responder.")
-        XCTAssertTrue(controller.window.firstResponder === view)
+        XCTAssertTrue(window.firstResponder === view)
         let textMenu = try XCTUnwrap(menu.item(withTitle: "View")?.submenu)
         for title in ["Make Text Bigger", "Make Text Smaller", "Reset Text Size"] {
             let item = try XCTUnwrap(textMenu.item(withTitle: title))
@@ -51,33 +55,38 @@ final class MainMenuResponderTests: XCTestCase {
         }
 
         let first = view.gridSize
-        XCTAssertTrue(menu.performKeyEquivalent(with: try key("=", .command, in: controller.window, code: 24)))
+        XCTAssertTrue(menu.performKeyEquivalent(with: try key("=", .command, in: window, code: 24)))
         await wait { view.gridSize.columns < first.columns }
         let second = view.gridSize
         XCTAssertLessThan(second.columns, first.columns)
-        XCTAssertTrue(view.performKeyEquivalent(with: try key("+", [.command, .shift], in: controller.window, code: 24)))
+        XCTAssertTrue(view.performKeyEquivalent(with: try key("+", [.command, .shift], in: window, code: 24)))
         await wait { view.gridSize.columns < second.columns }
         XCTAssertLessThan(view.gridSize.columns, second.columns)
-        XCTAssertTrue(menu.performKeyEquivalent(with: try key("-", .command, in: controller.window, code: 27)))
+        XCTAssertTrue(menu.performKeyEquivalent(with: try key("-", .command, in: window, code: 27)))
         await wait { view.gridSize == second }
         XCTAssertEqual(view.gridSize, second)
-        XCTAssertTrue(menu.performKeyEquivalent(with: try key("0", .command, in: controller.window, code: 29)))
+        XCTAssertTrue(menu.performKeyEquivalent(with: try key("0", .command, in: window, code: 29)))
         await wait { view.gridSize == first }
         XCTAssertEqual(view.gridSize, first)
         let otherView = try TerminalView()
         otherView.frame = view.frame
-        let content = try XCTUnwrap(controller.window.contentView)
+        let content = try XCTUnwrap(view.superview)
         content.addSubview(otherView)
         defer { otherView.removeFromSuperview() }
         otherView.layoutSubtreeIfNeeded()
         let otherFirst = otherView.gridSize
-        XCTAssertTrue(controller.window.makeFirstResponder(otherView))
+        XCTAssertTrue(window.makeFirstResponder(otherView))
         let bigger = try XCTUnwrap(textMenu.item(withTitle: "Make Text Bigger"))
         XCTAssertTrue((sharedApplication.target(forAction: try XCTUnwrap(bigger.action), to: nil, from: bigger) as AnyObject?) === otherView)
-        XCTAssertTrue(menu.performKeyEquivalent(with: try key("=", .command, in: controller.window, code: 24)))
+        XCTAssertTrue(menu.performKeyEquivalent(with: try key("=", .command, in: window, code: 24)))
         await wait { otherView.gridSize.columns < otherFirst.columns }
         XCTAssertLessThan(otherView.gridSize.columns, otherFirst.columns)
         XCTAssertEqual(view.gridSize, first)
+    }
+
+    /// The terminal view of the first session of the app.
+    @MainActor private func shownTerminal(of application: OpenRunApplication) -> TerminalView? {
+        application.windows.controllers.first?.terminalView
     }
 
     @MainActor private func key(_ characters: String, _ flags: NSEvent.ModifierFlags, in window: NSWindow, code: UInt16) throws -> NSEvent {
