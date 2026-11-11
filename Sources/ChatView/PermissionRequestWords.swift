@@ -1,38 +1,51 @@
 import AgentConversation
 import Foundation
 
-/// The words of a permission request: what the agent wants to do, and the
-/// command, path or input that the user must read before an answer.
+/// The words of a permission request: what the agent wants to do, and
+/// everything that the user must read before an answer.
 struct PermissionRequestWords: Equatable {
+    /// A piece of what the request shows, from the top.
+    enum Part: Equatable {
+        /// Text in full in a box of code, such as a command.
+        case text(String)
+        /// A quiet line of prose, such as a path or a reason.
+        case note(String)
+    }
+
     var title: String
-    /// The text that the request is about, with each control character and
-    /// each mark of text direction shown, so nothing hides in it.
+    /// The command, the path or the name of the tool, for the folded line.
     var subject: String
+    var parts: [Part] = []
 
     init(_ item: PermissionRequestItem, agentName: String) {
         let request = item.request
-        func input(_ key: String) -> String? {
-            guard case .object(let members) = request.input, case .string(let value)? = members[key] else { return nil }
-            return value
-        }
-        let (action, subject): (String, String?) = switch request.toolName {
-        case "Bash": ("run a command", input("command"))
-        case "Edit", "MultiEdit", "NotebookEdit": ("edit a file", input("file_path") ?? input("notebook_path"))
-        case "Write": ("write a file", input("file_path"))
-        case "WebFetch": ("read a web page", input("url"))
-        default: ("use \(request.toolName)", nil)
+        var input = PermissionRequestInput(request.input)
+        let action: String
+        switch request.toolName {
+        case "Bash":
+            action = "run a command"
+            subject = input.text("command") ?? ""
+            parts = [.text(subject)]
+        case "WebFetch":
+            action = "read a web page"
+            subject = input.text("url") ?? ""
+            parts = [.text(subject)]
+        default:
+            action = "use \(request.toolName)"
+            subject = request.toolName
         }
         title = "\(agentName) wants to \(action)"
-        self.subject = Self.bounded(Self.visible(subject ?? Self.lines(of: request.input)))
+        let rest = input.rest
+        if !rest.isEmpty { parts += parts.isEmpty ? [.text(rest)] : [.note("More input:"), .text(rest)] }
+        subject = Self.visible(subject)
+        parts = parts.map(Self.visible)
     }
 
-    /// The input as one line for each member, such as `path: /tmp`.
-    static func lines(of input: JSONValue) -> String {
-        guard case .object(let members) = input else { return "\(input)" }
-        return members.keys.sorted().map { key in
-            guard case .string(let value)? = members[key] else { return "\(key): \(members[key] ?? .null)" }
-            return "\(key): \(value)"
-        }.joined(separator: "\n")
+    private static func visible(_ part: Part) -> Part {
+        switch part {
+        case .text(let text): .text(visible(text))
+        case .note(let text): .note(visible(text))
+        }
     }
 
     /// The text with control characters, other than a line end or a tab,
@@ -79,13 +92,5 @@ struct PermissionRequestWords: Equatable {
 
     private static func code(of scalar: Unicode.Scalar) -> String {
         "⟨U+" + String(format: "%04X", scalar.value) + "⟩"
-    }
-
-    /// A very long text keeps its start and its end, where a command
-    /// usually puts what it does.
-    static func bounded(_ text: String, limit: Int = 4_000) -> String {
-        guard text.count > limit else { return text }
-        let hidden = text.count - limit
-        return text.prefix(limit / 2) + "\n… \(hidden) characters not shown …\n" + text.suffix(limit / 2)
     }
 }

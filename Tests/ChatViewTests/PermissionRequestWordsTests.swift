@@ -17,13 +17,8 @@ struct PermissionRequestWordsTests {
     @Test func anotherToolShowsItsInputAndTheAnswer() {
         let words = PermissionRequestWords(item("mcp__notes__write", ["title": "A", "body": "B"]), agentName: "Codex")
         #expect(words.title == "Codex wants to use mcp__notes__write")
-        #expect(words.subject == "body: B\ntitle: A")
-    }
-
-    @Test func aVeryLongCommandKeepsItsStartAndItsEnd() {
-        let shown = PermissionRequestWords.bounded(String(repeating: "a", count: 5_000) + "END")
-        #expect(shown.hasPrefix("aaa") && shown.hasSuffix("END"))
-        #expect(shown.contains("1003 characters not shown"))
+        #expect(words.subject == "mcp__notes__write")
+        #expect(words.parts == [.text("body: B\ntitle: A")])
     }
 
     @Test func charactersThatDrawAsBlankShowAsCodes() {
