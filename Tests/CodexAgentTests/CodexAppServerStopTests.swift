@@ -15,6 +15,27 @@ import Testing
             level: .warning, text: "OpenRun could not end the commands of the thread, so a command may still run.")))
     }
 
+    @Test func aStopBeforeTheAnswerToTheStartOfATurnInterruptsThatTurn() async throws {
+        let harness = try await CodexServerHarness()
+        _ = await harness.server.open("a", first: [])
+        let start = Task { try await harness.server.startTurn(CodexTurn(messageIdentifier: "message-1", text: "Go."), thread: "a") }
+        let request = await harness.nextWritten()
+        #expect(request?["method"] == .string("turn/start"))
+        let stop = Task { await harness.server.stop(thread: "a") }
+        // The stop waits now, because no line names the turn yet.
+        try await Task.sleep(for: .milliseconds(100))
+        harness.serve(#"{"id":\#(request?["id"]?.integer ?? -1),"result":{"turn":{"id":"turn-1"}}}"#)
+        let interrupt = await harness.nextWritten()
+        #expect(interrupt?["method"] == .string("turn/interrupt") && interrupt?["params"]?["turnId"] == .string("turn-1"))
+        harness.serve(#"{"id":\#(interrupt?["id"]?.integer ?? -1),"result":{}}"#)
+        harness.serve(#"{"method":"turn/completed","params":{"threadId":"a","turn":{"id":"turn-1","status":"interrupted"}}}"#)
+        let list = await harness.nextWritten()
+        #expect(list?["method"] == .string("thread/backgroundTerminals/list"))
+        harness.serve(#"{"id":\#(list?["id"]?.integer ?? -1),"result":{"data":[]}}"#)
+        try await start.value
+        #expect(await stop.value == CodexStop(interruptedTurn: true))
+    }
+
     @Test func aStopInterruptsTheTurnAndEndsItsCommand() async throws {
         let harness = try await CodexServerHarness()
         async let resumed = harness.play("resume")

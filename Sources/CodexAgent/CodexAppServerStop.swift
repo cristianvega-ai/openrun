@@ -6,6 +6,12 @@ extension CodexAppServer {
         guard threads[thread] != nil else { return CodexStop() }
         var stop = CodexStop()
         await endApprovals(of: { $0 == thread })
+        // A stop can come before the answer to `turn/start`. Without the
+        // wait, the stop found no turn, and the turn ran on.
+        let startDeadline = ContinuousClock.now + options.stopTimeLimit
+        while threads[thread]?.mapper.turnToStop == nil, (threads[thread]?.startingTurnCount ?? 0) > 0, ContinuousClock.now < startDeadline {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
         if let turn = threads[thread]?.mapper.turnToStop {
             let parameters = JSONValue.object(["threadId": .string(thread), "turnId": .string(turn)])
             stop.interruptedTurn = (try? await request("turn/interrupt", parameters)) != nil

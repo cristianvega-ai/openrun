@@ -14,6 +14,8 @@ extension CodexAppServer {
             threads[thread]?.mapper.pendingMessageIdentifiers.removeFirst()
         }
         emit([.userMessage(turn.userMessage)], line: nil, to: thread)
+        threads[thread]?.startingTurnCount += 1
+        defer { threads[thread]?.startingTurnCount -= 1 }
         do {
             let answer = try await request("turn/start", turn.parameters(thread: thread))
             if let started = answer["turn"]?["id"]?.string { threads[thread]?.mapper.noteRequestedTurn(started) }
