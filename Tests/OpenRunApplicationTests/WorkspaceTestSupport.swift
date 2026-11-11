@@ -19,12 +19,14 @@ func waitUntil(timeout: Duration = .seconds(20), _ condition: () -> Bool) async 
 struct TestWorkspace {
     let process: RunningSessionProcess
     let workspace: Workspace
+    /// Where the window keeps the widths of its panes.
+    let defaults: UserDefaults
     private let defaultsName = "OpenRunTests-\(UUID().uuidString)"
 
     init() throws {
         _ = NSApplication.shared
         process = try RunningSessionProcess()
-        let defaults = try #require(UserDefaults(suiteName: defaultsName))
+        defaults = try #require(UserDefaults(suiteName: defaultsName))
         workspace = Workspace(socket: try SocketLocation(path: process.socketPath), defaults: defaults, frameName: nil)
         workspace.window.window.setContentSize(NSSize(width: 1_100, height: 700))
     }
