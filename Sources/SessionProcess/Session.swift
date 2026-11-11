@@ -13,7 +13,8 @@ import TerminalTheme
 /// touches the screen: output from the program, attaching, resizing and
 /// reading. That ordering is what makes attaching free of gaps and repeats.
 actor Session {
-    /// The line limit of the scrollback that every session keeps.
+    /// The line limit of the scrollback of a session, unless the setting
+    /// `scrollback-limit` names another.
     static let scrollbackLimit = 10_000
 
     private(set) var summary: SessionSummary
@@ -80,6 +81,7 @@ actor Session {
         summary: SessionSummary,
         launch: ProgramLaunch,
         changes: SessionChangeFeed? = nil,
+        scrollbackLimit: Int = Session.scrollbackLimit,
         onFinish: @escaping @Sendable (UUID) async -> Void,
         answerTimeLimit: Duration = .milliseconds(500),
         installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try Session.installReplies(on: $0, handler: $1) }
@@ -90,7 +92,7 @@ actor Session {
         self.answerTimeLimit = answerTimeLimit
         let gate = ReplyGate()
         replyGate = gate
-        terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: Self.scrollbackLimit)
+        terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: scrollbackLimit)
         prompts = ShellPromptTracker(terminal: terminal)
         try terminal.setEventHandler(terminalEvents.handler)
         // The terminal answers queries such as "where is the cursor", unless a

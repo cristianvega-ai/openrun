@@ -24,13 +24,19 @@ actor SettingKeeper {
     /// - Parameter changes: Gets the list now and after each change, in
     ///   the step of the change, so the watchers get the changes in order.
     init(store: SettingsStore, changes: SessionChangeFeed? = nil) {
+        self.init(store: store, values: Self.load(from: store), changes: changes)
+    }
+
+    /// Starts from values that `load(from:)` gave, so the caller can hand
+    /// the limits to the registry before any change.
+    init(store: SettingsStore, values: SettingValues, changes: SessionChangeFeed?) {
         self.store = store
         self.changes = changes
-        values = Self.load(from: store)
+        self.values = values
         changes?.replaceSettings(Self.summaries(of: values))
     }
 
-    private static func load(from store: SettingsStore) -> SettingValues {
+    static func load(from store: SettingsStore) -> SettingValues {
         do {
             let loaded = try store.load()
             if let path = loaded.setAsidePath {

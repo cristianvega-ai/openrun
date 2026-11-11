@@ -9,10 +9,16 @@ actor SessionRegistry {
     private let socketPath: String
     private let helperSearchPath: HelperSearchPath
     private let changes: SessionChangeFeed?
-    /// The most sessions at once (decision of 2026-11-10). An agent can
-    /// start sessions by itself, and a loop must not start them without end.
+    /// The most sessions at once when the setting `session-limit` names no
+    /// other (decision of 2026-11-10). An agent can start sessions by
+    /// itself, and a loop must not start them without end.
     static let defaultSessionLimit = 100
-    private let sessionLimit: Int
+    private var sessionLimit: Int
+    /// The line limit of the scrollback of each new session. A session
+    /// keeps the limit that it started with.
+    private var scrollbackLimit: Int
+    /// The version of the settings that gave the two limits.
+    private var limitsVersion = 0
     /// Set before `terminateAll` first suspends. A client that is already
     /// connected can still send `createSession` while the programs end, and
     /// that program would outlive the session process.
@@ -30,8 +36,9 @@ actor SessionRegistry {
 
     init(
         socketPath: String, helperSearchPath: HelperSearchPath, changes: SessionChangeFeed? = nil, projects: ProjectList = ProjectList(),
-        sessionLimit: Int = defaultSessionLimit
+        sessionLimit: Int = defaultSessionLimit, scrollbackLimit: Int = Session.scrollbackLimit
     ) {
+        self.scrollbackLimit = scrollbackLimit
         self.projects = projects
         self.sessionLimit = sessionLimit
         self.socketPath = socketPath
@@ -76,7 +83,7 @@ actor SessionRegistry {
         var summary = SessionSummary(identifier: identifier, folder: folder, command: shownCommand, size: size, createdAt: Date())
         let startFolder = Self.realPath(of: folder)
         summary.projectIdentifier = projects.project(holding: startFolder)?.identifier
-        let session = try Session(summary: summary, launch: launch, changes: changes) { [self] identifier in
+        let session = try Session(summary: summary, launch: launch, changes: changes, scrollbackLimit: scrollbackLimit) { [self] identifier in
             await remove(identifier)
         }
         sessions[identifier] = session
@@ -86,6 +93,14 @@ actor SessionRegistry {
     }
 
     var isEmpty: Bool { sessions.isEmpty }
+
+    /// Takes the limits of newer settings. The limit of sessions applies to
+    /// the next `create`, and the sessions that run stay. The scrollback
+    /// limit applies to the sessions that start after it.
+    func updateLimits(sessionLimit: Int, scrollbackLimit: Int, version: Int) {
+        guard version > limitsVersion else { return }
+        (self.sessionLimit, self.scrollbackLimit, limitsVersion) = (sessionLimit, scrollbackLimit, version)
+    }
 
     /// The path with its symbolic links resolved, or the path itself when
     /// the system cannot resolve it.

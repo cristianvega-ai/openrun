@@ -34,10 +34,15 @@ actor SessionServer {
         let projectStore = ProjectStore(dataFolder: dataFolder)
         let loadedProjects = ProjectKeeper.load(from: projectStore)
         projects = ProjectKeeper(store: projectStore, list: loadedProjects, changes: changes)
-        settings = SettingKeeper(store: SettingsStore(dataFolder: dataFolder), changes: changes)
+        let settingStore = SettingsStore(dataFolder: dataFolder)
+        let loadedSettings = SettingKeeper.load(from: settingStore)
+        settings = SettingKeeper(store: settingStore, values: loadedSettings, changes: changes)
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
-        registry = SessionRegistry(socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes, projects: loadedProjects)
+        registry = SessionRegistry(
+            socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes, projects: loadedProjects,
+            sessionLimit: loadedSettings.sessionLimit, scrollbackLimit: loadedSettings.scrollbackLimit
+        )
     }
 
     func start() {
@@ -441,7 +446,8 @@ actor SessionServer {
             requester = .application
         }
         do {
-            _ = try await settings.change(name: name, to: text, requestedBy: requester)
+            let (values, version) = try await settings.change(name: name, to: text, requestedBy: requester)
+            await registry.updateLimits(sessionLimit: values.sessionLimit, scrollbackLimit: values.scrollbackLimit, version: version)
             return .acknowledged
         } catch {
             return Self.refusal("\(error)")
