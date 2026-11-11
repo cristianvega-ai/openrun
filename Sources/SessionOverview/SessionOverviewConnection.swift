@@ -14,6 +14,9 @@ import SessionProtocol
 public final class SessionOverviewConnection {
     public private(set) var overview = SessionOverview()
     public private(set) var status = ConnectionStatus.connecting
+    /// Whether a list of the sessions came since the start. Before it, the
+    /// overview holds no session, and that does not mean that none runs.
+    public private(set) var hasSessionList = false
     /// Called after each batch that changed the overview, with the
     /// overview before the batch.
     public var overviewChanged: ((_ previous: SessionOverview) -> Void)?
@@ -92,6 +95,7 @@ public final class SessionOverviewConnection {
         for event in pending.takeAll() {
             overview.apply(event)
             switch event {
+            case .sessions: hasSessionList = true
             case .closed: end = "\(SessionConnectionError.connectionClosed)"
             case .failed(let error): end = "\(error)"
             default: break
