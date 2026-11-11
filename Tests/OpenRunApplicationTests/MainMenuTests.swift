@@ -9,9 +9,16 @@ import Testing
         _ = NSApplication.shared
         let oldWindowsMenu = NSApp.windowsMenu
         defer { NSApp.windowsMenu = oldWindowsMenu }
-        let application = OpenRunApplication(socket: try SocketLocation(path: "/tmp/openrun-menu-test.socket"))
+        let socket = try SocketLocation(path: NSTemporaryDirectory() + "openrun-menu-test.socket")
+        let defaultsName = "OpenRunTests-\(UUID().uuidString)"
+        let defaults = try #require(UserDefaults(suiteName: defaultsName))
+        defer { defaults.removePersistentDomain(forName: defaultsName) }
+        let application = OpenRunApplication(socket: socket, workspace: TestWorkspace.makeHost(socket: socket, defaults: defaults))
         let menu = MainMenu.make(target: application)
-        #expect(menu.items.map(\.title) == ["OpenRun", "File", "Edit", "View", "Window"])
+        #expect(menu.items.map(\.title) == ["OpenRun", "File", "Edit", "View", "Session", "Window"])
+        let session = try #require(menu.item(withTitle: "Session")?.submenu)
+        #expect(session.items.map(\.title) == ["Rename…", "", "Next Session", "Previous Session"])
+        #expect(session.items.allSatisfy { $0.isSeparatorItem || $0.target === application.workspace })
         let file = try #require(menu.item(withTitle: "File")?.submenu)
         let edit = try #require(menu.item(withTitle: "Edit")?.submenu)
         let view = try #require(menu.item(withTitle: "View")?.submenu)

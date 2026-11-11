@@ -10,6 +10,8 @@ import SessionWindow
 public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuItemValidation {
     private let socket: SocketLocation
     let windows: WindowList
+    /// The main window and its link to the session process.
+    let workspace: Workspace
     var makeNewSession: () -> SessionStart = { .newSessionInHomeFolder() }
     var chooseSession: @MainActor (SocketLocation, NSWindow?) async -> UUID? = { await SessionList.choose(at: $0, in: $1) }
     private var setupIsReady = false
@@ -23,9 +25,12 @@ public final class OpenRunApplication: NSObject, NSApplicationDelegate, NSMenuIt
     /// running bundle, so the start and the File menu use this one rule.
     private var ownsLaunchAgent: Bool { socket.isDefault || makeLaunchAgentSetup != nil }
 
-    init(socket: SocketLocation, makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)? = nil) {
+    /// - Parameter workspace: The host of the main window. Tests give one
+    ///   that keeps no frame and shows no notification.
+    init(socket: SocketLocation, makeLaunchAgentSetup: (@Sendable () -> LaunchAgentSetup)? = nil, workspace: Workspace? = nil) {
         self.socket = socket
         self.makeLaunchAgentSetup = makeLaunchAgentSetup
+        self.workspace = workspace ?? Workspace(socket: socket)
         windows = WindowList(socket: socket)
         approvalQuestions = ApprovalQuestionConnection(socket: socket)
         super.init()

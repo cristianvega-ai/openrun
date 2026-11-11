@@ -1,7 +1,8 @@
 import AppKit
 
-/// The menu of the app. Window actions go through the responder chain to the
-/// view that has focus.
+/// The menu of the app. The session commands go to the host of the main
+/// window, and the text commands go through the responder chain to the
+/// view that has the focus.
 @MainActor
 enum MainMenu {
     static func make(target: OpenRunApplication) -> NSMenu {
@@ -10,44 +11,51 @@ enum MainMenu {
         application.addItem(item("About OpenRun", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
         application.addItem(.separator())
         application.addItem(item("Hide OpenRun", #selector(NSApplication.hide(_:)), "h"))
-        let hideOthers = item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h")
-        hideOthers.keyEquivalentModifierMask = [.command, .option]
-        application.addItem(hideOthers)
+        application.addItem(item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
         application.addItem(item("Show All", #selector(NSApplication.unhideAllApplications(_:))))
         application.addItem(.separator())
         application.addItem(item("Quit OpenRun", #selector(NSApplication.terminate(_:)), "q"))
-
-        let file = submenu("File", in: menu)
-        let newSession = item("New Window", #selector(OpenRunApplication.newSession(_:)), "n")
-        let attach = item("Attach to Session…", #selector(OpenRunApplication.attachToSession(_:)))
-        newSession.target = target
-        attach.target = target
-        file.addItem(newSession)
-        file.addItem(attach)
-        let retry = item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)))
-        retry.target = target
-        file.addItem(retry)
-        let registerAgain = item("Register Session Process Again", #selector(OpenRunApplication.registerSessionProcessAgain(_:)))
-        registerAgain.target = target
-        file.addItem(registerAgain)
-        file.addItem(.separator())
-        file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
+        addFileMenu(to: menu, target: target)
 
         let edit = submenu("Edit", in: menu)
         edit.addItem(item("Copy", Selector(("copy:")), "c"))
         edit.addItem(item("Paste", Selector(("paste:")), "v"))
         edit.addItem(item("Select All", Selector(("selectAll:")), "a"))
         let view = submenu("View", in: menu)
+        for item in target.workspace.window.paneMenuItems() { view.addItem(item) }
+        view.addItem(.separator())
         view.addItem(item("Make Text Bigger", Selector(("increaseFontSize:")), "="))
         view.addItem(item("Make Text Smaller", Selector(("decreaseFontSize:")), "-"))
         view.addItem(item("Reset Text Size", Selector(("resetFontSize:")), "0"))
+        addSessionMenu(to: menu, workspace: target.workspace)
+
         let windows = submenu("Window", in: menu)
         windows.addItem(item("Minimize", #selector(NSWindow.performMiniaturize(_:)), "m"))
         windows.addItem(item("Zoom", #selector(NSWindow.performZoom(_:))))
         windows.addItem(.separator())
+        windows.addItem(item("OpenRun", #selector(Workspace.showMainWindow(_:)), target: target.workspace))
         windows.addItem(item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         NSApp.windowsMenu = windows
         return menu
+    }
+
+    private static func addFileMenu(to menu: NSMenu, target: OpenRunApplication) {
+        let file = submenu("File", in: menu)
+        file.addItem(item("New Window", #selector(OpenRunApplication.newSession(_:)), "n", target: target))
+        file.addItem(item("Attach to Session…", #selector(OpenRunApplication.attachToSession(_:)), target: target))
+        file.addItem(item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)), target: target))
+        file.addItem(item("Register Session Process Again", #selector(OpenRunApplication.registerSessionProcessAgain(_:)), target: target))
+        file.addItem(.separator())
+        file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w"))
+    }
+
+    private static func addSessionMenu(to menu: NSMenu, workspace: Workspace) {
+        let session = submenu("Session", in: menu)
+        session.addItem(item("Rename…", #selector(Workspace.renameSession(_:)), target: workspace))
+        session.addItem(.separator())
+        // The keys of the next and the previous tab of other Mac apps.
+        session.addItem(item("Next Session", #selector(Workspace.selectNextSession(_:)), "]", [.command, .shift], target: workspace))
+        session.addItem(item("Previous Session", #selector(Workspace.selectPreviousSession(_:)), "[", [.command, .shift], target: workspace))
     }
 
     private static func submenu(_ title: String, in menu: NSMenu) -> NSMenu {
@@ -58,7 +66,11 @@ enum MainMenu {
         return child
     }
 
-    private static func item(_ title: String, _ action: Selector, _ key: String = "") -> NSMenuItem {
-        NSMenuItem(title: title, action: action, keyEquivalent: key)
+    private static func item(
+        _ title: String, _ action: Selector, _ key: String = "", _ modifiers: NSEvent.ModifierFlags = [.command], target: AnyObject? = nil
+    ) -> NSMenuItem {
+        let item = NSMenuItem(title: title, action: action, keyEquivalent: key)
+        (item.keyEquivalentModifierMask, item.target) = (modifiers, target)
+        return item
     }
 }
