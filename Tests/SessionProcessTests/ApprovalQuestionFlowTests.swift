@@ -39,5 +39,24 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// A late answer to the question of a program that left does nothing.
+        @Test func aCallerThatLeavesEndsItsQuestion() async throws {
+            try await RunningSessionProcess.run(arguments: try testProcessAnswersArguments()) { process in
+                let (app, _) = try connectAsAnswerer(to: process)
+                defer { app.shutdown() }
+                let target = try process.createSession(program: ["/bin/sh"])
+                let caller = try process.createSession(program: ["/bin/sh", "-c", openrun(process, "send --enter \(target) 'echo typed-late'")])
+                guard case .approvalQuestion(let question) = try next(app) else {
+                    Issue.record("The app received no question.")
+                    return
+                }
+                #expect(try process.runCommand(["kill", caller]).status == 0)
+                #expect(try next(app) == .approvalQuestionEnded(identifier: question.identifier))
+                try app.send(ClientMessage.answerApprovalQuestion(identifier: question.identifier, allows: true))
+                #expect(try process.runCommand(["send", "--enter", target, "echo next-$((6*7))"]).status == 0)
+                #expect(await process.waitForScreen(of: target, containing: "next-42"))
+                #expect(try !process.screenText(of: target).contains("typed-late"))
+            }
+        }
     }
 }
