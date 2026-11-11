@@ -2,7 +2,7 @@ import AppKit
 
 /// A quiet box of monospaced text under an open line, such as the input
 /// and the output of a tool call.
-final class DetailBoxView: RoundedBoxView {
+final class DetailBoxView: RoundedBoxView, MeasurableView {
     static let padding = NSSize(width: 12, height: 8)
     let textView = ChatTextView()
 

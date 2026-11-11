@@ -39,7 +39,7 @@ class StackRowView: TranscriptRowView {
     }
 
     private static func height(of view: NSView, width: CGFloat) -> CGFloat {
-        (view as? DetailBoxView)?.height(forWidth: width) ?? view.fittingSize.height
+        (view as? MeasurableView)?.height(forWidth: width) ?? view.fittingSize.height
     }
 
     override func layout() {
