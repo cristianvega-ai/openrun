@@ -9,7 +9,8 @@ import TerminalEmulation
 public enum CommandLineTool {
     /// - Returns: 0 when the command worked, 1 when it could not be done, and
     ///   2 when the arguments were wrong. After `attach`, the exit code of the
-    ///   session's program, when it ended while attached.
+    ///   session's program, when it ended while attached. `notify` never
+    ///   exits with 2, because a hook of Claude Code then blocks the action.
     public static func run(arguments: [String], environment: [String: String]) -> Int32 {
         do {
             let parsed = try CommandLineArguments(arguments)
@@ -17,16 +18,24 @@ public enum CommandLineTool {
                 write(UsageText.full + "\n", to: .standardOutput)
                 return 0
             }
+            if case .notify(let identifier, let text) = parsed.command {
+                try NotifyCommand(identifier: identifier, text: text).run(socketFlag: parsed.socketPath, environment: environment)
+                return 0
+            }
             let location = try resolveLocation(flag: parsed.socketPath, environment: environment)
             return try execute(parsed.command, location: location, environment: environment)
         } catch let error as CommandLineToolError {
-            return report(error)
+            return exitCode(report(error), arguments: arguments)
         } catch let error as SessionConnectionError {
-            return report(CommandLineToolError(error))
+            return exitCode(report(CommandLineToolError(error)), arguments: arguments)
         } catch {
             writeError(error)
             return 1
         }
+    }
+
+    private static func exitCode(_ code: Int32, arguments: [String]) -> Int32 {
+        code == 2 && CommandLineArguments.namesNotify(arguments) ? 1 : code
     }
 
     private static func report(_ error: CommandLineToolError) -> Int32 {
@@ -51,7 +60,7 @@ public enum CommandLineTool {
             try KillCommand(identifier: identifier).run(location: location)
         case .rename(let identifier, let name):
             try RenameCommand(identifier: identifier, name: name).run(location: location)
-        case .help:
+        case .notify, .help:
             break
         }
         return 0

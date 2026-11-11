@@ -24,6 +24,7 @@ struct CommandLineArguments: Equatable {
         var printsJSON = false
         var helpRequested = false
         var folder: String?
+        var session: String?
         var positional: [String] = []
 
         var remaining = words[...]
@@ -33,6 +34,8 @@ struct CommandLineArguments: Equatable {
                 socketPath = try Self.value(of: word, from: &remaining)
             case "--folder":
                 folder = try Self.value(of: word, from: &remaining)
+            case "--session":
+                session = try Self.value(of: word, from: &remaining)
             case "--enter":
                 pressEnter = true
             case "--scrollback":
@@ -47,6 +50,8 @@ struct CommandLineArguments: Equatable {
                     socketPath = String(word.dropFirst("--socket=".count))
                 } else if word.hasPrefix("--folder=") {
                     folder = String(word.dropFirst("--folder=".count))
+                } else if word.hasPrefix("--session=") {
+                    session = String(word.dropFirst("--session=".count))
                 } else if word.hasPrefix("-") && word.count > 1 {
                     throw CommandLineToolError.usage("Unknown option \(word).")
                 } else {
@@ -69,6 +74,7 @@ struct CommandLineArguments: Equatable {
         }
         let rest = Array(positional.dropFirst())
         if printsJSON, name != "list" { throw CommandLineToolError.usage("--json does not belong to \(name). It works with list.") }
+        if session != nil, name != "notify" { throw CommandLineToolError.usage("--session does not belong to \(name). It works with notify.") }
 
         func allow(_ flag: String, used: Bool, in commands: String) throws {
             if used { throw CommandLineToolError.usage("\(flag) does not belong to \(name). It works with \(commands).") }
@@ -112,6 +118,12 @@ struct CommandLineArguments: Equatable {
             try Self.requireIdentifier(identifier)
             let newName = (Array(rest.dropFirst()) + (afterSeparator ?? [])).joined(separator: " ")
             command = .rename(identifier: identifier, name: newName.isEmpty ? nil : newName)
+        case "notify":
+            try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
+            if let session { try Self.requireIdentifier(session) }
+            let text = (rest + (afterSeparator ?? [])).joined(separator: " ")
+            guard !text.isEmpty else { throw CommandLineToolError.usage("notify needs the text of the alert.") }
+            command = .notify(identifier: session, text: text)
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -143,7 +155,17 @@ struct CommandLineArguments: Equatable {
         if word.isEmpty { throw CommandLineToolError.usage("The session identifier is empty.") }
     }
 
-    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "help"]
+    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "notify", "help"]
+
+    /// Whether the command is `notify`, also when the arguments are wrong.
+    static func namesNotify(_ arguments: [String]) -> Bool {
+        var words = arguments.prefix { $0 != "--" }[...]
+        while let word = words.popFirst() {
+            if ["--socket", "--folder", "--session"].contains(word) { _ = words.popFirst(); continue }
+            if !word.hasPrefix("-") { return word == "notify" }
+        }
+        return false
+    }
 
     private static func requireNoOptions(_ name: String, _ folder: String?, _ pressEnter: Bool, _ includeScrollback: Bool, _ afterSeparator: [String]?) throws {
         if folder != nil { throw CommandLineToolError.usage("--folder does not belong to \(name). It works with new.") }

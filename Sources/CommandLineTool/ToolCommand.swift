@@ -8,5 +8,7 @@ enum ToolCommand: Equatable {
     case kill(identifier: String)
     /// A nil name removes the name.
     case rename(identifier: String, name: String?)
+    /// A nil identifier means the session of the caller.
+    case notify(identifier: String?, text: String)
     case help
 }
