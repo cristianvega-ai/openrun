@@ -151,7 +151,7 @@ actor SessionServer {
                     client.send(Self.unknownSession(identifier))
                     break
                 }
-                if let refusal = await refusal(of: peer, toward: identifier, .type) {
+                if let refusal = await refusal(of: peer, toward: identifier, .typing(text)) {
                     client.send(refusal)
                     break
                 }
@@ -303,27 +303,38 @@ actor SessionServer {
     }
 
     /// What a caller in one session wants to do to another one.
-    enum CrossSessionAction: String {
-        case type = "type into"
-        case read
-        case attach = "attach to"
-        case kill
-    }
-
-    /// The refusal of a request on another session, or nil when the caller
-    /// may do it (decision of 2026-10-15). The reason is an existing one, so
-    /// protocol version 1 does not change.
-    private func refusal(of peer: PeerProcess, toward target: UUID, _ action: CrossSessionAction) async -> ServerMessage? {
+    /// Nil when the caller may do a request on the target session: the
+    /// caller may act on it freely, or the user allowed it. Otherwise the
+    /// refusal. While the question waits, this client sends no other request
+    /// (decisions of 2026-10-15 and 2026-11-10, ApprovalQuestion.tla).
+    private func refusal(of peer: PeerProcess, toward target: UUID, _ request: ApprovalQuestion.Request) async -> ServerMessage? {
         let place = await registry.place(of: peer)
         guard !place.mayAct(on: target) else { return nil }
-        let targetText = SessionSummary.text(for: target)
-        let message = switch place {
-        case .session(let own):
-            "A program in session \(SessionSummary.text(for: own)) cannot \(action.rawValue) session \(targetText) without the user's approval."
-        default:
-            "The program that asked to \(action.rawValue) session \(targetText) ended before the session process found its session."
+        let verb = switch request {
+        case .type: "type into"
+        case .read: "read"
+        case .attach: "attach to"
+        case .kill: "kill"
         }
-        return .failure(SessionFailure(reason: .invalidRequest, message: message))
+        let targetText = SessionSummary.text(for: target)
+        guard case .session(let own) = place, let asking = await registry.session(for: own),
+              let targetSession = await registry.session(for: target) else {
+            return Self.refusal("The program that asked to \(verb) session \(targetText) ended before the session process found its session, and it needs the user's approval.")
+        }
+        let start = "A program in session \(SessionSummary.text(for: own)) asked to \(verb) session \(targetText)"
+        let question = ApprovalQuestion(identifier: UUID(), askingSession: await asking.summary, targetSession: await targetSession.summary, request: request)
+        switch await questions.ask(question) {
+        case .allowed: return nil
+        case .denied: return Self.refusal("\(start), and the user did not allow it.")
+        case .timedOut: return Self.refusal("\(start), and the user did not answer in time.")
+        case .noAnswerer: return Self.refusal("\(start). This needs the user's approval, and OpenRun is not open to ask.")
+        case .withdrawn: return Self.refusal("\(start), and then it left.")
+        }
+    }
+
+    /// The reason is an existing one, so protocol version 1 does not change.
+    private static func refusal(_ message: String) -> ServerMessage {
+        .failure(SessionFailure(reason: .invalidRequest, message: message))
     }
 
     private static func unknownSession(_ identifier: UUID) -> ServerMessage {

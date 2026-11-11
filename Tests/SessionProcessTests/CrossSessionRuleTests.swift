@@ -3,7 +3,7 @@ import SessionProcessHarness
 import Testing
 
 /// A shell command that runs `openrun` with the socket of the process.
-private func openrun(_ process: RunningSessionProcess, _ arguments: String) -> String {
+func openrun(_ process: RunningSessionProcess, _ arguments: String) -> String {
     "'\(RunningSessionProcess.commandExecutable.path)' --socket '\(process.socketPath)' \(arguments)"
 }
 
