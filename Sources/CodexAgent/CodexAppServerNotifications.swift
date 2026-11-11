@@ -1,12 +1,14 @@
 import AgentConversation
 
-/// The lines that the app-server starts: notifications, and lines that
-/// OpenRun cannot read.
+/// The lines that the app-server starts: notifications, its requests, and
+/// lines that OpenRun cannot read.
 extension CodexAppServer {
     func receive(_ incoming: CodexMessageReader.Incoming) async {
         switch incoming {
         case .message(.notification(let method, let parameters), let line):
             await notification(method, parameters, line: line)
+        case .message(.request(let identifier, let method, let parameters), let line):
+            await serverRequest(identifier, method: method, parameters: parameters, line: line)
         case .message:
             // An answer after its time limit, or the refusal of a line that
             // Codex could not read. No caller waits for it.
@@ -53,5 +55,17 @@ extension CodexAppServer {
 
     static func threadIdentifier(of parameters: JSONValue) -> String? {
         parameters["threadId"]?.string ?? parameters["thread"]?["id"]?.string
+    }
+
+    /// Refuses a request of the app-server, so that Codex does not wait
+    /// for an answer. The thread learns of it.
+    func serverRequest(_ identifier: CodexRequestIdentifier, method: String, parameters: JSONValue, line: SourceLine) async {
+        if let refusal = try? CodexOutgoingLine.failure(to: identifier, code: -32601, message: "OpenRun does not support \(method).") {
+            await connection.send(refusal)
+        }
+        let text = "Codex asked for \(method), which OpenRun does not support, so OpenRun refused it."
+        if let thread = Self.threadIdentifier(of: parameters) {
+            await threads[thread]?.send([.notice(Notice(level: .warning, text: text))], line: line)
+        }
     }
 }

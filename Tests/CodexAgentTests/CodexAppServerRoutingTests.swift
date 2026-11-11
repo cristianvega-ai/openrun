@@ -43,3 +43,16 @@ import Testing
         #expect(await harness.server.hasEnded)
     }
 }
+
+@Suite struct CodexServerRequestTests {
+    @Test func aRequestThatOpenRunDoesNotServeIsRefused() async throws {
+        let harness = try await CodexServerHarness()
+        let thread = await harness.server.open("a", first: [])
+        harness.serve(#"{"id":5,"method":"item/tool/requestUserInput","params":{"threadId":"a","questions":[]}}"#)
+        let refusal = await harness.nextWritten()
+        #expect(refusal?["id"] == .number(5))
+        #expect(refusal?["error"]?["code"] == .number(-32601))
+        #expect(await thread.next()?.kind == .notice(Notice(
+            level: .warning, text: "Codex asked for item/tool/requestUserInput, which OpenRun does not support, so OpenRun refused it.")))
+    }
+}
