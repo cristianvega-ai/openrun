@@ -59,19 +59,25 @@ actor CodexConnection {
         }
     }
 
-    /// Sends a request and waits for its answer.
+    /// Sends a request and waits for its answer. A cancel of the caller
+    /// ends the wait at once.
     func request(_ method: String, _ parameters: JSONValue, timeLimit: Duration) async throws -> JSONValue {
         guard !hasEnded else { throw CodexRequestError.connectionEnded }
         let identifier = nextIdentifier
         nextIdentifier += 1
         let line = try CodexOutgoingLine.request(.number(identifier), method: method, parameters: parameters)
-        return try await withCheckedThrowingContinuation { continuation in
-            let timer = Task { [weak self] in
-                guard (try? await Task.sleep(for: timeLimit)) != nil else { return }
-                await self?.finish(identifier, with: .failure(CodexRequestError.timedOut(method: method)))
+        return try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { continuation in
+                let timer = Task { [weak self] in
+                    guard (try? await Task.sleep(for: timeLimit)) != nil else { return }
+                    await self?.finish(identifier, with: .failure(CodexRequestError.timedOut(method: method)))
+                }
+                waiting[identifier] = Waiting(method: method, continuation: continuation, timer: timer)
+                lines.yield(line)
+                if Task.isCancelled { finish(identifier, with: .failure(CancellationError())) }
             }
-            waiting[identifier] = Waiting(method: method, continuation: continuation, timer: timer)
-            lines.yield(line)
+        } onCancel: {
+            Task { await self.finish(identifier, with: .failure(CancellationError())) }
         }
     }
 

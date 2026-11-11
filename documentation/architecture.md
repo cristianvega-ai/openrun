@@ -540,10 +540,11 @@ The request names no tool call. `ClaudeCodeToolCallMatcher` finds the call that 
 
 One `codex app-server` serves all threads of one account (decision of 2026-11-10).
 `CodexAccountServers` keeps one `CodexAppServer` for each account: its `CODEX_HOME` folder, or the default account of the login shell. A server starts when a call needs it, and it ends when no thread and no call uses it. A read of the account or of the usage without an open thread starts a server for that read alone.
+`CodexAccountServers.shutDown` cancels the start of a server whose handshake has no answer yet, so it returns within a few seconds whatever the app-server does.
 The tasks of a server hold it and its `AgentProgram` weakly. When nobody holds the server, its threads or its `CodexAccountServers` any more, the program goes too, and its group gets SIGKILL, also without `shutDown`.
 
 The app-server speaks JSON-RPC on its standard input and output: one JSON object on each line, without the `jsonrpc` member.
-OpenRun's requests have whole-number identifiers. An answer to a request of Codex carries its identifier as the JSON text that it came in, so that a number above 2^53 does not change. Each request waits for its answer for at most `answerTimeLimit`, 60 seconds by default. When the output ends, every request that waits fails with `connectionEnded`, and so does every later one.
+OpenRun's requests have whole-number identifiers. A cancel of the caller ends the wait for an answer at once. An answer to a request of Codex carries its identifier as the JSON text that it came in, so that a number above 2^53 does not change. Each request waits for its answer for at most `answerTimeLimit`, 60 seconds by default. When the output ends, every request that waits fails with `connectionEnded`, and so does every later one.
 A line that is not JSON, that has an unknown method, that is longer than 16 MiB, or that the output cuts short becomes an `unknown` event of each open thread, and the connection goes on.
 The handshake sends `initialize` with the name and the version of OpenRun and `capabilities.experimentalApi: true`, which the stop needs. Then it sends `initialized`.
 

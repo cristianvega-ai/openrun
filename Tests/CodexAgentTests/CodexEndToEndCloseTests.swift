@@ -34,4 +34,14 @@ import Testing
         #expect(await servers.serverCount == 0)
         #expect(try await hasEnded(thread.server))
     }
+
+    @Test func aShutdownDuringTheHandshakeIsQuick() async throws {
+        var launch = CodexFakeServer.launch([])
+        launch.environment["FAKE_CODEX_SCRIPTS"] = CodexFixture(name: "deaf").url.path
+        let servers = CodexAccountServers(launch: launch)
+        let start = Task { try await servers.startThread(account: nil, CodexThreadStart(folder: "/work/project")) }
+        while await servers.serverCount == 0 { try await Task.sleep(for: .milliseconds(10)) }
+        #expect(await time { await servers.shutDown() } < .seconds(5))
+        await #expect(throws: (any Error).self) { try await start.value }
+    }
 }

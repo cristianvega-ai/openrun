@@ -31,6 +31,8 @@ extension CodexAccountServers {
         let all = entries
         entries = [:]
         for entry in all.values {
+            // A server that still starts gives up its handshake at once.
+            entry.server.cancel()
             if let server = try? await entry.server.value { await server.shutDown() }
         }
     }
