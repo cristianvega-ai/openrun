@@ -22,6 +22,7 @@ extension ComposerView: NSTextViewDelegate {
     }
 
     func submit() {
+        guard closedReason == nil else { return }
         let message = ChatOutgoingMessage(text: textView.string, images: images)
         let effect = logic.submit(message)
         if case .send(let outgoing) = effect { sendAction?(outgoing) }

@@ -14,6 +14,6 @@ import Testing
         view.buttons[1].performClick(nil)
         #expect(chosen == [.newThread(account: "b")])
         #expect(view.height(forWidth: 320) >= view.height(forWidth: 700))
-        #expect(view.accessibilityLabel() == "The account reached its limit")
+        #expect(view.accessibilityLabel()?.hasPrefix("The account reached its limit. The thread goes on") == true)
     }
 }

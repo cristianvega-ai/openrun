@@ -10,7 +10,16 @@ extension ComposerView {
         textView.font = newPalette.bodyFont
         textView.textColor = newPalette.text
         textView.insertionPointColor = newPalette.text
-        textView.placeholder = "Message \(facts.agentName)"
+        // At its limit, the account takes no message, so the field takes
+        // none either and says why. A draft stays.
+        if case .atLimit(let resetTime, _) = facts.condition {
+            closedReason = resetTime.map { "You can send messages again " + ThreadConditionWords.time($0, now: Date()) } ?? "The account is at its limit"
+        } else {
+            closedReason = nil
+        }
+        textView.isEditable = closedReason == nil
+        sendButton.isEnabled = closedReason == nil
+        textView.placeholder = closedReason ?? "Message \(facts.agentName)"
         textView.placeholderColor = newPalette.secondaryText
         footer.show(facts, palette: newPalette)
         refresh()

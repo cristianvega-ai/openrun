@@ -24,7 +24,8 @@ struct ThreadConditionWordsTests {
             ChatAccount(identifier: "personal", name: "Personal"),
         ])), now: now)
         #expect(words?.title == "The Work account reached its limit")
-        #expect(words?.detail?.hasPrefix("It resets at ") == true)
+        // The composer shows the time of the reset, so the box does not.
+        #expect(words?.detail == "The thread goes on when the account resets, or you can go on in a new thread.")
         #expect(words?.choices.map(\.title) == ["New Thread on Personal"])
         #expect(words?.choices.map(\.choice) == [.newThread(account: "personal")])
     }

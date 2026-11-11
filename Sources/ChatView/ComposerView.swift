@@ -19,6 +19,9 @@ final class ComposerView: NSView {
     var problem: String?
     var palette: ChatPalette
     var agentName = "the agent"
+    /// Why the composer takes no message now, such as an account at its
+    /// limit. Nil while it takes messages.
+    var closedReason: String?
     var sendAction: ((ChatOutgoingMessage) -> Void)?
     var stopAction: (() -> Void)?
     /// Gives the text of the field after each change.

@@ -30,7 +30,7 @@ struct ThreadConditionWords: Equatable {
         case .atLimit(let resetTime, let accounts):
             symbolName = "hourglass"
             title = facts.accountName.map { "The \($0) account reached its limit" } ?? "The account reached its limit"
-            detail = resetTime.map { "It resets \(Self.time($0, now: now)). The thread goes on then." }
+            detail = "The thread goes on when the account resets" + (accounts.isEmpty ? "." : ", or you can go on in a new thread.")
             choices = accounts.map { ("New Thread on \($0.name)", .newThread(account: $0.identifier)) }
         case .openInTerminal:
             symbolName = "terminal"

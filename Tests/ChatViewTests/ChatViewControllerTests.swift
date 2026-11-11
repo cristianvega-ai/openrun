@@ -86,6 +86,23 @@ import Testing
         #expect(delegate.requests == ["return", "terminal"])
     }
 
+    @Test func atTheLimitTheComposerSaysSoAndTakesNoMessage() {
+        let delegate = RecordingDelegate()
+        controller.delegate = delegate
+        controller.facts.condition = .atLimit(resetTime: nil, otherAccounts: [ChatAccount(identifier: "p", name: "Personal")])
+        let field = controller.composer.textView
+        #expect(!field.isEditable)
+        #expect(field.placeholder == "The account is at its limit")
+        field.string = "Go on."
+        controller.composer.submit()
+        #expect(delegate.requests.isEmpty)
+        #expect(field.string == "Go on.")
+        #expect(!controller.conditionView.buttons.isEmpty)
+        controller.facts.condition = .ready
+        #expect(field.isEditable)
+        #expect(field.placeholder == "Message Claude Code")
+    }
+
     @Test func aNewRequestIsAnnouncedOnceAlsoWhenItsRowHasNoView() {
         controller.view.frame.size = NSSize(width: 600, height: 400)
         var transcript = Transcript(events: (0..<80).map { TestEvents.user("\($0)", "Message \($0)") })
