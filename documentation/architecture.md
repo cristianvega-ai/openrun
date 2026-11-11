@@ -45,6 +45,7 @@ A module uses another module only through its public types.
 | `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
 | `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, and the attach conversation | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionIdentifierMatch`, `SessionConnectionError` |
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
+| `UntrustedText` | The rule for a name that a client or a file gives, and the escape of such text in a message | `PlainName`, `QuotedText` |
 | `DataStorage` | The data folder: its location, its files, and the safe write and read of a JSON document | `DataFolder`, `DataFile`, `DataFileScope`, `DataDocument`, `DataReadResult`, `DataStorageError` |
 | `Projects` | The folders that the user adds as projects, their order and names, and the project of a session's start folder | `Project`, `ProjectList`, `ProjectFolderPath`, `ProjectStore`, `LoadedProjects`, `ProjectListError` |
 | `Settings` | The settings of version 1: their names, kinds, defaults and text forms, the rule for protected settings, and their file | `SettingName`, `SettingValues`, `SettingRequester`, `OptionKeyBehavior`, `LinkDestination`, `NewSessionCommand`, `SettingsStore`, `LoadedSettings`, `SettingError` |
@@ -74,12 +75,14 @@ openrun-application -> OpenRunApplication -> SessionWindow -> TerminalView
                                           -> SessionLaunch
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
                   -> TerminalTheme     -> TerminalEmulation
-Projects          -> DataStorage
-Settings          -> DataStorage
+Projects          -> DataStorage -> UntrustedText
+                  -> UntrustedText
+Settings          -> DataStorage -> UntrustedText
+                  -> UntrustedText
 ```
 
 No program uses `Projects` and `Settings` yet. The session process will own both.
-`DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
+`UntrustedText`, `DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
 
 `SessionWindow` also uses `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
@@ -366,13 +369,14 @@ OpenRun.app registers the session process as a launch agent with SMAppService (`
 OpenRun keeps its data as readable JSON in `~/Library/Application Support/OpenRun`, the folder of the socket (`DataFolder.defaultPath`).
 A test keeps `DataFolder.defaultPath` and `SocketLocation.defaultPath` in step.
 Tests name a temporary folder instead.
-The folder has mode 0700, and each file has mode 0600.
+The default folder has mode 0700, also when it exists, and each file has mode 0600.
+A folder that a caller named gets mode 0700 only when `create` makes it. Otherwise it keeps its mode, as the folder of a socket from `--socket` does.
 
 | File | What it holds | Scope |
 |---|---|---|
 | `projects.json` | The projects in the user's order: the identifier of each and the name that the user gave | Can sync |
 | `project-folders.json` | The folder of each project on this Mac, by identifier | This Mac |
-| `settings.json` | The settings that differ from their defaults, and the settings of a later build | Can sync |
+| `settings.json` | The settings that differ from their defaults, each a key beside `format`, and the settings of a later build | Can sync |
 | `layout.json` | The rows of the sessions list and their splits, which the app keeps | This Mac |
 
 Data that can sync and data of this Mac never share a file, so a later sync takes whole files.
@@ -386,15 +390,23 @@ After a full flush of the disk (`F_FULLFSYNC`), a rename puts it in the place of
 A file that this build cannot read is never deleted and never written over.
 That is a file that is not JSON, that has no format number or the format of a later build, that does not decode, or that is larger than 16 MiB.
 It gets the name `NAME.unreadable-TIME.json`, with the time in UTC such as `20261110T093000Z`, and the caller starts from the defaults.
-When the system cannot read or move a file, the load throws, and the caller must not save over it.
+When the system cannot read or move a file, the load throws.
+A write reads the file first, sets it aside when this build cannot read it, and throws when it cannot read or set it aside.
+So no save replaces data that the load did not read.
+
+A write keeps each key at the top of the file that the document does not name in `knownKeys`, such as a key of a later build.
+`ObjectMembers` keeps the exact text of its value, because a decoder turns a number into a Double and loses digits.
+Keys deeper in the file are not kept.
 
 `ProjectStore` writes `project-folders.json` first and `projects.json` second.
-A load adds a folder with no entry at the end of the list and leaves out an entry with no folder.
-So a crash between the two writes completes the last change, and the projects stay when only `projects.json` is lost.
+A load adds a folder with no entry at the end of the list.
+It keeps an entry with no usable folder but does not show it, and a save writes such entries after the others.
+So the projects stay when only `projects.json` is lost, and the names, identifiers and order stay when only `project-folders.json` is lost.
+A crash in a remove between the two writes leaves such a hidden entry. A later sync will bring entries of this kind from other Macs.
 
 `SettingsStore` reads each setting alone.
 A value of the wrong type or out of range goes back to its default, and the load names it in `fallbackNames`.
-A setting that this build does not know stays in the file when the file is saved again.
+A setting that this build does not know is an unknown key of the file, so it stays with the exact text of its value.
 
 ## The socket protocol
 
