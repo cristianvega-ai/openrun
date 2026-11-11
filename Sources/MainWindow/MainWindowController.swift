@@ -25,6 +25,9 @@ public final class MainWindowController: NSObject {
     var isContentActive = false
     /// In full screen the traffic lights hide, so no top row keeps room for them.
     var isInFullScreen = false
+    /// The one way back to hidden lists that the window shows. It moves to
+    /// the top row of the first visible pane, next to the traffic lights.
+    lazy var listsButton = PaneButton.make(symbol: "sidebar.left", label: "Hide Projects", target: self, action: #selector(toggleProjectsList))
     /// Whether the window is key. Tests set it, because a test window is not key.
     lazy var isWindowKey: () -> Bool = { [weak paneWindow] in paneWindow?.isKeyWindow ?? false }
     /// The setting of Reduce Motion. Tests set it.

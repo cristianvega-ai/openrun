@@ -1,4 +1,5 @@
 import AppKit
+import PaneAppearance
 
 /// The menu commands that hide and show the two lists, with a smooth
 /// animation unless the user asks for less motion.
@@ -54,11 +55,18 @@ extension MainWindowController: NSMenuItemValidation {
     }
 
     /// The traffic lights sit in the top row of the first visible pane, so
-    /// that row keeps room for them.
+    /// that row keeps room for them, with the button of the lists after them.
     func updateTopRowSpaces() {
         let lights = isInFullScreen ? 16 : paneWindow.trafficLightsSpace
-        projectsList.topRow.leadingSpace = lights
-        sessionsList.topRow.leadingSpace = projectsItem.isCollapsed ? lights : 16
-        contentPane.topRow.leadingSpace = projectsItem.isCollapsed && sessionsItem.isCollapsed ? lights : 16
+        let rows = [projectsItem.isCollapsed ? nil : projectsList.topRow, sessionsItem.isCollapsed ? nil : sessionsList.topRow, contentPane.topRow]
+        let first = rows.compactMap { $0 }[0]
+        for row in [projectsList.topRow, sessionsList.topRow, contentPane.topRow] {
+            row.leadingSpace = row === first ? lights : 16
+        }
+        listsButton.removeFromSuperview()
+        first.leadingItems.insertArrangedSubview(listsButton, at: 0)
+        let label = projectsItem.isCollapsed ? "Show Projects" : "Hide Projects"
+        listsButton.toolTip = label
+        listsButton.setAccessibilityLabel(label)
     }
 }

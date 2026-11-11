@@ -1,4 +1,5 @@
 import AppKit
+import PaneAppearance
 import Testing
 @testable import MainWindow
 
@@ -32,5 +33,24 @@ import Testing
         controller.toggleSessionsList(nil)
         _ = items.map(controller.validateMenuItem)
         #expect(items.prefix(2).map(\.title) == ["Hide Projects", "Show Sessions"])
+    }
+
+    /// With both lists hidden, the button still shows the way back.
+    @Test func theListsButtonSitsFirstInTheFirstVisibleTopRow() {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.reducesMotion = { true }
+        func firstItem(of row: PaneTopRow) -> NSView? { row.leadingItems.arrangedSubviews.first }
+        #expect(firstItem(of: controller.projectsList.topRow) === controller.listsButton)
+        controller.toggleSessionsList(nil)
+        #expect(firstItem(of: controller.projectsList.topRow) === controller.listsButton)
+        controller.toggleProjectsList(nil)
+        #expect(firstItem(of: controller.contentPane.topRow) === controller.listsButton)
+        #expect(controller.listsButton.toolTip == "Show Projects")
+        controller.toggleSessionsList(nil)
+        #expect(firstItem(of: controller.sessionsList.topRow) === controller.listsButton)
+        controller.listsButton.performClick(nil)
+        #expect(!controller.projectsItem.isCollapsed && firstItem(of: controller.projectsList.topRow) === controller.listsButton)
+        #expect(controller.listsButton.toolTip == "Hide Projects" && firstItem(of: controller.sessionsList.topRow) !== controller.listsButton)
     }
 }
