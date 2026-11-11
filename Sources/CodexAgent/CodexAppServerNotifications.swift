@@ -1,0 +1,47 @@
+import AgentConversation
+
+/// The lines that the app-server starts: notifications, and lines that
+/// OpenRun cannot read.
+extension CodexAppServer {
+    func receive(_ incoming: CodexMessageReader.Incoming) async {
+        switch incoming {
+        case .message(.notification(let method, let parameters), let line):
+            await notification(method, parameters, line: line)
+        case .message:
+            // An answer after its time limit, or the refusal of a line that
+            // Codex could not read. No caller waits for it.
+            break
+        case .unreadable(let unknown, let line):
+            for state in threads.values { await state.send([.unknown(unknown)], line: line) }
+        }
+    }
+
+    func notification(_ method: String, _ parameters: JSONValue, line: SourceLine) async {
+        guard let thread = Self.threadIdentifier(of: parameters) else {
+            for identifier in threads.keys { await deliver(method, parameters, line: line, to: identifier) }
+            return
+        }
+        await deliver(method, parameters, line: line, to: thread)
+    }
+
+    /// Maps a notification with the mapper of the thread. A method that
+    /// the mapper does not know gives an unknown event with the line.
+    func deliver(_ method: String, _ parameters: JSONValue, line: SourceLine, to thread: String) async {
+        guard threads[thread] != nil else { return }
+        let kinds = threads[thread]?.mapper.events(method: method, parameters: parameters)
+            ?? [.unknown(UnknownLine(reason: .unknownKind, kind: method, text: line.text, byteCount: line.byteCount))]
+        await threads[thread]?.send(kinds, line: line)
+    }
+
+    /// Opens a thread with its first events.
+    func open(_ thread: String, first: [ConversationEventKind]) async -> CodexEventChannel {
+        let state = threads[thread] ?? CodexThreadState(channel: CodexEventChannel(limit: options.eventLimit))
+        threads[thread] = state
+        for kind in first { state.channel.add(ConversationEvent(kind)) }
+        return state.channel
+    }
+
+    static func threadIdentifier(of parameters: JSONValue) -> String? {
+        parameters["threadId"]?.string ?? parameters["thread"]?["id"]?.string
+    }
+}

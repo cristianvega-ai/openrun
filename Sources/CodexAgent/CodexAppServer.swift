@@ -9,6 +9,7 @@ import AgentProgram
 public actor CodexAppServer {
     let connection: CodexConnection
     let options: CodexServerOptions
+    var threads: [String: CodexThreadState] = [:]
     var isShuttingDown = false
     /// Whether the app-server ended. A new thread then needs a new server.
     public private(set) var hasEnded = false
@@ -56,6 +57,4 @@ public actor CodexAppServer {
     func ended(_ end: ProcessEnd) async {
         hasEnded = true
     }
-
-    func receive(_ incoming: CodexMessageReader.Incoming) async {}
 }
