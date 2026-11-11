@@ -4,6 +4,7 @@
         switch row.kind {
         case .userMessage: UserMessageRowView()
         case .agentText: AgentTextRowView()
+        case .agentCode: CodeBlockRowView()
         default: TranscriptRowView()
         }
     }
