@@ -37,18 +37,19 @@ A module uses another module only through its public types.
 
 | Module | What it does | Public types |
 |---|---|---|
-| `TerminalEmulation` | Wraps libghostty-vt: the screen, the scrollback, snapshots, replies to the queries that programs send, the default colors that a client sets, and the start of a shell's prompt, and the place in a shell's output where a new width starts | `Terminal`, `ShellPromptScanner`, `ShellPromptTracker`, `PromptKeeping`, `LineEditorAnswer`, `LineEditor`, `TerminalSnapshot`, `UnfinishedSequence`, `TerminalSize`, `TerminalCursorPosition`, `ScreenFormat`, `ScreenExtent`, `TerminalReplyHandler`, `TerminalColorScheme`, `TerminalColor`, `TerminalEmulationError`, `PrintableText`, `ViewportRowText` |
+| `TerminalEmulation` | Wraps libghostty-vt: the screen, the scrollback, snapshots, replies to the queries that programs send, the default colors that a client sets, and the start of a shell's prompt, and the place in a shell's output where a new width starts | `Terminal`, `ShellPromptScanner`, `ShellPromptTracker`, `PromptKeeping`, `LineEditorAnswer`, `LineEditor`, `TerminalSnapshot`, `UnfinishedSequence`, `TerminalSize`, `TerminalCursorPosition`, `ScreenFormat`, `ScreenExtent`, `TerminalReplyHandler`, `TerminalColorScheme`, `TerminalColor`, `TerminalEmulationError`, `PrintableText`, `ViewportRowText` |, `TerminalEventHandler`, `KittyNotificationScanner`
 | `TerminalTheme` | The Graphite colors for the light and the dark appearance, and the call that gives them to a terminal | `TerminalTheme` |
 | `TerminalRendering` | Draws a terminal with Metal and CoreText: fonts, glyph textures, shaders, rows, cursor, selection and marked text | `TerminalRenderer`, `FontSet`, `FrameStatistics`, `RenderTarget`, `OffscreenTarget`, `DrawableTarget`, `RenderingError`, `ViewportCellRun` |
 | `TerminalView` | The AppKit view that shows one terminal and handles its input, selection and scrollback | `TerminalView`, `TerminalViewDelegate`, `OptionKeyRule`, `AppearanceThemes` |
-| `PseudoTerminal` | Runs one program on a new pseudo terminal, and names the program in its foreground | `PseudoTerminal`, `ForegroundProgram`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
-| `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
-| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, and the attach conversation | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionIdentifierMatch`, `SessionConnectionError` |
+| `PseudoTerminal` | Runs one program on a new pseudo terminal, and names the program in its foreground, its folder and its terminal mode | `PseudoTerminal`, `ForegroundProgram`, `ForegroundState`, `PseudoTerminalSize`, `ProgramLaunch`, `ProgramExit`, `LoginShell`, `PseudoTerminalError` |
+| `SessionProtocol` | The socket protocol that the session process and all clients share | `ClientMessage`, `ServerMessage`, `ServerCapabilities`, `SessionExit`, `SessionFailure`, `MessageFrame`, `FramedMessage`, `MessageConnection`, `SocketLocation`, `PeerIdentity`, `SessionSummary`, `SessionAlert`, `SessionSize`, `SessionEnvironment`, `SessionProtocolError` |
+| `SessionConnection` | The client side of the socket: connect, greet, requests, the match of a typed identifier, the attach conversation, and the session changes | `SessionClient`, `SessionAttachment`, `SessionAttachmentEvent`, `SessionChangeReceiver`, `SessionIdentifierMatch`, `SessionConnectionError` |
 | `SessionLaunch` | How launchd starts the session process when a client needs it: the names of the launch agent, the wake service of the session process, the wake of clients, and the registration with SMAppService | `LaunchAgentNames`, `SessionWakeService`, `SessionWake`, `SessionWakeFailure`, `LaunchAgentRegistration`, `LaunchAgentStatus` |
 | `UntrustedText` | The rule for a name that a client or a file gives, and the escape of such text in a message | `PlainName`, `QuotedText` |
 | `DataStorage` | The data folder: its location, its files, and the safe write and read of a JSON document | `DataFolder`, `DataFile`, `DataFileScope`, `DataDocument`, `DataReadResult`, `DataStorageError` |
 | `Projects` | The folders that the user adds as projects, their order and names, and the project of a session's start folder | `Project`, `ProjectWithoutFolder`, `ProjectList`, `ProjectFolderPath`, `ProjectStore`, `LoadedProjects`, `ProjectListError` |
 | `Settings` | The settings of version 1: their names, kinds, defaults and text forms, the rule for protected settings, and their file | `SettingName`, `SettingValues`, `SettingRequester`, `OptionKeyBehavior`, `LinkDestination`, `NewSessionCommand`, `SettingsStore`, `LoadedSettings`, `SettingError` |
+| `GitBranch` | Reads the git branch of a folder from the files of git, with no git program | `GitBranch` |
 | `SessionProcess` | The server: sessions, clients, the listening socket, shutdown, the idle exit of the launch agent | `SessionProcess`, `SessionProcessError` |
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
 | `SessionWindow` | Connects one terminal view to one session, owns its window, and offers a session picker | `SessionWindowController`, `SessionStart`, `SessionList` |
@@ -68,6 +69,7 @@ openrun             -> CommandLineTool -> SessionConnection -> SessionProtocol
 openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> SessionLaunch
                                        -> PseudoTerminal
+                                       -> GitBranch
                                        -> TerminalTheme -> TerminalEmulation
                                        -> TerminalEmulation -> libghostty-vt
 openrun-application -> OpenRunApplication -> SessionWindow -> TerminalView
@@ -87,7 +89,7 @@ No program uses `Projects` and `Settings` yet. The session process will own both
 `SessionWindow` also uses `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
-`PseudoTerminal`, `SessionProtocol` and `SessionLaunch` depend on no other OpenRun module. `SessionConnection` depends on `SessionProtocol` and `SessionLaunch`.
+`PseudoTerminal`, `SessionProtocol`, `SessionLaunch` and `GitBranch` depend on no other OpenRun module. `SessionConnection` depends on `SessionProtocol` and `SessionLaunch`.
 So each of the three size types (`TerminalSize`, `PseudoTerminalSize`, `SessionSize`) belongs to one module. `SessionProcess` converts between them at its edge.
 
 The tests follow the same rule. `Tests/SessionProcessHarness` is support code for the integration tests: it starts the real executables and plays the part of a terminal window.
@@ -127,7 +129,8 @@ The rest of `TerminalEmulation` gives a view what it needs to draw the screen an
 - `RenderState` keeps a picture of the visible screen. `update(from:)` reads a `Terminal`. `beginUpdate(from:)` and `endUpdate()` split the update in two, and only the first one reads the terminal. `dirtiness` is a `RenderDirtiness`: `nothing`, `someRows` or `everything`. `markClean()` resets it after a frame. Output that scrolls the screen marks `everything`, although the rows keep their identifiers.
 - `RenderState.forEachRow(onlyChanged:)` gives each `RenderRow` from the top. A row is valid only inside the call. It has a `RowIdentifier` that stays with the row when it moves, `viewportRow`, `isDirty` and `selectedColumns`. `forEachCell(palette:)` gives each `RenderCell`: the text (`base` and `extraScalars`), the `CellWidth`, the `CellStyle` with its `UnderlineStyle`, the resolved colors (`nil` is the default color) and `hasHyperlink`. `colors` is a `RenderColors` and `cursor` is a `RenderCursor` with a `CursorStyle`.
 - `TerminalMode` names the modes that a view reads. `Terminal.isModeEnabled` and `setMode` use them. Swift cannot import the mode macros of libghostty-vt, so each mode number comes from `ghostty_mode_new`. `Terminal` also gives `title`, `pointerShape` (a `PointerShape`), `isMouseTrackingActive` and `kittyKeyboardFlags`.
-- `TerminalEventHandler` holds the closures for the bell, a new title and a render hold (mode 2026). `Terminal.setEventHandler` installs it. It shares the user data pointer with the reply handler (see "Query replies").
+- `TerminalEventHandler` holds the closures for the bell, a new title, a render hold (mode 2026) and a desktop notification (OSC 9 and OSC 777, with at most `notificationByteLimit`, 2048 bytes; libghostty-vt drops a longer OSC). The progress report of ConEmu, `OSC 9 ; 4`, is no notification.
+- `KittyNotificationScanner` finds the notifications of kitty, OSC 99, in output, because libghostty-vt parses them and does not report them. It joins the pieces of one notification (`d=0`), decodes base64 (`e=1`), and returns the body, or the title when there is no body. It ignores the other kinds of OSC 99 and a command longer than 2048 bytes. `Terminal.setEventHandler` installs it. It shares the user data pointer with the reply handler (see "Query replies").
 - `KeyEncoder` turns a `KeyEvent` (a `PhysicalKey`, `KeyModifiers`, text) into bytes. Call `update(from:optionAsAlternate:)` before each key. It sets the Option choice again after libghostty-vt reads the terminal, because that read removes it. `leftOnly` makes the left Option key send Alt. `MouseEncoder` does the same for a `MouseEvent`. Call its `update` only when the modes or the cell size change, because it forgets the last cell. `FocusReport` makes the bytes of mode 1004, and `PasteText` the bytes of a paste. `PasteText` does not use `ghostty_terminal_paste`, because that function needs the write callback.
 - `Terminal.scrollViewport(_:)` takes a `ViewportScroll`. `scrollbar` and `isViewportAtBottom` tell where the viewport is. `selectWord(at:)`, `selectLine(at:)`, `clearSelection()`, `selectedText()` and `hyperlink(at:)` take a `ViewportCell`. `SelectionGesture` turns presses, drags and releases of the pointer into a selection.
 
@@ -206,6 +209,7 @@ The object offers:
 - `write`, for a terminal's answers to queries. It never waits, because the terminal answers while it parses output. The answer joins the backlog even when the backlog is full. When typed input waits for room, the answer goes in right behind that input, because a real terminal sends its bytes in the order it made them. It waits only for the input in front of it, never for room. An answer that waits counts toward the 1 MiB of answers at once (see `waitForAnswerRoom`).
 - `waitForAnswerRoom`, which waits while more than 1 MiB of answers wait for the program. The session calls it after each chunk of output. A program that asks without end and never reads the answers then stops in its own output, as typed input stops at 8 MiB.
 - `resize`, which sets the size with `TIOCSWINSZ`. The kernel sends SIGWINCH to the program.
+- `foregroundState`, a `ForegroundState`: the foreground program, whether it leads the terminal session, its current folder (`proc_pidinfo` with `PROC_PIDVNODEPATHINFO`), and whether the terminal is in line mode (`ICANON`, which `tcgetattr` on the master side reads on macOS). It is nil after the program ended.
 - `foregroundProgram`, the name and the arguments of the program that reads the keys, such as `zsh` at a prompt. It reads the foreground process group from the process information of the program (`e_tpgid`), because `tcgetpgrp` on the master side reports the program's own group on macOS. The arguments come from `KERN_PROCARGS2`. It is nil after the program ended.
 - `writtenOutputByteCount`, the bytes of output that the program has written so far: the bytes read, and the bytes that still wait on the terminal. `TIOCOUTQ` on the master side counts those; `FIONREAD` there always reports zero on macOS.
 - `waitForExit`, which returns a `ProgramExit`.
@@ -238,6 +242,8 @@ The client side of the socket, for the command-line tool and the window of the a
 - `SessionConnectionError` names each failure. Its text names no command or option of a client, so `CommandLineToolError(_:)` gives each error the words of the tool, such as "choose a socket with --socket".
 - A socket that no program listens on (ENOENT or ECONNREFUSED) gives `noSessionProcess`. On the default socket, `SessionClient(location:)` first sends one wake to the launch agent and connects again. A connection that closes before `hello` leads to the same wake, because a launch agent that ends at its idle exit closes such a connection. A wake that fails gives `wakeFailed` with the `SessionWakeFailure`. Tests pass their own wake to `SessionClient(location:wake:)`.
 - `SessionClient.receiveApprovalQuestions` turns the connection into an `ApprovalQuestionReceiver`. Its thread hands each question, the end of each question, and last `closed` or `failed` to a handler. `answer(_:allows:)` sends the user's answer from any thread.
+- `SessionClient.receiveSessionChanges` turns the connection into a `SessionChangeReceiver`. Its thread hands `sessions` first, then each `sessionChanged` and `sessionEnded`, and last `closed` or `failed`. Check `capabilities.sessionChanges` first.
+- `rename(session:to:)`, `raiseAlert(session:text:)` and `clearAlert(session:)` change the facts of a session. See "Facts of a session".
 - `SessionClient(location:helloTimeLimit:)` gives each `hello` a time limit. A `hello` that takes longer throws `protocolFailure(.timedOut)` and sends no wake. The other initializers keep no limit, so `openrun` and the windows wait as long as the session process takes. Only the setup of the app passes a limit.
 
 ### SessionWindow
@@ -258,6 +264,10 @@ The title comes from the terminal's title, or the session folder when the title 
 `MainMenu` makes the native app, File, Edit, View and Window menus. File opens a new session or the session picker; these actions stay disabled until setup is ready. File > Retry Session Process runs the setup again. It is on only when setup has not succeeded and does not run. File > Register Session Process Again is on except while setup runs. It is also off for a nondefault socket, which has no launch agent, and its action does nothing there. Copy, paste and text-size actions reach the focused view through the responder chain.
 Once setup is ready, `ApprovalQuestionConnection` opens the connection for approval questions. It connects again after the session process ends, with a wait that doubles from one second up to 30 seconds, and every 30 seconds after a refusal. `ApprovalQuestionAlerts` shows one question at a time, from a run loop block as `ModalAlert` does, and closes the alert of a question that ends with `abortModal`, since that end comes outside the events of the modal loop. A button chosen after the end sends nothing. `ApprovalQuestionWords` holds the words: the first button denies and takes the keyboard focus, each control character of typed text shows as a sign, such as ⏎ for Return, and each format character, such as a direction override, shows as its code.
 
+### GitBranch
+
+`GitBranch.name(forFolder:)` finds the nearest `.git` at or above the folder. It follows a `.git` file with `gitdir:`, as a worktree has, and reads `HEAD`. `ref: refs/heads/NAME` gives NAME, and a detached head gives the first 7 characters of the commit. It reads at most 4096 bytes of a regular file and does not wait for a named pipe. The nearest `.git` decides, so a broken one gives no branch. It runs no git program, because the session process reads the branch once a second while a session works.
+
 ### SessionProcess
 
 `SessionProcess.run()` listens until SIGTERM, SIGINT or SIGHUP arrives. Internally:
@@ -273,8 +283,12 @@ Once setup is ready, `ApprovalQuestionConnection` opens the connection for appro
 | `ClientConnection` | One client. A thread reads from it, and a serial queue writes to it. It ends the connection when a deadline or a limit is missed, answers a request that it cannot decode, tells the server when the client has left, and closes the socket once neither the thread nor the queue uses it |
 | `ReadAhead` | Holds the reading thread of a client while the frames that were read and not handled are too many. Keeps room for one small control frame, so a client can detach while its input waits |
 | `ConnectionLimits` | Every limit and deadline of a client, in one place. See "Limits and deadlines of a client" |
-| `SessionRegistry` | An actor. The sessions, found by identifier |
-| `Session` | An actor. One program, one `Terminal`, and the attached clients |
+| `SessionRegistry` | An actor. The sessions, found by identifier. It refuses a session past the limit of 100 |
+| `Session` | An actor. One program, one `Terminal`, the attached clients, and the facts of the session |
+| `SessionChangeFeed` | The latest summary of each session and the connections that watch them. It sends each change under one lock, so every watcher gets the same order |
+| `SessionActivity` | Decides whether a session is in progress, and whether a bell raises the alert |
+| `TerminalEvents` | Keeps the bell, the title and the notifications that the terminal reported during one write |
+| `InteractiveShell` | Tells a shell that reads commands from the terminal from a shell that runs a command or a script |
 | `ShutdownSignals` | Turns the stop signals into a value to wait for |
 | `IdleExit` | The time limit of the idle exit of the launch agent, 30 seconds, and the wait for it. See "Launch agent" |
 | `SessionLog` | Writes each line of the log to standard error and to the unified log |
