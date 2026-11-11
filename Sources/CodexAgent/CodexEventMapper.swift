@@ -68,7 +68,7 @@ struct CodexEventMapper: Sendable {
 
     /// A short detail of a status, such as the new state of the thread.
     static func statusDetail(_ parameters: JSONValue) -> String? {
-        if let status = parameters["status"] {
+        if let status = parameters["status"] ?? parameters["thread"]?["status"] {
             let flags = (status["activeFlags"]?.array ?? []).compactMap(\.string)
             return ([status["type"]?.string ?? status.string].compactMap(\.self) + flags).joined(separator: " ")
         }
