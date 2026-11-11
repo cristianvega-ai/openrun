@@ -64,6 +64,8 @@ A module uses another module only through its public types.
 | `ClaudeCodeAgent` | Claude Code in a thread: its command line and environment, the user message line, the decoder of its output, its permission hook, and its history | `ClaudeCodeEnvironment`, `ClaudeCodeHistoryLocation`, `ClaudeCodeHistoryReader`, `ClaudeCodeLaunch`, `ClaudeCodeLaunchError`, `ClaudeCodeOutputDecoder`, `ClaudeCodePermissionHookAnswer`, `ClaudeCodePermissionHookError`, `ClaudeCodePermissionHookRequest`, `ClaudeCodePermissionMode`, `ClaudeCodeToolCallMatcher`, `ClaudeCodeUserMessage`, `ClaudeCodeUserMessageError` |
 | `AgentProgram` | Runs an agent program on pipes in a process group of its own, with flow control, and reads the environment of the user's login shell | `AgentProgram`, `AgentProgramError`, `AgentProgramLaunch`, `LoginShellEnvironment` |
 | `CodexAgent` | Codex in a thread: the client of `codex app-server`, one app-server for each account, the events of its threads, their approvals, stop, usage and history | `CodexAccount`, `CodexAccountServers`, `CodexAppServer`, `CodexHistoryPage`, `CodexPermissionAnswer`, `CodexRequestError`, `CodexSandbox`, `CodexServerLaunch`, `CodexServerOptions`, `CodexStop`, `CodexThread`, `CodexThreadStart`, `CodexTurn` |
+| `MarkdownText` | Markdown as agents write it: its blocks and inline styles while it streams, and their text for display | `MarkdownDocument`, `MarkdownBlock`, `MarkdownBlockKind`, `MarkdownListMarker`, `MarkdownTable`, `MarkdownSpan`, `MarkdownInlineParser`, `MarkdownRenderer`, `MarkdownStyle`, `MarkdownLayoutManager` |
+| `ChatView` | The native chat of an agent thread: the transcript, the composer, the states of a thread, and the interface to its host | `ChatViewController`, `ChatViewControllerDelegate`, `ChatThreadFacts`, `ChatThreadCondition`, `ChatChoice`, `ChatAccount`, `ChatOutgoingMessage`, `ChatPermissionAnswer`, `ChatAppearance`, `ChatColors`, `ChatColor` |
 
 The programs in `Sources/openrun`, `Sources/openrun-session` and `Sources/openrun-application` read their start-up input and call `CommandLineTool`, `SessionProcess` and `OpenRunApplication`. They hold no other logic.
 
@@ -102,6 +104,9 @@ CodexAgent        -> AgentConversation
                   -> AgentProgram -> PseudoTerminal
                   -> PseudoTerminal
 AgentProgram      -> PseudoTerminal
+ChatView          -> AgentConversation
+                  -> MarkdownText
+                  -> TerminalTheme -> TerminalEmulation
 ```
 
 The session process owns the projects and the settings. Every client reads and changes them through the socket. The tool uses `Projects` only for `ProjectFolderPath`, to find the project of a folder that the user typed, and `Settings` only for the message about an unknown name.
@@ -109,6 +114,7 @@ The session process owns the projects and the settings. Every client reads and c
 `UntrustedText`, `DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
 No program uses `AgentConversation`, `ClaudeCodeAgent`, `CodexAgent` and `AgentProgram` yet. The session process will join them.
 `AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. `CodexAgent` starts its app-server through `AgentProgram`, and uses only `ProgramExit` of `PseudoTerminal`. None of the four uses AppKit (proposal 13 of 2026-11-10).
+No program uses `ChatView` yet. The main window will show it in the third pane.
 
 `SessionPane` and `SessionWindow` also use `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionPane` and `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color. `MainWindow` also uses `PaneAppearance`, and `PaneAppearance` uses `TerminalEmulation` for the colors. No app module uses `MainWindow` yet: the app still opens one `SessionWindow` for each session. `MainWindow` does not use `SessionPane`: a host gives the third pane any view, such as `paneView` of a `SessionPaneController`.
 
@@ -614,6 +620,23 @@ Special steps play an answer that never comes, the end of the connection while a
 After the last step, each request gets an empty answer, and the end of its input ends the fake.
 The tests in `CodexAgentTests` run it through `AgentProgram`, the server and a transcript. Faster tests play the same fixtures on a transport in memory.
 The fixtures come from real runs of Codex 0.167.0, with everything that describes the owner removed. `FixturePrivacyTests` scans them too. Its rules for Codex allow only the made-up forms of the identifiers of reasoning items, credits and commands, and only the made-up date of a rollout file.
+
+### Chat view
+
+`ChatView` shows one thread. It knows no agent, no process and no socket: it uses no `SessionProtocol`, `SessionConnection` or `SessionProcess`, and no module of the main window.
+The host makes a `ChatViewController` with the `ChatThreadFacts` of the thread, gives it each new `Transcript` with the `TranscriptChange` of the event, and puts its view in the pane. The controller asks the host for every action through `ChatViewControllerDelegate`: send, stop, the answer to a permission request, a change of the model or the mode, the earlier history, Open in Terminal, and a link. It never acts by itself.
+`ChatAppearance` holds the colors and the fonts. Its default is Graphite, the colors of `TerminalTheme`, and the code font is the font of the terminal.
+
+`TranscriptRowBuilder` turns the items into rows. An agent message splits into text rows and code rows, and a run of tool calls is one row. It parses again only the messages that a change names.
+`TranscriptView` keeps a view only for the rows near the screen. `RowLayout` keeps the height of each row, estimated until the row comes near the screen, and the tops as a running sum from the first row that changed. So an update at the end costs the same at 10,000 items as at 10.
+While the user is at the bottom, the view follows the newest row. Otherwise the row that the user reads stays at its place when rows above it change their height or open.
+Each row uses TextKit 1, because TextKit 2 does not show the tables of Markdown. `MarkdownLayoutManager` draws inline code as a box around the letters.
+
+The composer keeps a draft for each thread in memory. While a turn runs, a sent message waits, and the next message joins it.
+Find (Command-F) searches the text of every row, also the rows with no view, and the newest match comes first.
+
+The tests draw pictures of the chat only when `OPENRUN_RENDER_OUTPUT` names a folder. They draw into a bitmap, so they work while the screen is locked, but a picture shows no shadow and no running animation.
+`ChatReplayTests` play the recorded turns of Claude Code one event at a time. `ChatSpeedTests` measure the chat in a debug build on an M-series Mac: an update of a stream on 2,000 items takes about 4 ms, the first show of 10,000 items 80 ms, the open of an output of 10,000 lines 5 ms, and a step of a resize 1.3 ms. A full draw of the pane into a bitmap takes about 34 ms. A frame on the screen draws only the rows that changed.
 
 ## Launch agent
 
