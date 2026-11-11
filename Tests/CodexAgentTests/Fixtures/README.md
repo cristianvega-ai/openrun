@@ -22,6 +22,7 @@ The tests that read the output alone take the `server` lines in order.
 | `handshake.jsonl` | `initialize` with the experimental capability, the answer, `initialized`, and the notifications that come before any thread. |
 | `thread-start.jsonl` | A new thread in a folder: the answer with the thread, `thread/started`, and the start of an MCP server. |
 | `plain-turn.jsonl` | A plain answer: the user message, text that streams, the token usage, the usage of the account, and the end of the turn. |
+| `command-accepted.jsonl` | A command that needs approval: the request of the app-server, the answer `accept`, the end of the command, and the answer of the agent. |
 
 ## What was replaced
 
