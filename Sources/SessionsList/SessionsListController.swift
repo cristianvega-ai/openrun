@@ -21,7 +21,7 @@ public final class SessionsListController: NSObject {
     let newSessionButton: NSButton
     let table = SessionsTableView()
     let emptyView = SessionsEmptyView()
-    let scroll = NSScrollView()
+    let scroll = OverlayScrollView()
     var rows: [SessionsListRow] = []
     /// The time for the ages of the rows. Tests set it.
     var now: () -> Date = { Date() }

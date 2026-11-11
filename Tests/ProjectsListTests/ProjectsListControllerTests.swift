@@ -9,6 +9,8 @@ import Testing
         #expect(list.table.numberOfRows == 6 && list.selection == .allSessions && host.selections.isEmpty)
         #expect(list.cell(at: 1)?.name.stringValue == "Needs You" && list.cell(at: 2)?.name.stringValue == "openrun")
         #expect(list.cell(at: 5)?.name.stringValue == "No Project")
+        list.scroll.scrollerStyle = .legacy
+        #expect(list.scroll.scrollerStyle == .overlay)
     }
 
     @Test func aSelectionByTheUserReachesTheHost() {

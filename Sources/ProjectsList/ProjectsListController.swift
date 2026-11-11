@@ -14,7 +14,7 @@ public final class ProjectsListController: NSObject {
     public weak var delegate: ProjectsListDelegate?
     public internal(set) var content = ProjectsListContent()
     let table = ProjectsTableView()
-    let scroll = NSScrollView()
+    let scroll = OverlayScrollView()
     let addButton: NSButton
     var rows = ProjectsListRow.rows(for: ProjectsListContent())
     /// The table selects a row while it shows a change, and that is no choice of the user.

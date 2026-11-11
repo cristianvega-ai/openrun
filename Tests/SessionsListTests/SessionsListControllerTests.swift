@@ -32,6 +32,8 @@ import Testing
         let cell = try #require(list.cell(at: 0))
         let title = list.titleLabel.superview!.convert(list.titleLabel.alignmentRect(forFrame: list.titleLabel.frame), to: list.view)
         #expect(cell.icon.imageAlignment == .alignLeft)
+        list.scroll.scrollerStyle = .legacy
+        #expect(list.scroll.scrollerStyle == .overlay)
         #expect(cell.convert(cell.icon.frame, to: list.view).minX == title.minX)
     }
 

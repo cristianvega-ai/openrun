@@ -54,7 +54,7 @@ A module uses another module only through its public types.
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
 | `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneDelegate`, `SessionStart` |
 | `SessionWindow` | One window around one session pane, and a session picker | `SessionWindowController`, `SessionList` |
-| `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, and the selected row of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView` |
+| `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, the selected row and the scroll view of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView`, `OverlayScrollView` |
 | `ListUpdates` | The rows of a list that changed between two contents, so a table updates them in place | `RowChanges` |
 | `ProjectsList` | The first pane of the main window: All Sessions, Needs You, the projects and No Project | `ProjectsListController`, `ProjectsListDelegate`, `ProjectsListContent`, `ProjectDisplay`, `ProjectsListEntry` |
 | `SessionsList` | The second pane of the main window: the threads with agents and the terminal sessions as vertical tabs | `SessionsListController`, `SessionsListDelegate`, `SessionsListContent`, `SessionRowDisplay`, `SessionKind`, `SessionsFilter`, `SessionsOrder`, `NewSessionRequest` |
@@ -288,7 +288,7 @@ The title comes from the terminal's title, or the session folder when the title 
 
 ### PaneAppearance
 
-`PaneColor` gives the colors of the Graphite theme to AppKit as dynamic colors, so a pane changes at once with the appearance. With Increase Contrast, the dividers and quiet text take stronger colors. `PaneBackgroundView` paints one pane color. `PaneTopRow` is the top row of a pane: 52 points high, the height of the unified toolbar, so its controls sit on the middle line of the traffic lights. A press on its empty part moves the window, and a double click does what the user chose in System Settings. It paints only its own bounds, because views do not clip to their bounds since macOS 14. `PaneButton` makes a borderless outline symbol button in the quiet text color, with a name for VoiceOver. `SelectedRowView` draws the selection as a soft rounded rectangle, quieter when the window is not key.
+`PaneColor` gives the colors of the Graphite theme to AppKit as dynamic colors, so a pane changes at once with the appearance. With Increase Contrast, the dividers and the quiet text take the color of the text, and the selection is clearly stronger. `PaneBackgroundView` paints one pane color. `PaneTopRow` is the top row of a pane: 52 points high, the height of the unified toolbar, so its controls sit on the middle line of the traffic lights. A press on its empty part moves the window, and a double click does what the user chose in System Settings. It paints only its own bounds, because views do not clip to their bounds since macOS 14. `PaneButton` makes a borderless outline symbol button in the quiet text color, with a name for VoiceOver. `SelectedRowView` draws the selection as a soft rounded rectangle, quieter when the window is not key. `OverlayScrollView` keeps thin overlay scrollers in the lists when the user asks for legacy ones.
 
 ### ListUpdates
 
