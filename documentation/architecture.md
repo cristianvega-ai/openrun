@@ -408,6 +408,69 @@ A frame body is read as its bytes arrive. A frame that announces 64 MiB and send
 On macOS a failed accept drops the connection that waited. Without the pause, the listener dropped every waiting client at once when the process ran out of descriptors. With it, at most one is dropped in each pause, and the others are served when descriptors free up.
 A write uses the socket's send timeout (`SO_SNDTIMEO`) for its deadline, because `MSG_DONTWAIT` does not keep a send on a Unix socket of macOS from blocking. Every send passes `MSG_NOSIGNAL`, because the system refuses `SO_NOSIGPIPE` on a socket whose peer has already closed.
 
+## Agent threads
+
+An agent thread is a chat with one agent, one account and one model (proposal 1 of 2026-11-10).
+Three modules hold the parts that the session process will join: `AgentConversation`, the model; `ClaudeCodeAgent`, the adapter of Claude Code; and `AgentProgram`, the process on pipes.
+No program uses them yet.
+
+### The event model
+
+An adapter turns each line of its agent's output into `ConversationEvent` values. The kinds are the same for every agent (`ConversationEventKind`): the start of the agent, a user message, the start and end of a turn, text and thinking, tool calls with their input, output, result and refusal, file changes, the tasks of sub-agents, permission requests, the usage of the account, notices, the status of the agent, the end of its process, and a line that this version cannot read.
+Each event keeps the start of its source line, at most 16 KiB (`SourceLine`), so a later version can read again what this one did not understand (proposal 4).
+A line of a kind that the adapter does not know becomes an `unknown` event, and the stream goes on. So do a line that is not JSON, a line longer than its limit, and a line that the output cuts short.
+
+`Transcript` is a pure value. It applies the events in order and gives the items that a chat shows, and the state of the thread for the list of threads (`ThreadState`). The same events always give the same items with the same identifiers, so the session process, the app and a test agree.
+Text that streams grows one item, and the complete text replaces it. The end of a turn closes the items that are still open.
+`TranscriptLimits` bound its memory, whatever the agent sends: at most 5,000 items and 8 MiB of text, 1 MiB for one message, and 256 KiB for one detail, such as the output of a tool. The oldest items go first.
+
+### The Claude Code adapter
+
+`ClaudeCodeLaunch` makes the command line. Each flag has a reason:
+
+| Flag | Why |
+|---|---|
+| `-p` | Runs without the terminal interface. |
+| `--input-format stream-json` | Takes user messages as JSON lines on standard input, so one process takes many turns. |
+| `--output-format stream-json`, `--verbose` | Writes every event as one JSON line. `stream-json` output needs `--verbose`. |
+| `--include-partial-messages` | Streams text and tool input as they come, not only when a message is complete. |
+| `--replay-user-messages` | Echoes each user message with its identifier, which marks the message as taken. |
+| `--model`, `--permission-mode` | The model and the mode of the thread. `bypassPermissions` is never given. |
+| `--permission-prompts none` | Claude Code asks nothing itself. Every question goes to the hook. |
+| `--settings` | Adds the `PermissionRequest` hook for this run only, with `"onFailure": "block"` and a limit of 24 hours. The user's own settings, hooks, plugins, MCP servers and CLAUDE.md stay in force. |
+| `--session-id`, `--resume` | `--session-id` starts a new conversation with the identifier that OpenRun chose. `--resume` continues it at every later start. |
+
+`ClaudeCodeEnvironment` removes the variables that make Claude Code act as a run inside another run, such as `CLAUDECODE` and `CLAUDE_CODE_MESSAGING_*`. `CLAUDE_CONFIG_DIR` stays, because it selects the account.
+`ClaudeCodeUserMessage` makes the line of a user message, with text and images. OpenRun sends no control request.
+
+`ClaudeCodeOutputDecoder` takes the output in pieces of any size and gives events. A line can hold at most 16 MiB.
+Text, thinking and tool input stream with item identifiers made from the message identifier and the block index. The complete block of a message takes the identifier of the first streamed block of the same kind. Thus a block that streamed nothing, such as hidden thinking, does not shift the others.
+A `result` line ends the turn: done, stopped when Claude Code reports an abort, or failed with the error text. A line from a sub-agent becomes a message of its task.
+
+The hook program, `openrun permission-request`, reads `ClaudeCodePermissionHookRequest` from its standard input and writes `ClaudeCodePermissionHookAnswer` to its standard output.
+The request names no tool call. `ClaudeCodeToolCallMatcher` finds the call that the request is for: the oldest open call with the same tool name and input. The end of a turn or of the process clears the open calls, and it keeps at most 256.
+
+`ClaudeCodeHistoryLocation` finds the history file of a conversation: `projects/FOLDER/IDENTIFIER.jsonl` in the configuration folder. `FOLDER` is the working folder with each character that is not an ASCII letter or digit changed to `-`. When that file does not exist, it tries the real path of the folder, and then every project folder.
+`ClaudeCodeHistoryReader` reads that file from its end, one page of 256 KiB at a time, so a chat shows the newest turns first and never reads the whole file. It leaves out the lines of sub-agents and the lines that Claude Code adds for itself. OpenRun keeps no copy of the history (proposal 3).
+
+### The process on pipes
+
+`AgentProgram` starts an agent program with `posix_spawn` on three pipes, in a process group of its own. The program inherits no other descriptor, and it gets only the environment of its `AgentProgramLaunch`.
+The output comes as an `AsyncStream`. Reads stop while more than 4 MiB waits that the reader has not marked as consumed, and they start again below 1 MiB. The program then waits in its own write. The newest 64 KiB of standard error stay for a message when the program fails.
+Writes to standard input do not block a thread. They wait in order until the pipe takes them, and they fail when the program ends.
+`send(signal:)` signals the whole group, so SIGINT stops a turn with the commands that the agent started. `terminate` sends SIGTERM, and SIGKILL after a grace period.
+When the program ends, `ProcessGroupReaper` waits for it without reaping it. The zombie keeps the number of the group, so no signal can reach another program. It ends the rest of the group: SIGTERM, then SIGKILL after one second, for at most two seconds. Then it reaps the program. No zombie stays.
+
+`LoginShellEnvironment` runs the user's login shell one time as `SHELL -l -i -c`, with standard input closed, and reads the environment that it prints between two markers. The shell gets 10 seconds and 1 MiB of output. On a failure the caller uses its own environment.
+
+### The fake agent
+
+The tests never start the real `claude`, because it spends the owner's subscription.
+`Tests/FakeAgent` builds the program `fake-agent`. It refuses any command line that `ClaudeCodeLaunch` does not make, and the variable `CLAUDECODE`, with the exit status 64.
+It answers each user message line with a recorded turn from `Tests/ClaudeCodeAgentTests/Fixtures`. It puts in the identifier of the conversation and echoes the user message as Claude Code does. `FAKE_AGENT_MODE` selects a special case: a conversation that does not exist, a turn that waits for SIGINT, a line cut short, a crash, or a flood of text.
+`FakeAgentTests` run it through `AgentProgram`, the decoder and a transcript.
+The fixtures come from real runs of Claude Code 2.1.322, with everything that describes the owner removed. `FixturePrivacyTests` scans them.
+
 ## Launch agent
 
 OpenRun.app registers the session process as a launch agent with SMAppService (`LaunchAgentRegistration`). The property list is `Bundle/ai.cristianvega.openrun.session.plist`, and the bundle script copies it to `Contents/Library/LaunchAgents`. A test compares it with `LaunchAgentNames`.
