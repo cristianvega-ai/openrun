@@ -34,6 +34,7 @@ The tests that read the output alone take the `server` lines in order.
 | `never-answers.jsonl` | Made by hand: a thread start that gets no answer. |
 | `cut-line.jsonl` | Made by hand from `plain-turn.jsonl`: the output stops in the middle of a line, and the app-server fails. |
 | `crash.jsonl` | Made by hand from `plain-turn.jsonl`: the app-server is killed in the middle of the turn. |
+| `unknown-model.jsonl` | A turn in the resumed thread with a model that the account cannot use: a warning, an error, and a failed turn. |
 | `unknown-thread.jsonl` | The resume of a thread that Codex does not know, and its refusal. |
 
 ## What was replaced
