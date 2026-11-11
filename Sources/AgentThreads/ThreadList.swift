@@ -8,6 +8,8 @@ public struct ThreadList: Equatable, Sendable {
     /// More threads than a user keeps, and few enough for one small file.
     public static let countLimit = 1_000
     public static let nameLengthLimit = 100
+    /// The most characters of the first user message that stay as the title.
+    public static let titleLengthLimit = 80
     static let wordLengthLimit = 100
     static let folderLengthLimit = 4_096
 
@@ -48,11 +50,21 @@ public struct ThreadList: Equatable, Sendable {
         record.name = record.name?.trimmingCharacters(in: .whitespacesAndNewlines)
         if record.name?.isEmpty == true { record.name = nil }
         if let name = record.name, !PlainName.isValid(name, lengthLimit: nameLengthLimit) { throw ThreadListError.invalidName }
+        record.title = record.title.map(title(from:))
         guard record.folder.hasPrefix("/"), record.folder.utf8.count <= folderLengthLimit, !record.folder.unicodeScalars.contains(where: { $0.value == 0 })
         else { throw ThreadListError.invalidFolder }
         guard isWord(record.model) else { throw ThreadListError.invalidModel }
         guard isWord(record.permissionMode) else { throw ThreadListError.invalidPermissionMode }
         return record
+    }
+
+    /// The start of a message as one plain line, for the title of a thread.
+    public static func title(from message: String) -> String {
+        let plain = message.unicodeScalars.map { scalar -> Character in
+            PlainName.isValid(String(scalar), lengthLimit: 1) ? Character(scalar) : " "
+        }
+        let words = String(plain).split(separator: " ", omittingEmptySubsequences: true).joined(separator: " ")
+        return String(words.prefix(titleLengthLimit))
     }
 
     /// A model or a mode: a short word that cannot pass for a flag of the agent.
