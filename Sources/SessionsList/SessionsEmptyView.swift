@@ -12,14 +12,18 @@ final class SessionsEmptyView: NSView {
         super.init(frame: .zero)
         (message.font, message.textColor, message.alignment) = (.systemFont(ofSize: NSFont.systemFontSize), PaneColor.quietText, .center)
         startButton.controlSize = .small
-        let stack = NSStackView(views: [message, startButton])
-        (stack.orientation, stack.spacing) = (.vertical, 10)
-        stack.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(stack)
+        for view in [message, startButton] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            addSubview(view)
+        }
+        // The message, not the message with the button, is in the middle, so
+        // it is on one line with the empty message of the third pane.
         NSLayoutConstraint.activate([
-            stack.centerXAnchor.constraint(equalTo: centerXAnchor),
-            stack.centerYAnchor.constraint(equalTo: centerYAnchor),
-            stack.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
+            message.centerXAnchor.constraint(equalTo: centerXAnchor),
+            message.centerYAnchor.constraint(equalTo: centerYAnchor),
+            message.leadingAnchor.constraint(greaterThanOrEqualTo: leadingAnchor, constant: 16),
+            startButton.centerXAnchor.constraint(equalTo: centerXAnchor),
+            startButton.topAnchor.constraint(equalTo: message.bottomAnchor, constant: 10),
         ])
     }
 

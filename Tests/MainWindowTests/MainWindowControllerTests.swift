@@ -1,6 +1,7 @@
 import AppKit
 import Testing
 @testable import MainWindow
+@testable import SessionsList
 
 @MainActor @Suite struct MainWindowControllerTests {
     @Test func thePanesLieSideBySideWithAShadowAtEachEdge() {
@@ -46,5 +47,16 @@ import Testing
         #expect(controller.contentPane.topRow.leadingSpace == 8)
         controller.showContent(nil)
         #expect(controller.contentPane.topRow.leadingSpace == 16)
+    }
+
+    /// The two empty messages sit on one line across the window.
+    @Test func theEmptyMessagesShareOneLine() {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.sessionsList.show(SessionsListContent(title: "All Sessions", rows: [], agents: []))
+        controller.window.layoutIfNeeded()
+        let sessions = controller.sessionsList.emptyView.message, content = controller.contentPane.emptyLabel
+        #expect(!sessions.isHidden && !content.isHidden)
+        #expect(sessions.convert(sessions.bounds, to: nil).midY == content.convert(content.bounds, to: nil).midY)
     }
 }
