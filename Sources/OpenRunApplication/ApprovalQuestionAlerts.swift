@@ -16,6 +16,9 @@ final class ApprovalQuestionAlerts {
 
     private var waiting: [ApprovalQuestion] = []
     private var shown: (identifier: UUID, alert: NSAlert)?
+    /// The shown question ended. A button that the user chooses after that
+    /// sends nothing.
+    private var shownHasEnded = false
     private let answer: Answer
     private let runModal: RunModal
     private let stopModal: StopModal
@@ -33,11 +36,17 @@ final class ApprovalQuestionAlerts {
             showNextLater()
         case .ended(let identifier):
             waiting.removeAll { $0.identifier == identifier }
-            if let shown, shown.identifier == identifier { stopModal(shown.alert) }
+            if let shown, shown.identifier == identifier {
+                shownHasEnded = true
+                stopModal(shown.alert)
+            }
         case .closed, .failed:
             // The session process has ended the questions of this connection.
             waiting.removeAll()
-            if let shown { stopModal(shown.alert) }
+            if let shown {
+                shownHasEnded = true
+                stopModal(shown.alert)
+            }
         }
     }
 
@@ -58,11 +67,15 @@ final class ApprovalQuestionAlerts {
         alert.messageText = words.title
         alert.informativeText = words.message
         for button in words.buttons { alert.addButton(withTitle: button) }
+        // With keyboard navigation on, Space chooses the focused button.
+        alert.layout()
+        alert.window.initialFirstResponder = alert.buttons.first
         shown = (question.identifier, alert)
+        shownHasEnded = false
         NSApp.requestUserAttention(.criticalRequest)
         let response = runModal(alert)
         shown = nil
-        switch response {
+        switch shownHasEnded ? .abort : response {
         case .alertFirstButtonReturn: answer(question.identifier, false)
         case .alertSecondButtonReturn: answer(question.identifier, true)
         default: break
@@ -70,7 +83,9 @@ final class ApprovalQuestionAlerts {
         if !waiting.isEmpty { showNextLater() }
     }
 
+    /// The end of a question comes in a block of the main queue, not in an
+    /// event of the modal loop, so `abortModal` ends the loop at once.
     static func stopStandardModal(_ alert: NSAlert) {
-        if NSApp.modalWindow === alert.window { NSApp.stopModal(withCode: .abort) }
+        if NSApp.modalWindow === alert.window { NSApp.abortModal() }
     }
 }

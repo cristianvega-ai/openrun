@@ -26,6 +26,7 @@ import Testing
             answers.withLock { $0.append("\(identifier == first.identifier ? "first" : "second") \(allows)") }
         }, runModal: { alert in
             titles.append(alert.buttons.map(\.title).joined(separator: ","))
+            #expect(alert.window.initialFirstResponder === alert.buttons.first)
             return titles.count == 1 ? .alertSecondButtonReturn : .alertFirstButtonReturn
         }, stopModal: { _ in })
         alerts.handle(.question(first))
@@ -35,7 +36,8 @@ import Testing
         #expect(titles == ["Don't Allow,Allow", "Don't Allow,Allow"])
     }
 
-    /// A question that ends while it waits or while it shows gets no answer.
+    /// A question that ends while it waits or while it shows gets no answer,
+    /// also when the user chooses Allow after the end.
     @Test func aQuestionThatEndsGetsNoAnswer() async {
         _ = NSApplication.shared
         let answers = Mutex<[UUID]>([])
@@ -48,7 +50,7 @@ import Testing
             shownCount += 1
             alerts.handle(.ended(waiting.identifier))
             alerts.handle(.ended(shown.identifier))
-            return stopped ? .abort : .alertSecondButtonReturn
+            return .alertSecondButtonReturn
         }, stopModal: { _ in stopped = true })
         alerts.handle(.question(shown))
         alerts.handle(.question(waiting))
