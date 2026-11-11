@@ -60,6 +60,7 @@ let package = Package(
         .target(name: "PseudoTerminal"),
         // The git branch of a folder, read from the files of its repository.
         .target(name: "GitBranch"),
+        .testTarget(name: "GitBranchTests", dependencies: ["GitBranch"]),
         // How launchd starts the session process when a client needs it:
         // the names of the launch agent, its wake service, and the wake.
         .target(name: "SessionLaunch"),
