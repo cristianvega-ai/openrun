@@ -52,6 +52,11 @@ extension Workspace {
         window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry), terminalCommands: commands))
         window.sessionsList.select(layout.selectedRow)
         showSelectedRow()
+        // The third pane has the title of its row, so the user reads one
+        // name for a session in both places.
+        if shownSession != nil, let row = content.rows(of: .allSessions).first(where: { $0.identifier == layout.selectedRow }) {
+            window.updateContentTitle(row.title)
+        }
         updateBadge(content.projects.needsYouCount)
         if layout != savedLayout {
             savedLayout = layout

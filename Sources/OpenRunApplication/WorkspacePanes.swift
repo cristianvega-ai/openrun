@@ -23,9 +23,9 @@ extension Workspace: SessionPaneDelegate, MainWindowDelegate {
         }
     }
 
-    func sessionPane(_ pane: SessionPaneController, didChangeTitle title: String) {
-        if panes.session(of: pane) == shownSession { window.updateContentTitle(title) }
-    }
+    /// The title of the third pane is the title of its row, which the
+    /// feed brings with the facts of the session.
+    func sessionPane(_ pane: SessionPaneController, didChangeTitle title: String) {}
 
     func sessionPaneDidChangeMinimumSize(_ pane: SessionPaneController) {
         if panes.session(of: pane) == shownSession { window.updateContentMinimumSize(pane.minimumSize) }

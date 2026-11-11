@@ -18,17 +18,19 @@ import Testing
         return (test, shown, other)
     }
 
-    @Test func theThirdPaneShowsTheTitleOfTheShownSessionOnly() async throws {
+    @Test func theThirdPaneShowsTheTitleOfTheRowOfTheShownSession() async throws {
         let (test, shown, other) = try await startWithTwoShells()
         defer { test.stop() }
         let workspace = test.workspace, title = workspace.window.contentPane.titleLabel
         let pane = try #require(workspace.panes.existing(shown)), view = try #require(pane.terminalView)
         pane.terminalView(view, send: Array("printf '\\033]2;Build log\\007'\r".utf8))
-        #expect(await waitUntil { title.stringValue == "Build log" })
+        #expect(await waitUntil { title.stringValue == "Build log" && test.rowTitles.last == "Build log" })
+        _ = try test.process.runCommand(["rename", SessionSummary.text(for: shown), "Release"])
+        #expect(await waitUntil { title.stringValue == "Release" })
         workspace.select(row: other)
         #expect(await waitUntil { workspace.panes.existing(other)?.terminalView != nil })
         let otherTitle = title.stringValue
-        #expect(otherTitle != "Build log")
+        #expect(otherTitle == test.rowTitles.first && otherTitle != "Release")
         // The pane that the window does not show stays attached, and its title does not reach the window.
         pane.terminalView(view, send: Array("printf '\\033]2;Hidden\\007'\r".utf8))
         #expect(await waitUntil { pane.title == "Hidden" })
