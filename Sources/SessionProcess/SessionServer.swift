@@ -12,7 +12,7 @@ actor SessionServer {
     let registry: SessionRegistry
     private let questions = ApprovalQuestions()
     private let changes = SessionChangeFeed()
-    private let answererRequirement: AnswererRequirement
+    let answererRequirement: AnswererRequirement
     private let projects: ProjectKeeper
     private let settings: SettingKeeper
     let threads: ThreadRegistry
@@ -353,10 +353,10 @@ actor SessionServer {
                     break
                 }
                 if let answer = await answer(threadRequest: received.message, from: client, peer: peer, attached: &attachedThread) { client.send(answer) }
-            case .requestToolPermission, .answerToolPermission:
-                // The question to the user comes in the next commits. Until
-                // then no tool call gets a permission.
-                client.send(.toolPermissionAnswer(allows: false, message: "OpenRun cannot ask the user yet."))
+            case .requestToolPermission(let request):
+                client.send(await answer(permissionRequest: request, from: peer))
+            case .answerToolPermission(let thread, let request, let allows, let message):
+                client.send(await answerPermission(request, ofThread: thread, allows: allows, message: message, from: peer))
             }
             client.markHandled(received)
         }

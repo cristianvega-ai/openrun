@@ -1,5 +1,6 @@
 import AgentConversation
 import AgentThreads
+import ClaudeCodeAgent
 import Foundation
 import SessionProtocol
 
@@ -42,6 +43,37 @@ extension SessionServer {
         } catch {
             return Self.refusal("\(error)")
         }
+    }
+
+    /// The permission hook of an agent asks for the user. Only a program
+    /// that the agent of a thread started may ask, and its request goes
+    /// to that thread. The answer waits for the end of the request. When
+    /// the hook leaves, this task is cancelled, and the request ends.
+    func answer(permissionRequest payload: Data, from peer: PeerProcess) async -> ServerMessage {
+        guard let thread = await threads.thread(startedProcess: peer.processIdentifier), let runner = try? await threads.runner(for: thread),
+              let request = try? ClaudeCodePermissionHookRequest(decoding: payload) else {
+            return Self.refusal("Only the permission hook of an agent thread may ask for a permission.")
+        }
+        switch await runner.askPermission(request) {
+        case .allow: return .toolPermissionAnswer(allows: true)
+        case .deny(let message): return .toolPermissionAnswer(allows: false, message: message)
+        }
+    }
+
+    /// The answer of the user. Only OpenRun.app, signed and outside every
+    /// session and every thread, can give it, as for an approval question.
+    /// Any program of the user can reach the socket, so an agent could
+    /// else allow its own request (proposal 2 of 2026-11-10).
+    func answerPermission(_ request: String, ofThread thread: UUID, allows: Bool, message: String?, from peer: PeerProcess) async -> ServerMessage {
+        let isApplication = Self.acceptsAnswerer(
+            at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken))
+        guard isApplication, await threads.thread(startedProcess: peer.processIdentifier) == nil else {
+            return Self.refusal("Only OpenRun.app answers a permission request.")
+        }
+        guard let runner = try? await threads.runner(for: thread), await runner.answerPermission(request, allows: allows, message: message) else {
+            return Self.refusal("That permission request does not wait for an answer.")
+        }
+        return .acknowledged
     }
 
     /// Attaches a client to a thread: the summary first, then what the
