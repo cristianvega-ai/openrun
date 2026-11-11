@@ -4,7 +4,7 @@ import SessionsList
 
 @Suite struct SessionsArrangementTests {
     private func row(_ title: String, inProgress: Bool = false, active: TimeInterval, started: TimeInterval) -> SessionRowDisplay {
-        SessionRowDisplay(identifier: UUID(), title: title, detail: "", kind: .terminal, isInProgress: inProgress,
+        SessionRowDisplay(identifier: UUID(), title: title, folder: "", kind: .terminal, isInProgress: inProgress,
                           lastActivity: Date(timeIntervalSince1970: active), startTime: Date(timeIntervalSince1970: started))
     }
 

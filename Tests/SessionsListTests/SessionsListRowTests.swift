@@ -6,17 +6,20 @@ import Testing
     private let now = Date(timeIntervalSince1970: 1_000_000)
 
     private func display(_ kind: SessionKind, inProgress: Bool = false, alert: String? = nil, minutesAgo: Double = 0) -> SessionRowDisplay {
-        SessionRowDisplay(identifier: UUID(), title: "Repair the resize", detail: "~/Projects/openrun · main", kind: kind,
+        SessionRowDisplay(identifier: UUID(), title: "Repair the resize", folder: "~/Projects/openrun", branch: "main", kind: kind,
                           isInProgress: inProgress, alert: alert, lastActivity: now - minutesAgo * 60, startTime: now)
     }
 
-    @Test func aThreadShowsItsAgentModelAndAccountQuietly() {
+    /// Every second line is the folder and the branch. A thread puts only
+    /// its model in front, without its agent and its account.
+    @Test func theSecondLineIsTheFolderAndTheBranch() {
         let row = SessionsListRow(display(.agentThread(agent: "Claude Code", model: "Opus", account: "Work"), inProgress: true), now: now)
-        #expect(row.secondLine == "Claude Code · Opus · Work · ~/Projects/openrun · main")
+        #expect(row.secondLine == "Opus · ~/Projects/openrun · main" && row.model == "Opus")
         #expect(row.symbol == "bubble.left" && row.mark == .progress)
-        #expect(row.accessibilityLabel == "Repair the resize, Claude Code · Opus · Work · ~/Projects/openrun · main, in progress")
+        #expect(row.accessibilityLabel == "Repair the resize, Opus · ~/Projects/openrun · main, in progress")
         let plain = SessionsListRow(display(.agentThread(agent: "Codex", model: nil, account: nil)), now: now)
-        #expect(plain.secondLine == "Codex · ~/Projects/openrun · main")
+        #expect(plain.secondLine == "~/Projects/openrun · main" && plain.model == nil)
+        #expect(SessionsListRow(display(.terminal), now: now).secondLine == "~/Projects/openrun · main")
     }
 
     @Test func anAlertTakesThePlaceOfTheSecondLine() {

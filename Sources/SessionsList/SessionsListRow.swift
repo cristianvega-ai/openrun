@@ -13,7 +13,13 @@ struct SessionsListRow: Equatable {
 
     var identifier: UUID
     var title: String
+    /// The whole second line: the alert, or the place of the work.
     var secondLine: String
+    /// The parts of the place. The cell shortens the folder from its start
+    /// when the line does not fit, so the model and the branch stay.
+    var model: String?
+    var folder: String
+    var branch: String?
     var symbol: String
     var mark: Mark
     var accessibilityLabel: String
@@ -22,11 +28,11 @@ struct SessionsListRow: Equatable {
     /// line, because the alert is what the user must read first.
     init(_ display: SessionRowDisplay, now: Date) {
         (identifier, title) = (display.identifier, display.title)
-        var parts = [display.detail]
-        if case .agentThread(let agent, let model, let account) = display.kind {
-            parts = [agent, model ?? "", account ?? "", display.detail]
-        }
-        let details = parts.filter { !$0.isEmpty }.joined(separator: " · ")
+        (folder, branch) = (display.folder, display.branch)
+        // A thread shows only the short name of its model, so the line keeps
+        // room for the folder (the owner's decision of 2026-11-10).
+        if case .agentThread(_, let model, _) = display.kind { self.model = model }
+        let details = [model, folder, branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
         symbol = display.kind == .terminal ? "terminal" : "bubble.left"
         let state: String
         if let alert = display.alert {

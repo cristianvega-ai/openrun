@@ -5,8 +5,10 @@ public struct SessionRowDisplay: Equatable, Sendable {
     public var identifier: UUID
     /// The name that the user gave, or the title of the program.
     public var title: String
-    /// The line under the title, such as `~/Projects/openrun · main`.
-    public var detail: String
+    /// The folder of the work, such as `~/Projects/openrun`.
+    public var folder: String
+    /// The Git branch of the folder, if it has one.
+    public var branch: String?
     public var kind: SessionKind
     /// The program works. A row that is not in progress has finished: an
     /// agent waits after its turn, or a terminal is idle.
@@ -16,9 +18,9 @@ public struct SessionRowDisplay: Equatable, Sendable {
     public var lastActivity: Date
     public var startTime: Date
 
-    public init(identifier: UUID, title: String, detail: String, kind: SessionKind, isInProgress: Bool = false,
+    public init(identifier: UUID, title: String, folder: String, branch: String? = nil, kind: SessionKind, isInProgress: Bool = false,
                 alert: String? = nil, lastActivity: Date, startTime: Date) {
-        (self.identifier, self.title, self.detail, self.kind) = (identifier, title, detail, kind)
+        (self.identifier, self.title, self.folder, self.branch, self.kind) = (identifier, title, folder, branch, kind)
         (self.isInProgress, self.alert, self.lastActivity, self.startTime) = (isInProgress, alert, lastActivity, startTime)
     }
 }

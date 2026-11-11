@@ -35,7 +35,7 @@ func makeSessionsList() -> (SessionsListController, RecordingSessionsHost, NSWin
     let identifiers = (0..<4).map { _ in UUID() }
     let rows = [("Repair the resize", true, nil, 9_000.0), ("zsh", false, "Build failed", 8_000), ("Write the tests", false, nil, 9_500), ("logs", false, nil, 100)]
     list.show(SessionsListContent(title: "openrun", rows: zip(identifiers, rows).map { identifier, row in
-        SessionRowDisplay(identifier: identifier, title: row.0, detail: "~/Projects/openrun · main", kind: row.0 == "zsh" || row.0 == "logs" ? .terminal : .agentThread(agent: "Claude Code", model: nil, account: nil),
+        SessionRowDisplay(identifier: identifier, title: row.0, folder: "~/Projects/openrun", branch: "main", kind: row.0 == "zsh" || row.0 == "logs" ? .terminal : .agentThread(agent: "Claude Code", model: nil, account: nil),
                           isInProgress: row.1, alert: row.2, lastActivity: Date(timeIntervalSince1970: row.3), startTime: Date(timeIntervalSince1970: row.3))
     }, agents: ["Claude Code", "Codex"]))
     window.layoutIfNeeded()
