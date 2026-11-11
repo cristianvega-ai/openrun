@@ -146,6 +146,9 @@ actor Session {
         (publishedSummary, publishedAt) = (summary, .now)
         changes?.add(summary)
         runTask = Task { await self.run() }
+        // A program can change the mode of the terminal before it writes
+        // anything, so the session looks once more.
+        refreshFactsWhileActive()
     }
 
     /// What became of a request to attach.
