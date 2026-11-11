@@ -12,15 +12,23 @@ import Foundation
 /// line limit.
 public final class ClaudeCodeHistoryReader {
     public static let defaultPageByteCount = 256 * 1024
+    /// A page of whole turns stops in a turn that is longer than this
+    /// many pages, so one very long turn cannot fill the memory.
+    static let longestTurnInPages: UInt64 = 8
 
     private let file: FileHandle
     private let lines: BackwardLineReader
 
-    public init(fileURL: URL, lineByteLimit: Int = ClaudeCodeOutputDecoder.defaultLineByteLimit) throws {
+    /// - Parameter before: The `cursor` of an earlier reader. The new
+    ///   reader gives the lines before it, so a client can ask for one
+    ///   page at a time and the reader keeps no state between two pages.
+    ///   Nil starts at the end of the file.
+    public init(fileURL: URL, before: UInt64? = nil, lineByteLimit: Int = ClaudeCodeOutputDecoder.defaultLineByteLimit) throws {
         file = try FileHandle(forReadingFrom: fileURL)
-        lines = BackwardLineReader(file: file, end: try file.seekToEnd(), lineByteLimit: lineByteLimit)
+        let size = try file.seekToEnd()
+        lines = BackwardLineReader(file: file, end: min(before ?? size, size), lineByteLimit: lineByteLimit)
         // The last line has no line end while Claude Code writes it.
-        _ = try lines.olderLine()
+        if before == nil { _ = try lines.olderLine() }
     }
 
     deinit {
@@ -29,6 +37,26 @@ public final class ClaudeCodeHistoryReader {
 
     /// Whether the oldest line was read.
     public var hasReachedStart: Bool { lines.hasReachedStart }
+
+    /// Where the lines that the reader gave start. A later reader takes
+    /// it as `before`.
+    public var cursor: UInt64 { lines.position }
+
+    /// The events of whole turns before the last page, oldest first: the
+    /// lines of about `pageByteCount` bytes, and then the lines back to
+    /// the message of the user that starts their turn. So a page does not
+    /// start in the middle of a turn, unless the turn is very long.
+    public func previousTurns(pageByteCount: Int = defaultPageByteCount) throws -> [ConversationEvent] {
+        var pages: [[ConversationEvent]] = []
+        let (end, page) = (lines.position, UInt64(max(1, pageByteCount)))
+        while end - lines.position < page * Self.longestTurnInPages, let line = try lines.olderLine() {
+            let events = Self.events(of: line)
+            pages.append(events)
+            let startsTurn = events.contains { if case .userMessage = $0.kind { true } else { false } }
+            if startsTurn, end - lines.position >= page { break }
+        }
+        return pages.reversed().flatMap(\.self)
+    }
 
     /// The events of about `pageByteCount` bytes of lines before the last
     /// page, oldest first. A page can have no events, when its lines are of
