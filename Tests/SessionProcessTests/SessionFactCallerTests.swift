@@ -10,16 +10,20 @@ extension SessionProcessIntegration {
         @Test func aProgramRenamesItsOwnSessionAndNoOther() async throws {
             try await RunningSessionProcess.run { process in
                 let target = try process.createSession(program: ["/bin/sh", "-c", "exec sleep 60"])
+                let errors = process.directory.appendingPathComponent("errors").path
                 let script = [
                     "\(openrun(process, "rename \"$OPENRUN_SESSION\" Release build")); echo own=$?",
-                    "\(openrun(process, "rename \(target) taken")) 2>&1; echo other=$?",
+                    "\(openrun(process, "rename \(target) taken")) 2>'\(errors)'; echo other=$?",
                     "exec sleep 60",
                 ].joined(separator: "; ")
                 let caller = try process.createSession(program: ["/bin/sh", "-c", script])
                 #expect(await process.waitForScreen(of: caller, containing: "other="))
                 let screen = try process.screenText(of: caller)
                 #expect(screen.contains("own=0") && screen.contains("other=1"), "\(screen)")
-                #expect(screen.contains("Only a program outside every session"), "\(screen)")
+                // The target is named once: "a program in session X itself" read
+                // as if the caller were in session X.
+                let refusal = "Only a program outside every session, or a program in the session itself, may rename session \(target)."
+                #expect(try String(contentsOfFile: errors, encoding: .utf8) == "openrun: \(refusal)\n")
                 let names = Dictionary(uniqueKeysWithValues: try listedSummaries(of: process).map { ($0.identifierText, $0.name) })
                 #expect(names[caller] == "Release build" && names[target] == .some(nil))
             }

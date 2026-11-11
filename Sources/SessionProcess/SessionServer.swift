@@ -370,7 +370,7 @@ actor SessionServer {
         guard let session = await registry.session(for: identifier) else { return Self.unknownSession(identifier) }
         guard await registry.place(of: peer).mayAct(on: identifier) else {
             let target = SessionSummary.text(for: identifier)
-            return Self.refusal("Only a program outside every session, or a program in session \(target) itself, may \(verb) session \(target).")
+            return Self.refusal("Only a program outside every session, or a program in the session itself, may \(verb) session \(target).")
         }
         return await session.update(change) ? .acknowledged : Self.unknownSession(identifier)
     }
