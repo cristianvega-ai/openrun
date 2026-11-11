@@ -63,4 +63,19 @@ import Testing
         #expect(list.project(identifier: second.identifier) == second)
         #expect(list.project(identifier: first.identifier) == nil)
     }
+
+    /// A project without a folder counts toward the limit, so a client
+    /// must be able to see it and remove it.
+    @Test func removeTakesOutAProjectWithoutAFolder() throws {
+        let hidden = ProjectWithoutFolder(identifier: UUID(), name: "Elsewhere")
+        let projects = (1..<ProjectList.countLimit).map { Project(identifier: UUID(), folder: "/folder/\($0)", name: nil) }
+        var list = ProjectList(checked: projects, projectsWithoutFolder: [hidden])
+        #expect(list.projectsWithoutFolder == [hidden])
+        #expect(throws: ProjectListError.tooManyProjects(limit: 1000)) { try list.add(folder: temporary.path + "/app") }
+        try list.remove(identifier: hidden.identifier)
+        #expect(list.projectsWithoutFolder.isEmpty)
+        #expect(list.projects == projects)
+        try list.add(folder: temporary.path + "/app")
+        #expect(throws: ProjectListError.unknownProject(hidden.identifier)) { try list.remove(identifier: hidden.identifier) }
+    }
 }

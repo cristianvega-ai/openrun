@@ -26,7 +26,9 @@ public struct ProjectStore: Sendable {
         try dataFolder.write(ProjectFoldersDocument(folders: folders))
         try dataFolder.write(ProjectsDocument(projects: list.projects.map {
             ProjectsDocument.Entry(identifier: $0.identifier, name: $0.name)
-        } + list.entriesWithoutFolder))
+        } + list.projectsWithoutFolder.map {
+            ProjectsDocument.Entry(identifier: $0.identifier, name: $0.name)
+        }))
     }
 
     /// Reads both files. A file that cannot be read is set aside, and the
@@ -66,18 +68,18 @@ public struct ProjectStore: Sendable {
             .sorted { ($0.value, $0.key.uuidString) < ($1.value, $1.key.uuidString) }
             .map { ProjectsDocument.Entry(identifier: $0.key, name: nil) }
         var projects: [Project] = []
-        var withoutFolder: [ProjectsDocument.Entry] = []
+        var withoutFolder: [ProjectWithoutFolder] = []
         var identifiers = Set<UUID>()
         var usedFolders = Set<String>()
         for entry in entries + orphans where projects.count + withoutFolder.count < ProjectList.countLimit {
             guard identifiers.insert(entry.identifier).inserted else { continue }
             let name = (try? Project.validName(entry.name)) ?? nil
             guard let folder = folderOfIdentifier[entry.identifier], usedFolders.insert(folder).inserted else {
-                withoutFolder.append(ProjectsDocument.Entry(identifier: entry.identifier, name: name))
+                withoutFolder.append(ProjectWithoutFolder(identifier: entry.identifier, name: name))
                 continue
             }
             projects.append(Project(identifier: entry.identifier, folder: folder, name: name))
         }
-        return ProjectList(checked: projects, entriesWithoutFolder: withoutFolder)
+        return ProjectList(checked: projects, projectsWithoutFolder: withoutFolder)
     }
 }

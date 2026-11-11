@@ -15,17 +15,16 @@ public struct ProjectList: Hashable, Sendable {
         projects = []
     }
 
-    /// The entries of `projects.json` whose folder this Mac does not know,
-    /// for example after `project-folders.json` was set aside, or when a
-    /// later sync brings a project of another Mac. They do not show, and
-    /// a save writes them back after the other entries, so their
-    /// identifiers and names are never lost.
-    private(set) var entriesWithoutFolder: [ProjectsDocument.Entry] = []
+    /// The projects whose folder this Mac does not know. They do not
+    /// show, and they lose their place in the order: a save writes them
+    /// after the other projects, so their identifiers and names are never
+    /// lost. They count toward `countLimit`.
+    public private(set) var projectsWithoutFolder: [ProjectWithoutFolder] = []
 
     /// The list as a file held it. The store checks each project first.
-    init(checked projects: [Project], entriesWithoutFolder: [ProjectsDocument.Entry] = []) {
+    init(checked projects: [Project], projectsWithoutFolder: [ProjectWithoutFolder] = []) {
         self.projects = projects
-        self.entriesWithoutFolder = entriesWithoutFolder
+        self.projectsWithoutFolder = projectsWithoutFolder
     }
 
     public func project(identifier: UUID) -> Project? {
@@ -71,7 +70,7 @@ public struct ProjectList: Hashable, Sendable {
         homeFolder: String = NSHomeDirectory(),
         currentFolder: String? = nil
     ) throws -> Project {
-        guard projects.count + entriesWithoutFolder.count < Self.countLimit else { throw ProjectListError.tooManyProjects(limit: Self.countLimit) }
+        guard projects.count + projectsWithoutFolder.count < Self.countLimit else { throw ProjectListError.tooManyProjects(limit: Self.countLimit) }
         let resolved = try ProjectFolderPath.resolve(folder, homeFolder: homeFolder, currentFolder: currentFolder)
         if let existing = projects.first(where: { $0.folder == resolved }) {
             throw ProjectListError.duplicateFolder(path: resolved, project: existing.identifier)
@@ -81,9 +80,13 @@ public struct ProjectList: Hashable, Sendable {
         return project
     }
 
-    /// Removes a project. Its sessions keep running and show under
-    /// "No Project".
+    /// Removes a project, also one without a folder. Its sessions keep
+    /// running and show under "No Project".
     public mutating func remove(identifier: UUID) throws {
+        if let hidden = projectsWithoutFolder.firstIndex(where: { $0.identifier == identifier }) {
+            projectsWithoutFolder.remove(at: hidden)
+            return
+        }
         projects.remove(at: try index(of: identifier))
     }
 

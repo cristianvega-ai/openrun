@@ -32,7 +32,7 @@ import Testing
         )
         #expect(list.projects.map(\.folder) == ["/one", "/four"])
         #expect(list.projects.map(\.name) == [nil, nil])
-        #expect(list.entriesWithoutFolder.map(\.identifier) == [2, 3, 5].map { Self.identifiers[$0 - 1] })
+        #expect(list.projectsWithoutFolder.map(\.identifier) == [2, 3, 5].map { Self.identifiers[$0 - 1] })
     }
 
     @Test func theLoadKeepsAtMostTheLimit() {
