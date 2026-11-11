@@ -11,6 +11,14 @@ import TerminalEmulation
 /// then interactive, but it runs the script and reads no command line. So
 /// bash has its editor only with no `-c` and no operand after its options.
 enum InteractiveShell {
+    /// The names of the shells that the sessions list knows. A shell at its
+    /// prompt is not in progress (decision of 2026-11-10).
+    private static let shellNames: Set<String> = ["sh", "bash", "zsh", "fish", "dash", "ksh", "mksh", "oksh", "yash", "tcsh", "csh", "nu", "elvish", "xonsh", "pwsh"]
+
+    static func isShell(_ program: ForegroundProgram) -> Bool {
+        shellNames.contains(program.name)
+    }
+
     /// Long options of bash whose value is the next argument.
     private static let longOptionsWithValue: Set<String> = ["--rcfile", "--init-file"]
 
