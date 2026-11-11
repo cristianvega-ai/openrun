@@ -58,7 +58,7 @@ let package = Package(
         // Claude Code in a thread: its command line, the user message line,
         // the decoder of its output, its permission hook, and its history.
         .target(name: "ClaudeCodeAgent", dependencies: ["AgentConversation"]),
-        .testTarget(name: "ClaudeCodeAgentTests", dependencies: ["ClaudeCodeAgent", "AgentConversation"]),
+        .testTarget(name: "ClaudeCodeAgentTests", dependencies: ["ClaudeCodeAgent", "AgentConversation"], exclude: ["Fixtures"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
