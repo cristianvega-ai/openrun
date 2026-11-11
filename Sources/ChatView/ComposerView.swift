@@ -24,6 +24,9 @@ final class ComposerView: NSView {
     /// Why the composer takes no message now, such as an account at its
     /// limit. Nil while it takes messages.
     var closedReason: String?
+    /// The height above which the field scrolls. A small pane lowers it,
+    /// so the transcript keeps its room.
+    var fieldHeightLimit = ComposerLayout.maximumFieldHeight
     var sendAction: ((ChatOutgoingMessage) -> Void)?
     var stopAction: (() -> Void)?
     /// Gives the draft after each change.
@@ -74,7 +77,8 @@ final class ComposerView: NSView {
             textHeight = ceil(layoutManager.usedRect(for: container).height)
         }
         return ComposerLayout(width: width, textHeight: textHeight, lineHeight: lineHeight, hasNote: !noteButton.isHidden, hasImages: !images.isEmpty,
-                              heldHeight: heldView.isHidden ? 0 : heldView.height(forWidth: ChatColumn.frame(inWidth: width).width))
+                              heldHeight: heldView.isHidden ? 0 : heldView.height(forWidth: ChatColumn.frame(inWidth: width).width),
+                              maximumFieldHeight: fieldHeightLimit)
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {

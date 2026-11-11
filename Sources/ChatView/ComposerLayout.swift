@@ -25,10 +25,11 @@ struct ComposerLayout: Equatable {
 
     /// - Parameter textHeight: The height of the text in the field. The
     ///   field grows with it up to a limit, and then scrolls.
-    init(width: CGFloat, textHeight: CGFloat, lineHeight: CGFloat, hasNote: Bool, hasImages: Bool, heldHeight: CGFloat = 0) {
+    init(width: CGFloat, textHeight: CGFloat, lineHeight: CGFloat, hasNote: Bool, hasImages: Bool, heldHeight: CGFloat = 0,
+         maximumFieldHeight: CGFloat = ComposerLayout.maximumFieldHeight) {
         let column = ChatColumn.frame(inWidth: width)
         let pad = Self.padding
-        let fieldHeight = min(Self.maximumFieldHeight, max(lineHeight, textHeight))
+        let fieldHeight = max(lineHeight, min(maximumFieldHeight, textHeight))
         note = hasNote ? CGRect(x: column.x + 4, y: 0, width: column.width - 8, height: 18) : nil
         previews = hasImages ? CGRect(x: pad.width, y: pad.height, width: column.width - 2 * pad.width, height: ImagePreviewsView.height) : nil
         field = CGRect(x: pad.width, y: previews.map { $0.maxY + 8 } ?? pad.height, width: Self.fieldWidth(forWidth: width), height: fieldHeight)

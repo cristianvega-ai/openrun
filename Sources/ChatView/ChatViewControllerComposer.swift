@@ -58,9 +58,18 @@ extension ChatViewController {
         composer.draft = ComposerDrafts.shared.draft(for: facts.threadIdentifier)
     }
 
+    /// The room that a waiting request needs: its heading, four lines of
+    /// its text and its buttons.
+    static let minimumTranscriptHeight: CGFloat = 340
+
     func layoutChat() {
         let bounds = view.bounds
-        let composerHeight = composer.isHidden ? 12 : composer.height(forWidth: bounds.width)
+        // The field gives way first, so the transcript keeps room for a
+        // request that waits. At the minimum size the field has one line.
+        composer.fieldHeightLimit = 0
+        let oneLine = composer.height(forWidth: bounds.width)
+        composer.fieldHeightLimit = min(ComposerLayout.maximumFieldHeight, bounds.height - Self.minimumTranscriptHeight - oneLine)
+        let composerHeight = composer.isHidden ? 12 : max(oneLine, composer.height(forWidth: bounds.width))
         composer.frame = NSRect(x: 0, y: bounds.height - composerHeight, width: bounds.width, height: composerHeight)
         var bottom = composer.frame.minY
         if !conditionView.isHidden {

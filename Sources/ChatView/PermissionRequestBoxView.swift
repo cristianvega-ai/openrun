@@ -81,7 +81,7 @@ final class PermissionRequestBoxView: RoundedBoxView, MeasurableView {
         let boxes = partViews.filter { $0 is DetailBoxView || $0 is DiffBoxView }
         let notes = partViews.filter { !boxes.contains($0) }.reduce(CGFloat(0)) { $0 + 8 + noteHeight($1, width: width) }
         let fixed = 2 * Self.padding + titleHeight(forWidth: width) + 2 + notes + CGFloat(boxes.count) * 8 + 14 + 24 + 10 + 28
-        let room = (viewportHeight - 18 - fixed) / CGFloat(max(1, boxes.count))
+        let room = (viewportHeight - 18 - RowSpacing.bottom - fixed) / CGFloat(max(1, boxes.count))
         for box in boxes {
             if let text = box as? DetailBoxView {
                 text.heightLimit = max(4 * codeLineHeight, min(DetailBoxView.maximumHeight, room - 2 * DetailBoxView.padding.height))

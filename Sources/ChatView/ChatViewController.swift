@@ -51,7 +51,7 @@ import AppKit
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     /// The smallest size of the pane that still shows a usable chat.
-    public var minimumSize: NSSize { NSSize(width: 320, height: 260) }
+    public var minimumSize: NSSize { NSSize(width: 320, height: 430) }
 
     /// The title of the pane.
     public var paneTitle: String { facts.title }

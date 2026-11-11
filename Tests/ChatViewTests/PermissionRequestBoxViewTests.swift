@@ -59,10 +59,10 @@ import Testing
         let request = PermissionRequest(identifier: "p1", toolName: "Bash", input: .object(["command": .string(command)]))
         let box = PermissionRequestBoxView()
         box.show(PermissionRequestWords(PermissionRequestItem(request: request), agentName: "Claude Code"), agentName: "Claude Code",
-                 isAnswered: false, palette: ChatPalette(appearance: .graphite), viewportHeight: 320)
+                 isAnswered: false, palette: ChatPalette(appearance: .graphite), viewportHeight: ChatViewController.minimumTranscriptHeight)
         let text = try #require(box.partViews.last as? DetailBoxView)
         let font = ChatPalette(appearance: .graphite).smallCodeFont
         #expect(text.height(forWidth: 300) >= 4 * (font.ascender - font.descender) + 2 * DetailBoxView.padding.height)
-        #expect(box.height(forWidth: 300) <= 320 - 18)
+        #expect(box.height(forWidth: 300) <= ChatViewController.minimumTranscriptHeight - 18 - RowSpacing.bottom)
     }
 }
