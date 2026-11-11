@@ -39,6 +39,26 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// Each request asks with its own kind, so the user never allows a
+        /// read that then kills.
+        @Test(arguments: [("read", ApprovalQuestion.Request.read), ("attach", .attach), ("kill", .kill)])
+        func eachRequestAsksWithItsKind(command: String, request: ApprovalQuestion.Request) async throws {
+            try await RunningSessionProcess.run(arguments: try testProcessAnswersArguments()) { process in
+                let (app, _) = try connectAsAnswerer(to: process)
+                defer { app.shutdown() }
+                let target = try process.createSession(program: ["/bin/sh"])
+                let caller = try process.createSession(program: ["/bin/sh", "-c", "\(openrun(process, "\(command) \(target)")); echo done=$?; exec sleep 60"])
+                guard case .approvalQuestion(let question) = try next(app) else {
+                    Issue.record("The app received no question.")
+                    return
+                }
+                #expect(question.request == request)
+                try app.send(ClientMessage.answerApprovalQuestion(identifier: question.identifier, allows: false))
+                #expect(await process.waitForScreen(of: caller, containing: "done=1"))
+                #expect(try process.listedIdentifiers().contains(target))
+            }
+        }
+
         /// A late answer to the question of a program that left does nothing.
         @Test func aCallerThatLeavesEndsItsQuestion() async throws {
             try await RunningSessionProcess.run(arguments: try testProcessAnswersArguments()) { process in

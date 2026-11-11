@@ -253,9 +253,7 @@ actor SessionServer {
             case .receiveApprovalQuestions:
                 // The app, signed and outside every session, is the only
                 // program that can answer (ApprovalQuestion.tla).
-                guard await registry.place(of: peer) == .outsideEverySession,
-                      answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)
-                else {
+                guard Self.acceptsAnswerer(at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)) else {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "Only OpenRun.app receives approval questions.")))
                     break
                 }
@@ -331,6 +329,12 @@ actor SessionServer {
         case .withdrawn: return Self.refusal("\(start), and then it left.")
         case .anotherQuestionWaits: return Self.refusal("\(start) while another question of that session waits for the user.")
         }
+    }
+
+    /// Only the signed app outside every session receives questions. An app
+    /// that a program in a session started counts as that program.
+    static func acceptsAnswerer(at place: CallerPlace, meetingRequirement: Bool) -> Bool {
+        place == .outsideEverySession && meetingRequirement
     }
 
     /// The reason is an existing one, so protocol version 1 does not change.

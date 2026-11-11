@@ -18,6 +18,13 @@ import Testing
         #expect(!CallerPlace.unknown.mayAct(on: UUID()))
     }
 
+    @Test func onlyTheSignedAppOutsideEverySessionAnswers() {
+        #expect(SessionServer.acceptsAnswerer(at: .outsideEverySession, meetingRequirement: true))
+        #expect(!SessionServer.acceptsAnswerer(at: .outsideEverySession, meetingRequirement: false))
+        #expect(!SessionServer.acceptsAnswerer(at: .session(UUID()), meetingRequirement: true))
+        #expect(!SessionServer.acceptsAnswerer(at: .unknown, meetingRequirement: true))
+    }
+
     /// A program with no terminal session ended before the check. This
     /// process runs in no session of the registry.
     @Test func theRegistryPlacesEachCaller() async {
