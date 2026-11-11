@@ -29,6 +29,7 @@ import MarkdownText
     var agentName = "The agent"
     /// The parts of rows that the user opened, such as a tool call.
     var openedParts: Set<String> = []
+    weak var actions: TranscriptRowActions?
     /// The rendered blocks of each message by their index.
     private var renderedBlocks: [String: [Int: RenderedBlock]] = [:]
 

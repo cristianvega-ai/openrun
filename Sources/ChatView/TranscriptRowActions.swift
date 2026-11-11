@@ -1,0 +1,8 @@
+/// What a row asks of the view that holds it.
+@MainActor protocol TranscriptRowActions: AnyObject {
+    /// The user clicked a link. Nothing opens it without the host.
+    func openLink(_ target: String)
+    /// The user opened or closed a part of a row, such as the output of a
+    /// tool call. The row's height changes.
+    func toggle(_ part: String, in row: TranscriptRowView)
+}
