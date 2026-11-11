@@ -36,7 +36,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let record = Mutex((questions: [LaunchAgentQuestion](), connections: 0))
         let releaseConnection = DispatchSemaphore(value: 0)
         defer { releaseConnection.signal() }
-        let application = OpenRunApplication(socket: try SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
+        let application = try makeApplication(at: SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
             LaunchAgentSetup(source: registration, connect: {
                 let count = record.withLock { $0.connections += 1; return $0.connections }
                 if count == 1 { throw SessionWakeFailure.timedOut(limit: .seconds(15)) }
@@ -46,7 +46,6 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
                 return false
             })
         })
-        application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer { application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
         let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
         let retry = try #require(file.item(withTitle: "Retry Session Process"))
@@ -54,7 +53,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         await waitForRecovery { application.validateMenuItem(retry) }
         #expect(record.withLock { $0.questions } == [.approvalNeeded])
-        #expect(application.windows.controllers.isEmpty)
+        #expect(showsNoSession(application))
         _ = application.applicationShouldHandleReopen(NSApp, hasVisibleWindows: false)
         try await Task.sleep(for: .milliseconds(30))
         #expect(record.withLock { $0.questions } == [.approvalNeeded])
@@ -63,7 +62,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(NSApp.sendAction(try #require(retry.action), to: retry.target, from: retry))
         await waitForRecovery { record.withLock { $0.connections } == 1 && application.validateMenuItem(retry) }
         #expect(record.withLock { $0.questions } == [.approvalNeeded, .failed(detail: "The OpenRun session process did not answer within 15 seconds.")])
-        #expect(application.windows.controllers.isEmpty)
+        #expect(showsNoSession(application))
 
         #expect(NSApp.sendAction(try #require(retry.action), to: retry.target, from: retry))
         await waitForRecovery { record.withLock { $0.connections } == 2 }
@@ -71,8 +70,8 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         application.retrySessionProcess(nil)
         #expect(record.withLock { $0.connections } == 2)
         releaseConnection.signal()
-        await waitForRecovery { application.windows.controllers.first?.terminalView != nil }
-        #expect(application.windows.controllers.count == 1 && !application.validateMenuItem(retry))
+        await waitForRecovery { firstShellShows(application) }
+        #expect(sessionCount(application) == 1 && !application.validateMenuItem(retry))
         #expect(registration.state.withLock { $0.calls }.isEmpty)
         #expect(record.withLock { $0.questions.count } == 2)
     }
@@ -89,7 +88,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let registration = RecoveryRegistration()
         registration.state.withLock { $0.status = .enabled }
         let questions = Mutex<[LaunchAgentQuestion]>([])
-        let application = OpenRunApplication(socket: try SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
+        let application = try makeApplication(at: SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
             LaunchAgentSetup(source: registration, connect: {
                 registration.state.withLock { $0.calls.append("connect") }
             }, ask: { question in
@@ -97,7 +96,6 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
                 questions.withLock { $0.append(question); return $0.count == 2 }
             })
         })
-        application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer { application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
         let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
         let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
@@ -106,10 +104,10 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(!application.validateMenuItem(registerAgain))
         await waitForRecovery { application.validateMenuItem(registerAgain) }
         #expect(questions.withLock { $0 } == [.registerAgain])
-        #expect(registration.state.withLock { $0.calls }.isEmpty && application.windows.controllers.isEmpty)
+        #expect(registration.state.withLock { $0.calls }.isEmpty && showsNoSession(application))
 
         #expect(NSApp.sendAction(try #require(registerAgain.action), to: registerAgain.target, from: registerAgain))
-        await waitForRecovery { application.windows.controllers.first?.terminalView != nil }
+        await waitForRecovery { firstShellShows(application) }
         #expect(questions.withLock { $0 } == [.registerAgain, .registerAgain])
         #expect(registration.state.withLock { $0.calls } == ["unregister", "register", "connect"])
         #expect(application.validateMenuItem(registerAgain))
@@ -127,33 +125,32 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let registration = RecoveryRegistration()
         registration.state.withLock { $0.status = .enabled }
         let questions = Mutex<[LaunchAgentQuestion]>([])
-        let application = OpenRunApplication(socket: try SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
+        let application = try makeApplication(at: SocketLocation(path: process.socketPath), makeLaunchAgentSetup: {
             LaunchAgentSetup(source: registration, connect: {}, ask: { question in
                 questions.withLock { $0.append(question) }
                 return question == .registerAgain
             })
         })
-        application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer { application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
         let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
         let retry = try #require(file.item(withTitle: "Retry Session Process"))
         let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
-        let newWindow = try #require(file.item(withTitle: "New Window"))
+        let newSession = try #require(file.item(withTitle: "New Window"))
 
         application.registerSessionProcessAgain(nil)
-        await waitForRecovery { application.windows.controllers.first?.terminalView != nil }
-        #expect(!application.validateMenuItem(retry) && application.validateMenuItem(newWindow))
+        await waitForRecovery { firstShellShows(application) }
+        #expect(!application.validateMenuItem(retry) && canStartSession(application, newSession))
         registration.state.withLock { $0.refuses = true }
         application.registerSessionProcessAgain(nil)
         await waitForRecovery { application.validateMenuItem(retry) }
         #expect(questions.withLock { $0 }.last == .failed(detail: "launchd refused the agent."))
-        #expect(application.windows.controllers.count == 1 && application.validateMenuItem(registerAgain))
-        #expect(!application.validateMenuItem(newWindow))
+        #expect(sessionCount(application) == 1 && application.validateMenuItem(registerAgain))
+        #expect(!canStartSession(application, newSession))
 
         registration.state.withLock { $0.refuses = false }
         application.retrySessionProcess(nil)
-        await waitForRecovery { application.validateMenuItem(newWindow) }
-        #expect(application.windows.controllers.count == 1)
+        await waitForRecovery { canStartSession(application, newSession) }
+        #expect(sessionCount(application) == 1)
     }
 
     /// The session process takes the connection and never answers hello, so
@@ -171,7 +168,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let registration = RecoveryRegistration()
         registration.state.withLock { $0.status = .enabled }
         let questions = Mutex<[LaunchAgentQuestion]>([])
-        let application = OpenRunApplication(socket: location, makeLaunchAgentSetup: {
+        let application = try makeApplication(at: location, makeLaunchAgentSetup: {
             LaunchAgentSetup(source: registration, connect: {
                 try OpenRunApplication.connect(to: location, helloTimeLimit: .seconds(2))
             }, ask: { question in
@@ -185,7 +182,32 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(!application.validateMenuItem(retry))
         await waitForRecovery { application.validateMenuItem(retry) }
         #expect(questions.withLock { $0 } == [.failed(detail: "The OpenRun session process did not answer hello within 2 seconds.")])
-        #expect(application.windows.controllers.isEmpty && registration.state.withLock { $0.calls }.isEmpty)
+        #expect(showsNoSession(application) && registration.state.withLock { $0.calls }.isEmpty)
+    }
+
+    /// An application whose first session reads no start file of the user.
+    @MainActor private func makeApplication(at socket: SocketLocation, makeLaunchAgentSetup: @escaping @Sendable () -> LaunchAgentSetup) throws -> OpenRunApplication {
+        FileManager.default.createFile(atPath: socket.folder + "/.zshrc", contents: Data())
+        let application = OpenRunApplication(socket: socket, makeLaunchAgentSetup: makeLaunchAgentSetup)
+        application.makeNewSession = { .newSession(folder: socket.folder, environment: ["HOME": socket.folder, "ZDOTDIR": socket.folder, "PATH": "/usr/bin:/bin"]) }
+        return application
+    }
+
+    /// Whether the shell of the first start runs and its pane shows it.
+    @MainActor private func firstShellShows(_ application: OpenRunApplication) -> Bool {
+        application.windows.controllers.first?.terminalView != nil
+    }
+
+    @MainActor private func showsNoSession(_ application: OpenRunApplication) -> Bool {
+        application.windows.controllers.isEmpty
+    }
+
+    @MainActor private func sessionCount(_ application: OpenRunApplication) -> Int {
+        application.windows.controllers.count
+    }
+
+    @MainActor private func canStartSession(_ application: OpenRunApplication, _ item: NSMenuItem) -> Bool {
+        application.validateMenuItem(item)
     }
 
     @MainActor private func waitForRecovery(_ condition: () -> Bool) async {
