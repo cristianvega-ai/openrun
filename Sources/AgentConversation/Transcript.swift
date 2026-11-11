@@ -6,6 +6,7 @@
 public struct Transcript: Sendable, Hashable {
     public let limits: TranscriptLimits
     var storage = TranscriptStorage()
+    public private(set) var state: ThreadState = .idle
     /// The thinking that goes on now, or nil.
     public private(set) var thinking: Thinking?
     /// The newest facts of the agent's process.
@@ -18,6 +19,10 @@ public struct Transcript: Sendable, Hashable {
     /// Items that the end of a turn closes: text that streams, tool calls
     /// that run, and permission requests that wait.
     var openItems: Set<String> = []
+    var waitingPermissions: Set<String> = []
+    /// The task item of each tool call that started a sub-agent.
+    var taskItems: [String: String] = [:]
+
     public init(limits: TranscriptLimits = TranscriptLimits()) {
         self.limits = limits
     }
@@ -49,6 +54,11 @@ public struct Transcript: Sendable, Hashable {
             thinking = new.isComplete ? nil : Thinking(
                 itemIdentifier: new.itemIdentifier ?? thinking?.itemIdentifier,
                 estimatedTokens: new.estimatedTokens ?? thinking?.estimatedTokens, isComplete: false)
+        case .turnEnded(var end):
+            end.errorText = end.errorText.map { BoundedText.prefix(of: $0, byteLimit: limits.detailByteLimit) }
+            insert("turn:\(eventCount)", .turnEnd(end), &change)
+            closeOpenItems(&change)
+        case .processEnded(let end): applyProcessEnd(end, &change)
         case .usage(let reading): usage = reading
         case .notice(let notice): insertNotice(notice.level, notice.text, &change)
         case .unknown(var line):
@@ -56,6 +66,7 @@ public struct Transcript: Sendable, Hashable {
             insert("unknown:\(eventCount)", .unknown(line), &change)
         default: break
         }
+        updateState(after: event.kind)
         change.removed = storage.trim(to: limits)
         return change
     }
@@ -88,6 +99,61 @@ public struct Transcript: Sendable, Hashable {
             openItems.remove(identifier)
             thinking = nil
         }
+    }
+
+    // MARK: - Ends
+
+    private mutating func applyProcessEnd(_ end: ProcessEnd, _ change: inout TranscriptChange) {
+        if end.isFailure {
+            let how = end.signal.map { "by signal \($0)" } ?? "with status \(end.exitStatus ?? -1)"
+            let detail = end.standardErrorText.map { "\n" + $0 } ?? ""
+            insertNotice(.error, "The agent's process ended \(how)." + detail, &change)
+        }
+        closeOpenItems(&change)
+    }
+
+    /// A turn or a process that ends also ends what it left open.
+    private mutating func closeOpenItems(_ change: inout TranscriptChange) {
+        // A set has no fixed order, and the change must be the same for the
+        // same events, so the items close in the order of their names.
+        for identifier in openItems.sorted() {
+            update(identifier, &change) { content in
+                content.modifyAgentMessage { $0.isComplete = true }
+                content.modifyToolCall { call in
+                    if call.state == .preparing || call.state == .running { call.state = .interrupted }
+                }
+                content.modifyPermissionRequest { item in
+                    if item.isWaiting { item.end = PermissionEnd(identifier: item.request.identifier, outcome: .cancelled) }
+                }
+            }
+        }
+        openItems.removeAll()
+        waitingPermissions.removeAll()
+        thinking = nil
+    }
+
+    private mutating func updateState(after kind: ConversationEventKind) {
+        switch kind {
+        case .turnEnded(let end):
+            state = switch end.outcome {
+            case .done: .finishedTurn
+            case .stopped: .idle
+            case .failed: .failed
+            }
+        case .processEnded(let end):
+            if end.isFailure {
+                state = .failed
+            } else if state == .inProgress || state == .needsUser {
+                state = .idle
+            }
+        case .permissionEnded:
+            if state == .needsUser { state = .inProgress }
+        case .agentStarted, .usage, .notice, .agentStatus, .unknown:
+            break
+        default:
+            state = .inProgress
+        }
+        if !waitingPermissions.isEmpty { state = .needsUser }
     }
 
     // MARK: - Items
