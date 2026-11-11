@@ -40,6 +40,17 @@ final class ChatTextView: NSTextView {
         return ceil(layoutManager.usedRect(for: textContainer).height)
     }
 
+    /// The width of the longest line after a call of `fittingHeight`. The
+    /// used rectangle of the container can span the full width, so this
+    /// measures each line.
+    var usedWidth: CGFloat {
+        guard let layoutManager else { return 0 }
+        var width: CGFloat = 0
+        let glyphs = NSRange(location: 0, length: layoutManager.numberOfGlyphs)
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { _, used, _, _, _ in width = max(width, used.width) }
+        return ceil(width)
+    }
+
     /// Shows new text when it differs from the text that shows.
     func show(_ text: NSAttributedString) {
         guard let textStorage, !textStorage.isEqual(to: text) else { return }

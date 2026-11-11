@@ -16,6 +16,10 @@ import Testing
         let narrow = view.fittingHeight(forWidth: 200)
         #expect(wide > 0)
         #expect(narrow > wide * 2)
+        #expect(view.usedWidth <= 200)
+        view.show(NSAttributedString(string: "Thanks.", attributes: [.font: NSFont.systemFont(ofSize: 14)]))
+        _ = view.fittingHeight(forWidth: 400)
+        #expect(view.usedWidth < 60)
     }
 
     @Test func aClickOnALinkGoesOnlyToTheAction() {
