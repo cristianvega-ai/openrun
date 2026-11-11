@@ -47,4 +47,12 @@ import Testing
         #expect(await channel.next() == event(2))
         #expect(await channel.next() == nil)
     }
+
+    @Test func aCancelledReaderGetsNil() async throws {
+        let channel = CodexEventChannel(limit: 10)
+        let reader = Task { await channel.next() }
+        try await Task.sleep(for: .milliseconds(50))
+        reader.cancel()
+        #expect(await reader.value == nil)
+    }
 }

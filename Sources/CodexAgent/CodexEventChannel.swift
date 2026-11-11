@@ -66,19 +66,26 @@ final class CodexEventChannel: Sendable {
     /// The next event, or nil after the finish and the last event. Only
     /// one task may wait at a time.
     func next() async -> ConversationEvent? {
-        await withCheckedContinuation { continuation in
-            state.withLock { state in
-                if !state.events.isEmpty {
-                    continuation.resume(returning: state.events.removeFirst())
-                    if state.events.count <= limit {
-                        for writer in state.writers { writer.resume() }
-                        state.writers = []
+        await withTaskCancellationHandler {
+            await withCheckedContinuation { continuation in
+                state.withLock { state in
+                    if !state.events.isEmpty {
+                        continuation.resume(returning: state.events.removeFirst())
+                        if state.events.count <= limit {
+                            for writer in state.writers { writer.resume() }
+                            state.writers = []
+                        }
+                    } else if state.isFinished || state.reader != nil || Task.isCancelled {
+                        continuation.resume(returning: nil)
+                    } else {
+                        state.reader = continuation
                     }
-                } else if state.isFinished || state.reader != nil {
-                    continuation.resume(returning: nil)
-                } else {
-                    state.reader = continuation
                 }
+            }
+        } onCancel: {
+            state.withLock { state in
+                state.reader?.resume(returning: nil)
+                state.reader = nil
             }
         }
     }
