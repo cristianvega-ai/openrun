@@ -27,10 +27,19 @@ extension AgentProgram {
         queue.sync { exit != nil }
     }
 
-    /// Closes the pipes and ends the waits, after the reap.
+    /// Ends the output and the waits, after the reap.
     func programEnded(_ reason: ProgramExit) {
-        for descriptor in [outputDescriptor, errorDescriptor, inputDescriptor] { close(descriptor) }
+        // Output that the program wrote before it ended can still wait in
+        // the pipe. It comes before the stream finishes.
+        readOutput(honoringBackpressure: false)
+        outputContinuation.finish()
         exit = reason
+        for descriptor in [errorDescriptor, inputDescriptor] { close(descriptor) }
+        if outputSourceIsSuspended {
+            outputSource?.resume()
+            outputSourceIsSuspended = false
+        }
+        outputSource?.cancel()
         for waiter in exitWaiters { waiter.resume(returning: reason) }
         exitWaiters.removeAll()
     }

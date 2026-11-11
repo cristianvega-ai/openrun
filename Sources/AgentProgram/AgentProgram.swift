@@ -13,12 +13,30 @@ import PseudoTerminal
 public final class AgentProgram: @unchecked Sendable {
     public let processIdentifier: pid_t
 
+    /// The bytes that the program writes on its standard output, in order.
+    /// The stream finishes after the program ended, and before
+    /// `waitForExit` returns. Only one task may read it.
+    ///
+    /// Call `markOutputConsumed` for each chunk that has been dealt with.
+    /// Reading stops while too many bytes wait, and the program then waits
+    /// in its own write.
+    public let output: AsyncStream<[UInt8]>
+
+    static let readChunkSize = 64 * 1024
+    /// Reading stops above the high mark and starts again below the low mark.
+    static let unconsumedHighMark = 4 * 1024 * 1024
+    static let unconsumedLowMark = 1 * 1024 * 1024
+
     let queue = DispatchQueue(label: "AgentProgram")
+    let outputContinuation: AsyncStream<[UInt8]>.Continuation
 
     // Everything below belongs to `queue`. No other thread touches it.
     var outputDescriptor: Int32
     var errorDescriptor: Int32
     var inputDescriptor: Int32
+    var outputSource: DispatchSourceRead?
+    var outputSourceIsSuspended = false
+    var unconsumedBytes = 0
     var reaper: ProcessGroupReaper?
     var exit: ProgramExit?
     var exitWaiters: [CheckedContinuation<ProgramExit, Never>] = []
@@ -30,6 +48,7 @@ public final class AgentProgram: @unchecked Sendable {
         inputDescriptor = started.inputDescriptor
         outputDescriptor = started.outputDescriptor
         errorDescriptor = started.errorDescriptor
+        (output, outputContinuation) = AsyncStream.makeStream(of: [UInt8].self)
         queue.async { self.startWatching() }
     }
 
@@ -43,6 +62,11 @@ public final class AgentProgram: @unchecked Sendable {
     }
 
     private func startWatching() {
+        let reader = DispatchSource.makeReadSource(fileDescriptor: outputDescriptor, queue: queue)
+        reader.setEventHandler { [self] in readOutput() }
+        reader.setCancelHandler { [self] in close(outputDescriptor); outputDescriptor = -1 }
+        outputSource = reader
+        reader.resume()
         reaper = ProcessGroupReaper(processIdentifier: processIdentifier, queue: queue) { [self] in programEnded($0) }
         reaper?.start()
     }
