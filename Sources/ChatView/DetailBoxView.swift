@@ -1,15 +1,20 @@
 import AppKit
 
 /// A quiet box of monospaced text under an open line, such as the input
-/// and the output of a tool call.
+/// and the output of a tool call. A long text wraps and scrolls inside a
+/// box of bounded height, so all of it can be read.
 final class DetailBoxView: RoundedBoxView, MeasurableView {
     static let padding = NSSize(width: 12, height: 8)
+    static let maximumHeight: CGFloat = 300
+    let scrollView = InnerScrollView()
     let textView = ChatTextView()
 
     override init(frame: NSRect) {
         super.init(frame: frame)
         cornerRadius = 6
-        addSubview(textView)
+        scrollView.automaticallyAdjustsContentInsets = false
+        scrollView.documentView = textView
+        addSubview(scrollView)
     }
 
     @available(*, unavailable)
@@ -31,14 +36,20 @@ final class DetailBoxView: RoundedBoxView, MeasurableView {
         }
         textView.selectedTextAttributes = [.backgroundColor: palette.selection]
         textView.show(text)
+        needsLayout = true
     }
 
     func height(forWidth width: CGFloat) -> CGFloat {
-        textView.fittingHeight(forWidth: width - 2 * Self.padding.width) + 2 * Self.padding.height
+        min(Self.maximumHeight, textView.fittingHeight(forWidth: width - 2 * Self.padding.width)) + 2 * Self.padding.height
     }
 
     override func layout() {
         super.layout()
-        textView.frame = bounds.insetBy(dx: Self.padding.width, dy: Self.padding.height)
+        // The scroll view reaches the edges of the box, so its scroller
+        // sits at the edge, and the inset of the text keeps its margins.
+        scrollView.frame = bounds.insetBy(dx: 0, dy: Self.padding.height)
+        textView.textContainerInset = NSSize(width: Self.padding.width, height: 0)
+        let height = textView.fittingHeight(forWidth: bounds.width - 2 * Self.padding.width)
+        textView.frame = NSRect(x: 0, y: 0, width: bounds.width, height: height)
     }
 }
