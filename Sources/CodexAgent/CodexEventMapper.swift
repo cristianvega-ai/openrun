@@ -18,9 +18,18 @@ struct CodexEventMapper: Sendable {
         "item/autoApprovalReview/started", "item/autoApprovalReview/completed",
     ]
 
+    /// The turn that runs, from its start to its end.
+    var activeTurn: String?
+    /// The tokens of the thread before the turn that runs, and now.
+    var tokensBeforeTurn: TokenUsage?
+    var tokensNow: TokenUsage?
+
     mutating func events(method: String, parameters: JSONValue) -> [ConversationEventKind]? {
         let item = parameters["itemId"]?.string ?? ""
         switch method {
+        case "turn/started": return turnStarted(parameters)
+        case "turn/completed": return turnCompleted(parameters)
+        case "thread/tokenUsage/updated": return tokenUsageUpdated(parameters)
         case "item/agentMessage/delta":
             return [.agentTextDelta(AgentTextDelta(itemIdentifier: item, text: parameters["delta"]?.string ?? ""))]
         case "item/commandExecution/outputDelta":

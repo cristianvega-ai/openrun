@@ -3,6 +3,20 @@ import Testing
 @testable import CodexAgent
 
 @Suite struct CodexEventMapperTests {
+    @Test func theNextTurnCountsOnlyItsOwnTokens() {
+        var mapper = CodexEventMapper()
+        func total(_ input: Double, _ output: Double) -> JSONValue {
+            .object(["tokenUsage": .object(["total": .object(["inputTokens": .number(input), "cachedInputTokens": .number(0),
+                                                               "outputTokens": .number(output)])])])
+        }
+        _ = mapper.events(method: "thread/tokenUsage/updated", parameters: total(100, 10))
+        _ = mapper.events(method: "turn/started", parameters: .object(["turn": .object(["id": .string("t")])]))
+        _ = mapper.events(method: "thread/tokenUsage/updated", parameters: total(150, 25))
+        let end = mapper.events(method: "turn/completed", parameters: .object(["turn": .object(["id": .string("t"), "status": .string("completed")])]))
+        #expect(end == [.turnEnded(TurnEnd(outcome: .done, usage: TokenUsage(inputTokens: 50, outputTokens: 15)))])
+        #expect(mapper.activeTurn == nil)
+    }
+
     @Test func warningsAndErrorsAreNotices() {
         var mapper = CodexEventMapper()
         let retry = mapper.events(method: "error", parameters: .object(["error": .object(["message": .string("busy")]), "willRetry": .bool(true)]))
