@@ -44,6 +44,7 @@ import Testing
         let files = try FileManager.default.contentsOfDirectory(at: Self.folder, includingPropertiesForKeys: nil)
         let opaque = try Regex("(toolu|msg|req)_[A-Za-z0-9]{10,}")
         let universal = try Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+        let hash = try Regex("[0-9a-fA-F]{20,}")
         for file in files {
             let text = try String(contentsOf: file, encoding: .utf8)
             for match in text.matches(of: opaque) {
@@ -51,6 +52,10 @@ import Testing
             }
             for match in text.matches(of: universal) {
                 #expect(text[match.range].hasPrefix("00000000-0000-"), "\(file.lastPathComponent) holds a real identifier")
+            }
+            // A hash, such as the hash of the system prompt, is only zeros.
+            for match in text.matches(of: hash) {
+                #expect(text[match.range].allSatisfy { $0 == "0" }, "\(file.lastPathComponent) holds a real hash")
             }
         }
     }
