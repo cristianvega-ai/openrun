@@ -617,14 +617,18 @@ extension CommandLineToolIntegration {
                 try #require(TerminalControl.waitingOutput(onTerminal: path) == fullQueueLength, "the waiting output still grew")
 
                 kill(tool, SIGTSTP)
-                try await Task.sleep(for: .milliseconds(150))
-                try #require(!TerminalControl.isStopped(process: tool), "the tool stopped, so this run proves nothing")
+                // The keyboard thread pauses before the tool restores the mode.
+                try #require(await eventually { !terminal.isInRawMode })
+                // A tool that must end does not stop itself after the closing
+                // wait of 1 second, which a busy Mac passed before the keys came.
+                // The end waits behind the closing sequences, so the keys still
+                // come while the tool suspends.
+                kill(tool, SIGTERM)
                 // The restored mode lets any key restart the output. Holding the
                 // output again keeps the terminal frozen while the keys are typed.
                 terminal.pauseOutput()
                 terminal.type("typed-while-suspended\r")
                 try await Task.sleep(for: .milliseconds(300))
-                kill(tool, SIGTERM)
                 #expect(await eventually(timeout: .seconds(10)) { !TerminalControl.exists(process: tool) })
                 terminal.resumeOutput()
 
