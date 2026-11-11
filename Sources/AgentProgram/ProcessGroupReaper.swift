@@ -47,7 +47,10 @@ final class ProcessGroupReaper: @unchecked Sendable {
         } while result < 0 && errno == EINTR
         // The event can come before the program can be waited for, and it
         // comes once. After another error, such as ECHILD, the reap tells.
-        if result == 0, information.si_pid == 0 {
+        // `waitid` on macOS also reports a stopped or continued program, and
+        // that is no end.
+        let ended = information.si_pid != 0 && [CLD_EXITED, CLD_KILLED, CLD_DUMPED].contains(information.si_code)
+        if result == 0, !ended {
             queue.asyncAfter(deadline: .now() + .milliseconds(5)) { [self] in checkExit() }
             return
         }
@@ -71,10 +74,16 @@ final class ProcessGroupReaper: @unchecked Sendable {
         queue.asyncAfter(deadline: .now() + .milliseconds(20)) { [self] in endGroup(since: start, terminated: true) }
     }
 
+    /// Never blocks the queue: the program has ended, so the wait returns at
+    /// once, and a wait that finds nothing tries again a moment later.
     private func reap() {
         var status: Int32 = 0
         var result: pid_t
-        repeat { result = waitpid(processIdentifier, &status, 0) } while result < 0 && errno == EINTR
+        repeat { result = waitpid(processIdentifier, &status, WNOHANG) } while result < 0 && errno == EINTR
+        if result == 0 {
+            queue.asyncAfter(deadline: .now() + .milliseconds(5)) { [self] in reap() }
+            return
+        }
         hasReaped = true
         // The macros WIFEXITED and WTERMSIG are not available to Swift. On a
         // failed wait the status is lost, and 127 says that it is unknown.
