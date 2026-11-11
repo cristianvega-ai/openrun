@@ -211,12 +211,15 @@ extension CommandLineToolIntegration {
 
                 var plainDelays: [Duration] = []
                 var escapeDelays: [Duration] = []
-                for _ in 0..<9 {
+                // Load only adds delay to a sample, so the smallest delays
+                // show the hold. A longer hold raises every Escape sample. On a
+                // busy Mac all of 9 samples came late, so the test takes more
+                // samples, up to 60, until the smallest ones are within the limit.
+                for round in 0..<60 {
                     plainDelays.append(try #require(delayUntilReported(key: 0x71, in: terminal)))
                     escapeDelays.append(try #require(delayUntilReported(key: 0x1B, in: terminal)))
+                    if round >= 8 && escapeDelays.min()! - plainDelays.min()! <= .milliseconds(40) { break }
                 }
-                // Load only adds delay to a sample, so the smallest delays
-                // show the hold. A longer hold raises every Escape sample.
                 let plain = plainDelays.min()!
                 let escape = escapeDelays.min()!
                 print("lone-escape-delay: plain \(plain), escape \(escape), extra \(escape - plain)")
