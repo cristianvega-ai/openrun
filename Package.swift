@@ -50,6 +50,10 @@ let package = Package(
         // for protected settings.
         .target(name: "Settings", dependencies: ["DataStorage", "UntrustedText"]),
         .testTarget(name: "SettingsTests", dependencies: ["Settings", "DataStorage"]),
+        // The model of an agent thread: its events, the transcript that a
+        // chat shows, and the state of the thread. It uses no AppKit, so the
+        // Linux app can use it too (proposal 13 of 2026-11-10).
+        .target(name: "AgentConversation"),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
