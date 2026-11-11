@@ -25,4 +25,18 @@ struct PermissionRequestWordsTests {
         #expect(shown.hasPrefix("aaa") && shown.hasSuffix("END"))
         #expect(shown.contains("1003 characters not shown"))
     }
+
+    @Test func charactersThatDrawAsBlankShowAsCodes() {
+        // Fillers, a blank Braille cell, spaces that are not a space, tags,
+        // a variation selector on its own, and zero-width characters.
+        let hidden: [UInt32] = [0x3164, 0x115F, 0xFFA0, 0x2800, 0x00A0, 0x2003, 0x3000, 0xE0041, 0xFE0F, 0x200B, 0x2060, 0x034F]
+        for value in hidden {
+            let scalar = Character(Unicode.Scalar(value)!)
+            #expect(PermissionRequestWords.visible("a\(scalar)b") == "a⟨U+\(String(format: "%04X", value))⟩b")
+        }
+    }
+
+    @Test func anEmojiKeepsItsVariationSelector() {
+        #expect(PermissionRequestWords.visible("echo \u{2764}\u{FE0F}") == "echo \u{2764}\u{FE0F}")
+    }
 }

@@ -36,11 +36,18 @@ struct PermissionRequestWords: Equatable {
     }
 
     /// The text with control characters, other than a line end or a tab,
-    /// and format characters shown as marks or codes. A direction override
-    /// or a zero-width space can hide or reorder what the user reads.
+    /// format characters, and characters that draw as blank but are not a
+    /// space shown as marks or codes. A direction override, a zero-width
+    /// space or a filler can hide or reorder what the user reads.
     static func visible(_ text: String) -> String {
         var shown = ""
+        var previous: Unicode.Scalar?
         for scalar in text.unicodeScalars {
+            defer { previous = scalar }
+            if isBlank(scalar, after: previous) {
+                shown += code(of: scalar)
+                continue
+            }
             switch scalar.value {
             case 0x0A, 0x09: shown.unicodeScalars.append(scalar)
             case 0x0D: shown += "⏎"
@@ -56,6 +63,18 @@ struct PermissionRequestWords: Equatable {
             }
         }
         return shown
+    }
+
+    /// Whether a character draws as blank, or as nothing, but is not a
+    /// space: a filler, a blank Braille cell, another kind of space, or a
+    /// character that a font ignores. A variation selector after an emoji
+    /// only chooses its look, so it stays.
+    private static func isBlank(_ scalar: Unicode.Scalar, after previous: Unicode.Scalar?) -> Bool {
+        let properties = scalar.properties
+        if properties.isVariationSelector { return previous?.properties.isEmoji != true }
+        if scalar.value == 0x2800 { return true }
+        if properties.generalCategory == .spaceSeparator { return scalar.value != 0x20 }
+        return properties.isDefaultIgnorableCodePoint
     }
 
     private static func code(of scalar: Unicode.Scalar) -> String {
