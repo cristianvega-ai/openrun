@@ -27,6 +27,15 @@ import AppKit
     init(context: TranscriptRowContext) {
         self.context = context
         super.init(frame: .zero)
+        setAccessibilityRole(.group)
+        setAccessibilityLabel("Conversation")
+    }
+
+    /// The rows in the order of the conversation. The views come and go
+    /// as the user scrolls, so the order of the subviews is not the order
+    /// that VoiceOver must read.
+    override func accessibilityChildren() -> [Any]? {
+        subviews.filter { !$0.isHidden }.sorted { $0.frame.minY < $1.frame.minY }
     }
 
     @available(*, unavailable)

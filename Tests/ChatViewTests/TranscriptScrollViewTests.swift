@@ -66,4 +66,14 @@ import Testing
         #expect(!scrollView.transcriptView.isFollowingBottom)
         #expect(scrollView.reveal("user:none") == nil)
     }
+
+    @Test func voiceOverReadsTheRowsInTheOrderOfTheConversation() throws {
+        // Rows above come into sight after the rows below, so their views
+        // are the last subviews.
+        scrollView.contentView.scroll(to: NSPoint(x: 0, y: scrollView.contentView.bounds.minY - 300))
+        let children = try #require(scrollView.transcriptView.accessibilityChildren() as? [NSView])
+        #expect(children.count > 1)
+        #expect(children.map(\.frame.minY) == children.map(\.frame.minY).sorted())
+        #expect(scrollView.transcriptView.subviews.map(\.frame.minY) != children.map(\.frame.minY))
+    }
 }
