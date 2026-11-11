@@ -338,6 +338,9 @@ actor SessionServer {
                 client.send(.settingList(SettingKeeper.summaries(of: await settings.values)))
             case .changeSetting(let name, let text):
                 client.send(await changeSetting(name, to: text, for: peer))
+            case .createThread, .listThreads, .renameThread, .closeThread, .attachThread, .sendThreadMessage, .stopThread:
+                // The capability `threads` is off until the threads are here.
+                client.send(Self.refusal("This session process does not keep agent threads yet."))
             }
             client.markHandled(received)
         }

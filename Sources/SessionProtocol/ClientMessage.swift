@@ -103,6 +103,33 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// `openrun settings set`. Only OpenRun.app may change a protected
     /// setting. Answer: `acknowledged`.
     case changeSetting(name: String, text: String)
+
+    // Agent threads. Check `capabilities.threads` first. Only a program
+    // outside every session and every thread may send these (decision of
+    // 2026-11-10).
+
+    /// Makes a thread. `nil` for the model or the permission mode takes the
+    /// one of the settings. Answer: `threadCreated`.
+    case createThread(agent: String, folder: String, model: String? = nil, permissionMode: String? = nil, name: String? = nil)
+    /// Answer: `threadList`.
+    case listThreads
+    /// Gives a thread a name, or removes it with `nil` or an empty name.
+    /// Answer: `acknowledged`.
+    case renameThread(identifier: UUID, name: String?)
+    /// Ends the process of the thread and removes its record. The history
+    /// of the agent stays where the agent keeps it. Answer: `acknowledged`.
+    case closeThread(identifier: UUID)
+    /// Attaches the connection to a thread. Answer: `threadAttached`, the
+    /// events that the thread kept, `threadReplayComplete`, and then each
+    /// new event. The connection then takes `sendThreadMessage`,
+    /// `stopThread` and `detach`.
+    case attachThread(identifier: UUID)
+    /// Sends a message of the user to a thread. It waits behind a turn
+    /// that runs. Answer: `threadMessageSent`.
+    case sendThreadMessage(identifier: UUID, text: String, images: [ThreadImage]? = nil)
+    /// Stops the turn of a thread. Answer: `acknowledged`, also when no
+    /// turn runs.
+    case stopThread(identifier: UUID)
 }
 
 extension ClientMessage: FramedMessage {
@@ -158,6 +185,13 @@ extension ClientMessage {
         case .moveProject: "moveProject"
         case .listSettings: "listSettings"
         case .changeSetting: "changeSetting"
+        case .createThread: "createThread"
+        case .listThreads: "listThreads"
+        case .renameThread: "renameThread"
+        case .closeThread: "closeThread"
+        case .attachThread: "attachThread"
+        case .sendThreadMessage: "sendThreadMessage"
+        case .stopThread: "stopThread"
         }
     }
 }

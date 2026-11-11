@@ -59,6 +59,25 @@ public enum ServerMessage: Codable, Equatable, Sendable {
 
     // Agent threads. Only a client that asked for threads gets these.
 
+    case threadCreated(ThreadSummary)
+    /// Every thread, oldest first: the answer to `listThreads`, and on a
+    /// connection that asked with `receiveSessionChanges`, the list at
+    /// the start, after the settings.
+    case threadList([ThreadSummary])
+    /// The connection is attached to the thread. The kept events follow.
+    case threadAttached(ThreadSummary)
+    /// The events that the thread kept came before this message, and each
+    /// later event is new. `hasEarlierEvents` tells that older events
+    /// went away, so the history of the agent holds more.
+    case threadReplayComplete(hasEarlierEvents: Bool)
+    /// The thread took the message. Its events carry the identifier.
+    case threadMessageSent(identifier: UUID)
+    /// A new thread, or new facts of a thread, on a connection that asked
+    /// with `receiveSessionChanges`.
+    case threadChanged(ThreadSummary)
+    /// The thread closed and left the list. An attached connection gets
+    /// it as its last message.
+    case threadEnded(identifier: UUID)
     /// One event of the thread that the connection is attached to, as the
     /// JSON of a conversation event. It travels as a raw frame.
     case threadEvent(Data)
@@ -127,6 +146,13 @@ extension ServerMessage {
         case .projectAdded: "projectAdded"
         case .settingList: "settingList"
         case .threadEvent: "threadEvent"
+        case .threadCreated: "threadCreated"
+        case .threadList: "threadList"
+        case .threadAttached: "threadAttached"
+        case .threadReplayComplete: "threadReplayComplete"
+        case .threadMessageSent: "threadMessageSent"
+        case .threadChanged: "threadChanged"
+        case .threadEnded: "threadEnded"
         }
     }
 }

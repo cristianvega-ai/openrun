@@ -10,17 +10,22 @@ public struct ServerCapabilities: Codable, Equatable, Sendable {
     /// lists after the session list to a connection that asked with
     /// `receiveSessionChanges`.
     public let projectsAndSettings: Bool
+    /// Whether the session process keeps agent threads and takes the
+    /// thread requests. An older process answers them with a failure.
+    public let threads: Bool
 
-    public init(orderedResizeConfirmation: Bool = false, sessionChanges: Bool = false, projectsAndSettings: Bool = false) {
+    public init(orderedResizeConfirmation: Bool = false, sessionChanges: Bool = false, projectsAndSettings: Bool = false, threads: Bool = false) {
         self.orderedResizeConfirmation = orderedResizeConfirmation
         self.sessionChanges = sessionChanges
         self.projectsAndSettings = projectsAndSettings
+        self.threads = threads
     }
 
     private enum CodingKeys: String, CodingKey {
         case orderedResizeConfirmation
         case sessionChanges
         case projectsAndSettings
+        case threads
     }
 
     public init(from decoder: any Decoder) throws {
@@ -28,5 +33,6 @@ public struct ServerCapabilities: Codable, Equatable, Sendable {
         orderedResizeConfirmation = try values.decodeIfPresent(Bool.self, forKey: .orderedResizeConfirmation) ?? false
         sessionChanges = try values.decodeIfPresent(Bool.self, forKey: .sessionChanges) ?? false
         projectsAndSettings = try values.decodeIfPresent(Bool.self, forKey: .projectsAndSettings) ?? false
+        threads = try values.decodeIfPresent(Bool.self, forKey: .threads) ?? false
     }
 }
