@@ -37,6 +37,12 @@ struct CodexEventMapper: Sendable {
 
     mutating func events(method: String, parameters: JSONValue) -> [ConversationEventKind]? {
         let item = parameters["itemId"]?.string ?? ""
+        // A command that a stop left as a background terminal goes on to
+        // write and to end after its turn. In the chat it would show the
+        // thread as busy, so it reaches only the log of the thread.
+        if let turn = parameters["turnId"]?.string, turn != activeTurn, Self.isToolOutput(method, parameters) {
+            return [.agentStatus(AgentStatus(kind: method, detail: "after the end of its turn"))]
+        }
         switch method {
         case "turn/started": return turnStarted(parameters)
         case "turn/completed": return turnCompleted(parameters)
@@ -70,6 +76,10 @@ struct CodexEventMapper: Sendable {
             guard Self.statusMethods.contains(method) else { return nil }
             return [.agentStatus(AgentStatus(kind: method, detail: Self.statusDetail(parameters)))]
         }
+    }
+
+    static func isToolOutput(_ method: String, _ parameters: JSONValue) -> Bool {
+        method == "item/commandExecution/outputDelta" || method == "item/completed" && parameters["item"]?["type"]?.string == "commandExecution"
     }
 
     /// A short detail of a status, such as the new state of the thread.

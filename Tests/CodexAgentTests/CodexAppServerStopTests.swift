@@ -30,11 +30,13 @@ import Testing
                 if request.identifier.hasSuffix("/0") { await thread.answerPermission(identifier: request.identifier, answer: .allow) }
                 if request.identifier.hasSuffix("/1") { stop = Task { await thread.stop() } }
             }
-            if case .toolCallResult(let result) = event.kind, result.identifier == "exec-00000000-0000-7000-8000-000000000017" { break }
+            // The command that the stop ended completes after its turn.
+            if case .agentStatus(let status) = event.kind, status.detail == "after the end of its turn", status.kind == "item/completed" { break }
         }
         _ = try await played
         #expect(await stop?.value == CodexStop(interruptedTurn: true, endedCommandCount: 1))
         #expect(events.contains { if case .permissionEnded(let end) = $0.kind { end.outcome == .cancelled } else { false } })
         #expect(events.contains { if case .turnEnded(let end) = $0.kind { end.outcome == .stopped } else { false } })
+        #expect(Transcript(events: events).state == .idle)
     }
 }

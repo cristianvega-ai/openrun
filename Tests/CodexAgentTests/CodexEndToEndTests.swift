@@ -23,6 +23,7 @@ import Testing
         await #expect(throws: CodexRequestError.connectionEnded) {
             try await server.startThread(CodexThreadStart(folder: "/work/project"))
         }
-        #expect(await server.hasEnded)
+        // The server learns the end after the process exit, a little later.
+        while await !server.hasEnded { try await Task.sleep(for: .milliseconds(10)) }
     }
 }
