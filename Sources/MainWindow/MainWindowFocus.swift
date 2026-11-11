@@ -37,7 +37,7 @@ extension MainWindowController {
     /// The content is active while the window is key and the focus is in the content.
     func updateContentActivity() {
         let responder = paneWindow.firstResponder as? NSView
-        let isActive = paneWindow.isKeyWindow && responder?.isDescendant(of: contentPane.contentArea) == true
+        let isActive = isWindowKey() && responder?.isDescendant(of: contentPane.contentArea) == true
         guard isActive != isContentActive else { return }
         isContentActive = isActive
         if isActive { delegate?.mainWindowContentDidBecomeActive(self) } else { delegate?.mainWindowContentDidResignActive(self) }

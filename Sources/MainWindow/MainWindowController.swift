@@ -23,6 +23,8 @@ public final class MainWindowController: NSObject {
     let defaults: UserDefaults
     var layout: PaneLayout
     var isContentActive = false
+    /// Whether the window is key. Tests set it, because a test window is not key.
+    lazy var isWindowKey: () -> Bool = { [weak paneWindow] in paneWindow?.isKeyWindow ?? false }
     /// The setting of Reduce Motion. Tests set it.
     var reducesMotion = { NSWorkspace.shared.accessibilityDisplayShouldReduceMotion }
 

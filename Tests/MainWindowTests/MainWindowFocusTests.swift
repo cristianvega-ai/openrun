@@ -34,16 +34,20 @@ final class RecordingWindowHost: MainWindowDelegate {
         #expect(window.firstResponder === controller.sessionsList.focusView)
     }
 
-    /// A window that is not key never makes its content active, so the test
-    /// checks the reports through the key state that AppKit gives it.
     @Test func theHostLearnsWhenTheContentIsActiveAndWhenTheWindowCloses() {
         let controller = makeMainWindow(), host = RecordingWindowHost()
         controller.delegate = host
+        var isKey = true
+        controller.isWindowKey = { isKey }
         let content = NSTextView()
         controller.showContent(PaneContent(view: content, title: "zsh", minimumSize: .zero))
         controller.focusContent()
-        #expect(controller.window.firstResponder === content)
-        #expect(host.events == (controller.window.isKeyWindow ? ["active"] : []))
+        #expect(controller.window.firstResponder === content && host.events == ["active"])
+        controller.focusNextPane(nil)
+        controller.focusContent()
+        isKey = false
+        controller.windowDidResignKey(Notification(name: NSWindow.didResignKeyNotification))
+        #expect(host.events == ["active", "inactive", "active", "inactive"])
         controller.window.close()
         #expect(host.events.last == "close")
     }
