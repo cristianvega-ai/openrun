@@ -22,8 +22,11 @@ import Testing
         var layout = controller.layout
         if toggle != .sessions { layout.projectsHidden.toggle() }
         if toggle != .projects { layout.sessionsHidden.toggle() }
-        let room = controller.window.screen.map { controller.window.contentRect(forFrameRect: $0.visibleFrame).width } ?? .infinity
-        return min(layout.minimumWidth(content: controller.contentPane.minimumSize.width), room)
+        return min(layout.minimumWidth(content: controller.contentPane.minimumSize.width), room(of: controller))
+    }
+
+    private func room(of controller: MainWindowController) -> CGFloat {
+        controller.window.screen.map { controller.window.contentRect(forFrameRect: $0.visibleFrame).width } ?? .infinity
     }
 
     /// Waits until no hold is on and the count of sizes stays the same for
@@ -40,11 +43,13 @@ import Testing
     private func check(_ toggle: Toggle, fromHidden hidden: Bool, at width: Width, _ controller: MainWindowController, _ pane: SessionPaneController) async {
         let name = "\(toggle) from hidden \(hidden) at \(width)"
         setHidden(toggle, hidden, in: controller)
-        let (start, end) = (controller.window.contentMinSize.width, finalMinimumWidth(toggle, controller))
+        // The middle between the two minimums needs only to be near, so the
+        // limits of the lists stand for the width of their top rows.
+        let (start, estimate) = (controller.window.contentMinSize.width, finalMinimumWidth(toggle, controller))
         let target: CGFloat = switch width {
         case .minimum: 10
         case .onePointAbove: start + 1
-        case .betweenMinimums: max(start, ((start + end) / 2).rounded())
+        case .betweenMinimums: max(start, ((start + estimate) / 2).rounded())
         }
         controller.window.setContentSize(NSSize(width: target, height: 10))
         await settle(controller, pane)
@@ -55,6 +60,7 @@ import Testing
         if pane.sentSizeRequests > before { await turns(seconds: 10) { pane.terminalView?.gridSize != gridBefore } }
         let window = controller.window
         let content = window.contentRect(forFrameRect: window.frame).size
+        let end = min(expectedMinimumWidth(of: controller, content: controller.contentPane.minimumSize.width), room(of: controller))
         #expect(window.screen.map { $0.visibleFrame.contains(window.frame) } ?? true, "\(name)")
         #expect(window.contentMinSize.width == end && content.width >= end && content.height >= window.contentMinSize.height, "\(name)")
         #expect(pane.paneView.frame.width == controller.contentPane.contentArea.frame.width, "\(name)")

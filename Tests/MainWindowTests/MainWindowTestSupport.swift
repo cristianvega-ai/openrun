@@ -36,3 +36,14 @@ func dragSessionsEdge(of controller: MainWindowController, by distance: CGFloat)
     }
     splitView.dragEnded?()
 }
+
+/// The narrowest window: each visible list at its limit, or at the width
+/// that its top row needs when that is more, with its divider, and the content.
+@MainActor
+func expectedMinimumWidth(of controller: MainWindowController, content: CGFloat) -> CGFloat {
+    let divider = controller.splitController.splitView.dividerThickness
+    var width = content
+    if !controller.projectsItem.isCollapsed { width += max(160, controller.projectsList.topRow.fittingSize.width) + divider }
+    if !controller.sessionsItem.isCollapsed { width += max(240, controller.sessionsList.topRow.fittingSize.width) + divider }
+    return width
+}

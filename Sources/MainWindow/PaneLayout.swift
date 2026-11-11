@@ -22,10 +22,12 @@ public struct PaneLayout: Codable, Equatable, Sendable {
         return layout
     }
 
-    /// The narrowest window: the smallest width of each visible list, and the
-    /// minimum width of the content of the third pane.
-    func minimumWidth(content: Double) -> Double {
-        (projectsHidden ? 0 : Self.projectsWidths.lowerBound) + (sessionsHidden ? 0 : Self.sessionsWidths.lowerBound) + content
+    /// The narrowest window: each visible list at its smallest width with the
+    /// divider after it, and the minimum width of the content of the third
+    /// pane. A list can need more than its limit, for the traffic lights.
+    func minimumWidth(content: Double, projects: Double = projectsWidths.lowerBound,
+                      sessions: Double = sessionsWidths.lowerBound, divider: Double = 0) -> Double {
+        (projectsHidden ? 0 : projects + divider) + (sessionsHidden ? 0 : sessions + divider) + content
     }
 
     /// The kept layout, or the first layout when there is none or it cannot be read.

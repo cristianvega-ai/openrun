@@ -12,14 +12,14 @@ import Testing
         let controller = makeMainWindow()
         defer { controller.window.close() }
         controller.reducesMotion = { true }
-        #expect(controller.window.contentMinSize == NSSize(width: 160 + 240 + 360, height: 52 + 240))
+        #expect(controller.window.contentMinSize == NSSize(width: expectedMinimumWidth(of: controller, content: 360), height: 52 + 240))
         controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: 520, height: 300)))
-        #expect(controller.window.contentMinSize == NSSize(width: 920, height: 352))
+        #expect(controller.window.contentMinSize == NSSize(width: expectedMinimumWidth(of: controller, content: 520), height: 352))
         controller.toggleProjectsList(nil)
-        #expect(controller.window.contentMinSize.width == 760)
+        #expect(controller.window.contentMinSize.width == expectedMinimumWidth(of: controller, content: 520))
         controller.toggleProjectsList(nil)
         controller.updateContentMinimumSize(CGSize(width: 800, height: 300))
-        let expected = min(1_200, room(of: controller))
+        let expected = min(expectedMinimumWidth(of: controller, content: 800), room(of: controller))
         #expect(controller.window.contentMinSize.width == expected && controller.window.contentLayoutRect.width >= expected)
         #expect(controller.contentItem.minimumThickness == 800)
     }
@@ -39,6 +39,25 @@ import Testing
         #expect(controller.window.frame.width >= minimum.width && controller.window.frame.height >= minimum.height)
     }
 
+    /// The minimum counts the dividers and the top row of the first pane,
+    /// which holds the traffic lights. Else AppKit grows the window past it.
+    @Test func theWindowAtItsMinimumHasNoRoomToSpare() async {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.reducesMotion = { true }
+        controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: 500, height: 300)))
+        for (projects, sessions) in [(false, false), (true, false), (false, true), (true, true)] {
+            if controller.projectsItem.isCollapsed != projects { controller.toggleProjectsList(nil) }
+            if controller.sessionsItem.isCollapsed != sessions { controller.toggleSessionsList(nil) }
+            controller.window.setContentSize(NSSize(width: 10, height: 10))
+            await turns(seconds: 0.3)
+            controller.window.layoutIfNeeded()
+            let width = controller.window.contentRect(forFrameRect: controller.window.frame).width
+            #expect(width == controller.window.contentMinSize.width, "hidden \(projects) \(sessions): \(width)")
+            #expect(controller.contentPane.view.frame.width == 500, "hidden \(projects) \(sessions)")
+        }
+    }
+
     /// An animated show of a list at the minimum width once ended the app
     /// with an exception: a check of the minimum inside the layout pass of
     /// the animation asked for another pass without end.
@@ -54,7 +73,8 @@ import Testing
         await turns(seconds: 0.3)
         controller.toggleSessionsList(nil)
         await turns(seconds: 1)
-        #expect(controller.window.contentMinSize.width == 900 && controller.window.frame.width >= 900)
+        let expected = expectedMinimumWidth(of: controller, content: 500)
+        #expect(controller.window.contentMinSize.width == expected && controller.window.frame.width >= expected)
     }
 
     /// A new screen sets the minimum again, after the pass that moved the window.

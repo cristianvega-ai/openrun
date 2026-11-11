@@ -11,7 +11,14 @@ extension MainWindowController: NSWindowDelegate {
     func keepMinimumSize() {
         let content = contentPane.minimumSize
         contentItem.minimumThickness = content.width
-        var minimum = NSSize(width: layout.minimumWidth(content: content.width), height: PaneTopRow.height + content.height)
+        // The top row of the first pane holds the traffic lights, and it can
+        // need more than the limit of its list. A minimum that leaves it out,
+        // or the dividers, is too small, and AppKit then grows the window.
+        projectsItem.minimumThickness = max(PaneLayout.projectsWidths.lowerBound, projectsList.topRow.fittingSize.width)
+        sessionsItem.minimumThickness = max(PaneLayout.sessionsWidths.lowerBound, sessionsList.topRow.fittingSize.width)
+        let width = layout.minimumWidth(content: content.width, projects: projectsItem.minimumThickness,
+                                        sessions: sessionsItem.minimumThickness, divider: splitController.splitView.dividerThickness)
+        var minimum = NSSize(width: width, height: PaneTopRow.height + content.height)
         let screen = paneWindow.screen?.visibleFrame
         if let screen {
             let room = paneWindow.contentRect(forFrameRect: screen).size
