@@ -22,6 +22,9 @@ public struct Transcript: Sendable, Hashable {
     var waitingPermissions: Set<String> = []
     /// The task item of each tool call that started a sub-agent.
     var taskItems: [String: String] = [:]
+    /// The tool calls of each task item, so that its entries in
+    /// `taskItems` go when the item goes.
+    var taskCalls: [String: [String]] = [:]
 
     public init(limits: TranscriptLimits = TranscriptLimits()) {
         self.limits = limits
@@ -73,7 +76,21 @@ public struct Transcript: Sendable, Hashable {
         }
         updateState(after: event.kind)
         change.removed = storage.trim(to: limits)
+        forget(change.removed)
         return change
+    }
+
+    /// Drops what the transcript kept about items that it trimmed, so that
+    /// its memory stays bounded however many items come and go.
+    private mutating func forget(_ removed: [String]) {
+        for identifier in removed {
+            openItems.remove(identifier)
+            waitingPermissions.remove(identifier)
+            for call in taskCalls.removeValue(forKey: identifier) ?? [] where taskItems[call] == identifier {
+                taskItems[call] = nil
+            }
+        }
+        if waitingPermissions.isEmpty, state == .needsUser { state = .inProgress }
     }
 
     // MARK: - Messages

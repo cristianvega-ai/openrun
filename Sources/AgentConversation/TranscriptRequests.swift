@@ -30,13 +30,13 @@ extension Transcript {
             start.prompt = BoundedText.prefix(of: start.prompt, byteLimit: limit)
             // A message of the task can come before its start.
             let identifier = start.toolCallIdentifier.flatMap { taskItems[$0] } ?? "task:" + start.identifier
-            if let call = start.toolCallIdentifier { taskItems[call] = identifier }
+            if let call = start.toolCallIdentifier { mapTask(call: call, to: identifier) }
             update(identifier, create: .task(TaskItem(start: nil)), &change) { content in
                 content.modifyTask { $0.start = start }
             }
         case .taskMessage(let message):
             let identifier = taskItems[message.toolCallIdentifier] ?? "task:" + message.toolCallIdentifier
-            taskItems[message.toolCallIdentifier] = identifier
+            mapTask(call: message.toolCallIdentifier, to: identifier)
             update(identifier, create: .task(TaskItem(start: nil)), &change) { content in
                 content.modifyTask { task in
                     task.messages.append(BoundedText.prefix(of: message.text, byteLimit: limit))
@@ -56,5 +56,11 @@ extension Transcript {
         default:
             break
         }
+    }
+
+    private mutating func mapTask(call: String, to identifier: String) {
+        guard taskItems[call] != identifier else { return }
+        taskItems[call] = identifier
+        taskCalls[identifier, default: []].append(call)
     }
 }
