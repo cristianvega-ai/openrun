@@ -5,8 +5,10 @@ import AppKit
 @MainActor
 final class RecordingProjectsHost: ProjectsListDelegate {
     var selections: [ProjectsListEntry] = []
+    var newProjectRequests = 0
 
     func projectsList(_ list: ProjectsListController, didSelect entry: ProjectsListEntry) { selections.append(entry) }
+    func projectsListDidRequestNewProject(_ list: ProjectsListController) { newProjectRequests += 1 }
 }
 
 /// A first pane in a window, with three projects.

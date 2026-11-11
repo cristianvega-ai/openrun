@@ -9,18 +9,23 @@ import PaneAppearance
 public final class ProjectsListController: NSObject {
     /// The pane: its top row over the list, on the color of the first pane.
     public let view = PaneBackgroundView(color: PaneColor.firstPane)
-    /// The host makes room in the top row for the traffic lights.
+    /// The top row holds the add button. The host makes room in it for the traffic lights.
     public let topRow = PaneTopRow(background: PaneColor.firstPane)
     public weak var delegate: ProjectsListDelegate?
     public internal(set) var content = ProjectsListContent()
     let table = ProjectsTableView()
     let scroll = NSScrollView()
+    let addButton: NSButton
     var rows = ProjectsListRow.rows(for: ProjectsListContent())
     /// The table selects a row while it shows a change, and that is no choice of the user.
     var isShowingChanges = false
 
     public override init() {
+        addButton = PaneButton.make(symbol: "plus", label: "Add Project", target: nil, action: nil)
         super.init()
+        addButton.target = self
+        addButton.action = #selector(requestNewProject)
+        topRow.trailingItems.addArrangedSubview(addButton)
         configureTable()
         layOut()
         table.reloadData()
@@ -60,6 +65,10 @@ public final class ProjectsListController: NSObject {
         table.selectRowIndexes(IndexSet(integer: index), byExtendingSelection: false)
         isShowingChanges = false
         table.scrollRowToVisible(index)
+    }
+
+    @objc func requestNewProject() {
+        delegate?.projectsListDidRequestNewProject(self)
     }
 
     private func layOut() {

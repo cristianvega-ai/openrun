@@ -6,4 +6,6 @@ import Foundation
 public protocol ProjectsListDelegate: AnyObject {
     /// The user selected an entry. The second pane shows its sessions.
     func projectsList(_ list: ProjectsListController, didSelect entry: ProjectsListEntry)
+    /// The user wants a new project. The host asks for a folder.
+    func projectsListDidRequestNewProject(_ list: ProjectsListController)
 }

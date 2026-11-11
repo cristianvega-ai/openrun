@@ -35,4 +35,21 @@ import Testing
         #expect(zip(cells, (0..<6).map { list.cell(at: $0) }).allSatisfy { $0 === $1 })
         #expect(list.selection == .project(identifiers[2]))
     }
+
+    @Test func theSelectionGoesToAllSessionsWhenItsProjectGoesAway() {
+        let (list, host, window, identifiers) = makeProjectsList()
+        defer { window.close() }
+        list.select(.project(identifiers[0]))
+        var content = list.content
+        content.projects.removeFirst()
+        list.show(content)
+        #expect(list.table.numberOfRows == 5 && list.selection == .allSessions && host.selections == [.allSessions])
+    }
+
+    @Test func theAddButtonAsksTheHostForANewProject() {
+        let (list, host, window, _) = makeProjectsList()
+        defer { window.close() }
+        list.addButton.performClick(nil)
+        #expect(host.newProjectRequests == 1 && list.topRow.trailingItems.arrangedSubviews.contains(list.addButton))
+    }
 }
