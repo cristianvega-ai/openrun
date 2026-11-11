@@ -9,6 +9,9 @@ public enum CodexRequestError: Error, Equatable, Sendable, CustomStringConvertib
     case connectionEnded
     /// The answer did not have the form that the method gives.
     case unexpectedAnswer(method: String)
+    /// The thread is open on this app-server already, or no longer open.
+    case threadIsOpen
+    case threadIsClosed
 
     public var description: String {
         switch self {
@@ -16,6 +19,8 @@ public enum CodexRequestError: Error, Equatable, Sendable, CustomStringConvertib
         case .timedOut(let method): "Codex gave no answer to \(method) in the time limit."
         case .connectionEnded: "The Codex app-server ended before it answered."
         case .unexpectedAnswer(let method): "Codex gave an answer to \(method) that OpenRun cannot read."
+        case .threadIsOpen: "The Codex thread is open already."
+        case .threadIsClosed: "The Codex thread is closed."
         }
     }
 }

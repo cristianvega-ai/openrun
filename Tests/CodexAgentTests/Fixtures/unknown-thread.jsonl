@@ -1,0 +1,2 @@
+{"client":"thread/resume"}
+{"server":{"error":{"code":-32600,"message":"no rollout found for thread id 00000000-0000-7000-8000-000000000019"},"id":"$request"}}

@@ -19,4 +19,29 @@ import Testing
         #expect(await events.next()?.kind == .agentStatus(AgentStatus(kind: "mcpServer/startupStatus/updated", detail: "starting")))
         #expect(await harness.server.openThreadCount == 1)
     }
+
+    @Test func aClosedThreadEndsItsEventsAndLeavesTheServer() async throws {
+        let harness = try await CodexServerHarness()
+        async let played = harness.play("thread-start")
+        let thread = try await harness.server.startThread(CodexThreadStart(folder: "/work/project"))
+        try await played
+        let close = Task { await thread.close() }
+        let unsubscribe = await harness.nextWritten()
+        #expect(unsubscribe?["method"] == .string("thread/unsubscribe"))
+        harness.serve(#"{"id":\#(unsubscribe?["id"]?.integer ?? 0),"result":{}}"#)
+        await close.value
+        var count = 0
+        for await _ in thread.events { count += 1 }
+        #expect(count <= 3)
+        #expect(await harness.server.openThreadCount == 0)
+    }
+
+    @Test func anUnknownThreadIsRefused() async throws {
+        let harness = try await CodexServerHarness()
+        async let played = harness.play("unknown-thread")
+        await #expect(throws: CodexRequestError.self) {
+            try await harness.server.resumeThread(identifier: "00000000-0000-7000-8000-000000000019", CodexThreadStart(folder: "/work/project"))
+        }
+        try await played
+    }
 }

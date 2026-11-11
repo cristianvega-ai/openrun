@@ -11,4 +11,13 @@ public struct CodexThread: Sendable {
     /// the app-server. Only one task may read them.
     public let events: AsyncStream<ConversationEvent>
     let server: CodexAppServer
+    /// Runs after the close, so that a pool can end an idle server.
+    let closed: (@Sendable () async -> Void)?
+
+    /// Ends the thread on the app-server. Its events end. The app-server
+    /// stays for its other threads.
+    public func close() async {
+        await server.closeThread(identifier)
+        await closed?()
+    }
 }
