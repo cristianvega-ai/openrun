@@ -54,6 +54,11 @@ A module uses another module only through its public types.
 | `CommandLineTool` | The `openrun` commands | `CommandLineTool` |
 | `SessionPane` | Connects one terminal view to one session, in a view that any window can hold | `SessionPaneController`, `SessionPaneView`, `SessionPaneDelegate`, `SessionStart` |
 | `SessionWindow` | One window around one session pane, and a session picker | `SessionWindowController`, `SessionList` |
+| `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, and the selected row of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView` |
+| `ListUpdates` | The rows of a list that changed between two contents, so a table updates them in place | `RowChanges` |
+| `ProjectsList` | The first pane of the main window: All Sessions, Needs You, the projects and No Project | `ProjectsListController`, `ProjectsListDelegate`, `ProjectsListContent`, `ProjectDisplay`, `ProjectsListEntry` |
+| `SessionsList` | The second pane of the main window: the threads with agents and the terminal sessions as vertical tabs | `SessionsListController`, `SessionsListDelegate`, `SessionsListContent`, `SessionRowDisplay`, `SessionKind`, `SessionsFilter`, `SessionsOrder`, `NewSessionRequest` |
+| `MainWindow` | The main window: the three panes as stacked sheets, their widths, the content of the third pane, and the focus between the panes | `MainWindowController`, `MainWindowDelegate`, `PaneContent`, `ContentPaneController`, `PaneLayout` |
 | `OpenRunApplication` | The app, its menus and windows, and setup of the launch agent at the start and on request | `OpenRunApplication` |
 | `AgentConversation` | The model of an agent thread: the events of every agent, the transcript that a chat shows, and the state of the thread | `ConversationEvent`, `ConversationEventKind`, `SourceLine`, `Transcript`, `TranscriptItem`, `TranscriptItemContent`, `TranscriptChange`, `TranscriptLimits`, `ThreadState`, `AgentMessage`, `AgentStart`, `AgentStatus`, `AgentText`, `AgentTextDelta`, `BoundedText`, `FileChange`, `JSONValue`, `LineSplitter`, `MessageImage`, `Notice`, `PermissionEnd`, `PermissionRequest`, `PermissionRequestItem`, `ProcessEnd`, `TaskEnd`, `TaskItem`, `TaskMessage`, `TaskStart`, `Thinking`, `TokenUsage`, `ToolCallInput`, `ToolCallInputDelta`, `ToolCallItem`, `ToolCallOutput`, `ToolCallRefusal`, `ToolCallResult`, `ToolCallStart`, `TurnEnd`, `TurnStart`, `UnknownLine`, `UsageReading`, `UsageWindow`, `UserMessage` |
 | `ClaudeCodeAgent` | Claude Code in a thread: its command line and environment, the user message line, the decoder of its output, its permission hook, and its history | `ClaudeCodeEnvironment`, `ClaudeCodeHistoryLocation`, `ClaudeCodeHistoryReader`, `ClaudeCodeLaunch`, `ClaudeCodeLaunchError`, `ClaudeCodeOutputDecoder`, `ClaudeCodePermissionHookAnswer`, `ClaudeCodePermissionHookError`, `ClaudeCodePermissionHookRequest`, `ClaudeCodePermissionMode`, `ClaudeCodeToolCallMatcher`, `ClaudeCodeUserMessage`, `ClaudeCodeUserMessageError` |
@@ -79,6 +84,10 @@ openrun-session     -> SessionProcess  -> SessionProtocol
 openrun-application -> OpenRunApplication -> SessionWindow -> SessionPane -> TerminalView
                                           -> SessionConnection
                                           -> SessionLaunch
+MainWindow        -> ProjectsList -> PaneAppearance -> TerminalTheme
+                                  -> ListUpdates
+                  -> SessionsList -> PaneAppearance
+                                  -> ListUpdates
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
                   -> TerminalTheme     -> TerminalEmulation
 Projects          -> DataStorage -> UntrustedText
@@ -94,7 +103,7 @@ No program uses `Projects` and `Settings` yet. The session process will own both
 No program uses `AgentConversation`, `ClaudeCodeAgent` and `AgentProgram` yet. The session process will join them.
 `AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. None of the three uses AppKit (proposal 13 of 2026-11-10).
 
-`SessionPane` and `SessionWindow` also use `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionPane` and `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color.
+`SessionPane` and `SessionWindow` also use `SessionConnection`, `SessionProtocol` and `TerminalEmulation`. `OpenRunApplication` uses `SessionPane` and `SessionProtocol`. `TerminalRendering` does not use `TerminalTheme`: the caller gives it the selection color. `MainWindow` also uses `PaneAppearance`, and `PaneAppearance` uses `TerminalEmulation` for the colors. No app module uses `MainWindow` yet: the app still opens one `SessionWindow` for each session. `MainWindow` does not use `SessionPane`: a host gives the third pane any view, such as `paneView` of a `SessionPaneController`.
 
 `TerminalEmulation` is the only module that imports libghostty-vt.
 `PseudoTerminal`, `SessionProtocol`, `SessionLaunch` and `GitBranch` depend on no other OpenRun module. `SessionConnection` depends on `SessionProtocol` and `SessionLaunch`.
