@@ -38,6 +38,23 @@ import Testing
         }
     }
 
+    /// Real identifiers can lead to the owner's account, so each one in a
+    /// fixture is a made-up one, also where it is the key of an object.
+    @Test func everyIdentifierIsAMadeUpOne() throws {
+        let files = try FileManager.default.contentsOfDirectory(at: Self.folder, includingPropertiesForKeys: nil)
+        let opaque = try Regex("(toolu|msg|req)_[A-Za-z0-9]{10,}")
+        let universal = try Regex("[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
+        for file in files {
+            let text = try String(contentsOf: file, encoding: .utf8)
+            for match in text.matches(of: opaque) {
+                #expect(text[match.range].contains("Fixture"), "\(file.lastPathComponent) holds a real identifier")
+            }
+            for match in text.matches(of: universal) {
+                #expect(text[match.range].hasPrefix("00000000-0000-"), "\(file.lastPathComponent) holds a real identifier")
+            }
+        }
+    }
+
     @Test func theHashOfAWordIsItsDigestInLowerCase() {
         #expect(Self.hash("Example") == "50d858e0985ecc7f")
     }
