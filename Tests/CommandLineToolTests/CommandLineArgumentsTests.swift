@@ -62,6 +62,15 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(try parse("project", "list", "--json").command == .projectList(printsJSON: true))
         #expect(usageMessage("project") != nil && usageMessage("project", "list", "x") != nil)
         #expect(usageMessage("project", "bogus") == "Unknown project command bogus.")
+        #expect(try parse("project", "add", "app", "--name", "My App").command == .projectChange(.add(folder: "app", name: "My App")))
+        #expect(try parse("project", "add", "--name=App", "--", "-app").command == .projectChange(.add(folder: "-app", name: "App")))
+        #expect(try parse("project", "remove", "3f2a").command == .projectChange(.remove(project: "3f2a")))
+        #expect(try parse("project", "rename", "~/app", "My", "App").command == .projectChange(.rename(project: "~/app", name: "My App")))
+        #expect(try parse("project", "rename", "3f2a").command == .projectChange(.rename(project: "3f2a", name: nil)))
+        #expect(usageMessage("project", "add") != nil && usageMessage("project", "add", "a", "b") != nil)
+        #expect(usageMessage("project", "remove", "") != nil && usageMessage("project", "rename") != nil)
+        #expect(usageMessage("project", "remove", "x", "--name", "y")?.contains("--name does not belong to project remove") == true)
+        #expect(usageMessage("list", "--name", "y")?.contains("--name does not belong to list") == true)
         #expect(try parse("--help").command == .help)
     }
 

@@ -25,6 +25,7 @@ struct CommandLineArguments: Equatable {
         var helpRequested = false
         var folder: String?
         var session: String?
+        var projectName: String?
         var positional: [String] = []
 
         var remaining = words[...]
@@ -36,6 +37,8 @@ struct CommandLineArguments: Equatable {
                 folder = try Self.value(of: word, from: &remaining)
             case "--session":
                 session = try Self.value(of: word, from: &remaining)
+            case "--name":
+                projectName = try Self.value(of: word, from: &remaining)
             case "--enter":
                 pressEnter = true
             case "--scrollback":
@@ -52,6 +55,8 @@ struct CommandLineArguments: Equatable {
                     folder = String(word.dropFirst("--folder=".count))
                 } else if word.hasPrefix("--session=") {
                     session = String(word.dropFirst("--session=".count))
+                } else if word.hasPrefix("--name=") {
+                    projectName = String(word.dropFirst("--name=".count))
                 } else if word.hasPrefix("-") && word.count > 1 {
                     throw CommandLineToolError.usage("Unknown option \(word).")
                 } else {
@@ -76,6 +81,7 @@ struct CommandLineArguments: Equatable {
         if printsJSON, name != "list", name != "project" {
             throw CommandLineToolError.usage("--json does not belong to \(name). It works with list and project list.")
         }
+        if projectName != nil, name != "project" { throw CommandLineToolError.usage("--name does not belong to \(name). It works with project add.") }
         if session != nil, name != "notify" { throw CommandLineToolError.usage("--session does not belong to \(name). It works with notify.") }
 
         func allow(_ flag: String, used: Bool, in commands: String) throws {
@@ -128,7 +134,7 @@ struct CommandLineArguments: Equatable {
             command = .notify(identifier: session, text: text)
         case "project":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
-            command = try Self.projectCommand(rest + (afterSeparator ?? []), printsJSON: printsJSON)
+            command = try Self.projectCommand(rest + (afterSeparator ?? []), printsJSON: printsJSON, name: projectName)
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -140,16 +146,29 @@ struct CommandLineArguments: Equatable {
     }
 
     /// The words after `project`: the action, and what it acts on.
-    private static func projectCommand(_ words: [String], printsJSON: Bool) throws -> ToolCommand {
-        guard let action = words.first else { throw CommandLineToolError.usage("project needs list.") }
+    private static func projectCommand(_ words: [String], printsJSON: Bool, name: String?) throws -> ToolCommand {
+        guard let action = words.first else { throw CommandLineToolError.usage("project needs list, add, remove or rename.") }
         let rest = words.dropFirst()
         if printsJSON, action != "list" {
             throw CommandLineToolError.usage("--json does not belong to project \(action). It works with list and project list.")
         }
+        if name != nil, action != "add" { throw CommandLineToolError.usage("--name does not belong to project \(action). It works with project add.") }
         switch action {
         case "list":
             guard rest.isEmpty else { throw CommandLineToolError.usage("project list takes no arguments.") }
             return .projectList(printsJSON: printsJSON)
+        case "add":
+            guard rest.count == 1, let folder = rest.first, !folder.isEmpty else { throw CommandLineToolError.usage("project add needs one folder.") }
+            return .projectChange(.add(folder: folder, name: name))
+        case "remove":
+            guard rest.count == 1, let project = rest.first, !project.isEmpty else {
+                throw CommandLineToolError.usage("project remove needs one identifier or folder.")
+            }
+            return .projectChange(.remove(project: project))
+        case "rename":
+            guard let project = rest.first, !project.isEmpty else { throw CommandLineToolError.usage("project rename needs an identifier or a folder, and the name to give.") }
+            let newName = rest.dropFirst().joined(separator: " ")
+            return .projectChange(.rename(project: project, name: newName.isEmpty ? nil : newName))
         default:
             throw CommandLineToolError.usage("Unknown project command \(action).")
         }
@@ -182,7 +201,7 @@ struct CommandLineArguments: Equatable {
     static func namesNotify(_ arguments: [String]) -> Bool {
         var words = arguments.prefix { $0 != "--" }[...]
         while let word = words.popFirst() {
-            if ["--socket", "--folder", "--session"].contains(word) { _ = words.popFirst(); continue }
+            if ["--socket", "--folder", "--session", "--name"].contains(word) { _ = words.popFirst(); continue }
             if !word.hasPrefix("-") { return word == "notify" }
         }
         return false

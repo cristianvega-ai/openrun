@@ -11,5 +11,6 @@ enum ToolCommand: Equatable {
     /// A nil identifier means the session of the caller.
     case notify(identifier: String?, text: String)
     case projectList(printsJSON: Bool)
+    case projectChange(ProjectChangeCommand.Change)
     case help
 }
