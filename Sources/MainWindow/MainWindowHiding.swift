@@ -38,20 +38,23 @@ extension MainWindowController: NSMenuItemValidation {
     }
 
     func setCollapsed(_ collapsed: Bool, _ item: NSSplitViewItem) {
-        if reducesMotion() {
+        let animates = !reducesMotion()
+        if animates { contentPane.beginPaneResize() }
+        // The window takes the minimum of the final layout before the panes
+        // move. So the animation never asks for a size that the minimum refuses.
+        if item === projectsItem { layout.projectsHidden = collapsed } else { layout.sessionsHidden = collapsed }
+        keepMinimumSize()
+        if !animates {
             item.isCollapsed = collapsed
+            layout.save(to: defaults)
         } else {
-            contentPane.beginPaneResize()
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.25
                 context.allowsImplicitAnimation = true
                 item.animator().isCollapsed = collapsed
             }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.paneResizeEnded() } })
         }
-        (layout.projectsHidden, layout.sessionsHidden) = (projectsItem.isCollapsed, sessionsItem.isCollapsed)
-        if reducesMotion() { layout.save(to: defaults) }
         updateTopRowSpaces()
-        keepMinimumSize()
     }
 
     /// The traffic lights sit in the top row of the first visible pane, so

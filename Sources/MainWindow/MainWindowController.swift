@@ -25,6 +25,8 @@ public final class MainWindowController: NSObject {
     var isContentActive = false
     /// In full screen the traffic lights hide, so no top row keeps room for them.
     var isInFullScreen = false
+    /// A check of the minimum size waits for a later turn of the main queue.
+    var isMinimumCheckWaiting = false
     /// The one way back to hidden lists that the window shows. It moves to
     /// the top row of the first visible pane, next to the traffic lights.
     lazy var listsButton = PaneButton.make(symbol: "sidebar.left", label: "Hide Projects", target: self, action: #selector(toggleProjectsList))

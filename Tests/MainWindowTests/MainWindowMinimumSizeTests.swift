@@ -24,16 +24,36 @@ import Testing
         #expect(controller.contentItem.minimumThickness == 800)
     }
 
-    /// A program that sets a size below the minimum gets the minimum. The
+    /// A program that sets a size below the minimum gets at least the minimum soon after. The
     /// content fills the whole window, under the top row, so the size of
     /// the window and the minimum have one base.
-    @Test func aSizeBelowTheMinimumComesBackToTheMinimum() {
+    @Test func aSizeBelowTheMinimumComesBackToTheMinimum() async {
         let controller = makeMainWindow()
         defer { controller.window.close() }
         let minimum = controller.window.contentMinSize
         controller.window.setContentSize(NSSize(width: 10, height: 10))
-        #expect(controller.window.frame.size == minimum)
+        await turns(seconds: 0.2)
+        #expect(controller.window.frame.width >= minimum.width && controller.window.frame.height >= minimum.height)
         controller.window.setFrame(NSRect(x: 100, y: 100, width: 300, height: 100), display: false)
-        #expect(controller.window.frame.size == minimum)
+        await turns(seconds: 0.2)
+        #expect(controller.window.frame.width >= minimum.width && controller.window.frame.height >= minimum.height)
+    }
+
+    /// An animated show of a list at the minimum width once ended the app
+    /// with an exception: a check of the minimum inside the layout pass of
+    /// the animation asked for another pass without end.
+    @Test func anAnimatedShowAtTheMinimumGrowsTheWindow() async {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: 500, height: 300)))
+        controller.showWindow()
+        controller.reducesMotion = { true }
+        controller.toggleSessionsList(nil)
+        controller.reducesMotion = { false }
+        controller.window.setContentSize(NSSize(width: 10, height: 10))
+        await turns(seconds: 0.3)
+        controller.toggleSessionsList(nil)
+        await turns(seconds: 1)
+        #expect(controller.window.contentMinSize.width == 900 && controller.window.frame.width >= 900)
     }
 }

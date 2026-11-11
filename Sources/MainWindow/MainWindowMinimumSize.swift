@@ -33,9 +33,17 @@ extension MainWindowController: NSWindowDelegate {
         paneWindow.setFrame(frame, display: true)
     }
 
-    /// A program can set a size below the minimum, which AppKit allows.
+    /// A program can set a size below the minimum, which AppKit allows. A
+    /// resize can come from a layout pass, and a new size or minimum inside
+    /// that pass starts the pass again without end. So the check waits for
+    /// a later turn of the main queue.
     public func windowDidResize(_ notification: Notification) {
-        keepMinimumSize()
+        guard !isMinimumCheckWaiting else { return }
+        isMinimumCheckWaiting = true
+        Task { [weak self] in
+            self?.isMinimumCheckWaiting = false
+            self?.keepMinimumSize()
+        }
     }
 
     /// A window on a screen of another size can have another minimum.

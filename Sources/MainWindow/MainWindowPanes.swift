@@ -42,7 +42,6 @@ extension MainWindowController {
         placeShadows()
         if !projectsItem.isCollapsed { layout.projectsWidth = projectsList.view.frame.width }
         if !sessionsItem.isCollapsed { layout.sessionsWidth = sessionsList.view.frame.width }
-        (layout.projectsHidden, layout.sessionsHidden) = (projectsItem.isCollapsed, sessionsItem.isCollapsed)
     }
 
     /// An animation or a drag of the panes ends. The layout is saved once
