@@ -1,6 +1,10 @@
 /// Finds the bounds of the strings and values of JSON text, without a
-/// decode. It checks only the bounds, so read text that a decoder has
-/// already accepted.
+/// decode, and accepts only strict JSON (RFC 8259).
+///
+/// Foundation's decoder also takes text that is not JSON, such as a raw
+/// tab in a string or the escape `\q`. A value that this build keeps as
+/// text goes back into the file, so it must be valid there. The scanner
+/// does not check UTF-8; `ObjectMembers` checks the whole text.
 struct DocumentTextScanner {
     let bytes: [UInt8]
     private var position = 0
@@ -31,11 +35,29 @@ struct DocumentTextScanner {
         guard take(UInt8(ascii: "\"")) else { return nil }
         while position < bytes.count {
             let byte = bytes[position]
-            position += byte == UInt8(ascii: "\\") ? 2 : 1
+            position += 1
             if byte == UInt8(ascii: "\"") { return bytes[start..<position] }
+            if byte < 0x20 { return nil }
+            if byte == UInt8(ascii: "\\"), !takeEscape() { return nil }
         }
         return nil
     }
+
+    /// The rest of an escape after its backslash: one of `"\/bfnrt`, or
+    /// `u` and four hexadecimal digits.
+    private mutating func takeEscape() -> Bool {
+        guard position < bytes.count else { return false }
+        let escaped = bytes[position]
+        position += 1
+        guard escaped == UInt8(ascii: "u") else { return Array(#""\/bfnrt"#.utf8).contains(escaped) }
+        for _ in 0..<4 {
+            guard position < bytes.count, Self.hexadecimalDigits.contains(bytes[position]) else { return false }
+            position += 1
+        }
+        return true
+    }
+
+    private static let hexadecimalDigits = Set("0123456789abcdefABCDEF".utf8)
 
     /// The text of the value that comes next: a string, an object or an
     /// array with all that it holds, or a number, `true`, `false` or `null`.

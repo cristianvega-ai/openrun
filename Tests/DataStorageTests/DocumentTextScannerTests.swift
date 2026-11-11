@@ -23,4 +23,23 @@ import Testing
             #expect(found == nil)
         }
     }
+
+    static func isValid(_ text: String) -> Bool {
+        var scanner = DocumentTextScanner(bytes: Array(text.utf8))
+        let found = scanner.value()
+        return found != nil && scanner.atEnd
+    }
+
+    @Test func strictJSONPasses() {
+        #expect(Self.isValid(#"[-0.0, 1E+400, 0.5e-3, -12, "\u00e9\n\/\"", {}, [], true, false, null, {"a": [{}]}]"#))
+    }
+
+    /// Foundation's decoder takes some of these. A kept value goes back
+    /// into the file, so each one must fail here.
+    @Test(arguments: [
+        "\"a\tb\"", "\"a\nb\"", #""\q""#, #""\u12""#, #""\u12G4""#, "\"open",
+    ])
+    func textThatIsNotStrictJSONFails(text: String) {
+        #expect(!Self.isValid(text))
+    }
 }
