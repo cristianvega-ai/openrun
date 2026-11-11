@@ -49,6 +49,8 @@ public enum CommandLineTool {
             try SendCommand(identifier: identifier, text: text, pressEnter: pressEnter).run(location: location)
         case .kill(let identifier):
             try KillCommand(identifier: identifier).run(location: location)
+        case .rename(let identifier, let name):
+            try RenameCommand(identifier: identifier, name: name).run(location: location)
         case .help:
             break
         }

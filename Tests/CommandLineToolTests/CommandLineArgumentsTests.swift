@@ -48,6 +48,10 @@ private func usageMessage(_ words: String...) -> String? {
         #expect(try parse("read", "abc").command == .read(identifier: "abc", includeScrollback: false))
         #expect(try parse("read", "abc", "--scrollback").command == .read(identifier: "abc", includeScrollback: true))
         #expect(try parse("kill", "abc").command == .kill(identifier: "abc"))
+        #expect(try parse("rename", "abc", "Release", "build").command == .rename(identifier: "abc", name: "Release build"))
+        #expect(try parse("rename", "abc", "--", "--draft").command == .rename(identifier: "abc", name: "--draft"))
+        #expect(try parse("rename", "abc").command == .rename(identifier: "abc", name: nil))
+        #expect(usageMessage("rename") != nil && usageMessage("rename", "abc", "--enter") != nil)
         #expect(try parse("help").command == .help)
         #expect(try parse("--help").command == .help)
     }

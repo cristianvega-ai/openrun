@@ -6,5 +6,7 @@ enum ToolCommand: Equatable {
     case read(identifier: String, includeScrollback: Bool)
     case send(identifier: String, text: String, pressEnter: Bool)
     case kill(identifier: String)
+    /// A nil name removes the name.
+    case rename(identifier: String, name: String?)
     case help
 }

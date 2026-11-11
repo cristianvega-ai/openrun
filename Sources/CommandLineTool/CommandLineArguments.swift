@@ -106,6 +106,12 @@ struct CommandLineArguments: Equatable {
         case "kill":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
             command = .kill(identifier: try Self.single(rest, name: name))
+        case "rename":
+            try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, nil)
+            guard let identifier = rest.first else { throw CommandLineToolError.usage("rename needs an identifier, and the name to give.") }
+            try Self.requireIdentifier(identifier)
+            let newName = (Array(rest.dropFirst()) + (afterSeparator ?? [])).joined(separator: " ")
+            command = .rename(identifier: identifier, name: newName.isEmpty ? nil : newName)
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
@@ -137,7 +143,7 @@ struct CommandLineArguments: Equatable {
         if word.isEmpty { throw CommandLineToolError.usage("The session identifier is empty.") }
     }
 
-    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "help"]
+    private static let commandNames: Set<String> = ["new", "list", "attach", "read", "send", "kill", "rename", "help"]
 
     private static func requireNoOptions(_ name: String, _ folder: String?, _ pressEnter: Bool, _ includeScrollback: Bool, _ afterSeparator: [String]?) throws {
         if folder != nil { throw CommandLineToolError.usage("--folder does not belong to \(name). It works with new.") }
