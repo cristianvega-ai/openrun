@@ -38,7 +38,14 @@ final class LinkClick {
     /// Ends the click. The link opens when the pointer is still over it.
     func release(at cell: ViewportCell) {
         defer { pressedAddress = nil }
-        guard let address = pressedAddress, self.address(at: cell) == address, let target = LinkSchemeRule.target(for: address) else { return }
+        guard let address = pressedAddress, self.address(at: cell) == address else { return }
+        open(address)
+    }
+
+    /// Opens a link at once, or after a yes for a scheme that can open another app
+    /// or a file. An address that is not valid opens nothing.
+    func open(_ address: String) {
+        guard let target = LinkSchemeRule.target(for: address) else { return }
         guard LinkSchemeRule.needsQuestion(for: target) else { return opener.open(target) }
         let (ask, opener) = (ask, opener)
         Task { if await ask(address) { opener.open(target) } }
