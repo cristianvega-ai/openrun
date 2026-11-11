@@ -63,6 +63,9 @@ let package = Package(
         // group, and the environment of the user's login shell.
         .target(name: "AgentProgram", dependencies: ["PseudoTerminal"]),
         .testTarget(name: "AgentProgramTests", dependencies: ["AgentProgram", "PseudoTerminal"]),
+        // A stand-in for `claude -p` that plays recorded turns, so that no
+        // test runs the real agent.
+        .executableTarget(name: "fake-agent", path: "Tests/FakeAgent"),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
