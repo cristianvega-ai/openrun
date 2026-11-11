@@ -487,6 +487,10 @@ Client to server:
 | `detach` | none | the connection closes |
 | `receiveApprovalQuestions` | none | `acknowledged`, then `approvalQuestion` and `approvalQuestionEnded` for as long as the connection stays open. A `failure` with reason `invalidRequest` when the program is not the signed app outside every session |
 | `answerApprovalQuestion` | `identifier`, `allows` | none. Only a connection that holds the question can answer it, and only while it waits |
+| `receiveSessionChanges` | none | `sessionList`, oldest first, then `sessionChanged` and `sessionEnded` for as long as the connection stays open. An attached connection gets a `failure` with reason `invalidRequest`. After it, every message other than `detach` gets a `failure` with reason `invalidRequest`, and the connection stays open |
+| `renameSession` | `identifier`, `name` (absent or empty removes the name) | `acknowledged`. A name with a control character or more than 500 Unicode scalars gets a `failure` with reason `invalidRequest` |
+| `raiseSessionAlert` | `identifier`, `text` | `acknowledged`. The alert has the source `notifyCommand`. The session process removes control characters from the text and keeps at most 500 scalars |
+| `clearSessionAlert` | `identifier` | `acknowledged` |
 
 Server to client:
 
@@ -505,8 +509,11 @@ Server to client:
 | `failure` | `_0` holds `reason` (`incompatibleProtocol`, `unknownSession`, `launchFailed` or `invalidRequest`) and `message` |
 | `approvalQuestion` | `_0` holds `identifier`, `askingSession`, `targetSession` (session summaries) and `request`: `type` with `start` and `characterCount`, or `read`, `attach` or `kill`. `start` holds at most 500 Unicode scalars, and `characterCount` counts scalars too |
 | `approvalQuestionEnded` | `identifier`. Every connection that holds the question receives it when the question ends |
+| `sessionChanged` | `_0` is a session summary: a new session, or a session with new facts |
+| `sessionEnded` | `identifier` of a session that ended and left the list |
 
 A session summary holds `identifier`, `folder`, `command` (a list), `size` and `createdAt` (seconds since 1970).
+It can also hold the facts of the session: `name`, `title`, `currentFolder`, `branch`, `foregroundProgram`, `isInProgress`, `lastOutputAt`, `lastInputAt` (seconds since 1970) and `alert`. An alert holds `text`, `raisedAt` and `source` (`bell`, `terminalNotification` or `notifyCommand`). A fact that is not known is absent. See "Facts of a session".
 A size holds `columns` and `rows`, each 0 to 65,535.
 
 A control frame from a client that the session process cannot decode gets a `failure` with reason `invalidRequest`, and then the connection closes. Examples are text that is not JSON, a name that is no message of the protocol, a missing field, a field of the wrong type, keys in a control frame, and a value out of range, such as a size of 999999 or -1. The message names the problem in the words of the protocol, such as `A frame is malformed: the field resize._0.rows holds a value that is out of range or in the wrong form.` It never quotes the request, which can hold escape sequences. The first frame gets the same answer in place of `hello`. A frame that breaks the framing (a zero length, a length above the limit, or an unknown kind) closes the connection without an answer, because the bytes after it cannot be read as frames. A frame of a kind that only the server sends also closes the connection without an answer, as before. Other clients notice nothing.
@@ -527,6 +534,12 @@ Examples of control payloads:
 {"sizeChanged":{"_0":{"columns":100,"rows":30}}}
 {"exited":{"_0":{"exited":{"status":3}}}}
 {"failure":{"_0":{"message":"No session has the identifier 3f2a9c1e-…","reason":"unknownSession"}}}
+{"receiveSessionChanges":{}}
+{"renameSession":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","name":"Release build"}}
+{"raiseSessionAlert":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001","text":"Waiting for input"}}
+{"clearSessionAlert":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}
+{"sessionChanged":{"_0":{"alert":{"raisedAt":800000000,"source":"notifyCommand","text":"Waiting for input"},"command":["claude"],"createdAt":799999000,"folder":"/work","foregroundProgram":"claude","identifier":"3F2A9C1E-0000-4000-8000-000000000001","isInProgress":false,"size":{"columns":80,"rows":24}}}}
+{"sessionEnded":{"identifier":"3F2A9C1E-0000-4000-8000-000000000001"}}
 ```
 
 `relaysRawOutput` is a new optional field of `attach`. It stays inside protocol version 1: a client that leaves it out, or sends `false`, does not relay raw output, and an older session process ignores the field.
@@ -556,10 +569,12 @@ The identifier is a UUID. In JSON it is the usual upper case text. People and en
 
 The four messages of approval questions are additions, and only a client that asks with `receiveApprovalQuestions` receives a question. So they stay inside protocol version 1.
 
+The messages of the session changes and the facts are additions too, and so are the new fields of a summary, which an older client ignores. Only a client that asks with `receiveSessionChanges` gets `sessionChanged` and `sessionEnded`. The server's `hello` holds `capabilities.sessionChanges` as `true`. A missing field means `false`, and an older session process answers the new requests with a `failure`. So they stay inside protocol version 1.
+
 ### A conversation
 
 1. The client connects and sends `hello`. The server answers `hello`.
-2. A request that needs one answer (`createSession`, `listSessions`, `readScreen`, `sendText`, `killSession`) gets its answer. The client may send the next request or close.
+2. A request that needs one answer (`createSession`, `listSessions`, `readScreen`, `sendText`, `killSession`, `renameSession`, `raiseSessionAlert`, `clearSessionAlert`) gets its answer. The client may send the next request or close.
 3. `attach` starts a longer conversation. See the next section.
 
 Between the connection and step 1, the client checks the folder of the socket and the user of the session process, and the session process checks the user of the client. See "The folder of the socket" and "The user at the other end" in "Process model".
