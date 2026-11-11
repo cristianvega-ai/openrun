@@ -46,6 +46,21 @@ struct SessionsListRow: Equatable {
         accessibilityLabel = [title, kind, secondLine, state].filter { !$0.isEmpty }.joined(separator: ", ")
     }
 
+    /// The place of the work in one line that fits. Only the folder gets
+    /// shorter, from its start, so the model and the branch stay whole.
+    static func place(model: String?, folder: String, branch: String?, fits: (String) -> Bool) -> String {
+        func line(_ shownFolder: String) -> String {
+            [model, shownFolder, branch].compactMap { $0 }.filter { !$0.isEmpty }.joined(separator: " · ")
+        }
+        guard !fits(line(folder)), !folder.isEmpty else { return line(folder) }
+        var (shortest, longest) = (0, folder.count - 1)
+        while shortest < longest {
+            let middle = (shortest + longest + 1) / 2
+            if fits(line("…" + folder.suffix(middle))) { shortest = middle } else { longest = middle - 1 }
+        }
+        return line("…" + folder.suffix(shortest))
+    }
+
     /// A short age, such as "now", "5m", "3h", "2d" or "6w".
     static func age(of date: Date, now: Date) -> String {
         let minutes = max(0, Int(now.timeIntervalSince(date) / 60))

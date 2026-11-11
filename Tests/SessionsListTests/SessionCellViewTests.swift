@@ -25,19 +25,27 @@ import Testing
         #expect(cell.accessibilityLabel() == "Repair the resize, Approve the edit?, needs you")
     }
 
-    /// A long folder loses its start, so the model and the branch stay whole.
-    @Test func aLongFolderLosesItsStartFirst() {
-        let cell = SessionCellView()
-        cell.show(SessionsListRow(SessionRowDisplay(identifier: UUID(), title: "Repair", folder: "~/Projects/openrun/Sources/TerminalRendering/Atlas",
-                                                    branch: "main", kind: .agentThread(agent: "Codex", model: "Opus", account: nil),
-                                                    lastActivity: now, startTime: now), now: now))
-        cell.layoutSubtreeIfNeeded()
-        #expect(cell.modelLabel.stringValue == "Opus · " && cell.branchLabel.stringValue == " · main")
-        #expect(cell.folderLabel.lineBreakMode == .byTruncatingHead && cell.folderLabel.alignment == .right)
-        #expect(!cell.place.isHidden && cell.secondLine.isHidden)
-        #expect(cell.folderLabel.frame.width < cell.folderLabel.intrinsicContentSize.width)
-        #expect(cell.branchLabel.frame.width >= cell.branchLabel.intrinsicContentSize.width)
-        #expect(cell.place.frame.maxX <= cell.bounds.maxX - 18)
+    private func place(_ folder: String, model: String?) -> SessionsListRow {
+        let kind: SessionKind = model.map { .agentThread(agent: "Codex", model: $0, account: nil) } ?? .terminal
+        return SessionsListRow(SessionRowDisplay(identifier: UUID(), title: "Repair", folder: folder, branch: "main", kind: kind,
+                                                 lastActivity: now, startTime: now), now: now)
+    }
+
+    /// The second line starts at the title and reads without a gap. A long
+    /// line loses only the start of its folder, and its spare room is at its end.
+    @Test func theSecondLineStartsAtTheTitleAndCutsOnlyTheFolder() {
+        let long = "~/Projects/openrun/Sources/TerminalRendering/Glyphs/Atlas"
+        let cases: [(String, String?, String)] = [("~/p", "Opus", "Opus · ~/p · main"), ("~/p", nil, "~/p · main"),
+                                                  (long, "Opus", "Opus · …"), (long, nil, "…")]
+        for (folder, model, start) in cases {
+            let cell = SessionCellView()
+            cell.show(place(folder, model: model))
+            cell.layoutSubtreeIfNeeded()
+            let line = cell.secondLine
+            #expect(line.frame.minX == cell.title.frame.minX && line.alignment == .natural && !line.isHidden)
+            #expect(line.stringValue.hasPrefix(start) && line.stringValue.hasSuffix("Atlas · main") == (folder == long))
+            #expect(line.intrinsicContentSize.width <= line.frame.width, "\(line.stringValue)")
+        }
     }
 
     /// The age, the dot and the arc end at one edge and share the middle
