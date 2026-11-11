@@ -39,7 +39,7 @@ extension MainWindowController: NSMenuItemValidation {
 
     func setCollapsed(_ collapsed: Bool, _ item: NSSplitViewItem) {
         let animates = !reducesMotion()
-        if animates { contentPane.beginPaneResize() }
+        if animates, animationGeneration == finishedAnimationGeneration { contentPane.beginPaneResize() }
         // The window takes the minimum of the final layout before the panes
         // move. So the animation never asks for a size that the minimum refuses.
         if item === projectsItem { layout.projectsHidden = collapsed } else { layout.sessionsHidden = collapsed }
@@ -48,13 +48,29 @@ extension MainWindowController: NSMenuItemValidation {
             item.isCollapsed = collapsed
             layout.save(to: defaults)
         } else {
+            animationGeneration += 1
+            let generation = animationGeneration
             NSAnimationContext.runAnimationGroup({ context in
                 context.duration = 0.25
                 context.allowsImplicitAnimation = true
                 item.animator().isCollapsed = collapsed
-            }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.paneResizeEnded() } })
+            }, completionHandler: { [weak self] in MainActor.assumeIsolated { self?.animationEnded(generation) } })
+            // AppKit did not always call the completion of two animations
+            // that overlap, so the end also comes after a time limit.
+            Task { [weak self] in
+                try? await Task.sleep(for: .seconds(1))
+                self?.animationEnded(generation)
+            }
         }
         updateTopRowSpaces()
+    }
+
+    /// Only the end of the last animation ends the hold of the content
+    /// width, so overlapping animations give one size at the end.
+    func animationEnded(_ generation: Int) {
+        guard generation == animationGeneration, finishedAnimationGeneration != generation else { return }
+        finishedAnimationGeneration = generation
+        paneResizeEnded()
     }
 
     /// The traffic lights sit in the top row of the first visible pane, so

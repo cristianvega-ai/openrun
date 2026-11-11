@@ -27,6 +27,8 @@ public final class MainWindowController: NSObject {
     var isInFullScreen = false
     /// A check of the minimum size waits for a later turn of the main queue.
     var isMinimumCheckWaiting = false
+    /// The number of the last animation of the lists, and of the last one that ended.
+    var animationGeneration = 0, finishedAnimationGeneration = 0
     /// The one way back to hidden lists that the window shows. It moves to
     /// the top row of the first visible pane, next to the traffic lights.
     lazy var listsButton = PaneButton.make(symbol: "sidebar.left", label: "Hide Projects", target: self, action: #selector(toggleProjectsList))

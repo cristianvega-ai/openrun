@@ -29,4 +29,18 @@ import Testing
             #expect(pane.paneView.frame.width == controller.contentPane.contentArea.frame.width)
         }
     }
+
+    /// Two animations that overlap end the hold once, at the end of the last.
+    @Test func bothListsTogetherSendOneSize() async throws {
+        try await withHostedSession { controller, pane in
+            for count in 1...2 {
+                controller.toggleProjectsList(nil)
+                controller.toggleSessionsList(nil)
+                await turns(seconds: 5) { !controller.contentPane.isHoldingWidth }
+                await turns(seconds: 0.5)
+                #expect(pane.sentSizeRequests == count)
+                #expect(pane.paneView.frame.width == controller.contentPane.contentArea.frame.width)
+            }
+        }
+    }
 }

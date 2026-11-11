@@ -71,6 +71,8 @@ public final class ContentPaneController {
     }
 
     /// The change ends. The content gets the final width in one layout.
+    var isHoldingWidth: Bool { heldWidth != nil }
+
     func endPaneResize() {
         resizeDepth = max(resizeDepth - 1, 0)
         guard resizeDepth == 0 else { return }
