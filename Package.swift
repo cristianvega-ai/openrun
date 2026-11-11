@@ -151,8 +151,11 @@ let package = Package(
         .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
         .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
         // The app. In milestone 2 it registers the launch agent at its start.
-        .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "SessionWindow"]),
-        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionWindow", "SessionProcessHarness", "TerminalView"]),
+        .target(name: "OpenRunApplication", dependencies: [
+            "SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "SessionWindow", "MainWindow", "ProjectsList", "SessionsList",
+            "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "TerminalView", "PaneAppearance",
+        ]),
+        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionWindow", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
         .testTarget(
             name: "PseudoTerminalTests",
