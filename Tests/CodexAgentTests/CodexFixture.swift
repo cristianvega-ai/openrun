@@ -35,18 +35,22 @@ struct CodexFixture {
     }
 
     /// The events of the notifications of the output, in one piece, for
-    /// one thread. Answers and requests of the server give none.
+    /// one thread.
     var events: [ConversationEventKind] {
-        get throws {
-            var reader = CodexMessageReader()
-            var mapper = CodexEventMapper()
-            return (reader.read(try serverBytes) + reader.finish()).flatMap { incoming -> [ConversationEventKind] in
-                switch incoming {
-                case .message(.notification(let method, let parameters), _):
-                    mapper.events(method: method, parameters: parameters) ?? [.unknown(UnknownLine(reason: .unknownKind, kind: method, text: "", byteCount: 0))]
-                case .unreadable(let line, _): [.unknown(line)]
-                default: []
-                }
+        get throws { Self.events(of: [try serverBytes[...]]) }
+    }
+
+    /// The events of output that comes in these pieces. Answers and
+    /// requests of the server give none.
+    static func events(of pieces: [ArraySlice<UInt8>]) -> [ConversationEventKind] {
+        var reader = CodexMessageReader()
+        var mapper = CodexEventMapper()
+        return (pieces.flatMap { reader.read($0) } + reader.finish()).flatMap { incoming -> [ConversationEventKind] in
+            switch incoming {
+            case .message(.notification(let method, let parameters), _):
+                mapper.events(method: method, parameters: parameters) ?? [.unknown(UnknownLine(reason: .unknownKind, kind: method, text: "", byteCount: 0))]
+            case .unreadable(let line, _): [.unknown(line)]
+            default: []
             }
         }
     }
