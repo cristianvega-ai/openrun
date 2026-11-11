@@ -47,7 +47,19 @@ struct MarkdownInlineTests {
             MarkdownSpan("docs", style: .bold, link: "https://example.com/a_(b)"), MarkdownSpan(" now"),
         ])
         #expect(spans("![a picture](image.png) [b](<c d>)") == [MarkdownSpan("a picture", link: "image.png"), MarkdownSpan(" "), MarkdownSpan("b", link: "c d")])
-        #expect(spans("[1] and [a](b and") == [MarkdownSpan("[1] and [a](b and")])
+        #expect(spans("<https://example.com> <me@example.com>") == [
+            MarkdownSpan("https://example.com", link: "https://example.com"), MarkdownSpan(" "),
+            MarkdownSpan("me@example.com", link: "mailto:me@example.com"),
+        ])
+        #expect(spans("[1] and [a](b and <b>") == [MarkdownSpan("[1] and [a](b and <b>")])
+    }
+
+    @Test func plainAddressesEndBeforePunctuation() {
+        #expect(spans("Open https://example.com/path?q=1. Or (http://example.org/x).") == [
+            MarkdownSpan("Open "), MarkdownSpan("https://example.com/path?q=1", link: "https://example.com/path?q=1"),
+            MarkdownSpan(". Or ("), MarkdownSpan("http://example.org/x", link: "http://example.org/x"), MarkdownSpan(")."),
+        ])
+        #expect(spans("xhttps://no and https://") == [MarkdownSpan("xhttps://no and https://")])
     }
 
     @Test func aLinkThatHasNotClosedAtTheEndOfAStreamShowsAsALink() {
