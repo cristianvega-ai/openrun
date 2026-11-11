@@ -65,4 +65,13 @@ struct ChatPictureTests {
         try picture("narrow", SampleConversation.transcript, size: NSSize(width: 360, height: 900))
         try picture("wide", SampleConversation.transcript, size: NSSize(width: 1400, height: 800))
     }
+
+    @Test func aFailedStartAndATerminalThread() throws {
+        var facts = Self.facts
+        facts.condition = .startFailed(reason: "The program claude was not found in the folders of PATH.",
+                                       advice: "Install Claude Code, or set its path in Settings.")
+        try picture("start-failed", Transcript(), size: NSSize(width: 820, height: 600), facts: facts)
+        facts.condition = .openInTerminal
+        try picture("terminal", Transcript(events: SampleConversation.firstTurn), size: NSSize(width: 820, height: 600), facts: facts)
+    }
 }
