@@ -11,6 +11,7 @@ extension SessionsListController: NSTableViewDataSource, NSTableViewDelegate {
             delegate?.sessionsList(self, didOpen: selection)
         }
         table.menu = contextMenu()
+        configureDragging()
         scroll.documentView = table
         scroll.drawsBackground = false
         scroll.hasVerticalScroller = true

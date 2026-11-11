@@ -15,6 +15,8 @@ public protocol SessionsListDelegate: AnyObject {
     func sessionsList(_ list: SessionsListController, didRename identifier: UUID, to name: String)
     /// The user closed a row from its context menu.
     func sessionsList(_ list: SessionsListController, didClose identifier: UUID)
+    /// The user dragged a row to `index` in the user's own order of the content.
+    func sessionsList(_ list: SessionsListController, didMove identifier: UUID, toIndex index: Int)
     /// The user chose a filter or an order. The host keeps them for the next start.
     func sessionsList(_ list: SessionsListController, didChange filter: SessionsFilter, order: SessionsOrder)
 }

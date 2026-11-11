@@ -9,6 +9,7 @@ final class RecordingSessionsHost: SessionsListDelegate {
     var requests: [NewSessionRequest] = []
     var renames: [(UUID, String)] = []
     var closes: [UUID] = []
+    var moves: [(UUID, Int)] = []
     var arrangements: [(SessionsFilter, SessionsOrder)] = []
 
     func sessionsList(_ list: SessionsListController, didSelect identifier: UUID?) { selections.append(identifier) }
@@ -16,6 +17,7 @@ final class RecordingSessionsHost: SessionsListDelegate {
     func sessionsList(_ list: SessionsListController, didRequest request: NewSessionRequest) { requests.append(request) }
     func sessionsList(_ list: SessionsListController, didRename identifier: UUID, to name: String) { renames.append((identifier, name)) }
     func sessionsList(_ list: SessionsListController, didClose identifier: UUID) { closes.append(identifier) }
+    func sessionsList(_ list: SessionsListController, didMove identifier: UUID, toIndex index: Int) { moves.append((identifier, index)) }
     func sessionsList(_ list: SessionsListController, didChange filter: SessionsFilter, order: SessionsOrder) { arrangements.append((filter, order)) }
 }
 
