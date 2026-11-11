@@ -18,6 +18,9 @@ struct CodexEventMapper: Sendable {
         "item/autoApprovalReview/started", "item/autoApprovalReview/completed",
     ]
 
+    /// The client identifiers of the user messages that went to Codex and
+    /// that Codex has not echoed yet, oldest first.
+    var pendingMessageIdentifiers: [String] = []
     /// The turn that runs, from its start to its end.
     var activeTurn: String?
     /// The tokens of the thread before the turn that runs, and now.
@@ -30,6 +33,8 @@ struct CodexEventMapper: Sendable {
         case "turn/started": return turnStarted(parameters)
         case "turn/completed": return turnCompleted(parameters)
         case "thread/tokenUsage/updated": return tokenUsageUpdated(parameters)
+        case "item/started": return itemStarted(parameters["item"] ?? .null)
+        case "item/completed": return itemCompleted(parameters["item"] ?? .null)
         case "item/agentMessage/delta":
             return [.agentTextDelta(AgentTextDelta(itemIdentifier: item, text: parameters["delta"]?.string ?? ""))]
         case "item/commandExecution/outputDelta":

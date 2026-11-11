@@ -17,6 +17,29 @@ import Testing
         #expect(mapper.activeTurn == nil)
     }
 
+    @Test func aFailedTurnGivesItsTextAndItsKind() {
+        var mapper = CodexEventMapper()
+        let error = JSONValue.object(["message": .string("The model is not supported."), "codexErrorInfo": .string("modelNotFound")])
+        let end = mapper.events(method: "turn/completed", parameters: .object(["turn": .object(["status": .string("failed"), "error": error])]))
+        #expect(end == [
+            .turnEnded(TurnEnd(outcome: .failed, errorText: "The model is not supported.")),
+            .agentStatus(AgentStatus(kind: "turn/error", detail: "modelNotFound")),
+        ])
+        let interrupted = mapper.events(method: "turn/completed", parameters: .object(["turn": .object(["status": .string("interrupted")])]))
+        #expect(interrupted == [.turnEnded(TurnEnd(outcome: .stopped))])
+        #expect(CodexEventMapper.errorKind(.object(["codexErrorInfo": .object(["httpConnectionFailed": .object([:])])])) == "httpConnectionFailed")
+    }
+
+    @Test func anEchoedUserMessageKeepsTheIdentifierOfTheClient() {
+        var mapper = CodexEventMapper()
+        mapper.pendingMessageIdentifiers = ["first", "second"]
+        let item = JSONValue.object(["type": .string("userMessage"), "id": .string("item"),
+                                     "content": .array([.object(["type": .string("text"), "text": .string("hi")])])])
+        #expect(mapper.events(method: "item/started", parameters: .object(["item": item]))
+            == [.userMessage(UserMessage(identifier: "first", text: "hi", isAccepted: true))])
+        #expect(mapper.pendingMessageIdentifiers == ["second"])
+    }
+
     @Test func warningsAndErrorsAreNotices() {
         var mapper = CodexEventMapper()
         let retry = mapper.events(method: "error", parameters: .object(["error": .object(["message": .string("busy")]), "willRetry": .bool(true)]))
