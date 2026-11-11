@@ -48,4 +48,14 @@ import Testing
         #expect(!activity.bellRaisesAlert(at: Self.start + .milliseconds(500)))
         #expect(activity.bellRaisesAlert(at: Self.start + SessionActivity.bellAnswerTime))
     }
+
+    /// `sh -c` and `bash build.sh` run commands and have no prompt.
+    @Test(arguments: [["sh", "-c", "make"], ["bash", "build.sh"]])
+    func aShellWithACommandOrAScriptWorks(arguments: [String]) {
+        var activity = SessionActivity()
+        let program = ForegroundProgram(name: arguments[0], arguments: arguments)
+        activity.noteForeground(ForegroundState(program: program, leadsSession: true, currentFolder: "/", isInLineMode: false))
+        activity.noteOutput(at: Self.start)
+        #expect(activity.isInProgress(at: Self.start))
+    }
 }
