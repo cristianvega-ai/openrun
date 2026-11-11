@@ -25,7 +25,7 @@ extension ThreadRegistry {
         let previous = list
         try list.add(record)
         try save(restoring: previous)
-        let summary = Self.summary(of: list.thread(record.identifier) ?? record, in: projects)
+        let summary = summary(of: list.thread(record.identifier) ?? record)
         summaries[record.identifier] = summary
         changes?.threadChanged(summary)
         return summary
@@ -77,7 +77,7 @@ extension ThreadRegistry {
             try? list.update(record.identifier) { $0 = record }
             do { try store.save(list) } catch { SessionLog.write("The facts of a thread could not be saved: ", detail: "\(error)") }
         }
-        var summary = Self.summary(of: list.thread(record.identifier) ?? record, in: projects)
+        var summary = summary(of: list.thread(record.identifier) ?? record)
         (summary.state, summary.isProcessRunning, summary.waitingMessageCount) = (state.rawValue, isRunning, waiting)
         guard summaries[record.identifier] != summary else { return }
         summaries[record.identifier] = summary
@@ -106,10 +106,11 @@ extension ThreadRegistry {
     }
 
     /// Sends the summary of a thread again after a change of its record.
-    private func publish(_ identifier: UUID) {
+    func publish(_ identifier: UUID) {
         guard let record = list.thread(identifier), var summary = summaries[identifier] else { return }
-        let fresh = Self.summary(of: record, in: projects)
+        let fresh = self.summary(of: record)
         (summary.name, summary.title, summary.projectIdentifier) = (fresh.name, fresh.title, fresh.projectIdentifier)
+        (summary.model, summary.permissionMode, summary.models, summary.permissionModes) = (fresh.model, fresh.permissionMode, fresh.models, fresh.permissionModes)
         summaries[identifier] = summary
         changes?.threadChanged(summary)
     }

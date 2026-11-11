@@ -29,15 +29,21 @@ public struct ThreadSummary: Codable, Equatable, Sendable {
     public var waitingMessageCount: Int
     /// The project that holds the folder of the thread, as for a session.
     public var projectIdentifier: UUID?
+    /// The models that the user can choose for the thread, for a menu.
+    public var models: [String]?
+    /// The permission modes that the thread can take now, from the
+    /// strictest to the widest. A wider mode needs the settings window.
+    public var permissionModes: [String]?
 
     public init(
         identifier: UUID, agent: String, folder: String, model: String, permissionMode: String, name: String? = nil, title: String? = nil,
         accountName: String? = nil, createdAt: Date, lastActivityAt: Date, state: String = "idle", isProcessRunning: Bool = false,
-        waitingMessageCount: Int = 0, projectIdentifier: UUID? = nil
+        waitingMessageCount: Int = 0, projectIdentifier: UUID? = nil, models: [String]? = nil, permissionModes: [String]? = nil
     ) {
         (self.identifier, self.agent, self.folder, self.model, self.permissionMode) = (identifier, agent, folder, model, permissionMode)
         (self.name, self.title, self.accountName, self.createdAt, self.lastActivityAt) = (name, title, accountName, createdAt, lastActivityAt)
         (self.state, self.isProcessRunning, self.waitingMessageCount, self.projectIdentifier) = (state, isProcessRunning, waitingMessageCount, projectIdentifier)
+        (self.models, self.permissionModes) = (models, permissionModes)
     }
 
     /// The identifier in lower case, as for a session.

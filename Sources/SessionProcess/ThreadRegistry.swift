@@ -1,4 +1,5 @@
 import AgentThreads
+import ClaudeCodeAgent
 import Dispatch
 import Foundation
 import Projects
@@ -51,7 +52,7 @@ actor ThreadRegistry {
         } catch {
             SessionLog.write("The threads could not be read, and each change of them fails until they can: ", detail: "\(error)")
         }
-        let first = loaded.threads.map { Self.summary(of: $0, in: projects) }
+        let first = loaded.threads.map { Self.summary(of: $0, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode) }
         list = loaded
         summaries = Dictionary(first.map { ($0.identifier, $0) }, uniquingKeysWith: { summary, _ in summary })
         changes?.replaceThreads(first)
@@ -63,6 +64,14 @@ actor ThreadRegistry {
         guard version > settingsVersion else { return }
         (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
         for thread in slots.setLimit(processLimit) { await runners[thread]?.sendNextMessage() }
+        // The menus of each thread offer the modes up to the one of the setting.
+        for record in list.threads { publish(record.identifier) }
+    }
+
+    /// The permission modes that a thread can take: each mode up to the
+    /// one of the setting (proposal 9).
+    static func offeredModes(upTo widest: String) -> [String] {
+        ClaudeCodePermissionMode.modes(upTo: ClaudeCodePermissionMode(rawValue: widest) ?? .standard).map(\.rawValue)
     }
 
     /// Every thread, oldest first.
@@ -86,13 +95,19 @@ actor ThreadRegistry {
         summaries.values.contains { $0.isProcessRunning }
     }
 
+    func summary(of record: ThreadRecord) -> ThreadSummary {
+        Self.summary(of: record, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode)
+    }
+
     /// The summary of a thread that is not in use: idle, with no process.
-    static func summary(of record: ThreadRecord, in projects: ProjectList) -> ThreadSummary {
+    /// It holds the choices of the menus of the thread.
+    static func summary(of record: ThreadRecord, in projects: ProjectList, defaultModel: String, widestMode: String) -> ThreadSummary {
         ThreadSummary(
             identifier: record.identifier, agent: record.agent.rawValue, folder: record.folder, model: record.model,
             permissionMode: record.permissionMode, name: record.name, title: record.title, accountName: record.account?.name,
             createdAt: record.createdAt, lastActivityAt: record.lastActivityAt,
-            projectIdentifier: projects.project(holding: record.folder)?.identifier)
+            projectIdentifier: projects.project(holding: record.folder)?.identifier,
+            models: ClaudeCodeModelChoices.choices(with: [defaultModel, record.model]), permissionModes: offeredModes(upTo: widestMode))
     }
 
     /// Saves the list, or puts back the list before the change, so the

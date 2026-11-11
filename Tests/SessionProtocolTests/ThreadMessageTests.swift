@@ -39,6 +39,11 @@ import Testing
         for message in [ServerMessage.threadCreated(summary), .threadAttached(summary), .threadChanged(summary), .threadList([summary])] {
             #expect(try ServerMessage(frame: message.frame()) == message)
         }
+        // The choices of the menus are optional, so a summary of an older build has none.
+        var withChoices = summary
+        (withChoices.models, withChoices.permissionModes) = (["opus", "sonnet"], ["plan", "default"])
+        #expect(try ServerMessage(frame: ServerMessage.threadChanged(withChoices).frame()) == .threadChanged(withChoices))
+        #expect(summary.models == nil && summary.permissionModes == nil)
         let older = try JSONDecoder.messages.decode(ServerCapabilities.self, from: Data(#"{"sessionChanges":true}"#.utf8))
         #expect(!older.threads && ServerCapabilities(threads: true).threads)
     }
