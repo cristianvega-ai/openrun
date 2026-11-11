@@ -30,10 +30,19 @@ struct TestWorkspace {
         _ = NSApplication.shared
         process = try RunningSessionProcess()
         defaults = try #require(UserDefaults(suiteName: defaultsName))
-        workspace = Workspace(socket: try SocketLocation(path: process.socketPath), defaults: defaults, frameName: nil, notifier: notifier)
+        workspace = Self.makeHost(socket: try SocketLocation(path: process.socketPath), defaults: defaults, notifier: notifier)
+    }
+
+    /// A host that keeps no frame, takes no focus and changes no Dock icon.
+    /// Its new sessions read no start file of the user.
+    static func makeHost(socket: SocketLocation, defaults: UserDefaults, notifier: RecordingNotifier = RecordingNotifier()) -> Workspace {
+        let workspace = Workspace(socket: socket, defaults: defaults, frameName: nil, notifier: notifier)
         workspace.setBadge = { _ in }
         workspace.activateApplication = {}
         workspace.window.window.setContentSize(NSSize(width: 1_100, height: 700))
+        workspace.home = socket.folder
+        workspace.sessionEnvironment = ["HOME": socket.folder, "ZDOTDIR": socket.folder, "PATH": "/usr/bin:/bin", "PS1": "test> "]
+        return workspace
     }
 
     /// Starts a shell with a prompt that a test can wait for.

@@ -33,7 +33,9 @@ import Testing
         let workspace = test.workspace, name = SessionSummary.text(for: other)
         try notify(test, other, "Allow the edit?")
         #expect(await waitUntil { alert(test, of: other) == "Allow the edit?" })
-        #expect(test.notifier.posted == [AlertNotification(identifier: name, title: "sh — \(test.process.directory.lastPathComponent)", body: "Allow the edit?")])
+        // The title is the program with its folder. `/bin/sh` runs as `sh` or as `bash`.
+        #expect(test.notifier.posted.map(\.identifier) == [name] && test.notifier.posted.first?.body == "Allow the edit?")
+        #expect(test.notifier.posted.first?.title.hasSuffix("sh — \(test.process.directory.lastPathComponent)") == true)
         #expect(badges() == [1] && workspace.window.projectsList.content.needsYouCount == 1)
 
         workspace.sessionsList(workspace.window.sessionsList, didSelect: other)
