@@ -31,6 +31,7 @@ final class ThreadPaneController: NSObject {
         (thread, self.socket) = (summary.identifier, socket)
         chat = ChatViewController(facts: Self.facts(of: summary, home: home))
         super.init()
+        chat.delegate = self
     }
 
     /// What the chat shows of the thread beside its transcript.
