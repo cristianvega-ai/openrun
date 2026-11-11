@@ -35,9 +35,9 @@ final class MainMenuResponderTests: XCTestCase {
         let menu = MainMenu.make(target: application)
         sharedApplication.mainMenu = menu
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        await wait { application.windows.controllers.first?.view != nil }
+        await wait { application.windows.controllers.first?.terminalView != nil }
         let controller = try XCTUnwrap(application.windows.controllers.first)
-        let view = try XCTUnwrap(controller.view)
+        let view = try XCTUnwrap(controller.terminalView)
         await wait { sharedApplication.isActive && sharedApplication.keyWindow === controller.window && controller.window.isKeyWindow }
         try XCTSkipUnless(sharedApplication.isActive && sharedApplication.keyWindow === controller.window && controller.window.isKeyWindow,
             "The test host did not become active with its OpenRun window key; AppKit cannot resolve its first responder.")

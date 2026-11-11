@@ -71,7 +71,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         application.retrySessionProcess(nil)
         #expect(record.withLock { $0.connections } == 2)
         releaseConnection.signal()
-        await waitForRecovery { application.windows.controllers.first?.view != nil }
+        await waitForRecovery { application.windows.controllers.first?.terminalView != nil }
         #expect(application.windows.controllers.count == 1 && !application.validateMenuItem(retry))
         #expect(registration.state.withLock { $0.calls }.isEmpty)
         #expect(record.withLock { $0.questions.count } == 2)
@@ -109,7 +109,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         #expect(registration.state.withLock { $0.calls }.isEmpty && application.windows.controllers.isEmpty)
 
         #expect(NSApp.sendAction(try #require(registerAgain.action), to: registerAgain.target, from: registerAgain))
-        await waitForRecovery { application.windows.controllers.first?.view != nil }
+        await waitForRecovery { application.windows.controllers.first?.terminalView != nil }
         #expect(questions.withLock { $0 } == [.registerAgain, .registerAgain])
         #expect(registration.state.withLock { $0.calls } == ["unregister", "register", "connect"])
         #expect(application.validateMenuItem(registerAgain))
@@ -141,7 +141,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let newWindow = try #require(file.item(withTitle: "New Window"))
 
         application.registerSessionProcessAgain(nil)
-        await waitForRecovery { application.windows.controllers.first?.view != nil }
+        await waitForRecovery { application.windows.controllers.first?.terminalView != nil }
         #expect(!application.validateMenuItem(retry) && application.validateMenuItem(newWindow))
         registration.state.withLock { $0.refuses = true }
         application.registerSessionProcessAgain(nil)

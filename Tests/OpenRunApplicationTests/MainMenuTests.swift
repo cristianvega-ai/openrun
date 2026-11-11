@@ -27,16 +27,16 @@ import TerminalView
         application.makeNewSession = { .newSession(folder: folder.path, environment: ["HOME": folder.path, "ZDOTDIR": folder.path, "PATH": "/usr/bin:/bin"]) }
         defer { application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification)) }
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
-        await wait { application.windows.controllers.first?.view != nil }
+        await wait { application.windows.controllers.first?.terminalView != nil }
         let controller = try #require(application.windows.controllers.first)
-        _ = try #require(controller.view)
+        _ = try #require(controller.terminalView)
         let first = try process.listedIdentifiers()
         #expect(first.count == 1)
         controller.window.close()
         let afterClose = try process.listedIdentifiers()
         #expect(application.windows.controllers.isEmpty && afterClose == first)
         #expect(application.applicationShouldHandleReopen(NSApplication.shared, hasVisibleWindows: false))
-        await wait { application.windows.controllers.first?.view != nil }
+        await wait { application.windows.controllers.first?.terminalView != nil }
         let afterReopen = try process.listedIdentifiers()
         #expect(application.windows.controllers.count == 1 && afterReopen.count == 2)
         application.applicationWillTerminate(Notification(name: NSApplication.willTerminateNotification))
@@ -57,7 +57,7 @@ import TerminalView
         application.applicationDidFinishLaunching(Notification(name: NSApplication.didFinishLaunchingNotification))
         let action = NSMenuItem(title: "New Window", action: #selector(OpenRunApplication.newSession(_:)), keyEquivalent: "n")
         #expect(application.validateMenuItem(action))
-        await wait { application.windows.controllers.first?.view != nil }
+        await wait { application.windows.controllers.first?.terminalView != nil }
         let first = try #require(try process.listedIdentifiers().first)
         let identifier = try #require(UUID(uuidString: first))
         application.chooseSession = { socket, _ in
@@ -65,11 +65,11 @@ import TerminalView
             return identifier
         }
         application.attachToSession(nil)
-        await wait { application.windows.controllers.count == 2 && application.windows.controllers.last?.view != nil }
+        await wait { application.windows.controllers.count == 2 && application.windows.controllers.last?.terminalView != nil }
         let afterAttach = try process.listedIdentifiers()
         #expect(application.windows.controllers.count == 2 && afterAttach == [first])
         application.newSession(nil)
-        await wait { application.windows.controllers.count == 3 && application.windows.controllers.last?.view != nil }
+        await wait { application.windows.controllers.count == 3 && application.windows.controllers.last?.terminalView != nil }
         let afterNew = try process.listedIdentifiers()
         #expect(application.windows.controllers.count == 3 && afterNew.count == 2)
         application.chooseSession = { _, _ in nil }
