@@ -543,7 +543,7 @@ One `codex app-server` serves all threads of one account (decision of 2026-11-10
 The tasks of a server hold it and its `AgentProgram` weakly. When nobody holds the server, its threads or its `CodexAccountServers` any more, the program goes too, and its group gets SIGKILL, also without `shutDown`.
 
 The app-server speaks JSON-RPC on its standard input and output: one JSON object on each line, without the `jsonrpc` member.
-OpenRun's requests have whole-number identifiers. Each request waits for its answer for at most `answerTimeLimit`, 60 seconds by default. When the output ends, every request that waits fails with `connectionEnded`, and so does every later one.
+OpenRun's requests have whole-number identifiers. An answer to a request of Codex carries its identifier as the JSON text that it came in, so that a number above 2^53 does not change. Each request waits for its answer for at most `answerTimeLimit`, 60 seconds by default. When the output ends, every request that waits fails with `connectionEnded`, and so does every later one.
 A line that is not JSON, that has an unknown method, that is longer than 16 MiB, or that the output cuts short becomes an `unknown` event of each open thread, and the connection goes on.
 The handshake sends `initialize` with the name and the version of OpenRun and `capabilities.experimentalApi: true`, which the stop needs. Then it sends `initialized`.
 
@@ -565,7 +565,7 @@ The events of a thread go through a channel. The reader of the app-server never 
 
 Codex asks before a command or a file change with `item/commandExecution/requestApproval` or `item/fileChange/requestApproval`. Each request becomes a `permissionRequested` event with the identifier `ITEM/REQUEST`.
 A command shows the command, its folder and the reason. A request for a file change has no diff, so it takes the paths and the diffs from the start of the item with the same identifier. When the start comes after the request, the request shows again with the diff.
-Only `CodexThread.answerPermission` accepts a request: allow sends `accept`, and deny sends `decline`. A second answer sends nothing.
+Only `CodexThread.answerPermission` accepts a request: allow sends `accept`, and deny sends `decline`. A second answer sends nothing. A second request with the identifier of a request that waits gets `decline` at once, and the thread gets a warning.
 OpenRun declines a request after `approvalTimeLimit`, 10 minutes by default, at a stop, and at the close of its thread. When the app-server ends, no answer can go, and the request ends as declined. Codex runs nothing that waits (result 3 of the prototype). When Codex withdraws a request with `serverRequest/resolved`, it ends without an answer.
 Every other request of the app-server, such as a question for the user or a tool call of the client, gets the error -32601, and the thread gets a warning.
 

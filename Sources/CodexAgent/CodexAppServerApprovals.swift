@@ -9,6 +9,13 @@ extension CodexAppServer {
             await sendDecision("decline", to: request)
             return
         }
+        guard !approvals.values.contains(where: { $0.request == request }) else {
+            // A second request with the identifier of one that waits would
+            // take its place, and the first could then never end.
+            await sendDecision("decline", to: request)
+            let text = "Codex sent a second request with the identifier \(request) while the first waited, so OpenRun declined it."
+            return emit([.notice(Notice(level: .warning, text: text))], line: line, to: thread)
+        }
         let item = parameters["itemId"]?.string ?? ""
         let identifier = "\(item)/\(request)"
         let limit = options.approvalTimeLimit
