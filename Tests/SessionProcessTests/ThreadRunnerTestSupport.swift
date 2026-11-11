@@ -18,6 +18,13 @@ enum FakeAgentSettings {
         return AgentLaunchSettings(program: executable, environment: base.merging(environment) { $1 }, hookCommand: "/usr/bin/false", hookArguments: [])
     }
 
+    /// A real session process whose threads run the fake agent with the
+    /// environment of the test, and never the login shell of the user.
+    static func sessionProcess(turns: [String] = ["plain-turn"], mode: String = "replay", environment: [String: String] = [:]) throws -> RunningSessionProcess {
+        let settings = make(turns: turns, mode: mode, environment: environment)
+        return try RunningSessionProcess(arguments: ["--agent-program", executable, "--own-environment-for-agents"], environment: settings.environment)
+    }
+
     static func record(folder: String = NSTemporaryDirectory()) -> ThreadRecord {
         ThreadRecord(agent: .claudeCode, folder: folder, model: "claude-haiku-5-5", permissionMode: "default")
     }

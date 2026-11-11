@@ -98,6 +98,8 @@ public final class RunningSessionProcess: @unchecked Sendable {
     ///     replaces itself with the process, so the process identifier stays.
     ///   - executable: Another copy of `openrun-session`, such as one inside
     ///     an app bundle.
+    ///   - environment: Variables for the process beside the ones of the
+    ///     test, such as the turns that a fake agent plays.
     public init(
         directory: URL? = nil,
         socketRelativePath: String = "socket",
@@ -107,6 +109,7 @@ public final class RunningSessionProcess: @unchecked Sendable {
         readyTimeout: TimeInterval = 15,
         arguments: [String] = [],
         executable: URL = sessionExecutable,
+        environment: [String: String] = [:],
         didStart: (pid_t) -> Void = { _ in }
     ) throws {
         ownsDirectory = directory == nil
@@ -138,6 +141,7 @@ public final class RunningSessionProcess: @unchecked Sendable {
         process.standardError = try FileHandle(forWritingTo: logFile)
         process.standardOutput = FileHandle.nullDevice
         process.standardInput = FileHandle.nullDevice
+        if !environment.isEmpty { process.environment = ProcessInfo.processInfo.environment.merging(environment) { _, new in new } }
         try process.run()
         didStart(process.processIdentifier)
         if waitUntilReady {
