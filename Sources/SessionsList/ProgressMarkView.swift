@@ -19,7 +19,8 @@ final class ProgressMarkView: NSView {
         arc.frame = bounds
         layer?.addSublayer(arc)
         setAccessibilityElement(false)
-        NotificationCenter.default.addObserver(self, selector: #selector(updateMotion),
+        // NSWorkspace posts the change of Reduce Motion on its own center.
+        NSWorkspace.shared.notificationCenter.addObserver(self, selector: #selector(updateMotion),
             name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: NSWorkspace.shared)
     }
 

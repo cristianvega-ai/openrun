@@ -19,7 +19,7 @@ import Testing
         mark.isHidden = false
         #expect(mark.isTurning)
         reducesMotion = true
-        NotificationCenter.default.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: NSWorkspace.shared)
+        NSWorkspace.shared.notificationCenter.post(name: NSWorkspace.accessibilityDisplayOptionsDidChangeNotification, object: NSWorkspace.shared)
         #expect(!mark.isTurning)
         mark.removeFromSuperview()
         #expect(!mark.isTurning)
