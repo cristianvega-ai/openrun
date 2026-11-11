@@ -27,4 +27,34 @@ import Testing
         #expect(!composer.noteButton.isHidden)
         #expect(composer.noteButton.title == "The image is too large.")
     }
+
+    @Test func aMessageWrittenWhileTheAgentWorksGoesAtTheEnd() {
+        var sent: [String] = []
+        var stops = 0
+        composer.sendAction = { sent.append($0.text) }
+        composer.stopAction = { stops += 1 }
+        composer.setBusy(true)
+        composer.textView.string = "Then commit."
+        composer.submit()
+        #expect(sent.isEmpty)
+        #expect(composer.textView.string.isEmpty)
+        #expect(!composer.noteButton.isHidden)
+        composer.sendOrStop()
+        #expect(stops == 1)
+        composer.setBusy(false)
+        #expect(sent == ["Then commit."])
+        #expect(composer.noteButton.isHidden)
+    }
+
+    @Test func escapeTwiceStopsAndCommandPeriodStopsAtOnce() {
+        var stops = 0
+        composer.stopAction = { stops += 1 }
+        composer.setBusy(true)
+        composer.textView.stopAction?(false)
+        #expect(stops == 0)
+        composer.textView.stopAction?(false)
+        #expect(stops == 1)
+        composer.textView.stopAction?(true)
+        #expect(stops == 2)
+    }
 }

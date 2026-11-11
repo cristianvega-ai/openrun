@@ -38,6 +38,7 @@ final class ComposerView: NSView {
         noteButton.alignment = .left
         for view in [previews, scrollView, sendButton] as [NSView] { box.addSubview(view) }
         for view in [noteButton, box, footer] as [NSView] { addSubview(view) }
+        connectSending()
     }
 
     @available(*, unavailable)
