@@ -39,6 +39,7 @@ import AppKit
         context.actions = self
         context.hasEarlierHistory = facts.hasEarlierHistory
         scrollView.reachedTop = { [weak self] in self?.loadEarlierHistory() }
+        showThreadState()
     }
 
     @available(*, unavailable)

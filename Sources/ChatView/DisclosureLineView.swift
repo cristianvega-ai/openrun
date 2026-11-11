@@ -18,6 +18,7 @@ final class DisclosureLineView: NSView {
     override init(frame: NSRect) {
         super.init(frame: frame)
         title.lineBreakMode = .byTruncatingTail
+        status.lineBreakMode = .byTruncatingTail
         for view in [symbol, title, status] { addSubview(view) }
         setAccessibilityElement(true)
         setAccessibilityRole(.button)
@@ -47,9 +48,13 @@ final class DisclosureLineView: NSView {
         super.layout()
         let middle = bounds.height / 2
         symbol.frame = NSRect(x: 6, y: middle - 8, width: 16, height: 16)
-        let statusWidth = status.stringValue.isEmpty ? 0 : ceil(status.attributedStringValue.size().width) + 4
-        let titleWidth = min(ceil(title.attributedStringValue.size().width) + 4, bounds.width - 38 - statusWidth - (statusWidth > 0 ? 8 : 0))
-        title.frame = NSRect(x: 30, y: middle - 9, width: max(0, titleWidth), height: 18)
+        // The title keeps at least 60 percent of the line, and a long
+        // state, such as the message of a denial, gives way first.
+        let room = max(0, bounds.width - 38)
+        let wantedStatus = status.stringValue.isEmpty ? 0 : ceil(status.attributedStringValue.size().width) + 4
+        let titleWidth = min(ceil(title.attributedStringValue.size().width) + 4, max(room * 0.6, room - wantedStatus - 8))
+        let statusWidth = min(wantedStatus, max(0, room - titleWidth - 8))
+        title.frame = NSRect(x: 30, y: middle - 9, width: titleWidth, height: 18)
         status.frame = NSRect(x: title.frame.maxX + 8, y: middle - 9, width: statusWidth, height: 18)
     }
 
