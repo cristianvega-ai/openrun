@@ -30,7 +30,9 @@ enum SettingStoredForm {
     private static func commands(from entries: [StoredValue]) -> [NewSessionCommand]? {
         var commands: [NewSessionCommand] = []
         for entry in entries {
-            guard case .object(let fields) = entry, fields.count == 2,
+            // Other keys, such as a field of a later build, do not count,
+            // so the user's commands stay.
+            guard case .object(let fields) = entry,
                   case .string(let name) = fields["name"],
                   case .string(let commandLine) = fields["command"] else { return nil }
             commands.append(NewSessionCommand(name: name, commandLine: commandLine))
