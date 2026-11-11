@@ -21,6 +21,7 @@ struct CommandLineArguments: Equatable {
         var socketPath: String?
         var pressEnter = false
         var includeScrollback = false
+        var printsJSON = false
         var helpRequested = false
         var folder: String?
         var positional: [String] = []
@@ -36,6 +37,8 @@ struct CommandLineArguments: Equatable {
                 pressEnter = true
             case "--scrollback":
                 includeScrollback = true
+            case "--json":
+                printsJSON = true
             case "--help":
                 helpRequested = true
                 remaining.removeAll()
@@ -65,6 +68,7 @@ struct CommandLineArguments: Equatable {
             throw CommandLineToolError.usage("Missing command.")
         }
         let rest = Array(positional.dropFirst())
+        if printsJSON, name != "list" { throw CommandLineToolError.usage("--json does not belong to \(name). It works with list.") }
 
         func allow(_ flag: String, used: Bool, in commands: String) throws {
             if used { throw CommandLineToolError.usage("\(flag) does not belong to \(name). It works with \(commands).") }
@@ -83,7 +87,7 @@ struct CommandLineArguments: Equatable {
         case "list":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
             guard rest.isEmpty else { throw CommandLineToolError.usage("list takes no arguments.") }
-            command = .list
+            command = .list(printsJSON: printsJSON)
         case "attach":
             try Self.requireNoOptions(name, folder, pressEnter, includeScrollback, afterSeparator)
             command = .attach(identifier: try Self.single(rest, name: name))

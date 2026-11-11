@@ -41,7 +41,9 @@ private func usageMessage(_ words: String...) -> String? {
     }
 
     @Test func eachCommandParses() throws {
-        #expect(try parse("list").command == .list)
+        #expect(try parse("list").command == .list(printsJSON: false))
+        #expect(try parse("list", "--json").command == .list(printsJSON: true))
+        #expect(usageMessage("read", "abc", "--json")?.contains("--json does not belong to read") == true)
         #expect(try parse("attach", "abc").command == .attach(identifier: "abc"))
         #expect(try parse("read", "abc").command == .read(identifier: "abc", includeScrollback: false))
         #expect(try parse("read", "abc", "--scrollback").command == .read(identifier: "abc", includeScrollback: true))

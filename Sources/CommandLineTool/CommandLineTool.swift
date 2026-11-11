@@ -39,8 +39,8 @@ public enum CommandLineTool {
         switch command {
         case .new(let folder, let program):
             write(try NewCommand(folder: folder, program: program).run(location: location, environment: environment), to: .standardOutput)
-        case .list:
-            write(try ListCommand().run(location: location), to: .standardOutput)
+        case .list(let printsJSON):
+            write(try ListCommand(printsJSON: printsJSON).run(location: location), to: .standardOutput)
         case .attach(let identifier):
             return try AttachCommand(identifier: identifier).run(location: location)
         case .read(let identifier, let includeScrollback):
