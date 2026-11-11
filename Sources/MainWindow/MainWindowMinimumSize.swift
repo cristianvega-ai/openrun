@@ -38,16 +38,21 @@ extension MainWindowController: NSWindowDelegate {
     /// that pass starts the pass again without end. So the check waits for
     /// a later turn of the main queue.
     public func windowDidResize(_ notification: Notification) {
+        checkMinimumSizeLater()
+    }
+
+    /// A window on a screen of another size can have another minimum. The
+    /// move to the screen can also come from a layout pass.
+    public func windowDidChangeScreen(_ notification: Notification) {
+        checkMinimumSizeLater()
+    }
+
+    func checkMinimumSizeLater() {
         guard !isMinimumCheckWaiting else { return }
         isMinimumCheckWaiting = true
         Task { [weak self] in
             self?.isMinimumCheckWaiting = false
             self?.keepMinimumSize()
         }
-    }
-
-    /// A window on a screen of another size can have another minimum.
-    public func windowDidChangeScreen(_ notification: Notification) {
-        keepMinimumSize()
     }
 }

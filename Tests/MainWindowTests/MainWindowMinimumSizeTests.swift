@@ -56,4 +56,16 @@ import Testing
         await turns(seconds: 1)
         #expect(controller.window.contentMinSize.width == 900 && controller.window.frame.width >= 900)
     }
+
+    /// A new screen sets the minimum again, after the pass that moved the window.
+    @Test func aNewScreenSetsTheMinimumAgainLater() async {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        let minimum = controller.window.contentMinSize
+        controller.window.contentMinSize = NSSize(width: 100, height: 100)
+        NotificationCenter.default.post(name: NSWindow.didChangeScreenNotification, object: controller.window)
+        #expect(controller.window.contentMinSize.width == 100)
+        await turns(seconds: 0.2)
+        #expect(controller.window.contentMinSize == minimum)
+    }
 }
