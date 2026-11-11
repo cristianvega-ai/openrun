@@ -404,16 +404,26 @@ extension SessionProcessIntegration {
                 let baseline = try #require(process.memoryFootprint)
                 var maximum = baseline
                 FileManager.default.createFile(atPath: go.path, contents: Data())
-                for _ in 0..<10 {
+                // The test counts 30 MiB of output, not 10 seconds, because a
+                // busy Mac moved less than 30 MiB in 10 seconds. The limit of
+                // 120 seconds only stops a flood that does not move.
+                let start = ContinuousClock.now
+                while reader.state.withLock({ $0.byteCount }) <= 30 * 1024 * 1024 && ContinuousClock.now - start < .seconds(120) {
                     try await Task.sleep(for: .seconds(1))
                     maximum = max(maximum, try #require(process.memoryFootprint))
                     try #require(!reader.state.withLock { $0.isDone }, "The flood connection ended before control-C.")
                 }
                 let before = reader.state.withLock { $0.byteCount }
                 try client.connection.send(ClientMessage.input(Data([3])))
-                let stopped = await eventually(timeout: .seconds(5)) { reader.state.withLock { $0.isDone } }
+                // The reader takes the output that waits before control-C at
+                // its own pace, and a busy Mac read it at 0.5 MB a second, so
+                // the stop took 7.5 seconds. The bytes after the key show that
+                // the key did not wait behind the flood: 8 MiB of queue, 4 MiB
+                // of read-ahead and the socket buffers hold less than 13 MiB.
+                let stopped = await eventually(timeout: .seconds(30)) { reader.state.withLock { $0.isDone } }
                 let result = reader.state.withLock { $0 }
-                print("paced-flood: \(before) bytes; memory \(baseline) to \(maximum); stopped \(stopped); exit \(String(describing: result.exit))")
+                #expect(result.byteCount - before < 13 * 1024 * 1024)
+                print("paced-flood: \(before) bytes; after \(result.byteCount - before); memory \(baseline) to \(maximum); stopped \(stopped); exit \(String(describing: result.exit))")
                 #expect(before > 30 * 1024 * 1024)
                 #expect(maximum - baseline < 128 * 1024 * 1024)
                 #expect(stopped && result.exit == .signaled(signal: SIGINT))
