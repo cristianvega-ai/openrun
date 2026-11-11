@@ -61,6 +61,22 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case receiveApprovalQuestions
     /// The user's answer to one question. No message answers it.
     case answerApprovalQuestion(identifier: UUID, allows: Bool)
+
+    // The facts of the sessions.
+
+    /// Asks for every change of the sessions, on a connection that stays
+    /// open. Answer: `sessionList`, then each `sessionChanged` and
+    /// `sessionEnded`. The connection takes no other request after it.
+    case receiveSessionChanges
+    /// Gives a session a name, or removes it with `nil`. Answer:
+    /// `acknowledged`. A program in a session may name only its own.
+    case renameSession(identifier: UUID, name: String?)
+    /// Raises the alert of a session with a text. Answer: `acknowledged`.
+    /// A program in a session may alert only its own.
+    case raiseSessionAlert(identifier: UUID, text: String)
+    /// Ends the alert of a session. Answer: `acknowledged`. A program in a
+    /// session may clear only its own.
+    case clearSessionAlert(identifier: UUID)
 }
 
 extension ClientMessage: FramedMessage {
@@ -105,6 +121,10 @@ extension ClientMessage {
         case .detach: "detach"
         case .receiveApprovalQuestions: "receiveApprovalQuestions"
         case .answerApprovalQuestion: "answerApprovalQuestion"
+        case .receiveSessionChanges: "receiveSessionChanges"
+        case .renameSession: "renameSession"
+        case .raiseSessionAlert: "raiseSessionAlert"
+        case .clearSessionAlert: "clearSessionAlert"
         }
     }
 }

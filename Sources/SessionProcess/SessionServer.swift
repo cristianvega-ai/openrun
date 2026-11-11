@@ -261,6 +261,9 @@ actor SessionServer {
                 await questions.addAnswerer(owner) { client.send($0) }
             case .answerApprovalQuestion(let identifier, let allows):
                 await questions.answer(identifier, allows: allows, from: owner)
+            case .receiveSessionChanges, .renameSession, .raiseSessionAlert, .clearSessionAlert:
+                // The capability `sessionChanges` is off until these work.
+                client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This session process does not keep the facts of its sessions.")))
             }
             client.markHandled(received)
         }

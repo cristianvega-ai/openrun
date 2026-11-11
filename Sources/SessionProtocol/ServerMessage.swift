@@ -38,6 +38,12 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// The question has ended: an answer came, its time limit passed, or the
     /// program that asked left. Every connection that holds it receives this.
     case approvalQuestionEnded(identifier: UUID)
+    /// A new session, or new facts of a session. Only a connection that
+    /// asked with `receiveSessionChanges` receives it.
+    case sessionChanged(SessionSummary)
+    /// The session has ended and left the list. Only a connection that
+    /// asked with `receiveSessionChanges` receives it.
+    case sessionEnded(identifier: UUID)
 }
 
 extension ServerMessage: FramedMessage {
@@ -91,6 +97,8 @@ extension ServerMessage {
         case .failure: "failure"
         case .approvalQuestion: "approvalQuestion"
         case .approvalQuestionEnded: "approvalQuestionEnded"
+        case .sessionChanged: "sessionChanged"
+        case .sessionEnded: "sessionEnded"
         }
     }
 }
