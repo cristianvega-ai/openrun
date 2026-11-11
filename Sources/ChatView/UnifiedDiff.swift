@@ -60,6 +60,19 @@ struct UnifiedDiff: Equatable {
         for index in lines.indices { lines[index].text = transform(lines[index].text) }
     }
 
+    /// Keeps the lines that fit in `limit` characters.
+    /// - Returns: The number of characters that do not show.
+    mutating func cut(toCharacters limit: Int) -> Int {
+        var used = 0
+        let kept = lines.prefix { line in
+            used += line.text.utf16.count + 1
+            return used <= limit
+        }.count
+        let hidden = lines.dropFirst(kept).reduce(0) { $0 + $1.text.utf16.count + 1 }
+        lines.removeLast(lines.count - kept)
+        return hidden
+    }
+
     mutating func append(_ other: UnifiedDiff) {
         lines += other.lines
         addedCount += other.addedCount

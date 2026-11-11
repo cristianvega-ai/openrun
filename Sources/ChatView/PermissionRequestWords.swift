@@ -18,6 +18,12 @@ struct PermissionRequestWords: Equatable {
     /// The command, the path or the name of the tool, for the folded line.
     var subject: String
     var parts: [Part] = []
+    /// Whether the request is too long to show in full. The user cannot
+    /// see all of it, so it can only be denied.
+    private(set) var isCut = false
+    /// The most text that a request shows: 256 KiB, as the transcript
+    /// keeps of one detail.
+    static let shownLimit = 256 * 1024
 
     init(_ item: PermissionRequestItem, agentName: String) {
         let request = item.request
@@ -54,6 +60,33 @@ struct PermissionRequestWords: Equatable {
         if !rest.isEmpty { parts += parts.isEmpty ? [.text(rest)] : [.note("More input:"), .text(rest)] }
         subject = Self.visible(subject)
         parts = parts.map(Self.visible)
+        cutToLimit()
+    }
+
+    /// Cuts the parts after `shownLimit` characters, and says so.
+    private mutating func cutToLimit() {
+        var budget = Self.shownLimit
+        var hidden = 0
+        for index in parts.indices {
+            switch parts[index] {
+            case .text(let text), .note(let text):
+                let count = text.utf16.count
+                if count > budget {
+                    hidden += count - budget
+                    let shown = String(text.utf16.prefix(budget)) ?? String(text.prefix(budget / 2))
+                    parts[index] = if case .note = parts[index] { .note(shown) } else { .text(shown) }
+                }
+                budget = max(0, budget - count)
+            case .diff(var diff):
+                let count = diff.lines.reduce(0) { $0 + $1.text.utf16.count + 1 }
+                if count > budget { hidden += diff.cut(toCharacters: budget) }
+                budget = max(0, budget - count)
+                parts[index] = .diff(diff)
+            }
+        }
+        guard hidden > 0 else { return }
+        isCut = true
+        parts.append(.note("This request is too long to show in full: \(hidden) characters are not shown. You can only deny it."))
     }
 
     /// The parts of a change of a file, and the words for the action.
