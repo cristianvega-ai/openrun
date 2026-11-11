@@ -35,4 +35,40 @@ import Testing
             }
         }
     }
+
+    @Test func atTheEndEachRowHasItsFinalPlace() {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.reducesMotion = { true }
+        let lights = controller.paneWindow.trafficLightsSpace
+        controller.toggleProjectsList(nil)
+        controller.window.layoutIfNeeded()
+        #expect(start(of: controller.sessionsList.topRow, controller) == lights)
+        #expect(start(of: controller.contentPane.topRow, controller) == controller.frame(of: controller.contentPane.view).minX + 16)
+        controller.toggleProjectsList(nil)
+        controller.window.layoutIfNeeded()
+        #expect(start(of: controller.projectsList.topRow, controller) == lights)
+        #expect(start(of: controller.sessionsList.topRow, controller) == controller.frame(of: controller.sessionsList.view).minX + 16)
+    }
+
+    /// A live check of the animation, beside the one that moves the panes by hand.
+    @Test(.needsLiveDisplay)
+    func theTitleOfAListStaysWithItsPaneInTheAnimation() async {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.reducesMotion = { false }
+        controller.showWindow()
+        await turns(seconds: 0.3)
+        for direction in ["hide", "show"] {
+            controller.toggleProjectsList(nil)
+            let end = Date().addingTimeInterval(0.5)
+            var worst: CGFloat = 0
+            // AppKit lays out each step of the animation. A layout here would stop it.
+            while Date() < end {
+                worst = max(worst, abs(start(of: controller.sessionsList.topRow, controller) - expectedStart(of: controller.sessionsList.view, controller)))
+                await turns(seconds: 0.01)
+            }
+            #expect(worst <= 3, "\(direction): \(worst) points away")
+        }
+    }
 }
