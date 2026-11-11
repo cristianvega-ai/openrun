@@ -74,6 +74,9 @@ let package = Package(
         // Starts a program on pipes after it closed a standard descriptor.
         .executableTarget(name: "agent-program-probe", dependencies: ["AgentProgram"], path: "Tests/AgentProgramProbe"),
         .testTarget(name: "AgentProgramTests", dependencies: ["AgentProgram", "PseudoTerminal", "agent-program-probe"]),
+        // Markdown as agents write it: its blocks and inline styles while
+        // it streams, and their text for display.
+        .target(name: "MarkdownText"),
         // A stand-in for `claude -p` that plays recorded turns, so that no
         // test runs the real agent.
         .executableTarget(name: "fake-agent", path: "Tests/FakeAgent"),
