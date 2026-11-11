@@ -37,7 +37,7 @@ public final class SessionChangeReceiver: Sendable {
 
     /// Asks for the changes, and returns once the present list is there.
     static func open(on connection: MessageConnection) throws -> SessionChangeReceiver {
-        try SessionConnectionError.wrapping { try connection.send(ClientMessage.receiveSessionChanges) }
+        try SessionConnectionError.wrapping { try connection.send(ClientMessage.receiveSessionChanges()) }
         switch try SessionConnectionError.wrapping({ try connection.receive(ServerMessage.self) }) {
         case .sessionList(let list): return SessionChangeReceiver(connection: connection, initialList: list)
         case .failure(let failure): throw SessionConnectionError.requestFailed(failure)

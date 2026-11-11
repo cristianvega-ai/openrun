@@ -300,13 +300,13 @@ actor SessionServer {
                 await questions.addAnswerer(owner) { client.send($0) }
             case .answerApprovalQuestion(let identifier, let allows):
                 await questions.answer(identifier, allows: allows, from: owner)
-            case .receiveSessionChanges:
+            case .receiveSessionChanges(let includesThreads):
                 guard attachedSession == nil else {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "This connection is attached.")))
                     break
                 }
                 isWatching = true
-                changes.addWatcher(owner) { client.send($0) }
+                changes.addWatcher(owner, includesThreads: includesThreads == true) { client.send($0) }
             case .renameSession(let identifier, let name):
                 let name = name?.isEmpty == true ? nil : name
                 // A list shows the name on one line.

@@ -11,7 +11,7 @@ final class SessionChangeWatcher {
     init(_ process: RunningSessionProcess) throws {
         connection = try MessageConnection.connect(to: SocketLocation(path: process.socketPath))
         _ = try connection.greetSessionProcess(within: .seconds(5))
-        try connection.send(ClientMessage.receiveSessionChanges)
+        try connection.send(ClientMessage.receiveSessionChanges())
         let answer = try connection.receive(ServerMessage.self, timeLimit: .wholeFrame(by: .now + .seconds(5)))
         guard case .sessionList(let list) = answer else {
             connection.shutdown()

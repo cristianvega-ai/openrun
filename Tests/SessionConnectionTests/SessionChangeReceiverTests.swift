@@ -25,7 +25,7 @@ import Testing
         changed.isInProgress = true
         Thread {
             defer { sessionSide.shutdown() }
-            guard (try? sessionSide.receive(ClientMessage.self)) == .receiveSessionChanges else { return }
+            guard (try? sessionSide.receive(ClientMessage.self)) == .receiveSessionChanges() else { return }
             try? sessionSide.send(ServerMessage.sessionList([Self.summary]))
             try? sessionSide.send(ServerMessage.sessionChanged(changed))
             try? sessionSide.send(ServerMessage.sessionEnded(identifier: changed.identifier))

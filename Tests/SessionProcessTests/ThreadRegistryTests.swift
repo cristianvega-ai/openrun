@@ -22,7 +22,7 @@ import Testing
             store = ThreadStore(dataFolder: DataFolder(path: folder.path))
             registry = ThreadRegistry(store: store, changes: feed) { settings }
             let key = NSObject()
-            feed.addWatcher(ObjectIdentifier(key)) { [self] message in messages.withLock { $0.append(message) } }
+            feed.addWatcher(ObjectIdentifier(key), includesThreads: true) { [self] message in messages.withLock { $0.append(message) } }
         }
 
         /// The summaries that the feed sent for changes of threads.

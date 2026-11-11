@@ -25,6 +25,9 @@ final class SessionChangeFeed: Sendable {
         /// Oldest first.
         var threads: [ThreadSummary]?
         var watchers: [ObjectIdentifier: Send] = [:]
+        /// The watchers that asked for the threads too. An older client
+        /// did not ask, and it does not know their messages.
+        var threadWatchers: [ObjectIdentifier: Send] = [:]
     }
 
     private let state = Mutex(State())
@@ -84,31 +87,40 @@ final class SessionChangeFeed: Sendable {
             } else {
                 state.threads = (state.threads ?? []) + [summary]
             }
-            for send in state.watchers.values { send(.threadChanged(summary)) }
+            for send in state.threadWatchers.values { send(.threadChanged(summary)) }
         }
     }
 
     func threadEnded(_ identifier: UUID) {
         state.withLock { state in
             state.threads?.removeAll { $0.identifier == identifier }
-            for send in state.watchers.values { send(.threadEnded(identifier: identifier)) }
+            for send in state.threadWatchers.values { send(.threadEnded(identifier: identifier)) }
         }
     }
 
     /// Sends the present list, oldest first, then the projects and the
     /// settings, and then each change of any of them, in the order of the
     /// changes (decision of 2026-11-10).
-    func addWatcher(_ key: ObjectIdentifier, send: @escaping Send) {
+    ///
+    /// - Parameter includesThreads: The watcher asked for the agent
+    ///   threads too. It gets their list after the settings, and then
+    ///   each change and each end of a thread.
+    func addWatcher(_ key: ObjectIdentifier, includesThreads: Bool = false, send: @escaping Send) {
         state.withLock { state in
             send(.sessionList(state.summaries.values.sorted { $0.createdAt < $1.createdAt }))
             if let projects = state.projects { send(.projectList(projects)) }
             if let settings = state.settings { send(.settingList(settings)) }
-            if let threads = state.threads { send(.threadList(threads)) }
             state.watchers[key] = send
+            guard includesThreads else { return }
+            send(.threadList(state.threads ?? []))
+            state.threadWatchers[key] = send
         }
     }
 
     func removeWatcher(_ key: ObjectIdentifier) {
-        _ = state.withLock { $0.watchers.removeValue(forKey: key) }
+        state.withLock { state in
+            state.threadWatchers[key] = nil
+            state.watchers[key] = nil
+        }
     }
 }

@@ -67,7 +67,12 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// Asks for every change of the sessions, on a connection that stays
     /// open. Answer: `sessionList`, then each `sessionChanged` and
     /// `sessionEnded`. The connection takes no other request after it.
-    case receiveSessionChanges
+    ///
+    /// With `includesThreads`, the client also gets `threadList` after the
+    /// settings, and then `threadChanged` and `threadEnded`. A client that
+    /// leaves it out never gets a message of the threads (decision of
+    /// 2026-10-19).
+    case receiveSessionChanges(includesThreads: Bool? = nil)
     /// Gives a session a name, or removes it with `nil`. Answer:
     /// `acknowledged`. A program in a session may name only its own.
     case renameSession(identifier: UUID, name: String?)

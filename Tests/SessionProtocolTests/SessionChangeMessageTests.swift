@@ -10,7 +10,8 @@ import Testing
         let summary = SessionSummary(identifier: Self.identifier, folder: "work", command: ["sh"], size: SessionSize(columns: 80, rows: 24), createdAt: Date(timeIntervalSince1970: 0))
         let summaryText = #"{"command":["sh"],"createdAt":0,"folder":"work","identifier":"\#(Self.identifierText)","size":{"columns":80,"rows":24}}"#
         let expected: [(any FramedMessage, String)] = [
-            (ClientMessage.receiveSessionChanges, #"{"receiveSessionChanges":{}}"#),
+            (ClientMessage.receiveSessionChanges(), #"{"receiveSessionChanges":{}}"#),
+            (ClientMessage.receiveSessionChanges(includesThreads: true), #"{"receiveSessionChanges":{"includesThreads":true}}"#),
             (ClientMessage.renameSession(identifier: Self.identifier, name: "build"), #"{"renameSession":{"identifier":"\#(Self.identifierText)","name":"build"}}"#),
             (ClientMessage.renameSession(identifier: Self.identifier, name: nil), #"{"renameSession":{"identifier":"\#(Self.identifierText)"}}"#),
             (ClientMessage.raiseSessionAlert(identifier: Self.identifier, text: "done"), #"{"raiseSessionAlert":{"identifier":"\#(Self.identifierText)","text":"done"}}"#),
