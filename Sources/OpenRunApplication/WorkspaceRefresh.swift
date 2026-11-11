@@ -34,6 +34,10 @@ extension Workspace {
         defer { isRefreshing = false }
         let content = ListContent(overview: connection.overview, layout: layout, inView: sessionInView, home: home)
         window.projectsList.show(content.projects)
+        if let project = projectToSelect, content.projects.projects.contains(where: { $0.identifier == project }) {
+            window.projectsList.select(.project(project))
+            projectToSelect = nil
+        }
         // The first pane goes to "All Sessions" when its project went away.
         let entry = window.projectsList.selection
         layout.selectedEntry = entry.layoutEntry

@@ -34,6 +34,9 @@ final class Workspace: NSObject {
     /// A session that the user asked for. Its row takes the selection
     /// and the keyboard focus when the feed brings the session.
     var sessionToSelect: UUID?
+    /// A project that takes the selection of the first pane when the feed
+    /// brings it: one that the user added, or the kept one at the start.
+    var projectToSelect: UUID?
     /// The lists report a selection while they take new content, and that
     /// is no choice of the user.
     var isRefreshing = false
@@ -48,6 +51,8 @@ final class Workspace: NSObject {
     lazy var showFailure: (String, String) -> Void = { [weak self] in self?.showFailureSheet(title: $0, message: $1) }
     /// Asks before a close and gives the answer. Tests set it.
     lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
+    /// Asks for the folders of new projects. Tests set it.
+    lazy var chooseProjectFolders: (@escaping ([URL]) -> Void) -> Void = { [weak self] in self?.chooseFoldersInPanel(then: $0) }
 
     /// - Parameters:
     ///   - defaults: Where the window keeps the widths of its panes.
@@ -66,6 +71,10 @@ final class Workspace: NSObject {
         super.init()
         window.sessionsList.arrange(filter: SessionsFilter(rawValue: layout.filter) ?? .all, order: SessionsOrder(rawValue: layout.order) ?? .manual)
         window.sessionsList.delegate = self
+        window.projectsList.delegate = self
+        // The projects come with the feed, so a kept project waits for it.
+        if case .project(let identifier) = layout.selectedEntry { projectToSelect = identifier }
+        window.projectsList.select(ProjectsListEntry(layout.selectedEntry))
         connection.overviewChanged = { [weak self] in self?.overviewChanged(from: $0) }
     }
 
