@@ -24,6 +24,7 @@ extension CodexAppServer {
             return
         }
         if threads[thread] != nil {
+            if method == "serverRequest/resolved" { await approvalResolved(parameters, thread: thread) }
             await deliver(method, parameters, line: line, to: thread)
         } else {
             // A thread that closed, or one whose start has not returned.

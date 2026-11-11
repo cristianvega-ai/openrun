@@ -33,4 +33,18 @@ import Testing
         let transcript = Transcript(events: events)
         #expect(transcript.items.contains { if case .toolCall(let call) = $0.content { call.state == .succeeded && call.exitCode == 0 } else { false } })
     }
+
+    @Test func aDeniedCommandIsRefusedByTheUser() async throws {
+        let events = try await turn("command-declined", answer: .deny)
+        let identifier = "exec-00000000-0000-7000-8000-000000000007/1"
+        #expect(events.contains { $0.kind == .permissionEnded(PermissionEnd(identifier: identifier, outcome: .denied)) })
+        #expect(events.contains { if case .toolCallRefused(let refusal) = $0.kind { refusal.reason == .user } else { false } })
+    }
+
+    @Test func aRequestWithoutAnswerIsDeclinedAfterTheTimeLimit() async throws {
+        let events = try await turn("command-declined", answer: nil, options: CodexServerOptions(approvalTimeLimit: .milliseconds(100)))
+        let identifier = "exec-00000000-0000-7000-8000-000000000007/1"
+        #expect(events.contains { if case .permissionEnded(let end) = $0.kind { end.identifier == identifier && end.outcome == .timedOut } else { false } })
+        #expect(events.contains { if case .toolCallRefused(let refusal) = $0.kind { refusal.reason == .unanswered } else { false } })
+    }
 }
