@@ -84,7 +84,7 @@ import Testing
         #expect(pane.sentSizeRequests - before == (changed ? 1 : 0), "\(name): \(pane.sentSizeRequests - before) sizes, grid \(String(describing: gridBefore)) to \(String(describing: pane.terminalView?.gridSize))")
     }
 
-    @Test func everyToggleNearTheMinimumKeepsTheWindowWhole() async throws {
+    @Test(.needsLiveDisplay) func everyToggleNearTheMinimumKeepsTheWindowWhole() async throws {
         try await withHostedSession { controller, pane in
             for toggle in Toggle.allCases {
                 for hidden in [false, true] {
@@ -95,7 +95,7 @@ import Testing
     }
 
     /// A larger text size makes a larger minimum, which the host forwards.
-    @Test func everyToggleAtTheMinimumWithALargerTextSize() async throws {
+    @Test(.needsLiveDisplay) func everyToggleAtTheMinimumWithALargerTextSize() async throws {
         try await withHostedSession { controller, pane in
             for _ in 0..<3 { pane.terminalView?.increaseFontSize(nil) }
             controller.updateContentMinimumSize(pane.minimumSize)

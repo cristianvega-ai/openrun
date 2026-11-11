@@ -61,7 +61,7 @@ import Testing
     /// An animated show of a list at the minimum width once ended the app
     /// with an exception: a check of the minimum inside the layout pass of
     /// the animation asked for another pass without end.
-    @Test func anAnimatedShowAtTheMinimumGrowsTheWindow() async {
+    @Test(.needsLiveDisplay) func anAnimatedShowAtTheMinimumGrowsTheWindow() async {
         let controller = makeMainWindow()
         defer { controller.window.close() }
         controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: 500, height: 300)))
@@ -80,7 +80,15 @@ import Testing
     /// A show near the minimum takes the room of the list from the content
     /// where it can. The window grows only to the new minimum. It once grew
     /// to the minimum, and AppKit then added the width of the list again.
-    @Test(arguments: [false, true]) func aShowNearTheMinimumGrowsOnlyToTheNewMinimum(reducesMotion: Bool) async {
+    @Test func aShowNearTheMinimumGrowsOnlyToTheNewMinimum() async {
+        await checkAShowNearTheMinimum(reducesMotion: true)
+    }
+
+    @Test(.needsLiveDisplay) func anAnimatedShowNearTheMinimumGrowsOnlyToTheNewMinimum() async {
+        await checkAShowNearTheMinimum(reducesMotion: false)
+    }
+
+    private func checkAShowNearTheMinimum(reducesMotion: Bool) async {
         let controller = makeMainWindow()
         defer { controller.window.close() }
         controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: 500, height: 300)))
@@ -97,7 +105,7 @@ import Testing
     }
 
     /// With a content as wide as the screen, the screen limits the window.
-    @Test func aShowWithAMinimumAsWideAsTheScreenStaysOnTheScreen() async throws {
+    @Test(.needsLiveDisplay) func aShowWithAMinimumAsWideAsTheScreenStaysOnTheScreen() async throws {
         let controller = makeMainWindow()
         defer { controller.window.close() }
         controller.showWindow()

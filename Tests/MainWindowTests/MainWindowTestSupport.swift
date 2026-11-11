@@ -47,3 +47,18 @@ func expectedMinimumWidth(of controller: MainWindowController, content: CGFloat)
     if !controller.sessionsItem.isCollapsed { width += max(240, controller.sessionsList.topRow.fittingSize.width) + divider }
     return width
 }
+
+/// AppKit moves the panes in an animation only while the display refreshes,
+/// so a test that waits for an animation needs a display that is awake and
+/// not locked.
+func displayIsLive() -> Bool {
+    let session = CGSessionCopyCurrentDictionary() as? [String: Any]
+    let isLocked = session?["CGSSessionScreenIsLocked"] as? Bool ?? false
+    return !isLocked && CGDisplayIsAsleep(CGMainDisplayID()) == 0
+}
+
+extension Trait where Self == ConditionTrait {
+    static var needsLiveDisplay: Self {
+        .enabled("An animation of AppKit needs a display that is awake and not locked") { displayIsLive() }
+    }
+}

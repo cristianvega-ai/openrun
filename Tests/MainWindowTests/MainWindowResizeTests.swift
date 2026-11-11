@@ -5,7 +5,7 @@ import Testing
 
 /// A change of the widths of the panes gives a session one size, at the end.
 @MainActor @Suite(.serialized) struct MainWindowResizeTests {
-    @Test func oneAnimatedToggleSendsOneSize() async throws {
+    @Test(.needsLiveDisplay) func oneAnimatedToggleSendsOneSize() async throws {
         try await withHostedSession { controller, pane in
             let before = pane.sentSizeRequests
             for count in 1...2 {
@@ -31,7 +31,7 @@ import Testing
     }
 
     /// Two animations that overlap end the hold once, at the end of the last.
-    @Test func bothListsTogetherSendOneSize() async throws {
+    @Test(.needsLiveDisplay) func bothListsTogetherSendOneSize() async throws {
         try await withHostedSession { controller, pane in
             for count in 1...2 {
                 controller.toggleProjectsList(nil)

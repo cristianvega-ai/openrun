@@ -22,7 +22,7 @@ final class CountingDefaults: UserDefaults, @unchecked Sendable {
         return defaults
     }
 
-    @Test func anAnimatedToggleSavesOnce() async throws {
+    @Test(.needsLiveDisplay) func anAnimatedToggleSavesOnce() async throws {
         let defaults = try makeDefaults()
         let controller = makeMainWindow(defaults: defaults)
         defer { controller.window.close() }
