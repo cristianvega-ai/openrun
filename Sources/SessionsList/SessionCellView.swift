@@ -39,7 +39,9 @@ final class SessionCellView: NSTableCellView {
         for field in [modelLabel, folderLabel, branchLabel] {
             (field.font, field.textColor) = (.systemFont(ofSize: NSFont.smallSystemFontSize), PaneColor.quietText)
         }
-        folderLabel.lineBreakMode = .byTruncatingHead
+        // A cut text fills its label only to the last whole character. The
+        // rest of the room goes before the folder, not before the branch.
+        (folderLabel.lineBreakMode, folderLabel.alignment) = (.byTruncatingHead, .right)
         folderLabel.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
         place.spacing = 0
         age.setContentCompressionResistancePriority(.required, for: .horizontal)
