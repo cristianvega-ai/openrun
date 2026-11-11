@@ -81,6 +81,7 @@ let package = Package(
         // The native chat of an agent thread: the transcript, the composer,
         // the states of a thread, and the interface to its host.
         .target(name: "ChatView", dependencies: ["AgentConversation", "MarkdownText", "TerminalTheme", "TerminalEmulation"]),
+        .testTarget(name: "ChatViewTests", dependencies: ["ChatView", "AgentConversation", "MarkdownText", "TerminalTheme"]),
         // A stand-in for `claude -p` that plays recorded turns, so that no
         // test runs the real agent.
         .executableTarget(name: "fake-agent", path: "Tests/FakeAgent"),
