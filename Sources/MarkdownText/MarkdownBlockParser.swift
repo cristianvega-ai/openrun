@@ -42,6 +42,8 @@ struct MarkdownBlockParser {
             } else if MarkdownLine.isRule(line) {
                 append(.rule)
                 index += 1
+            } else if MarkdownLine.quoteContent(line) != nil {
+                parseQuote()
             } else if let item = MarkdownListItemStart(line) {
                 parseListItem(item)
             } else if let table = tableStart() {
@@ -64,6 +66,7 @@ struct MarkdownBlockParser {
     /// Whether the line starts a block and so ends a paragraph before it.
     static func interruptsParagraph(_ line: Substring) -> Bool {
         if MarkdownFence(line) != nil || MarkdownLine.heading(line) != nil || MarkdownLine.isRule(line) { return true }
+        if MarkdownLine.quoteContent(line) != nil { return true }
         if let item = MarkdownListItemStart(line) { return !item.isEmpty }
         return false
     }

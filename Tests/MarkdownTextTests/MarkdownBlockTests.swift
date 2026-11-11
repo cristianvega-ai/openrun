@@ -74,4 +74,10 @@ struct MarkdownBlockTests {
     @Test func aNestedListUnderANumberCanUseTwoSpaces() {
         #expect(blocks("1. Step\n  - detail\n2. Next").map(\.listDepth) == [1, 2, 1])
     }
+
+    @Test func quotesHoldBlocksOneLevelDeeper() {
+        let blocks = blocks("> Quoted\nlazy line\n> - item\n\nOut\n> again")
+        #expect(blocks.map(\.kind) == [.paragraph("Quoted\nlazy line"), .listItem(.bullet, text: "item"), .paragraph("Out"), .paragraph("again")])
+        #expect(blocks.map(\.quoteDepth) == [1, 1, 0, 1])
+    }
 }
