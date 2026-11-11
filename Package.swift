@@ -55,6 +55,9 @@ let package = Package(
         // Linux app can use it too (proposal 13 of 2026-11-10).
         .target(name: "AgentConversation"),
         .testTarget(name: "AgentConversationTests", dependencies: ["AgentConversation"]),
+        // Claude Code in a thread: its command line, the user message line,
+        // the decoder of its output, its permission hook, and its history.
+        .target(name: "ClaudeCodeAgent", dependencies: ["AgentConversation"]),
         .target(name: "SessionProtocol"),
         .testTarget(
             name: "SessionProtocolTests",
