@@ -4,11 +4,11 @@ import Testing
 @testable import SessionPane
 
 /// Each animated toggle of the lists at and near the minimum width: the
-/// window stays on its screen and at its minimum, the content gets the
-/// final width, and the session gets at most one size.
+/// window stays on its screen, keeps its width or grows to the new minimum,
+/// the content gets the final width, and the session gets at most one size.
 @MainActor @Suite(.serialized) struct MainWindowToggleTests {
     enum Toggle: CaseIterable { case projects, sessions, both }
-    enum Width: CaseIterable { case minimum, onePointAbove, betweenMinimums }
+    enum Width: CaseIterable { case minimum, onePointAbove, betweenMinimums, aboveBothMinimums }
 
     private func setHidden(_ toggle: Toggle, _ hidden: Bool, in controller: MainWindowController) {
         controller.reducesMotion = { true }
@@ -42,6 +42,14 @@ import Testing
 
     private func check(_ toggle: Toggle, fromHidden hidden: Bool, at width: Width, _ controller: MainWindowController, _ pane: SessionPaneController) async {
         let name = "\(toggle) from hidden \(hidden) at \(width)"
+        // Each case starts with the lists at their first widths. A list at its
+        // minimum asks for no more room than the minimum has.
+        setHidden(.both, false, in: controller)
+        controller.window.setContentSize(NSSize(width: 1_280, height: 760))
+        controller.window.layoutIfNeeded()
+        controller.splitController.splitView.setPosition(210, ofDividerAt: 0)
+        controller.splitController.splitView.setPosition(511, ofDividerAt: 1)
+        controller.window.layoutIfNeeded()
         setHidden(toggle, hidden, in: controller)
         // The middle between the two minimums needs only to be near, so the
         // limits of the lists stand for the width of their top rows.
@@ -50,10 +58,12 @@ import Testing
         case .minimum: 10
         case .onePointAbove: start + 1
         case .betweenMinimums: max(start, ((start + estimate) / 2).rounded())
+        case .aboveBothMinimums: max(start, estimate) + 100
         }
         controller.window.setContentSize(NSSize(width: target, height: 10))
         await settle(controller, pane)
         let (before, gridBefore) = (pane.sentSizeRequests, pane.terminalView?.gridSize)
+        let widthBefore = controller.window.contentRect(forFrameRect: controller.window.frame).width
         if toggle != .sessions { controller.toggleProjectsList(nil) }
         if toggle != .projects { controller.toggleSessionsList(nil) }
         await settle(controller, pane)
@@ -62,6 +72,9 @@ import Testing
         let content = window.contentRect(forFrameRect: window.frame).size
         let end = min(expectedMinimumWidth(of: controller, content: controller.contentPane.minimumSize.width), room(of: controller))
         #expect(window.screen.map { $0.visibleFrame.contains(window.frame) } ?? true, "\(name)")
+        // A show takes the room of the list from the content when it can,
+        // and a hide gives the room to the content.
+        #expect(content.width == max(widthBefore, end), "\(name): \(widthBefore) to \(content.width), minimum \(end)")
         #expect(window.contentMinSize.width == end && content.width >= end && content.height >= window.contentMinSize.height, "\(name)")
         #expect(pane.paneView.frame.width == controller.contentPane.contentArea.frame.width, "\(name)")
         let changed = pane.terminalView?.gridSize != gridBefore

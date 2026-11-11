@@ -10,7 +10,6 @@ extension MainWindowController: NSWindowDelegate {
     /// the minimum does not fit the screen, the screen limits the window.
     func keepMinimumSize() {
         let content = contentPane.minimumSize
-        contentItem.minimumThickness = content.width
         // The top row of the first pane holds the traffic lights, and it can
         // need more than the limit of its list. A minimum that leaves it out,
         // or the dividers, is too small, and AppKit then grows the window.
@@ -24,6 +23,9 @@ extension MainWindowController: NSWindowDelegate {
             let room = paneWindow.contentRect(forFrameRect: screen).size
             minimum = NSSize(width: min(minimum.width, room.width), height: min(minimum.height, room.height))
         }
+        // When the screen limits the window, the content gives up the room
+        // that is missing. Else its pane asks for a window wider than the screen.
+        contentItem.minimumThickness = max(content.width - (width - minimum.width), 0)
         paneWindow.contentMinSize = minimum
         // The content view fills the whole window, under the top row too, as
         // the minimum does. The layout rect leaves out the top row.

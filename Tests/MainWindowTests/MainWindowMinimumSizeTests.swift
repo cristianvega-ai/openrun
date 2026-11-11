@@ -77,6 +77,42 @@ import Testing
         #expect(controller.window.contentMinSize.width == expected && controller.window.frame.width >= expected)
     }
 
+    /// A show near the minimum takes the room of the list from the content
+    /// where it can. The window grows only to the new minimum. It once grew
+    /// to the minimum, and AppKit then added the width of the list again.
+    @Test(arguments: [false, true]) func aShowNearTheMinimumGrowsOnlyToTheNewMinimum(reducesMotion: Bool) async {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: 500, height: 300)))
+        controller.showWindow()
+        controller.reducesMotion = { true }
+        controller.toggleSessionsList(nil)
+        controller.window.setContentSize(NSSize(width: 10, height: 400))
+        await turns(seconds: 0.3)
+        controller.reducesMotion = { reducesMotion }
+        controller.toggleSessionsList(nil)
+        await turns(seconds: 1.5)
+        let width = controller.window.contentRect(forFrameRect: controller.window.frame).width
+        #expect(width == controller.window.contentMinSize.width && controller.contentPane.view.frame.width == 500, "\(width)")
+    }
+
+    /// With a content as wide as the screen, the screen limits the window.
+    @Test func aShowWithAMinimumAsWideAsTheScreenStaysOnTheScreen() async throws {
+        let controller = makeMainWindow()
+        defer { controller.window.close() }
+        controller.showWindow()
+        let screen = try #require(controller.window.screen).visibleFrame
+        controller.reducesMotion = { true }
+        controller.toggleSessionsList(nil)
+        controller.showContent(PaneContent(view: NSView(), title: "zsh", minimumSize: CGSize(width: room(of: controller), height: 300)))
+        await turns(seconds: 0.3)
+        controller.reducesMotion = { false }
+        controller.toggleSessionsList(nil)
+        await turns(seconds: 1.5)
+        let frame = controller.window.frame
+        #expect(screen.contains(frame) && frame.width == screen.width, "\(frame) on \(screen)")
+    }
+
     /// A new screen sets the minimum again, after the pass that moved the window.
     @Test func aNewScreenSetsTheMinimumAgainLater() async {
         let controller = makeMainWindow()

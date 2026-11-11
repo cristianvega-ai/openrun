@@ -18,6 +18,11 @@ extension MainWindowController {
         // A list hides only through its button, its menu command and its key
         // (decision of 2026-11-10). A drag of an edge stops at the minimum width.
         (projectsItem.canCollapse, sessionsItem.canCollapse) = (false, false)
+        // A show takes the room of the list from the content, and a hide gives
+        // it back, so the window keeps its width. The window grows first when
+        // the content cannot spare the room. AppKit otherwise added the width
+        // of the list to the window again, past the minimum and the screen.
+        for item in [projectsItem, sessionsItem] { item.collapseBehavior = .useConstraints }
         [projectsItem, sessionsItem, contentItem].forEach(splitController.addSplitViewItem)
         let root = NSView()
         paneWindow.contentView = root
