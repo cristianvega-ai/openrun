@@ -32,7 +32,7 @@ extension CodexAppServer {
         }
         if stop.commandsMayStillRun {
             let text = "OpenRun could not end the commands of the thread, so a command may still run."
-            await threads[thread]?.send([.notice(Notice(level: .warning, text: text))], line: nil)
+            emit([.notice(Notice(level: .warning, text: text))], line: nil, to: thread)
         }
         return stop
     }

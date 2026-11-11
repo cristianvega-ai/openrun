@@ -20,7 +20,7 @@ extension CodexAppServer {
         let approval = CodexApproval(thread: thread, request: request, item: item, method: method, parameters: parameters, timer: timer)
         approvals[identifier] = approval
         let started = threads[thread]?.mapper.startedItem(item)
-        await threads[thread]?.send([.permissionRequested(approval.permissionRequest(identifier: identifier, startedItem: started))], line: line)
+        emit([.permissionRequested(approval.permissionRequest(identifier: identifier, startedItem: started))], line: line, to: thread)
     }
 
     func answerPermission(_ identifier: String, answer: CodexPermissionAnswer, thread: String) async -> Bool {
@@ -39,7 +39,7 @@ extension CodexAppServer {
         if let decision { await sendDecision(decision, to: approval.request) }
         if decision == "decline" { threads[approval.thread]?.mapper.noteDecline(of: approval.item, reason: reason) }
         let end = PermissionEnd(identifier: identifier, outcome: outcome, message: message)
-        await threads[approval.thread]?.send([.permissionEnded(end)], line: nil)
+        emit([.permissionEnded(end)], line: nil, to: approval.thread)
     }
 
     /// Shows a request again when the start of its item comes after it,
@@ -47,7 +47,7 @@ extension CodexAppServer {
     func showApprovals(of item: String, line: SourceLine) async {
         for (identifier, approval) in approvals where approval.item == item {
             let request = approval.permissionRequest(identifier: identifier, startedItem: threads[approval.thread]?.mapper.startedItem(item))
-            await threads[approval.thread]?.send([.permissionRequested(request)], line: line)
+            emit([.permissionRequested(request)], line: line, to: approval.thread)
         }
     }
 

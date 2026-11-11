@@ -38,7 +38,14 @@ import Testing
             _ = try await server.startThread(CodexThreadStart(folder: "/work/project"))
         }
         #expect([usage, stop, start].allSatisfy { $0 < .seconds(1) })
-        #expect(stalled.state.withLock { $0.events.count } == 5)
+
+        // The stalled thread ended with an error after the events that fit.
+        var events: [ConversationEvent] = []
+        while let event = await stalled.next() { events.append(event) }
+        #expect(events.count == 6)
+        guard case .notice(let notice) = events.last?.kind else { Issue.record("No notice at the end"); return }
+        #expect(notice.level == .error)
+        #expect(await server.openThreadCount == 2)
     }
 
     @Test func aFloodToAStalledThreadKeepsItsEventsBounded() async throws {
@@ -47,6 +54,6 @@ import Testing
         for index in 0..<10_000 { harness.serve(delta(index)) }
         // The answer comes after the flood, so the reader read all of it.
         _ = try await answer("account/rateLimits/read", with: #"{"rateLimits":{}}"#, on: harness) { _ = try await harness.server.readUsage() }
-        #expect(stalled.state.withLock { $0.events.count } == 5)
+        #expect(stalled.state.withLock { $0.events.count } == 6)
     }
 }

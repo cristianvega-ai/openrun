@@ -2,8 +2,8 @@ import AgentConversation
 
 /// An open Codex thread on its app-server.
 ///
-/// Read `events` in a task of its own: while too many events wait, the
-/// app-server reads no more output, for every thread of the account.
+/// Read `events` in a task of its own: when too many events wait, the
+/// app-server closes the thread, and its last event is an error.
 public struct CodexThread: Sendable {
     /// The identifier of the thread, which `resumeThread` takes.
     public let identifier: String

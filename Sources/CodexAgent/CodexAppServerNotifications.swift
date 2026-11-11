@@ -14,7 +14,7 @@ extension CodexAppServer {
             // Codex could not read. No caller waits for it.
             break
         case .unreadable(let unknown, let line):
-            for state in threads.values { await state.send([.unknown(unknown)], line: line) }
+            for thread in threads.keys { emit([.unknown(unknown)], line: line, to: thread) }
         }
     }
 
@@ -40,7 +40,7 @@ extension CodexAppServer {
         guard threads[thread] != nil else { return }
         let kinds = threads[thread]?.mapper.events(method: method, parameters: parameters)
             ?? [.unknown(UnknownLine(reason: .unknownKind, kind: method, text: line.text, byteCount: line.byteCount))]
-        await threads[thread]?.send(kinds, line: line)
+        emit(kinds, line: line, to: thread)
     }
 
     /// Opens a thread with its first events, then gives it the lines that
@@ -48,7 +48,7 @@ extension CodexAppServer {
     func open(_ thread: String, first: [ConversationEventKind]) async -> CodexEventChannel {
         let state = threads[thread] ?? CodexThreadState(channel: CodexEventChannel(limit: options.eventLimit))
         threads[thread] = state
-        for kind in first { state.channel.add(ConversationEvent(kind)) }
+        emit(first, line: nil, to: thread)
         let early = earlyLines.filter { $0.thread == thread }
         earlyLines.removeAll { $0.thread == thread }
         for line in early { await deliver(line.method, line.parameters, line: line.line, to: thread) }
@@ -71,7 +71,7 @@ extension CodexAppServer {
         }
         let text = "Codex asked for \(method), which OpenRun does not support, so OpenRun refused it."
         if let thread = Self.threadIdentifier(of: parameters) {
-            await threads[thread]?.send([.notice(Notice(level: .warning, text: text))], line: line)
+            emit([.notice(Notice(level: .warning, text: text))], line: line, to: thread)
         }
     }
 }

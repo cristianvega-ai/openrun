@@ -10,8 +10,8 @@ public struct CodexServerOptions: Sendable, Hashable {
     /// How long a stop waits for the end of the turn before it ends the
     /// commands of the thread.
     public var stopTimeLimit: Duration
-    /// The most events of a thread that wait for the caller before the
-    /// reader of the app-server waits.
+    /// The most events of a thread that wait for the caller. A thread with
+    /// more ends with an error.
     public var eventLimit: Int
     /// The longest line of the app-server that OpenRun reads.
     public var lineByteLimit: Int
