@@ -435,5 +435,9 @@ import Testing
         let text = String(repeating: "a", count: ApprovalQuestion.shownCharacterLimit) + "tail"
         #expect(ApprovalQuestion.Request.typing(text) == .type(start: String(repeating: "a", count: ApprovalQuestion.shownCharacterLimit), characterCount: text.count))
         #expect(ApprovalQuestion.Request.typing("yes\r") == .type(start: "yes\r", characterCount: 4))
+        // One character with a million combining marks must not pass whole.
+        let marked = "a" + String(repeating: "\u{301}", count: 1_000_000)
+        guard case .type(let start, let count) = ApprovalQuestion.Request.typing(marked) else { return }
+        #expect(start.unicodeScalars.count == ApprovalQuestion.shownCharacterLimit && count == 1_000_001)
     }
 }

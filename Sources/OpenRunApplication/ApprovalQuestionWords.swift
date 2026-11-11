@@ -16,7 +16,8 @@ struct ApprovalQuestionWords: Equatable {
         switch question.request {
         case .type(let start, let characterCount):
             title = "Allow a program to type into another session?"
-            let more = characterCount > start.count ? "\n\nThis shows the first \(start.count) of \(characterCount) characters." : ""
+            let shown = start.unicodeScalars.count
+            let more = characterCount > shown ? "\n\nThis shows the first \(shown) of \(characterCount) characters." : ""
             message = "A program in \(asking) wants to type into \(target):\n\n\(Self.visible(start))\(more)\n\n\(reason)"
         case .read:
             title = "Allow a program to read another session?"
@@ -38,7 +39,9 @@ struct ApprovalQuestionWords: Equatable {
     }
 
     /// Typed text with each control character shown, such as the Return
-    /// that would confirm a prompt.
+    /// that would confirm a prompt. A format character, such as a direction
+    /// override or a zero-width space, shows as its code, because it can hide
+    /// or reorder what the user reads.
     static func visible(_ text: String) -> String {
         var shown = ""
         for scalar in text.unicodeScalars {
@@ -49,9 +52,18 @@ struct ApprovalQuestionWords: Equatable {
             case 0x1B: shown += "⎋"
             case 0x00..<0x20: shown += "^" + String(UnicodeScalar(UInt8(scalar.value + 0x40)))
             case 0x7F: shown += "⌫"
-            default: shown.unicodeScalars.append(scalar)
+            case 0x80...0x9F: shown += Self.code(of: scalar)
+            default:
+                switch scalar.properties.generalCategory {
+                case .format, .lineSeparator, .paragraphSeparator: shown += Self.code(of: scalar)
+                default: shown.unicodeScalars.append(scalar)
+                }
             }
         }
         return shown
+    }
+
+    private static func code(of scalar: Unicode.Scalar) -> String {
+        "⟨U+" + String(format: "%04X", scalar.value) + "⟩"
     }
 }

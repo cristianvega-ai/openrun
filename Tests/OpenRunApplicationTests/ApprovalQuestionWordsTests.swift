@@ -23,6 +23,7 @@ import Testing
     /// the text that the user allows.
     @Test func controlCharactersAreVisible() {
         #expect(ApprovalQuestionWords.visible("a\r\n\t\u{1B}[A\u{3}\u{7F}é") == "a⏎␤⇥⎋[A^C⌫é")
+        #expect(ApprovalQuestionWords.visible("ok\u{202E}sey\u{200B}\u{85}\u{2028}") == "ok⟨U+202E⟩sey⟨U+200B⟩⟨U+0085⟩⟨U+2028⟩")
     }
 
     @Test func longTextSaysHowMuchItLeavesOut() {
