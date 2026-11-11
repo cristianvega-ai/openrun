@@ -17,6 +17,9 @@ actor Session {
 
     private(set) var summary: SessionSummary
     private let pseudoTerminal: PseudoTerminal
+    /// The program leads its own terminal session, so the identifier of that
+    /// terminal session is this number (see `SessionRegistry.place(of:)`).
+    nonisolated var programProcessIdentifier: pid_t { pseudoTerminal.processIdentifier }
     private let terminal: Terminal
     /// Writes the program's output to the terminal, and finds its prompts.
     private let prompts: ShellPromptTracker

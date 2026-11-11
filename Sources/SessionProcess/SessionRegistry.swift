@@ -63,6 +63,14 @@ actor SessionRegistry {
         sessions[identifier]
     }
 
+    /// The session that a caller runs in. A process of a session has the
+    /// terminal session of its program, unless it started one of its own.
+    func place(of peer: PeerProcess) -> CallerPlace {
+        guard let terminalSession = peer.terminalSessionIdentifier else { return .unknown }
+        let match = sessions.first { $0.value.programProcessIdentifier == terminalSession }
+        return match.map { .session($0.key) } ?? .outsideEverySession
+    }
+
     /// The summaries of all sessions, oldest first.
     func summaries() async -> [SessionSummary] {
         var all: [SessionSummary] = []
