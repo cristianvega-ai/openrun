@@ -163,6 +163,7 @@ actor SessionServer {
                     client.send(refusal)
                     break
                 }
+                await session.noteInput(isTyped: false)
                 // The answer waits until the text is in the program's backlog,
                 // so a client never hears that text arrived when it was lost.
                 // The text goes in behind the input that this client typed.
@@ -234,6 +235,7 @@ actor SessionServer {
                 }
             case .input(let bytes):
                 guard let session = attachedSession else { break }
+                await session.noteInput(isTyped: true)
                 // The bytes go in behind this client's earlier input, and leave
                 // the read-ahead once they are in the backlog. The loop does not
                 // wait for them, so the client can still detach while its

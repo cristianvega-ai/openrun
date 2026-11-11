@@ -49,6 +49,8 @@ actor Session {
     private let changes: SessionChangeFeed?
     /// What the terminal reported while it parsed the last piece of output.
     private let terminalEvents = TerminalEvents()
+    /// libghostty-vt reports no OSC 99, so the session finds it itself.
+    private var kittyNotifications = KittyNotificationScanner()
     /// Whether the session works. See `SessionActivity`.
     private var activity = SessionActivity()
     /// Looks at the foreground while output or input comes.
@@ -358,6 +360,7 @@ actor Session {
         summary.lastOutputAt = Date()
         activity.noteOutput(at: .now)
         summary.isInProgress = activity.isInProgress(at: .now)
+        if let text = kittyNotifications.notification(in: bytes) { terminalEvents.note(notification: text) }
         takeTerminalEvents()
         publish()
         refreshFactsWhileActive()
@@ -401,13 +404,31 @@ actor Session {
         return !isQuiet
     }
 
-    /// Takes what the terminal reported while it parsed the output.
+    /// Takes what the terminal reported while it parsed the output. A
+    /// notification raises the alert with its text. The bell raises it when
+    /// no alert is up, and not right after a typed key.
     private func takeTerminalEvents() {
         if terminalEvents.titleChanged {
             let title = SessionSummary.boundedText(terminal.title)
             summary.title = title.isEmpty ? nil : title
         }
+        if let text = terminalEvents.notification {
+            summary.alert = SessionAlert(text: text, raisedAt: Date(), source: .terminalNotification)
+        } else if terminalEvents.bellRang, summary.alert == nil, activity.bellRaisesAlert(at: .now) {
+            summary.alert = SessionAlert(text: "", raisedAt: Date(), source: .bell)
+        }
         terminalEvents.reset()
+    }
+
+    /// Notes input. The keys of an attached client end the alert, because
+    /// the user is at the session. Text that a program sends does not.
+    func noteInput(isTyped: Bool) {
+        guard !isFinished else { return }
+        activity.noteInput(at: .now, isTyped: isTyped)
+        summary.lastInputAt = Date()
+        if isTyped { summary.alert = nil }
+        publish()
+        refreshFactsWhileActive()
     }
 
     /// Sends the summary to the watchers when a fact of the list changed: at
