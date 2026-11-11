@@ -10,6 +10,30 @@ func startProgram(_ executable: String, _ arguments: [String] = [], folder: Stri
         executablePath: executable, arguments: arguments, folder: folder, environment: ["PATH": "/usr/bin:/bin"]))
 }
 
+/// Reads the output to its end, and marks each chunk as consumed.
+func readAll(_ program: AgentProgram) async -> [UInt8] {
+    var bytes: [UInt8] = []
+    for await chunk in program.output {
+        bytes += chunk
+        program.markOutputConsumed(chunk.count)
+    }
+    return bytes
+}
+
+/// Whether the process ended. A zombie counts as ended: its parent ended
+/// too, and launchd reaps it soon.
+func isGone(_ processIdentifier: pid_t) -> Bool {
+    !runs(processIdentifier)
+}
+
+/// Whether the process runs, and is not a zombie.
+func runs(_ processIdentifier: pid_t) -> Bool {
+    var information = proc_bsdinfo()
+    let size = Int32(MemoryLayout<proc_bsdinfo>.size)
+    return proc_pidinfo(processIdentifier, PROC_PIDTBSDINFO, 0, &information, size) == size
+        && information.pbi_status != UInt32(SZOMB)
+}
+
 @Suite struct AgentProgramTests {
     @Test func theStatusAndTheSignalOfTheEndCome() async throws {
         let program = try startProgram("sh", ["-c", "exit 3"])
@@ -18,6 +42,12 @@ func startProgram(_ executable: String, _ arguments: [String] = [], folder: Stri
         #expect(waitpid(program.processIdentifier, nil, WNOHANG) == -1)
         program.send(signal: SIGKILL)
         #expect(await (try startProgram("sh", ["-c", "kill -USR1 $$"])).waitForExit() == .signaled(signal: SIGUSR1))
+    }
+
+    @Test func theOutputComesWholeAndThenTheEnd() async throws {
+        let program = try startProgram("sh", ["-c", "echo hello; echo world"])
+        #expect(String(decoding: await readAll(program), as: UTF8.self) == "hello\nworld\n")
+        #expect(await program.waitForExit() == .exited(status: 0))
     }
 
     @Test func terminateEndsTheProgram() async throws {
