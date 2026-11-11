@@ -46,6 +46,9 @@ extension SessionsListController {
         }
         if !content.agents.isEmpty { menu.addItem(.separator()) }
         menu.addItem(withTitle: "New Terminal", action: #selector(requestTerminal), keyEquivalent: "")
+        for command in content.terminalCommands {
+            menu.addItem(withTitle: "New Terminal with \(command)", action: #selector(requestCommand), keyEquivalent: "").representedObject = command
+        }
         for item in menu.items { item.target = self }
         return menu
     }
@@ -79,6 +82,10 @@ extension SessionsListController {
     }
 
     @objc func requestTerminal() {
-        delegate?.sessionsList(self, didRequest: .terminal)
+        delegate?.sessionsList(self, didRequest: .terminal(command: nil))
+    }
+
+    @objc private func requestCommand(_ item: NSMenuItem) {
+        if let command = item.representedObject as? String { delegate?.sessionsList(self, didRequest: .terminal(command: command)) }
     }
 }

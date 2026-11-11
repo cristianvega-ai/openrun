@@ -28,8 +28,18 @@ import Testing
         #expect(menu.items.map(\.title) == ["New Claude Code Thread", "New Codex Thread", "", "New Terminal"])
         try choose("New Codex Thread", in: menu)
         try choose("New Terminal", in: menu)
-        #expect(host.requests == [.thread(agent: "Codex"), .terminal])
+        #expect(host.requests == [.thread(agent: "Codex"), .terminal(command: nil)])
         #expect(list.topRow.trailingItems.arrangedSubviews == [list.arrangementButton, list.newSessionButton])
         #expect(list.newSessionButton.accessibilityLabel() == "New Session")
+    }
+
+    @Test func theNewSessionMenuOffersATerminalWithEachCommandOfTheSettings() throws {
+        let (list, host, window, _) = makeSessionsList()
+        defer { window.close() }
+        list.show(SessionsListContent(title: "openrun", terminalCommands: ["Claude Code", "Codex"]))
+        let menu = list.newSessionMenu()
+        #expect(menu.items.map(\.title) == ["New Terminal", "New Terminal with Claude Code", "New Terminal with Codex"])
+        try choose("New Terminal with Codex", in: menu)
+        #expect(host.requests == [.terminal(command: "Codex")])
     }
 }

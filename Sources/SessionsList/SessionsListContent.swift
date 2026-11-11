@@ -6,8 +6,11 @@ public struct SessionsListContent: Equatable, Sendable {
     public var rows: [SessionRowDisplay]
     /// The shown names of the agents that the new-session button offers.
     public var agents: [String]
+    /// The shown names of the commands that a new terminal can run in
+    /// place of the login shell, from the settings.
+    public var terminalCommands: [String]
 
-    public init(title: String = "", rows: [SessionRowDisplay] = [], agents: [String] = []) {
-        (self.title, self.rows, self.agents) = (title, rows, agents)
+    public init(title: String = "", rows: [SessionRowDisplay] = [], agents: [String] = [], terminalCommands: [String] = []) {
+        (self.title, self.rows, self.agents, self.terminalCommands) = (title, rows, agents, terminalCommands)
     }
 }
