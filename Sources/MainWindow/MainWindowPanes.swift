@@ -9,21 +9,23 @@ extension MainWindowController {
         splitController.splitView.dividerStyle = .thin
         (projectsItem.minimumThickness, projectsItem.maximumThickness) = (PaneLayout.projectsWidths.lowerBound, PaneLayout.projectsWidths.upperBound)
         (sessionsItem.minimumThickness, sessionsItem.maximumThickness) = (PaneLayout.sessionsWidths.lowerBound, PaneLayout.sessionsWidths.upperBound)
-        for item in [projectsItem, sessionsItem] {
-            (item.canCollapse, item.holdingPriority) = (true, .init(260))
-        }
-        contentItem.holdingPriority = .init(250)
+        // The first pane holds its width the hardest, so a drag of the second
+        // edge changes only the second pane, and a resize of the window changes the third.
+        (projectsItem.holdingPriority, sessionsItem.holdingPriority, contentItem.holdingPriority) = (.init(270), .init(260), .init(250))
+        (projectsItem.canCollapse, sessionsItem.canCollapse) = (true, true)
         [projectsItem, sessionsItem, contentItem].forEach(splitController.addSplitViewItem)
         projectsItem.isCollapsed = layout.projectsHidden
         sessionsItem.isCollapsed = layout.sessionsHidden
         let root = NSView()
+        paneWindow.contentView = root
         splitController.view.frame = root.bounds
         splitController.view.autoresizingMask = [.width, .height]
         root.addSubview(splitController.view)
-        paneWindow.contentView = root
-        root.frame = paneWindow.contentLayoutRect.union(root.bounds)
+        // The positions apply only to a split view that has its size.
+        paneWindow.layoutIfNeeded()
+        let divider = splitController.splitView.dividerThickness
         splitController.splitView.setPosition(layout.projectsWidth, ofDividerAt: 0)
-        splitController.splitView.setPosition(layout.projectsWidth + layout.sessionsWidth, ofDividerAt: 1)
+        splitController.splitView.setPosition(layout.projectsWidth + divider + layout.sessionsWidth, ofDividerAt: 1)
         // The split view controller is the delegate of its split view, so the window listens for the resize.
         NotificationCenter.default.addObserver(self, selector: #selector(panesDidResize),
             name: NSSplitView.didResizeSubviewsNotification, object: splitController.splitView)
