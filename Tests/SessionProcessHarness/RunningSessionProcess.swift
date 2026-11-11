@@ -96,6 +96,8 @@ public final class RunningSessionProcess: @unchecked Sendable {
     ///   - descriptorLimit: The most descriptors the process may open, for a
     ///     test that makes it run out. A shell sets the limit and then
     ///     replaces itself with the process, so the process identifier stays.
+    ///   - executable: Another copy of `openrun-session`, such as one inside
+    ///     an app bundle.
     public init(
         directory: URL? = nil,
         socketRelativePath: String = "socket",
@@ -104,6 +106,7 @@ public final class RunningSessionProcess: @unchecked Sendable {
         descriptorLimit: Int? = nil,
         readyTimeout: TimeInterval = 15,
         arguments: [String] = [],
+        executable: URL = sessionExecutable,
         didStart: (pid_t) -> Void = { _ in }
     ) throws {
         ownsDirectory = directory == nil
@@ -118,7 +121,7 @@ public final class RunningSessionProcess: @unchecked Sendable {
             throw HarnessError.commandFailed(description: "The socket path \(socketPath) has \(socketPath.utf8.count) bytes, and a Unix socket address holds \(Self.longestSocketPath). TMPDIR is \(base), with \(base.utf8.count) characters. Use a shorter TMPDIR.")
         }
         do {
-            try UserDataGuard.check(executable: Self.sessionExecutable, arguments: ["--socket", socketPath] + arguments, currentFolder: nil)
+            try UserDataGuard.check(executable: executable, arguments: ["--socket", socketPath] + arguments, currentFolder: nil)
         } catch {
             if ownsDirectory { try? FileManager.default.removeItem(at: self.directory) }
             throw error
@@ -127,9 +130,9 @@ public final class RunningSessionProcess: @unchecked Sendable {
         FileManager.default.createFile(atPath: logFile.path, contents: nil)
         if let descriptorLimit {
             process.executableURL = URL(fileURLWithPath: "/bin/sh")
-            process.arguments = ["-c", "ulimit -n \(descriptorLimit) && exec \"$0\" \"$@\"", Self.sessionExecutable.path, "--socket", socketPath] + arguments
+            process.arguments = ["-c", "ulimit -n \(descriptorLimit) && exec \"$0\" \"$@\"", executable.path, "--socket", socketPath] + arguments
         } else {
-            process.executableURL = Self.sessionExecutable
+            process.executableURL = executable
             process.arguments = ["--socket", socketPath] + arguments
         }
         process.standardError = try FileHandle(forWritingTo: logFile)
@@ -210,10 +213,12 @@ public final class RunningSessionProcess: @unchecked Sendable {
         try Self.runOpenrun(arguments + (passSocket ? ["--socket", socketPath] : []), folder: folder, environment: environment, in: directory)
     }
 
-    /// Runs `openrun` with the exact arguments.
-    public static func runOpenrun(_ arguments: [String], folder: URL? = nil, environment: [String: String] = [:], in directory: URL) throws -> CommandResult {
+    /// Runs `openrun`, or another copy of it, with the exact arguments.
+    public static func runOpenrun(
+        _ arguments: [String], folder: URL? = nil, environment: [String: String] = [:], in directory: URL, executable: URL = commandExecutable
+    ) throws -> CommandResult {
         let command = Process()
-        command.executableURL = commandExecutable
+        command.executableURL = executable
         // Put the options before a "--" separator, where the tool reads them.
         command.arguments = Self.placingOptionsBeforeSeparator(arguments)
         command.currentDirectoryURL = folder ?? directory
