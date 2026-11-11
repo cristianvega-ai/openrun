@@ -37,6 +37,22 @@ extension SessionProcessIntegration {
             }
         }
 
+        /// A session whose program ends at once can leave a background
+        /// process. Its terminal session then matches no session, and it
+        /// must not count as a program outside every session.
+        @Test func aProcessOfAnEndedSessionCannotActOnAnother() async throws {
+            try await RunningSessionProcess.run { process in
+                let target = try process.createSession(program: ["/bin/sh"])
+                let result = process.directory.appendingPathComponent("result").path
+                let background = "(trap '' HUP; sleep 1; \(openrun(process, "send \(target) typed-after-the-end")) 2>'\(result)'; echo status=$? >>'\(result)') </dev/null >/dev/null 2>&1 &"
+                _ = try process.createSession(program: ["/bin/sh", "-c", background])
+                let finished = await eventually { ((try? String(contentsOfFile: result, encoding: .utf8)) ?? "").contains("status=") }
+                let output = (try? String(contentsOfFile: result, encoding: .utf8)) ?? ""
+                #expect(finished && output.contains("status=1"), "\(output)")
+                #expect(try !process.screenText(of: target).contains("typed-after-the-end"))
+            }
+        }
+
         @Test func aProgramActsFreelyOnItsOwnSession() async throws {
             try await RunningSessionProcess.run { process in
                 let script = [

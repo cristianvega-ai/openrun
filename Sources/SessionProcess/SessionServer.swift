@@ -319,7 +319,7 @@ actor SessionServer {
         let targetText = SessionSummary.text(for: target)
         guard case .session(let own) = place, let asking = await registry.session(for: own),
               let targetSession = await registry.session(for: target) else {
-            return Self.refusal("The program that asked to \(verb) session \(targetText) ended before the session process found its session, and it needs the user's approval.")
+            return Self.refusal("The program that asked to \(verb) session \(targetText) runs in no session that the session process can name, such as one that has ended. Such a request needs the user's approval, and it is refused.")
         }
         let start = "A program in session \(SessionSummary.text(for: own)) asked to \(verb) session \(targetText)"
         let question = ApprovalQuestion(identifier: UUID(), askingSession: await asking.summary, targetSession: await targetSession.summary, request: request)

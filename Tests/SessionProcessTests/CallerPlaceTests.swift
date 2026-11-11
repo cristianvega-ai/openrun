@@ -1,4 +1,6 @@
+import Darwin
 import Foundation
+import SessionProtocol
 import Testing
 @testable import SessionProcess
 
@@ -14,5 +16,13 @@ import Testing
     /// A program that ended before the check may have run in any session.
     @Test func aCallerWhoseSessionIsUnknownActsOnNoSession() {
         #expect(!CallerPlace.unknown.mayAct(on: UUID()))
+    }
+
+    /// A program with no terminal session ended before the check. This
+    /// process runs in no session of the registry.
+    @Test func theRegistryPlacesEachCaller() async {
+        let registry = SessionRegistry(socketPath: "/nowhere", helperSearchPath: .ofThisProcess())
+        #expect(await registry.place(of: PeerProcess(processIdentifier: 1, terminalSessionIdentifier: nil, auditToken: Data())) == .unknown)
+        #expect(await registry.place(of: PeerProcess(processIdentifier: getpid(), terminalSessionIdentifier: getsid(0), auditToken: Data())) == .outsideEverySession)
     }
 }

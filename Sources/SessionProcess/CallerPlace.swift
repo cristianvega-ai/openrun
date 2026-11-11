@@ -11,7 +11,8 @@ enum CallerPlace: Equatable, Sendable {
     /// In the session with this identifier.
     case session(UUID)
     /// The program ended before the session process could find its terminal
-    /// session. It may have run in any session, so it counts as another one.
+    /// session, or its session has ended. It may have run in any session, so
+    /// it counts as another one.
     case unknown
 
     /// Whether the caller may act on the target session without a question.

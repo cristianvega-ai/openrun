@@ -11,6 +11,9 @@ actor SessionRegistry {
     /// connected can still send `createSession` while the programs end, and
     /// that program would outlive the session process.
     private var isStopping = false
+    /// The terminal sessions of the sessions that ended, while a process of
+    /// them can still live, such as a job that the program left behind.
+    private var endedTerminalSessions: Set<pid_t> = []
 
     init(socketPath: String, helperSearchPath: HelperSearchPath) {
         self.socketPath = socketPath
@@ -64,11 +67,22 @@ actor SessionRegistry {
     }
 
     /// The session that a caller runs in. A process of a session has the
-    /// terminal session of its program, unless it started one of its own.
+    /// terminal session of its program, unless it started one of its own. A
+    /// process of a session that has ended could have come from any session.
     func place(of peer: PeerProcess) -> CallerPlace {
         guard let terminalSession = peer.terminalSessionIdentifier else { return .unknown }
-        let match = sessions.first { $0.value.programProcessIdentifier == terminalSession }
-        return match.map { .session($0.key) } ?? .outsideEverySession
+        if let match = sessions.first(where: { $0.value.programProcessIdentifier == terminalSession }) {
+            return .session(match.key)
+        }
+        forgetFreeTerminalSessions()
+        return endedTerminalSessions.contains(terminalSession) ? .unknown : .outsideEverySession
+    }
+
+    /// A number with no live process can go to a new session, so it is
+    /// forgotten. When the processes cannot be listed, every number stays.
+    private func forgetFreeTerminalSessions() {
+        guard let live = TerminalSessionCensus.liveSessions(among: endedTerminalSessions) else { return }
+        endedTerminalSessions.formIntersection(live)
     }
 
     /// The summaries of all sessions, oldest first.
@@ -88,6 +102,8 @@ actor SessionRegistry {
     }
 
     private func remove(_ identifier: UUID) {
-        sessions[identifier] = nil
+        guard let session = sessions.removeValue(forKey: identifier) else { return }
+        endedTerminalSessions.insert(session.programProcessIdentifier)
+        forgetFreeTerminalSessions()
     }
 }
