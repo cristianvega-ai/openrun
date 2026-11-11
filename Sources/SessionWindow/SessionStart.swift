@@ -1,5 +1,6 @@
 import Foundation
 import SessionConnection
+import SessionPane
 import SessionProtocol
 
 /// What a window shows: a new session, or a session that runs.
@@ -29,7 +30,7 @@ public enum SessionStart: Equatable, Sendable {
     }
 
     func attach(using client: SessionClient, size: SessionSize) throws -> StartedSession {
-        guard client.capabilities.orderedResizeConfirmation else { throw SessionWindowError.orderedResizeUnsupported }
+        guard client.capabilities.orderedResizeConfirmation else { throw SessionStartError.orderedResizeUnsupported }
         let summary: SessionSummary
         switch self {
         case .newSession(let folder, let environment):

@@ -102,12 +102,14 @@ let package = Package(
             name: "openrun",
             dependencies: ["CommandLineTool"]
         ),
-        // One window for one session: the attach, the size rules, the title and the questions.
-        .target(name: "SessionWindow", dependencies: ["TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
-        .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
+        // One session in a view that any window can hold: the attach, the size rules, the title and the questions.
+        .target(name: "SessionPane", dependencies: ["TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
+        // One window for one session pane, and the picker of running sessions.
+        .target(name: "SessionWindow", dependencies: ["SessionPane", "TerminalView", "TerminalEmulation", "SessionConnection", "SessionProtocol"]),
+        .testTarget(name: "SessionWindowTests", dependencies: ["SessionWindow", "SessionPane", "TerminalView", "TerminalRendering", "SessionConnection", "SessionProtocol", "TerminalEmulation", "SessionProcessHarness", "LiveDisplay"]),
         // The app. In milestone 2 it registers the launch agent at its start.
-        .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol", "SessionWindow"]),
-        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionWindow", "SessionProcessHarness", "TerminalView"]),
+        .target(name: "OpenRunApplication", dependencies: ["SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "SessionWindow"]),
+        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionWindow", "SessionProcessHarness", "TerminalView"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
         .testTarget(
             name: "PseudoTerminalTests",

@@ -6,6 +6,7 @@ import TerminalEmulation
 import TerminalView
 import Testing
 import Synchronization
+import SessionPane
 @testable import SessionWindow
 
 @Suite(.isolatedThread) struct SessionStartTests {
@@ -29,13 +30,13 @@ import Synchronization
                 } catch {}
             }.start()
             let client = try SessionClient(greeting: clientSide)
-            let error = #expect(throws: SessionWindowError.self) {
+            let error = #expect(throws: SessionStartError.self) {
                 try start.attach(using: client, size: SessionSize(columns: 80, rows: 24))
             }
             clientSide.shutdown()
             #expect(finished.wait(timeout: .now() + .seconds(2)) == .success)
             #expect(error == .orderedResizeUnsupported && requests.withLock { $0.isEmpty })
-            #expect(String(describing: SessionWindowError.orderedResizeUnsupported).contains("same build"))
+            #expect(String(describing: SessionStartError.orderedResizeUnsupported).contains("same build"))
         }
     }
 
