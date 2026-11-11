@@ -94,6 +94,10 @@ let package = Package(
         ),
         .target(name: "SessionConnection", dependencies: ["SessionProtocol", "SessionLaunch"]),
         .testTarget(name: "SessionConnectionTests", dependencies: ["SessionConnection", "SessionProtocol", "SessionLaunch"]),
+        // What the session process holds, kept live for the app: the
+        // sessions, the projects and the settings.
+        .target(name: "SessionOverview", dependencies: ["SessionConnection", "SessionProtocol", "SessionLaunch"]),
+        .testTarget(name: "SessionOverviewTests", dependencies: ["SessionOverview", "SessionConnection", "SessionProtocol", "SessionProcessHarness"]),
         .target(name: "PseudoTerminal"),
         // The git branch of a folder, read from the files of its repository.
         .target(name: "GitBranch"),
