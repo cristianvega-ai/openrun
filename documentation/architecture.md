@@ -314,6 +314,35 @@ A program acts freely on its own session. Before a program in one session types 
 - **What the rule does not stop.** A program that starts a terminal session of its own, with `setsid`, a tmux server or `launchctl`, counts as outside every session. The rule stops an agent that uses `openrun` plainly. OpenRun is not a security layer against a program that works around it (decision of 2026-10-15). The process identifier can name a later process only after about 100,000 others (see `TerminalSessionProcesses`).
 - **The idle exit.** The connection of the app for questions is a client. So the session process does not end at its idle exit while the app runs.
 
+## Facts of a session
+
+The session process keeps the facts of each session in its summary (decisions of 2026-11-10). A client gets them with `listSessions`, or follows them with `receiveSessionChanges`.
+
+| Fact | Where it comes from |
+|---|---|
+| `name` | `renameSession`, from `openrun rename` or the app. No name means none |
+| `title` | The last title that the program set with OSC 0 or OSC 2. An empty title means none |
+| `foregroundProgram` | The name of the program that reads the keys (`PseudoTerminal.foregroundState`) |
+| `currentFolder` | The current folder of that program. The kernel reports it with every symbolic link resolved, such as `/private/var/...` |
+| `branch` | `GitBranch.name(forFolder:)` of the current folder |
+| `isInProgress` | See below |
+| `lastOutputAt`, `lastInputAt` | The time of the last output of the program, and of the last input from any client |
+| `alert` | See below |
+
+Every text fact holds no control character and at most 500 Unicode scalars (`SessionSummary.boundedText`), because a program chose it and a client shows it.
+
+**When the session process looks.** It reads the foreground, the folder and the branch when the session starts, once more one second later, and once a second while output or input comes. After two seconds without output or input it looks a last time and stops. A silent session costs no work. So a program that changes its folder or its terminal mode without output and without input after that last look is not seen until the next output or input.
+
+**In progress.** A session is in progress while its program writes output, and for two seconds after the last output. A shell at its prompt does not count: its prompt and the echo of keys are no work. It is also in progress while a program that is not a shell at its prompt runs with the terminal in line mode (`ICANON`), such as `sleep` or a build without output. An agent or an editor reads keys in raw mode, so only its output counts. A shell is at its prompt when its name is a known shell (`sh`, `bash`, `zsh`, `fish`, `dash`, `ksh`, `mksh`, `oksh`, `yash`, `tcsh`, `csh`, `nu`, `elvish`, `xonsh`, `pwsh`), it has no `-c` and no script, and it leads the terminal session or reads keys in raw mode (`SessionActivity`, `InteractiveShell.hasPrompt`).
+
+**The alert.** A session needs the user when its program sends a desktop notification (OSC 9, OSC 777 or OSC 99), rings the bell, or runs `openrun notify`. A notification raises the alert with its text and replaces an alert that is up. The bell raises an alert with no text, only when no alert is up, and not within one second after a typed key, because a shell rings it when a completion fails. The keys of an attached client end the alert, because the user is at the session, and so does `clearSessionAlert`, which a window sends when the user selects the session. Text from `sendText` does not end it.
+
+**The feed.** `SessionChangeFeed` keeps the latest summary of each session and the connections that watch. A session sends a change only when a fact other than the times and the size changed, and at most once in 250 milliseconds (`Session.changeInterval`), with the newest facts. The times go out with another change, or at the last look after the session went quiet, so output alone does not flood the watchers. A new session comes as `sessionChanged`, and its end as `sessionEnded`. The feed writes to every watcher under one lock, so all watchers see the same order. A watcher that falls behind is a slow client: the limits of "Limits and deadlines of a client" end it.
+
+**The rule for callers.** `renameSession`, `raiseSessionAlert` and `clearSessionAlert` follow the place of the caller (see "Requests on another session"). A program outside every session, or a program in the session itself, may change it. Any other caller, also an unknown one, is refused at once with a `failure` with reason `invalidRequest`, and no question goes to the user. The message is "Only a program outside every session, or a program in session X itself, may rename session X." with "alert" or "clear the alert of" in place of "rename".
+
+**The limit.** The session process runs at most 100 sessions. `createSession` past that gets a `failure` with reason `launchFailed` and the message "The session process already runs 100 sessions, its limit. End a session and try again."
+
 ## Process model
 
 - **One session process per user.** launchd starts it as the launch agent of OpenRun.app (see "Launch agent"). It can also run by hand in the foreground, as the tests do. It logs to standard error and to the unified log.
