@@ -211,8 +211,10 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         application.workspace.validateMenuItem(item)
     }
 
+    /// The limit is that of `waitUntil`: a Mac with much other work
+    /// shows the first shell later than five seconds.
     @MainActor private func waitForRecovery(_ condition: () -> Bool) async {
-        let deadline = Date().addingTimeInterval(5)
+        let deadline = Date().addingTimeInterval(20)
         while !condition(), Date() < deadline {
             try? await Task.sleep(for: .milliseconds(5))
         }
