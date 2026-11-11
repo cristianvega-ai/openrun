@@ -43,6 +43,13 @@ private func isClosedBySessionProcess(_ descriptor: Int32) -> Bool {
     return poll(&entry, 1, 0) > 0 && entry.revents & Int16(POLLHUP) != 0
 }
 
+/// The process and the count of chunks that a program wrote to its progress
+/// file. The program replaces the file whole, so a read never sees it empty.
+private func writtenChunks(in file: URL) -> (program: Int32?, chunks: Int) {
+    let fields = ((try? String(contentsOf: file, encoding: .utf8)) ?? "").split(separator: " ").compactMap { Int32($0) }
+    return (fields.first, Int(fields.last ?? 0))
+}
+
 /// The state of a process as `ps` shows it, such as "S" for a process that
 /// sleeps and "R" for one that runs or waits for a processor.
 private func processState(of processIdentifier: Int32) -> String? {
@@ -553,29 +560,51 @@ extension SessionProcessIntegration {
 
         @Test(.tags(.takesEverySlot)) func detachWakesAFullViewer() async throws {
             try await RunningSessionProcess.run { process in
-                // The large snapshot keeps the client waiting for 30 seconds. Without the wake of
-                // the detach, only the closing of the connection ends the wait, 2 seconds later.
+                // The large snapshot keeps the client waiting for 30 seconds. Without the
+                // wake of the detach, only the close of the connection ends the wait, at
+                // the closing limit of 2 seconds. The program counts the chunks that it
+                // wrote, so the test compares the program's progress with the close and
+                // not with a clock that a busy Mac makes late.
+                let progress = process.directory.appendingPathComponent("progress")
                 let size = SessionSize(columns: 240, rows: 50)
-                let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: #"exec "/usr/bin/yes";"#)
+                let program = #"for (my $count = 1; ; $count++) { print "x" x 65536; open(my $file, '>', '\#(progress.path).new'); print $file "$$ $count"; close $file; rename('\#(progress.path).new', '\#(progress.path)'); }"#
+                let (identifier, go) = try await startLargeSnapshotSession(process, size: size, afterwards: program)
                 let stalled = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { stalled.connection.shutdown() }
                 try #require(stalled.snapshotByteCount >= ConnectionLimits.largeSnapshotMinimumByteCount, "The snapshot must give the client its grace.")
                 FileManager.default.createFile(atPath: go.path, contents: Data())
-                try await Task.sleep(for: .milliseconds(1500))
+                // As in the shutdown test: a byte now and then keeps the client, and
+                // the program must sleep in a write with a full queue.
+                _ = fcntl(stalled.descriptor, F_SETFL, O_NONBLOCK)
+                var chunksAtTheStop = 0, unchangedSince = ContinuousClock.now
+                try #require(await eventually(timeout: .seconds(60)) {
+                    var byte: UInt8 = 0
+                    _ = Darwin.read(stalled.descriptor, &byte, 1)
+                    let (program, chunks) = writtenChunks(in: progress)
+                    if chunks != chunksAtTheStop { (chunksAtTheStop, unchangedSince) = (chunks, .now) }
+                    let sleeps = program.flatMap(processState(of:)).map { $0.hasPrefix("S") || $0.hasPrefix("I") } ?? false
+                    return chunks >= ConnectionLimits.outputHighMark / 65536 && ContinuousClock.now - unchangedSince >= .seconds(1) && sleeps
+                }, "The program must stop in its output before the detach.")
                 try stalled.connection.send(ClientMessage.detach)
+                // A thread looks for the close each 0.5 ms and then reads the count.
+                // Without the wake, the program writes again only after the close.
+                let descriptor = stalled.descriptor
+                let chunksAtTheClose = await BlockingWork.onNewThread { () -> Int? in
+                    let deadline = ContinuousClock.now + .seconds(30)
+                    while ContinuousClock.now < deadline {
+                        if isClosedBySessionProcess(descriptor) { return writtenChunks(in: progress).chunks }
+                        usleep(500)
+                    }
+                    return nil
+                }
+                print("detach-wake: chunks \(chunksAtTheStop) at the detach, \(String(describing: chunksAtTheClose)) at the close")
+                // Eight chunks, so the end of the chunk that waited is not enough.
+                #expect((chunksAtTheClose ?? 0) >= chunksAtTheStop + 8, "The detach must wake the session before the close.")
                 let active = try attachFlood(process, identifier: identifier, size: size, waitsForOutputRoom: true)
                 defer { active.connection.shutdown() }
                 let reader = FloodReader(active.connection)
                 reader.start()
-                let start = ContinuousClock.now
-                // Without the wake, no output comes for 2 seconds. A busy Mac took
-                // more than a second to parse 1 MiB, so the time limit is on the
-                // first output, and the amount has a long time.
-                let resumed = await eventually(timeout: .seconds(1)) { reader.state.withLock { $0.byteCount > 0 || $0.isDone } }
-                let firstOutput = ContinuousClock.now - start
                 let advanced = await eventually(timeout: .seconds(30)) { reader.state.withLock { $0.byteCount > 1024 * 1024 || $0.isDone } }
-                print("detach-wake: first output after \(firstOutput); advanced \(advanced) after \(ContinuousClock.now - start)")
-                #expect(resumed, "The detach must wake the session at once.")
                 try active.connection.send(ClientMessage.input(Data([3])))
                 // The output that waits for the client comes before the exit status.
                 let stopped = await eventually(timeout: .seconds(30)) { reader.state.withLock { $0.isDone } }
