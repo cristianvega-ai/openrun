@@ -7,7 +7,9 @@ import PseudoTerminal
 /// The program leads a new process group. Signals go to the whole group,
 /// so a command or a server that the agent started does not stay behind,
 /// and `ProcessGroupReaper` ends the rest of the group when the program
-/// ends.
+/// ends. When nobody holds the object any more, it ends the program and
+/// its group at once with SIGKILL, so keep the object for as long as the
+/// program must run.
 ///
 /// All methods can be called from any thread.
 public final class AgentProgram: @unchecked Sendable {
@@ -69,22 +71,44 @@ public final class AgentProgram: @unchecked Sendable {
         }
     }
 
+    /// The handlers hold the object weakly, so that a program that nobody
+    /// holds is not kept by its own sources. Each cancel handler closes the
+    /// descriptor that it was made for, also after the object is gone.
     private func startWatching() {
-        let reader = DispatchSource.makeReadSource(fileDescriptor: outputDescriptor, queue: queue)
-        reader.setEventHandler { [self] in readOutput() }
-        reader.setCancelHandler { [self] in close(outputDescriptor); outputDescriptor = -1 }
+        let output = outputDescriptor, error = errorDescriptor, input = inputDescriptor
+        let reader = DispatchSource.makeReadSource(fileDescriptor: output, queue: queue)
+        reader.setEventHandler { [weak self] in self?.readOutput() }
+        reader.setCancelHandler { [weak self] in close(output); self?.outputDescriptor = -1 }
         outputSource = reader
         reader.resume()
-        let errorReader = DispatchSource.makeReadSource(fileDescriptor: errorDescriptor, queue: queue)
-        errorReader.setEventHandler { [self] in readStandardError() }
-        errorReader.setCancelHandler { [self] in close(errorDescriptor); errorDescriptor = -1 }
+        let errorReader = DispatchSource.makeReadSource(fileDescriptor: error, queue: queue)
+        errorReader.setEventHandler { [weak self] in self?.readStandardError() }
+        errorReader.setCancelHandler { [weak self] in close(error); self?.errorDescriptor = -1 }
         errorSource = errorReader
         errorReader.resume()
-        let writer = DispatchSource.makeWriteSource(fileDescriptor: inputDescriptor, queue: queue)
-        writer.setEventHandler { [self] in pumpInput() }
-        writer.setCancelHandler { [self] in close(inputDescriptor); inputDescriptor = -1 }
+        let writer = DispatchSource.makeWriteSource(fileDescriptor: input, queue: queue)
+        writer.setEventHandler { [weak self] in self?.pumpInput() }
+        writer.setCancelHandler { [weak self] in close(input); self?.inputDescriptor = -1 }
         inputSource = writer
-        reaper = ProcessGroupReaper(processIdentifier: processIdentifier, queue: queue) { [self] in programEnded($0) }
+        reaper = ProcessGroupReaper(processIdentifier: processIdentifier, queue: queue) { [weak self] in self?.programEnded($0) }
         reaper?.start()
+    }
+
+    /// A program that nobody holds any more ends at once with its group, so
+    /// a forgotten object cannot leave an agent behind. The reaper stays
+    /// until its exit event and reaps the program. No block on the queue
+    /// holds the object now, so the state can be read here.
+    deinit {
+        outputContinuation.finish()
+        let reaper = reaper
+        let sources: [any DispatchSourceProtocol] = [outputSource, errorSource, inputSource].compactMap { $0 }
+        let suspended: [any DispatchSourceProtocol] = [outputSourceIsSuspended ? outputSource : nil, inputSourceIsSuspended ? inputSource : nil]
+            .compactMap { $0 }
+        queue.async {
+            reaper?.signalGroup(SIGKILL)
+            // A suspended source runs its cancel handler only after a resume.
+            suspended.forEach { $0.resume() }
+            sources.forEach { $0.cancel() }
+        }
     }
 }
