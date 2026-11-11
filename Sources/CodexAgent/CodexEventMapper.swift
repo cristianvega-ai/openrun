@@ -26,6 +26,8 @@ struct CodexEventMapper: Sendable {
     /// The tokens of the thread before the turn that runs, and now.
     var tokensBeforeTurn: TokenUsage?
     var tokensNow: TokenUsage?
+    /// Items that OpenRun declined without the user, with the reason.
+    var declineReasons: [String: ToolCallRefusal.Reason] = [:]
 
     mutating func events(method: String, parameters: JSONValue) -> [ConversationEventKind]? {
         let item = parameters["itemId"]?.string ?? ""

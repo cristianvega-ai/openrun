@@ -65,6 +65,13 @@ import Testing
         #expect(mapper.pendingMessageIdentifiers == ["second"])
     }
 
+    @Test func anMCPToolCallHasTheNameOfItsServerAndTool() {
+        let item = JSONValue.object(["server": .string("example-server"), "tool": .string("read"),
+                                     "result": .object(["content": .array([.object(["text": .string("done")])])])])
+        #expect(CodexEventMapper.toolName(item, type: "mcpToolCall") == "mcp/example-server/read")
+        #expect(CodexEventMapper.toolOutput(item) == "done")
+    }
+
     @Test func warningsAndErrorsAreNotices() {
         var mapper = CodexEventMapper()
         let retry = mapper.events(method: "error", parameters: .object(["error": .object(["message": .string("busy")]), "willRetry": .bool(true)]))

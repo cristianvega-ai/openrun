@@ -1,7 +1,7 @@
 import AgentConversation
 
-/// The items of a turn, such as messages and reasoning. Each has a start
-/// and a completion.
+/// The items of a turn: messages, reasoning, commands, file changes and
+/// other tool calls. Each has a start and a completion.
 extension CodexEventMapper {
     mutating func itemStarted(_ item: JSONValue) -> [ConversationEventKind]? {
         let identifier = item["id"]?.string ?? ""
@@ -15,6 +15,8 @@ extension CodexEventMapper {
             return [.agentStatus(AgentStatus(kind: "item/started", detail: type))]
         case "reasoning":
             return [.thinking(Thinking(itemIdentifier: identifier, isComplete: false))]
+        case "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch":
+            return toolCallStarted(item, identifier: identifier, type: type)
         case "contextCompaction":
             return [.notice(Notice(level: .information, text: "Codex compacts the conversation."))]
         default:
@@ -32,6 +34,8 @@ extension CodexEventMapper {
             return [.agentText(AgentText(itemIdentifier: identifier, text: item["text"]?.string ?? ""))]
         case "reasoning":
             return [.thinking(Thinking(itemIdentifier: identifier, isComplete: true))]
+        case "commandExecution", "fileChange", "mcpToolCall", "dynamicToolCall", "webSearch":
+            return toolCallCompleted(item, identifier: identifier, type: type)
         default:
             return nil
         }
