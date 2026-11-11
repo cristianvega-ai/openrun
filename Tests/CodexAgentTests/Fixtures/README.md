@@ -27,6 +27,7 @@ The tests that read the output alone take the `server` lines in order.
 | `file-change.jsonl` | A new file: the change with its content, the request of the app-server without the diff, the answer `accept`, and the end of the change. |
 | `closed-during-approval.jsonl` | A command that waits for approval when the app-server ends. The app-server ran nothing. |
 | `resume.jsonl` | The resume of a thread without its turns: a status before the answer, the answer, and the tokens of the thread. |
+| `interrupt.jsonl` | A stop in the resumed thread: an accepted command that runs on, a second request that the stop declines, `turn/interrupt`, and the end of the background terminal. |
 | `unknown-thread.jsonl` | The resume of a thread that Codex does not know, and its refusal. |
 
 ## What was replaced
