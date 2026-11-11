@@ -106,13 +106,20 @@ public struct DataFolder: Equatable, Sendable {
             throw DataStorageError.documentNotEncoded(file: Document.file.name)
         }
         data.append(UInt8(ascii: "\n"))
-        if case .document = current, let currentText, let kept = ObjectMembers(parsing: currentText),
-           var members = ObjectMembers(parsing: data) {
+        guard var members = ObjectMembers(parsing: data) else {
+            throw DataStorageError.documentNotEncoded(file: Document.file.name)
+        }
+        if case .document = current, let currentText {
+            // The read sets aside each file that the scanner refuses, so
+            // this never fails. If it did, the unknown keys would be lost.
+            guard let kept = ObjectMembers(parsing: currentText) else {
+                throw DataStorageError.documentNotEncoded(file: Document.file.name)
+            }
             for (key, value) in kept.values where !Document.knownKeys.contains(key) && members[key] == nil {
                 members[key] = value
             }
-            data = members.rendered()
         }
+        data = members.rendered()
         try AtomicFileWriter.write(data, to: path(of: Document.file))
     }
 
@@ -124,9 +131,9 @@ public struct DataFolder: Equatable, Sendable {
     /// file, so a document can decode an older format.
     public static let formatKey = CodingUserInfoKey(rawValue: "format")!
 
-    /// Reads a document. A file that is not JSON, that has no format number
-    /// or a format of a later build, or that does not decode, is set aside
-    /// and never written over.
+    /// Reads a document. A file that is not strict JSON in UTF-8, that has
+    /// no format number or a format of a later build, or that does not
+    /// decode, is set aside and never written over.
     ///
     /// - Throws: `DataStorageError` when the file exists but the system
     ///   cannot read or move it. A later `write` then throws too.
@@ -150,6 +157,11 @@ public struct DataFolder: Equatable, Sendable {
         }
         guard let data = FileManager.default.contents(atPath: path) else {
             throw DataStorageError.failure(of: "read")
+        }
+        // The decoder takes text that is not strict JSON. Such a file would
+        // lose its unknown keys at the next write, so it is set aside.
+        guard ObjectMembers(parsing: data) != nil else {
+            return (.setAside(path: try UnreadableFile.setAside(path)), nil)
         }
         let decoder = JSONDecoder()
         guard let header = try? decoder.decode(FormatHeader.self, from: data),

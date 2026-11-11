@@ -27,9 +27,10 @@ import Testing
     }
 
     @Test func textThatIsNotOneObjectHasNoMembers() {
-        for bad in ["", "[]", "{", #"{"a" 1}"#, #"{"a": 1,}"#, #"{"a": 1} {}"#, #"{"a": "open}"#] {
+        for bad in ["", "[]", "{", #"{"a" 1}"#, #"{"a": 1,}"#, #"{"a": 1} {}"#, #"{"a": "open}"#, "\u{FEFF}{}"] {
             #expect(ObjectMembers(parsing: Data(bad.utf8)) == nil)
         }
+        #expect(ObjectMembers(parsing: Data([0x7B, 0x22, 0xFF, 0x22, 0x3A, 0x31, 0x7D])) == nil)
         #expect(ObjectMembers(parsing: Data(" { } ".utf8))?.values.isEmpty == true)
     }
 

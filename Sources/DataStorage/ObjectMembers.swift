@@ -11,8 +11,10 @@ struct ObjectMembers {
     private(set) var values: [String: Data] = [:]
 
     /// Reads the members of the object that `data` holds, or gives `nil`
-    /// when `data` is not one JSON object.
+    /// when `data` is not one object of strict JSON in valid UTF-8. A byte
+    /// order mark before the object makes it invalid too.
     init?(parsing data: Data) {
+        guard String(validating: data, as: UTF8.self) != nil else { return nil }
         var scanner = DocumentTextScanner(bytes: [UInt8](data))
         guard scanner.take(UInt8(ascii: "{")) else { return nil }
         if scanner.take(UInt8(ascii: "}")) {
