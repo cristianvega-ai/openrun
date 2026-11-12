@@ -18,6 +18,13 @@ import Testing
         #expect(ProjectsListRow.firstProjectRow == 2)
     }
 
+    @Test func otherFoldersShowsOnlyWhenWorkIsOutsideEveryProject() {
+        let project = ProjectDisplay(identifier: first, name: "openrun", folder: "/p/openrun")
+        #expect(ProjectsListRow.rows(for: ProjectsListContent(projects: [project])).map(\.name) == ["All Projects", "Needs You", "openrun"])
+        let outside = ProjectsListRow.rows(for: ProjectsListContent(projects: [project], showsOtherFolders: true))
+        #expect(outside.last?.entry == .noProject && outside.last?.name == "Other Folders")
+    }
+
     @Test func voiceOverHearsTheCount() {
         let project = ProjectDisplay(identifier: first, name: "openrun", folder: "/p/openrun", attentionCount: 1)
         let rows = ProjectsListRow.rows(for: ProjectsListContent(projects: [project], needsYouCount: 5, noProjectAttentionCount: 4))

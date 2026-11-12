@@ -13,14 +13,16 @@ struct ProjectsListRow: Equatable {
 
     /// "All Projects" and "Needs You" first, then the projects in the user's
     /// order, then "Other Folders": the threads and the terminals in
-    /// folders of no project.
+    /// folders of no project. It shows only when such work exists.
     static func rows(for content: ProjectsListContent) -> [ProjectsListRow] {
         [ProjectsListRow(entry: .allSessions, name: "All Projects", symbol: "square.stack", help: "The threads and the terminals of every project", attentionCount: 0),
          ProjectsListRow(entry: .needsYou, name: "Needs You", symbol: "bell", help: nil, attentionCount: content.needsYouCount)]
             + content.projects.map {
                 ProjectsListRow(entry: .project($0.identifier), name: $0.name, symbol: "folder", help: $0.folder, attentionCount: $0.attentionCount)
             }
-            + [ProjectsListRow(entry: .noProject, name: "Other Folders", symbol: "tray", help: "The threads and the terminals in folders of no project", attentionCount: content.noProjectAttentionCount)]
+            + (content.showsOtherFolders ? [ProjectsListRow(
+                entry: .noProject, name: "Other Folders", symbol: "tray", help: "The threads and the terminals in folders of no project",
+                attentionCount: content.noProjectAttentionCount)] : [])
     }
 
     var projectIdentifier: UUID? {

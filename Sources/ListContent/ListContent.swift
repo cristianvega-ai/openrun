@@ -50,7 +50,8 @@ public struct ListContent {
                            attentionCount: attention.count { $0.project == project.identifier })
         }
         return ProjectsListContent(
-            projects: displays, needsYouCount: attention.count, noProjectAttentionCount: attention.count { $0.project == nil }, accounts: accounts)
+            projects: displays, needsYouCount: attention.count, noProjectAttentionCount: attention.count { $0.project == nil },
+            showsOtherFolders: rows.contains { $0.project == nil }, accounts: accounts)
     }
 
     /// The rows of one entry of the first pane, in the user's order.
