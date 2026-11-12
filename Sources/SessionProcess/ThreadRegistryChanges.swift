@@ -105,6 +105,30 @@ extension ThreadRegistry {
         changes?.threadChanged(summary)
     }
 
+    func terminalSession(of thread: UUID) -> UUID? {
+        terminals[thread]?.session
+    }
+
+    /// Open in Terminal: the thread takes no message until the session ends.
+    func openedInTerminal(_ thread: UUID, session: UUID, historyEnd: UInt64) async {
+        terminals[thread] = (session, historyEnd)
+        await runners[thread]?.setInTerminal()
+        publish(thread)
+    }
+
+    /// A session ended. When it was the terminal of a thread, the turns
+    /// that the user made there come into the events of the thread from
+    /// the history of the agent, and the thread takes messages again.
+    func sessionEnded(_ session: UUID) async {
+        guard let thread = terminals.first(where: { $0.value.session == session })?.key, let terminal = terminals.removeValue(forKey: thread),
+              let record = list.thread(thread), let runner = try? runner(for: thread) else { return }
+        let environment = (try? await launchSettings().environment) ?? [:]
+        // The read waits for the disk, so it runs off this actor.
+        let events = await Task.detached { (try? ThreadHistory.events(of: record, environment: environment, after: terminal.historyEnd)) ?? [] }.value
+        await runner.returnedFromTerminal(events: events)
+        publish(thread)
+    }
+
     /// A runner wants to start its agent. When every slot is taken, an
     /// agent with no work ends to make room. When all of them work, the
     /// thread waits in line (decision of 2026-11-10).
@@ -132,6 +156,7 @@ extension ThreadRegistry {
         let fresh = self.summary(of: record)
         (summary.name, summary.title, summary.projectIdentifier) = (fresh.name, fresh.title, fresh.projectIdentifier)
         (summary.model, summary.permissionMode, summary.models, summary.permissionModes) = (fresh.model, fresh.permissionMode, fresh.models, fresh.permissionModes)
+        summary.terminalSession = fresh.terminalSession
         summaries[identifier] = summary
         changes?.threadChanged(summary)
     }

@@ -126,6 +126,14 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// else after the turn. A mode outside `permissionModes` of the
     /// summary gets a failure. Answer: `acknowledged`.
     case changeThread(identifier: UUID, model: String? = nil, permissionMode: String? = nil)
+    /// Open in Terminal (proposal 6): stops the agent of the thread, and
+    /// resumes the conversation with the agent's own program in a new
+    /// terminal session. Answer: `sessionCreated`. The thread takes no
+    /// message until that session ends.
+    case openThreadInTerminal(identifier: UUID, size: SessionSize)
+    /// Ends the terminal session of a thread, so the thread takes
+    /// messages again. Answer: `acknowledged`.
+    case returnThreadFromTerminal(identifier: UUID)
     /// Ends the process of the thread and removes its record. The history
     /// of the agent stays where the agent keeps it. Answer: `acknowledged`.
     case closeThread(identifier: UUID)
@@ -216,6 +224,8 @@ extension ClientMessage {
         case .listThreads: "listThreads"
         case .renameThread: "renameThread"
         case .changeThread: "changeThread"
+        case .openThreadInTerminal: "openThreadInTerminal"
+        case .returnThreadFromTerminal: "returnThreadFromTerminal"
         case .closeThread: "closeThread"
         case .attachThread: "attachThread"
         case .readThreadHistory: "readThreadHistory"

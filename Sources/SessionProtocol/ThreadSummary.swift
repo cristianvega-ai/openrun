@@ -29,6 +29,9 @@ public struct ThreadSummary: Codable, Equatable, Sendable {
     public var waitingMessageCount: Int
     /// The project that holds the folder of the thread, as for a session.
     public var projectIdentifier: UUID?
+    /// The terminal session in which the conversation is open now
+    /// (proposal 6). The thread takes no message until it ends.
+    public var terminalSession: UUID?
     /// The models that the user can choose for the thread, for a menu.
     public var models: [String]?
     /// The permission modes that the thread can take now, from the

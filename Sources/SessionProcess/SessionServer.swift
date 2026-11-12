@@ -49,6 +49,7 @@ actor SessionServer {
             store: ThreadStore(dataFolder: dataFolder), projects: loadedProjects, changes: changes, processLimit: loadedSettings.agentProcessLimit,
             defaultModel: loadedSettings.claudeCodeModel, defaultPermissionMode: loadedSettings.claudeCodePermissionMode
         ) { await agents.settings() }
+        changes.observeEnds { [threads] session in Task { await threads.sessionEnded(session) } }
         // The path of the program is read at the start, because a new build
         // can replace the bundle while the process runs.
         registry = SessionRegistry(
@@ -353,7 +354,7 @@ actor SessionServer {
             case .changeSetting(let name, let text):
                 client.send(await changeSetting(name, to: text, for: peer))
             case .createThread, .listThreads, .renameThread, .changeThread, .closeThread, .attachThread, .readThreadHistory, .sendThreadMessage,
-                 .stopThread:
+                 .stopThread, .openThreadInTerminal, .returnThreadFromTerminal:
                 guard attachedSession == nil else {
                     client.send(Self.refusal("This connection is attached to a session."))
                     break

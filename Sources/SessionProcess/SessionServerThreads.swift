@@ -27,6 +27,10 @@ extension SessionServer {
             case .changeThread(let identifier, let model, let permissionMode):
                 try await threads.change(identifier, model: model, permissionMode: permissionMode)
                 return .acknowledged
+            case .openThreadInTerminal(let identifier, let size):
+                return try await openInTerminal(identifier, size: size)
+            case .returnThreadFromTerminal(let identifier):
+                return try await returnFromTerminal(identifier)
             case .closeThread(let identifier):
                 try await threads.close(identifier)
                 return .acknowledged

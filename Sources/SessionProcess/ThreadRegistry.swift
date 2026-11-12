@@ -24,6 +24,9 @@ actor ThreadRegistry {
     var projects: ProjectList
     /// The process of the agent of each thread whose agent runs.
     var agentProcesses: [pid_t: UUID] = [:]
+    /// The threads that are open in a terminal (proposal 6): the terminal
+    /// session, and the size of the history file when it started.
+    var terminals: [UUID: (session: UUID, historyEnd: UInt64)] = [:]
     /// The threads that may run a process now, and the ones that wait.
     var slots: AgentProcessSlots
     let quietTime: Duration
@@ -107,7 +110,9 @@ actor ThreadRegistry {
     }
 
     func summary(of record: ThreadRecord) -> ThreadSummary {
-        Self.summary(of: record, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode)
+        var summary = Self.summary(of: record, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode)
+        summary.terminalSession = terminals[record.identifier]?.session
+        return summary
     }
 
     /// The summary of a thread that is not in use: idle, with no process.
