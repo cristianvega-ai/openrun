@@ -153,6 +153,8 @@ let package = Package(
         // The main window: the three panes as stacked sheets, their widths, and the focus between them.
         .target(name: "MainWindow", dependencies: ["PaneAppearance", "ProjectsList", "SessionsList"]),
         .testTarget(name: "MainWindowTests", dependencies: ["MainWindow", "PaneAppearance", "ProjectsList", "SessionsList", "SessionPane", "SessionProcessHarness", "SessionProtocol"]),
+        // The view of a row with splits: the views of its sessions and threads with dividers between them.
+        .target(name: "PaneSplits", dependencies: ["WindowLayout"]),
         // The settings window: one pane for each group of settings, and a control for each setting.
         .target(name: "SettingsWindow", dependencies: ["Settings"]),
         .testTarget(name: "SettingsWindowTests", dependencies: ["SettingsWindow", "Settings"]),
