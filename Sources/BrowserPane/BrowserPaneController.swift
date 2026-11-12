@@ -35,6 +35,7 @@ public final class BrowserPaneController: NSObject {
         self.address = address
         super.init()
         layOut()
+        connect()
         if let url = BrowserAddress.url(from: address) { webView.load(URLRequest(url: url)) }
     }
 
