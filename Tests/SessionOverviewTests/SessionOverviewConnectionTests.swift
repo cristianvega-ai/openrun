@@ -40,8 +40,9 @@ import Testing
         #expect(reason.contains("No session process answers"))
     }
 
-    /// The sessions of a session process end with it. The next session
-    /// process on the socket brings a new list.
+    /// A session process that stops says nothing of the end of its
+    /// sessions, because they come back with the next session process on
+    /// the socket, which brings a new list.
     @Test func theConnectionComesBackAfterTheSessionProcessStartsAgain() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -49,15 +50,19 @@ import Testing
         let connection = SessionOverviewConnection(socket: try SocketLocation(path: first.socketPath))
         connection.firstRetryDelay = .milliseconds(20)
         connection.start()
-        _ = try first.createSession(program: ["/bin/sh"])
+        let session = try first.createSession(program: ["/bin/sh"])
         #expect(await waitUntil { connection.overview.sessions.count == 1 })
+        // The record of the session must be in its file before the stop.
+        let records = folder.appendingPathComponent("sessions.json")
+        #expect(await waitUntil { FileManager.default.fileExists(atPath: records.path) })
         first.stop()
-        // A session process that stops ends its sessions and says so.
-        #expect(await waitUntil { connection.status != .connected && connection.overview.sessions.isEmpty })
+        // The window keeps the rows of the sessions, which come back.
+        #expect(await waitUntil { connection.status != .connected })
+        #expect(connection.overview.sessions.map(\.identifierText) == [session])
         let second = try RunningSessionProcess(directory: folder, logName: "log2")
         defer { second.stop() }
-        _ = try second.createSession(program: ["/bin/sh"])
-        #expect(await waitUntil { connection.status == .connected && connection.overview.sessions.count == 1 })
+        let new = try second.createSession(program: ["/bin/sh"])
+        #expect(await waitUntil { connection.status == .connected && connection.overview.sessions.map(\.identifierText) == [new] })
         connection.stop()
         _ = try second.createSession(program: ["/bin/sh"])
         try await Task.sleep(for: .milliseconds(300))

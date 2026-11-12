@@ -30,6 +30,9 @@ final class SessionChangeFeed: Sendable {
         var threadWatchers: [ObjectIdentifier: Send] = [:]
         /// Hears of each session that ends, such as the terminal of a thread.
         var endObserver: (@Sendable (UUID) -> Void)?
+        /// Whether the session process stops. The ends that follow are
+        /// no ends for the user: the sessions come back at the next start.
+        var isStopping = false
     }
 
     private let state = Mutex(State())
@@ -55,10 +58,17 @@ final class SessionChangeFeed: Sendable {
     /// The session has ended. Nothing of it is sent after this.
     func end(_ identifier: UUID) {
         state.withLock { state in
-            guard state.summaries.removeValue(forKey: identifier) != nil else { return }
+            guard state.summaries.removeValue(forKey: identifier) != nil, !state.isStopping else { return }
             for send in state.watchers.values { send(.sessionEnded(identifier: identifier)) }
             state.endObserver?(identifier)
         }
+    }
+
+    /// The session process stops. No watcher hears of the ends that
+    /// follow, so the window keeps the rows and the splits of the sessions,
+    /// which come back at the next start (decision of 2026-10-15).
+    func stopTellingEnds() {
+        state.withLock { $0.isStopping = true }
     }
 
     /// Calls `observer` at the end of each session, after the watchers heard of it.

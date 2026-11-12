@@ -28,6 +28,8 @@ extension SessionServer {
         // The turns of the terminal start where the history file ends now.
         let historyEnd = ThreadHistory.fileSize(of: record, environment: settings.environment)
         let summary = try await registry.create(folder: record.folder, command: [settings.program] + launch.terminalArguments, size: size, environment: environment)
+        // The thread keeps the conversation, so its terminal does not come back after a restart.
+        await records.exclude(summary.identifier)
         await threads.openedInTerminal(thread, session: summary.identifier, historyEnd: historyEnd)
         SessionLog.write("Opened a thread in the terminal session \(summary.identifierText)")
         return .sessionCreated(summary)

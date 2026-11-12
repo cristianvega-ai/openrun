@@ -3,6 +3,7 @@ import DataStorage
 import Foundation
 import Projects
 import SessionProtocol
+import SessionRecords
 import Settings
 import TerminalEmulation
 
@@ -17,6 +18,7 @@ actor SessionServer {
     private let settings: SettingKeeper
     let threads: ThreadRegistry
     let agents: AgentLaunchProvider
+    let records: SessionRecordKeeper
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -57,6 +59,8 @@ actor SessionServer {
             socketPath: location.path, helperSearchPath: .ofThisProcess(), changes: changes, projects: loadedProjects,
             sessionLimit: loadedSettings.sessionLimit, scrollbackLimit: loadedSettings.scrollbackLimit
         )
+        records = SessionRecordKeeper(store: SessionRecordStore(dataFolder: dataFolder))
+        records.follow(changes)
     }
 
     func start() {
@@ -74,6 +78,9 @@ actor SessionServer {
     func shutDown() async {
         close()
         await acceptTask?.value
+        // The sessions that run now come back at the next start, so their records stay.
+        await records.stop()
+        changes.stopTellingEnds()
         await registry.terminateAll()
         await threads.terminateAll()
         // Each client gets a short time to take what still waits for it, such

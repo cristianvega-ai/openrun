@@ -26,6 +26,29 @@ import Testing
         #expect(await eventually { keeper.load().first == moved } && keeper.load().count == 2)
     }
 
+    @Test func theKeeperHearsOfTheSessionsOnTheFeedInTheOrderOfTheChanges() async throws {
+        let (keeper, folder) = try makeKeeper(endGrace: .milliseconds(20))
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let feed = SessionChangeFeed()
+        var (first, second) = (summary(at: 1), summary(at: 2))
+        feed.add(first)
+        keeper.follow(feed)
+        feed.add(second)
+        first.name = "Build"
+        feed.change(first)
+        #expect(await eventually { keeper.load().map(\.name) == ["Build", nil] })
+        feed.end(second.identifier)
+        #expect(await eventually { keeper.load().map(\.identifier) == [first.identifier] })
+        // After the stop, the feed tells no watcher of an end.
+        second = summary(at: 3)
+        feed.add(second)
+        #expect(await eventually { keeper.load().count == 2 })
+        feed.stopTellingEnds()
+        feed.end(second.identifier)
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(keeper.load().count == 2)
+    }
+
     private func makeKeeper(endGrace: Duration) throws -> (SessionRecordKeeper, URL) {
         let folder = try RunningSessionProcess.makeDirectory()
         let store = SessionRecordStore(dataFolder: DataFolder(path: folder.path))
