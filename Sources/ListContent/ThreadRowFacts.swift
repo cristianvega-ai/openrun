@@ -59,6 +59,39 @@ public enum ThreadRowFacts {
         }
     }
 
+    /// The usage of the account as one quiet line, such as
+    /// "Week 37% used · read 14:32", or nil with no reading. The time
+    /// shows, because a reading can be old (proposal 7).
+    public static func usageText(of thread: ThreadSummary, timeZone: TimeZone = .current) -> String? {
+        guard let windows = thread.usageWindows, let readAt = thread.usageReadAt else { return nil }
+        let parts = windows.compactMap { window -> String? in
+            guard let used = window.usedFraction else { return nil }
+            return "\(windowName(window)) \(Int((used * 100).rounded()))% used"
+        }
+        guard !parts.isEmpty else { return nil }
+        var style = Date.FormatStyle(date: .omitted, time: .shortened)
+        style.timeZone = timeZone
+        return parts.joined(separator: ", ") + " · read " + readAt.formatted(style)
+    }
+
+    /// A window by its length, because the names of the agents differ.
+    static func windowName(_ window: ThreadUsageWindow) -> String {
+        switch window.lengthInMinutes {
+        case 10_080?: "Week"
+        case 1_440?: "Day"
+        case let minutes? where minutes % 60 == 0: "\(minutes / 60) h"
+        case let minutes?: "\(minutes) min"
+        case nil: window.name
+        }
+    }
+
+    /// The time when the account can work again, when a window of its
+    /// usage is at its limit.
+    public static func limitResetTime(of thread: ThreadSummary) -> Date?? {
+        guard let window = thread.usageWindows?.first(where: { $0.status == "rejected" }) else { return nil }
+        return .some(window.resetTime)
+    }
+
     /// The short name of a model, such as `Opus` for `claude-opus-5-5`,
     /// so the second line of a row keeps room for the folder.
     public static func shortModelName(_ model: String) -> String {

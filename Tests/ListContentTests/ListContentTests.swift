@@ -71,6 +71,19 @@ import WindowLayout
         thread.state = "inProgress"
         #expect(ThreadRowFacts.title(of: thread) == "Resize" && ThreadRowFacts.shortModelName("gpt-6") == "gpt-6")
         #expect(ThreadRowFacts.modelTitle("opus") == "Opus" && ThreadRowFacts.modelTitle("claude-opus-5-5") == "claude-opus-5-5")
+        // The usage of the account shows with the time of its reading, because a reading can be old.
+        var used = thread
+        #expect(ThreadRowFacts.usageText(of: used) == nil && ThreadRowFacts.limitResetTime(of: used) == nil)
+        let reset = Date(timeIntervalSince1970: 86_400)
+        used.usageWindows = [
+            ThreadUsageWindow(name: "five_hour", lengthInMinutes: 300, usedFraction: 0.124), ThreadUsageWindow(name: "unknown"),
+            ThreadUsageWindow(name: "seven_day", lengthInMinutes: 10_080, usedFraction: 1, resetTime: reset, status: "rejected"),
+        ]
+        used.usageReadAt = Date(timeIntervalSince1970: 14 * 3600 + 32 * 60)
+        let text = ThreadRowFacts.usageText(of: used, timeZone: TimeZone(identifier: "UTC")!)
+        #expect(text?.hasPrefix("5 h 12% used, Week 100% used · read ") == true && text?.contains("32") == true)
+        #expect(ThreadRowFacts.limitResetTime(of: used) == .some(reset))
+        #expect(ThreadRowFacts.windowName(ThreadUsageWindow(name: "daily", lengthInMinutes: 1_440)) == "Day" && ThreadRowFacts.windowName(ThreadUsageWindow(name: "burst", lengthInMinutes: 90)) == "90 min")
         #expect(["plan", "dontAsk", "default", "acceptEdits", "auto", "later"].map(ThreadRowFacts.permissionModeTitle)
             == ["Plan Only", "Rules Only", "Ask First", "Accept Edits", "Auto", "later"])
         #expect(ThreadRowFacts.display(of: layout.rows[0], thread: thread, inView: false, home: "/").isInProgress)
