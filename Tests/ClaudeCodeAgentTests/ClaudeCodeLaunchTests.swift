@@ -24,6 +24,13 @@ import ClaudeCodeAgent
         #expect(try launch(.resume(identifier)).arguments.suffix(2) == ["--resume", "00000000-0000-4000-8000-00000000c0de"])
     }
 
+    /// Open in Terminal runs Claude Code itself, with no headless flag and no hook.
+    @Test func theTerminalGetsTheConversationTheModelAndTheMode() throws {
+        let text = identifier.uuidString.lowercased()
+        #expect(try launch(.resume(identifier)).terminalArguments == ["--resume", text, "--model", "haiku", "--permission-mode", "default"])
+        #expect(try launch(.new(identifier)).terminalArguments.prefix(2) == ["--session-id", text])
+    }
+
     @Test func noModeSkipsEveryCheck() {
         #expect(!ClaudeCodePermissionMode.allCases.map(\.rawValue).contains("bypassPermissions"))
         #expect(ClaudeCodePermissionMode.allCases.map(\.rawValue) == ["default", "acceptEdits", "plan", "dontAsk", "auto"])

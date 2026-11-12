@@ -43,12 +43,22 @@ public struct ClaudeCodeLaunch: Sendable, Hashable {
         self.hookArguments = hookArguments
     }
 
-    /// The arguments after the program name.
-    public var arguments: [String] {
-        let conversationArguments = switch conversation {
+    private var conversationArguments: [String] {
+        switch conversation {
         case .new(let identifier): ["--session-id", identifier.uuidString.lowercased()]
         case .resume(let identifier): ["--resume", identifier.uuidString.lowercased()]
         }
+    }
+
+    /// The arguments of Claude Code in a terminal session, for Open in
+    /// Terminal (proposal 6): the same conversation, model and mode. The
+    /// user answers in the terminal, so the run has no hook of OpenRun.
+    public var terminalArguments: [String] {
+        conversationArguments + ["--model", model, "--permission-mode", permissionMode.rawValue]
+    }
+
+    /// The arguments after the program name.
+    public var arguments: [String] {
         return [
             "-p", "--input-format", "stream-json", "--output-format", "stream-json", "--verbose",
             "--include-partial-messages", "--replay-user-messages",

@@ -62,6 +62,10 @@ import Testing
         #expect(try later.previousTurns(pageByteCount: 300).map(\.kind) == turn(1) + turn(2))
         #expect(later.hasReachedStart && later.cursor == 0)
         #expect(try ClaudeCodeHistoryReader(fileURL: url, before: 0).previousTurns() == [])
+        // The lines after an earlier size of the file are the turns that came since, such as in a terminal.
+        let secondTurn = UInt64((lines.prefix(3).joined(separator: "\n") + "\n").utf8.count)
+        #expect(try ClaudeCodeHistoryReader.events(inFileAt: url, after: secondTurn).map(\.kind) == turn(2) + turn(3))
+        #expect(try ClaudeCodeHistoryReader.events(inFileAt: url, after: later.cursor + 10_000).isEmpty)
         // A turn that is longer than eight pages gives a page that starts in the turn.
         let long = (0..<40).map { #"{"type":"assistant","message":{"id":"x\#($0)","content":[{"type":"text","text":"A"}]}}"# }
         try Data(((lines.prefix(1) + long).joined(separator: "\n") + "\n").utf8).write(to: url)

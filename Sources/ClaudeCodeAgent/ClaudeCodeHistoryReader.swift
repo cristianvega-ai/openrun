@@ -70,6 +70,19 @@ public final class ClaudeCodeHistoryReader {
         return pages.reversed().flatMap(\.self)
     }
 
+    /// The events of the lines that Claude Code wrote after `offset`, an
+    /// earlier size of the file: the turns that the user made in a
+    /// terminal (proposal 6). At most the last `byteLimit` bytes are read.
+    public static func events(inFileAt fileURL: URL, after offset: UInt64, byteLimit: Int = 4 * 1024 * 1024) throws -> [ConversationEvent] {
+        let reader = try ClaudeCodeHistoryReader(fileURL: fileURL)
+        var pages: [[ConversationEvent]] = []
+        let end = reader.lines.position
+        while reader.lines.position > offset, end - reader.lines.position < UInt64(byteLimit), let line = try reader.lines.olderLine() {
+            pages.append(events(of: line))
+        }
+        return pages.reversed().flatMap(\.self)
+    }
+
     private static func events(of line: BackwardLineReader.Line) -> [ConversationEvent] {
         switch line {
         case .whole(let bytes):
