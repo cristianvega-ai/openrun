@@ -31,7 +31,12 @@ import Testing
         #expect(file[0].target === workspace && file[1].target === workspace && file[4].target === workspace && file[5].target == nil && file[8].target === application)
         #expect(session.map(\.title) == ["Rename…", "", "Next Session", "Previous Session"] && session.map(key) == ["", "", "shift-]", "shift-["])
         #expect(try items("View").map(\.title) == ["Hide Projects", "Hide Sessions", "Move Focus to Next Pane", "Move Focus to Previous Pane", "", "Make Text Bigger", "Make Text Smaller", "Reset Text Size"])
-        #expect(try items("Edit").map(\.action) == [Selector(("copy:")), Selector(("paste:")), Selector(("selectAll:"))])
+        #expect(try items("Edit").map(\.title) == ["Undo", "Redo", "", "Cut", "Copy", "Paste", "Select All", "", "Find"])
+        #expect(try items("Edit").prefix(7).map(key) == ["z", "shift-z", "", "x", "c", "v", "a"])
+        let find = try #require(try items("Edit").last?.submenu).items
+        #expect(find.map(\.title) == ["Find…", "Find Next", "Find Previous", "Use Selection for Find"])
+        #expect(find.map(key) == ["f", "g", "shift-g", "e"] && find.map(\.tag) == [1, 2, 3, 7])
+        #expect(find.allSatisfy { $0.action == Selector(("performFindPanelAction:")) && $0.target == nil })
         // This application has a nondefault socket and no setup of its own, so
         // the item is off. Do not send its action: it would register the real launch agent.
         #expect(!application.validateMenuItem(file[8]))

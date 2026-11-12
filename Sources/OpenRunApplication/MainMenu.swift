@@ -19,10 +19,26 @@ enum MainMenu {
         application.addItem(item("Quit OpenRun", #selector(NSApplication.terminate(_:)), "q"))
         addFileMenu(to: menu, target: target)
 
+        // Undo, Redo and Cut are for the text fields, such as the composer of a chat.
         let edit = submenu("Edit", in: menu)
+        edit.addItem(item("Undo", Selector(("undo:")), "z"))
+        edit.addItem(item("Redo", Selector(("redo:")), "z", [.command, .shift]))
+        edit.addItem(.separator())
+        edit.addItem(item("Cut", Selector(("cut:")), "x"))
         edit.addItem(item("Copy", Selector(("copy:")), "c"))
         edit.addItem(item("Paste", Selector(("paste:")), "v"))
         edit.addItem(item("Select All", Selector(("selectAll:")), "a"))
+        edit.addItem(.separator())
+        // The view with the focus finds: a terminal or a chat.
+        let find = submenu("Find", in: edit)
+        for (title, key, modifiers, action) in [
+            ("Find…", "f", NSEvent.ModifierFlags.command, NSFindPanelAction.showFindPanel), ("Find Next", "g", .command, .next),
+            ("Find Previous", "g", [.command, .shift], .previous), ("Use Selection for Find", "e", .command, .setFindString),
+        ] {
+            let item = item(title, Selector(("performFindPanelAction:")), key, modifiers)
+            item.tag = Int(action.rawValue)
+            find.addItem(item)
+        }
         let view = submenu("View", in: menu)
         for item in target.workspace.window.paneMenuItems() { view.addItem(item) }
         view.addItem(.separator())
