@@ -147,6 +147,9 @@ let package = Package(
         .target(name: "PaneAppearance", dependencies: ["TerminalTheme", "TerminalEmulation"]),
         .testTarget(name: "PaneAppearanceTests", dependencies: ["PaneAppearance", "TerminalTheme", "TerminalEmulation"]),
         // The first pane of the main window: All Sessions, the projects, and No Project.
+        // A web page in a split of the third pane. Only this module imports WebKit.
+        .target(name: "BrowserPane", dependencies: ["PaneAppearance"]),
+        .testTarget(name: "BrowserPaneTests", dependencies: ["BrowserPane"]),
         .target(name: "ProjectsList", dependencies: ["PaneAppearance", "ListUpdates"]),
         .testTarget(name: "ProjectsListTests", dependencies: ["ProjectsList", "PaneAppearance"]),
         // The second pane of the main window: the threads and terminal sessions, as vertical tabs.
