@@ -60,6 +60,36 @@ public final class TerminalSearch {
         try move(GHOSTTY_SEARCH_OPT_SELECT_PREV)
     }
 
+    /// The matches whose first and last cell are in the viewport, each
+    /// from its first cell to its last one, so a view can mark them. The
+    /// search catches up with the terminal first. A match that lies
+    /// partly above or under the viewport is left out.
+    public func viewportMatches() -> [(first: ViewportCell, last: ViewportCell)] {
+        guard ghostty_search_run(handle) == GHOSTTY_SUCCESS else { return [] }
+        var buffer = GhosttySelectionBuffer(ptr: nil, cap: 0, len: 0)
+        // The first call only counts the matches.
+        guard ghostty_search_get(handle, GHOSTTY_SEARCH_DATA_VIEWPORT_MATCHES, &buffer) == GHOSTTY_OUT_OF_SPACE, buffer.len > 0 else { return [] }
+        var sized = GhosttySelection()
+        sized.size = MemoryLayout<GhosttySelection>.size
+        var selections = [GhosttySelection](repeating: sized, count: buffer.len)
+        let count = selections.withUnsafeMutableBufferPointer { pointer -> Int in
+            var filled = GhosttySelectionBuffer(ptr: pointer.baseAddress, cap: pointer.count, len: 0)
+            return ghostty_search_get(handle, GHOSTTY_SEARCH_DATA_VIEWPORT_MATCHES, &filled) == GHOSTTY_SUCCESS ? filled.len : 0
+        }
+        return selections.prefix(count).compactMap { selection in
+            guard let start = viewportCell(of: selection.start), let end = viewportCell(of: selection.end) else { return nil }
+            // The endpoints keep the direction of a selection, so the earlier one comes first.
+            return (start.row, start.column) <= (end.row, end.column) ? (start, end) : (end, start)
+        }
+    }
+
+    private func viewportCell(of reference: GhosttyGridRef) -> ViewportCell? {
+        var (reference, coordinate) = (reference, GhosttyPointCoordinate())
+        guard ghostty_terminal_point_from_grid_ref(terminal.handle, &reference, GHOSTTY_POINT_TAG_VIEWPORT, &coordinate) == GHOSTTY_SUCCESS,
+              coordinate.y < UInt32(terminal.size.rows) else { return nil }
+        return ViewportCell(column: coordinate.x, row: coordinate.y)
+    }
+
     /// The step catches up with the terminal first, and it scrolls the
     /// selected match into the viewport.
     private func move(_ option: GhosttySearchOption) throws -> Matches {

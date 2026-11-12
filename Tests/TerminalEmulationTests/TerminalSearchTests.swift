@@ -34,6 +34,21 @@ import Testing
         #expect(try search.find("") == TerminalSearch.Matches() && !terminal.hasSelection)
     }
 
+    @Test func theMatchesOfTheViewportComeWithTheirCells() throws {
+        let (terminal, search) = try makeSearch()
+        #expect(search.viewportMatches().isEmpty)
+        _ = try search.find("apple")
+        // The three rows of the viewport hold the lines 6 to 8, each with one match in the columns 7 to 11.
+        let matches = search.viewportMatches().sorted { $0.first.row < $1.first.row }
+        #expect(matches.map(\.first) == (0...2).map { ViewportCell(column: 7, row: $0) })
+        #expect(matches.map(\.last) == (0...2).map { ViewportCell(column: 11, row: $0) })
+        // The list follows the output that came after the search started.
+        terminal.write("\r\nno fruit here")
+        #expect(search.viewportMatches().map(\.first.row).sorted() == [0, 1])
+        _ = try search.find("pear")
+        #expect(search.viewportMatches().isEmpty)
+    }
+
     @Test func aStepSeesTheOutputThatCameAfterTheSearchStarted() throws {
         let (terminal, search) = try makeSearch()
         #expect(try search.find("apple").count == 8)
