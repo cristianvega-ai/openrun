@@ -87,7 +87,7 @@ extension ThreadRegistry {
     /// A runner has a new title, state or process. The record goes to the
     /// file when it changed, and the summary goes to the clients.
     func runnerChanged(_ runner: ThreadRunner) async {
-        let (record, state, process, waiting, holdsProcessSlot) = await runner.facts
+        let ((record, state, process, waiting, holdsProcessSlot), usage) = await (runner.facts, runner.usage)
         guard runners[record.identifier] === runner, let kept = list.thread(record.identifier) else { return }
         // The agent ended, so the thread that waited longest can start its agent.
         if !holdsProcessSlot, let next = slots.release(record.identifier) { await runners[next]?.sendNextMessage() }
@@ -100,6 +100,10 @@ extension ThreadRegistry {
         }
         var summary = summary(of: list.thread(record.identifier) ?? record)
         (summary.state, summary.isProcessRunning, summary.waitingMessageCount) = (state.rawValue, isRunning, waiting)
+        summary.usageReadAt = usage?.readAt
+        summary.usageWindows = usage?.reading.windows.map {
+            ThreadUsageWindow(name: $0.name, lengthInMinutes: $0.lengthInMinutes, usedFraction: $0.usedFraction, resetTime: $0.resetTime, status: $0.status)
+        }
         guard summaries[record.identifier] != summary else { return }
         summaries[record.identifier] = summary
         changes?.threadChanged(summary)

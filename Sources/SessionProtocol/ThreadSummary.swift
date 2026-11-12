@@ -32,6 +32,11 @@ public struct ThreadSummary: Codable, Equatable, Sendable {
     /// The terminal session in which the conversation is open now
     /// (proposal 6). The thread takes no message until it ends.
     public var terminalSession: UUID?
+    /// The newest usage reading of the account, which the agent gave in
+    /// this thread, and the time when it came. A reading can be old,
+    /// because the agent gives one only after a request (proposal 7).
+    public var usageWindows: [ThreadUsageWindow]?
+    public var usageReadAt: Date?
     /// The models that the user can choose for the thread, for a menu.
     public var models: [String]?
     /// The permission modes that the thread can take now, from the

@@ -69,6 +69,8 @@ actor ThreadRunner {
     /// 6). A second process on it would split the conversation in two,
     /// so the thread takes no message until the session ends.
     var isInTerminal = false
+    /// The time of the newest usage reading of the agent.
+    var usageReadAt: Date?
     /// The wait for the quiet time of the process.
     var quietTask: Task<Void, Never>?
     let quietTime: Duration
@@ -107,11 +109,18 @@ actor ThreadRunner {
         (record, transcript.state, program?.processIdentifier, waitingMessages.count, program != nil || isStartingProcess)
     }
 
+    /// The newest usage reading of the account and the time when it came.
+    var usage: (reading: UsageReading, readAt: Date)? {
+        guard let reading = transcript.usage, let usageReadAt else { return nil }
+        return (reading, usageReadAt)
+    }
+
     /// Gives an event to the transcript, the buffer and the clients.
     func emit(_ kind: ConversationEventKind, sourceLine: SourceLine? = nil) {
         let event = ConversationEvent(kind, sourceLine: sourceLine)
         _ = transcript.apply(event)
         toolCalls.observe(event)
+        if case .usage = kind { usageReadAt = Date() }
         let data = buffer.append(event)
         for listener in listeners.values { listener(.event(data)) }
         lastUse = .now

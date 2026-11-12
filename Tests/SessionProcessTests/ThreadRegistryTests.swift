@@ -85,6 +85,10 @@ import Testing
         #expect(await eventually { await registry.summary(thread)?.state == "finishedTurn" })
         let summary = try #require(await registry.summary(thread))
         #expect(summary.title == "Reply with the single word ok." && summary.isProcessRunning && summary.waitingMessageCount == 0)
+        // The agent gave a usage reading of the account in the turn, and the summary has it with its time.
+        let window = try #require(summary.usageWindows?.first)
+        #expect(window.lengthInMinutes == 10_080 && window.usedFraction != nil && window.status == "allowed")
+        #expect(try #require(summary.usageReadAt).timeIntervalSinceNow > -60)
         #expect(await registry.hasRunningProcess)
         #expect(fixture.changed.contains { $0.state == "inProgress" } && fixture.changed.last == summary)
         #expect(try fixture.store.load().list.thread(thread)?.hasConversation == true)
