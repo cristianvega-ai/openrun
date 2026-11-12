@@ -19,7 +19,10 @@ import Testing
         #expect(Set(names) == Set(SettingName.allCases.map(\.rawValue)) && names.count == SettingName.allCases.count)
         #expect(controller.window?.contentViewController is NSTabViewController)
         let links = controller.panes[0].controls["open-links-in"] as? ChoiceSettingControl
-        #expect(links?.popup.itemTitles == ["The Default Browser", "A Web Page Beside the Session"])
+        #expect(links?.popup.itemTitles == ["In the Default Browser", "In a Web Page Beside the Work"])
+        // Each pane groups its settings in sections with a heading, so a user sees what each one does.
+        #expect(controller.panes[0].pane.sections.map(\.title) == ["Notifications", "Links", "Limits"])
+        #expect(controller.panes[2].pane.sections.map(\.title) == ["Keyboard", "Scrollback", "Paste", "New Terminals"])
     }
 
     @Test func aPaneShowsTheHeadingOfEachSectionOverItsSettings() throws {

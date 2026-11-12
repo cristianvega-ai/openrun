@@ -26,39 +26,55 @@ struct SettingsPane {
     }
 
     @MainActor private static var general: SettingsPane {
-        SettingsPane(title: "General", symbolName: "gearshape", rows: [
-            SettingRow(name: SettingName.linkDestination.rawValue, label: "Open links in") {
-                ChoiceSettingControl([("default-browser", "The Default Browser"), ("browser-split", "A Web Page Beside the Session")])
-            },
-            SettingRow(name: SettingName.showsNotifications.rawValue, label: "Notifications") {
-                FlagSettingControl(title: "Show a notification when a session needs you")
-            },
-            SettingRow(name: SettingName.sessionLimit.rawValue, label: "Sessions", note: "The most sessions that run at one time.") {
-                NumberSettingControl(1...1_000)
-            },
+        SettingsPane(title: "General", symbolName: "gearshape", sections: [
+            SettingsSection(title: "Notifications", rows: [
+                SettingRow(name: SettingName.showsNotifications.rawValue, label: "") {
+                    FlagSettingControl(title: "Notify me when a thread or a terminal needs me")
+                },
+            ]),
+            SettingsSection(title: "Links", note: "A web link that you Command-click in a terminal, or click in a chat.", rows: [
+                SettingRow(name: SettingName.linkDestination.rawValue, label: "Open links") {
+                    ChoiceSettingControl([("default-browser", "In the Default Browser"), ("browser-split", "In a Web Page Beside the Work")])
+                },
+            ]),
+            SettingsSection(title: "Limits", rows: [
+                SettingRow(name: SettingName.sessionLimit.rawValue, label: "Terminals", note: "The most terminals that run at one time.") {
+                    NumberSettingControl(1...1_000)
+                },
+            ]),
         ])
     }
 
     @MainActor private static var appearance: SettingsPane {
-        SettingsPane(title: "Appearance", symbolName: "paintbrush", rows: [
-            SettingRow(name: SettingName.theme.rawValue, label: "Theme") { ChoiceSettingControl([("graphite", "Graphite")]) },
-            SettingRow(name: SettingName.fontName.rawValue, label: "Font") { ChoiceSettingControl(fixedPitchFonts.map { ($0, $0) }) },
-            SettingRow(name: SettingName.fontSize.rawValue, label: "Size") { NumberSettingControl(6...72, unit: "points") },
+        SettingsPane(title: "Appearance", symbolName: "paintbrush", sections: [
+            SettingsSection(title: "Colors", rows: [
+                SettingRow(name: SettingName.theme.rawValue, label: "Theme") { ChoiceSettingControl([("graphite", "Graphite")]) },
+            ]),
+            SettingsSection(title: "Terminal Text", rows: [
+                SettingRow(name: SettingName.fontName.rawValue, label: "Font") { ChoiceSettingControl(fixedPitchFonts.map { ($0, $0) }) },
+                SettingRow(name: SettingName.fontSize.rawValue, label: "Size") { NumberSettingControl(6...72, unit: "points") },
+            ]),
         ])
     }
 
     @MainActor private static var terminal: SettingsPane {
-        SettingsPane(title: "Terminal", symbolName: "terminal", rows: [
-            SettingRow(name: SettingName.optionAsAlt.rawValue, label: "Option key", note: "An Option key that is not Alt types the special characters of the keyboard.") {
-                ChoiceSettingControl([("left", "The Left Option Key Is Alt"), ("both", "Both Option Keys Are Alt"), ("neither", "No Option Key Is Alt")])
-            },
-            SettingRow(name: SettingName.scrollbackLimit.rawValue, label: "Scrollback") { NumberSettingControl(0...1_000_000, unit: "lines") },
-            SettingRow(name: SettingName.asksBeforeUnsafePaste.rawValue, label: "Paste") {
-                FlagSettingControl(title: "Ask before a paste that could run a command")
-            },
-            SettingRow(name: SettingName.newSessionCommands.rawValue, label: "New sessions", note: "The commands of the new-session button. An empty command starts the login shell.") {
-                EntryListSettingControl()
-            },
+        SettingsPane(title: "Terminal", symbolName: "terminal", sections: [
+            SettingsSection(title: "Keyboard", rows: [
+                SettingRow(name: SettingName.optionAsAlt.rawValue, label: "Option key", note: "An Option key that is not Alt types the special characters of the keyboard.") {
+                    ChoiceSettingControl([("left", "The Left Option Key Is Alt"), ("both", "Both Option Keys Are Alt"), ("neither", "No Option Key Is Alt")])
+                },
+            ]),
+            SettingsSection(title: "Scrollback", note: "The lines that each terminal keeps above its screen.", rows: [
+                SettingRow(name: SettingName.scrollbackLimit.rawValue, label: "Keep") { NumberSettingControl(0...1_000_000, unit: "lines") },
+            ]),
+            SettingsSection(title: "Paste", rows: [
+                SettingRow(name: SettingName.asksBeforeUnsafePaste.rawValue, label: "") {
+                    FlagSettingControl(title: "Ask before a paste that could run a command")
+                },
+            ]),
+            SettingsSection(
+                title: "New Terminals", note: "The plus button of the second pane offers a terminal with each command. An empty command starts your login shell.",
+                rows: [SettingRow(name: SettingName.newSessionCommands.rawValue, label: "Commands") { EntryListSettingControl() }]),
         ])
     }
 
