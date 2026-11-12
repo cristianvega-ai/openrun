@@ -33,7 +33,8 @@ import Testing
     }
 
     @Test func aMessageThatComesInATurnWaitsAndOneProcessTakesBothTurns() async throws {
-        let settings = FakeAgentSettings.make(turns: ["plain-turn", "edit-turn"], environment: ["FAKE_AGENT_PAUSE": "2"])
+        // The agent waits 25 milliseconds before each line, so the first turn still runs when the second message comes.
+        let settings = FakeAgentSettings.make(turns: ["plain-turn", "edit-turn"], environment: ["FAKE_AGENT_PAUSE": "25"])
         let runner = ThreadRunner(record: FakeAgentSettings.record()) { settings }
         try await runner.send(text: "Reply with the single word ok.")
         let process = await runner.program?.processIdentifier
