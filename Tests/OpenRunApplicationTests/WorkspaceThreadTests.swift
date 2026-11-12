@@ -62,6 +62,27 @@ import Testing
         #expect(pane.chat.facts.permissionMode?.identifier == "plan")
     }
 
+    @Test func openInTerminalShowsTheTerminalInTheRowOfTheThreadAndBackToChatReturns() async throws {
+        let test = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        workspace.newThread()
+        #expect(await waitUntil { workspace.shownThread.flatMap { workspace.threadPanes.existing($0) }?.isReplayComplete == true })
+        let thread = try #require(workspace.shownThread), pane = try #require(workspace.threadPanes.existing(thread))
+        #expect(workspace.window.shownContent?.topRowItems.count == 2)
+
+        pane.chatViewControllerOpenInTerminal(pane.chat)
+        #expect(await waitUntil { workspace.shownSession != nil })
+        let terminal = try #require(workspace.shownSession)
+        // The terminal shows in the row of the thread, and it has no row of its own.
+        #expect(workspace.connection.overview.thread(thread)?.terminalSession == terminal && test.shownRows == [thread])
+        #expect(pane.chat.facts.condition == .openInTerminal && workspace.layout.selectedRow == thread)
+        let back = try #require(workspace.window.shownContent?.topRowItems.first as? BackToChatButton)
+        workspace.backToChat(back)
+        #expect(await waitUntil { workspace.shownThread == thread && pane.chat.facts.condition == .ready })
+        #expect(workspace.connection.overview.sessions.isEmpty && test.shownRows == [thread])
+    }
+
     @Test func aCloseOfAThreadAsksFirstAndThenRemovesItsRow() async throws {
         let test = try await start()
         defer { test.stop() }

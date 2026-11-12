@@ -63,7 +63,13 @@ extension ThreadPaneController: ChatViewControllerDelegate {
     }
 
     // These parts of the chat arrive with later work on the threads.
-    func chatViewControllerOpenInTerminal(_ controller: ChatViewController) {}
-    func chatViewControllerReturnFromTerminal(_ controller: ChatViewController) {}
+    func chatViewControllerOpenInTerminal(_ controller: ChatViewController) {
+        openInTerminal?()
+    }
+
+    func chatViewControllerReturnFromTerminal(_ controller: ChatViewController) {
+        returnFromTerminal?()
+    }
+
     func chatViewController(_ controller: ChatViewController, startNewThreadOnAccount identifier: String) {}
 }

@@ -26,6 +26,9 @@ final class ThreadPaneController: NSObject {
     let socket: SocketLocation
     /// The calls that wait for the socket, in order, off the main thread.
     let work = DispatchQueue(label: "ai.cristianvega.openrun.thread-pane")
+    /// Asks the host for the conversation in a terminal, and for the way back.
+    var openInTerminal: (() -> Void)?
+    var returnFromTerminal: (() -> Void)?
     /// Tells the host why a request or the connection failed.
     var failed: ((String) -> Void)?
     /// Attaches to the thread. Tests give their own.
@@ -44,7 +47,7 @@ final class ThreadPaneController: NSObject {
             threadIdentifier: summary.identifierText, title: ThreadRowFacts.title(of: summary), agentName: ThreadRowFacts.agentName(summary.agent),
             accountName: summary.accountName, model: model(summary.model), models: (summary.models ?? []).map(model),
             permissionMode: mode(summary.permissionMode), permissionModes: (summary.permissionModes ?? []).map(mode),
-            folder: FolderText.shown(summary.folder, home: home))
+            folder: FolderText.shown(summary.folder, home: home), condition: summary.terminalSession == nil ? .ready : .openInTerminal)
     }
 
     private static func model(_ identifier: String) -> ChatChoice {

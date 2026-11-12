@@ -14,9 +14,12 @@ extension Workspace {
         let (pane, isNew) = threadPanes.pane(for: thread) { ThreadPaneController(summary: summary, socket: socket, home: home) }
         if isNew {
             pane.failed = { [weak self] in self?.showFailure("The thread could not do that", $0) }
+            pane.openInTerminal = { [weak self] in self?.openThreadInTerminal(thread) }
+            pane.returnFromTerminal = { [weak self] in self?.returnThreadFromTerminal(thread) }
             pane.attach()
         }
-        window.showContent(PaneContent(viewController: pane.chat, title: pane.chat.facts.title, minimumSize: pane.chat.minimumSize))
+        window.showContent(PaneContent(
+            viewController: pane.chat, title: pane.chat.facts.title, minimumSize: pane.chat.minimumSize, topRowItems: pane.chat.topRowItems))
     }
 
     /// A batch of changes came. The chat of a thread that closed goes
