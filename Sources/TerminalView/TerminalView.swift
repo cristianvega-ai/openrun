@@ -23,6 +23,9 @@ public final class TerminalView: NSView {
     let linkHover: LinkHover
     let scroll = ScrollInput()
     let scrollBar: OverlayScrollBar
+    /// The bar and the search of Find, while Find shows.
+    var findBar: TerminalFindBar?
+    var search: TerminalSearch?
     /// The time and the timers of the input. A test gives a clock that it moves.
     let clock: any InputClock
     /// The pasteboard for copy and paste. A test gives another one.
@@ -67,7 +70,7 @@ public final class TerminalView: NSView {
     private var isParseScheduled = false
     private var parseGeneration = 0
     private var afterOutput: [@MainActor @Sendable () -> Void] = []
-    private let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
+    let logger = Logger(subsystem: "ai.cristianvega.openrun", category: "TerminalView")
 
     /// - Parameter initialGrid: The size of the grid until the view has a size of its own.
     /// - Throws: `RenderingError` when the Mac has no Metal device, or
