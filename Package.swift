@@ -155,6 +155,7 @@ let package = Package(
         .testTarget(name: "MainWindowTests", dependencies: ["MainWindow", "PaneAppearance", "ProjectsList", "SessionsList", "SessionPane", "SessionProcessHarness", "SessionProtocol"]),
         // The settings window: one pane for each group of settings, and a control for each setting.
         .target(name: "SettingsWindow", dependencies: ["Settings"]),
+        .testTarget(name: "SettingsWindowTests", dependencies: ["SettingsWindow", "Settings"]),
         // The notifications of macOS for sessions that need the user, behind a type that tests replace.
         .target(name: "AlertNotifications"),
         .testTarget(name: "AlertNotificationsTests", dependencies: ["AlertNotifications"]),
