@@ -17,6 +17,7 @@ extension Workspace {
             layout.follow(
                 sessions: overview.sessions.map(\.identifier).filter { terminals[$0] == nil },
                 threads: connection.hasThreadList ? overview.threads.map(\.identifier) : nil)
+            forgetClosedBrowsers()
         }
         threadsChanged(from: previous)
         if overview.settings != previous.settings { settingsChanged() }

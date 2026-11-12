@@ -1,4 +1,5 @@
 import AppKit
+import BrowserPane
 import MainWindow
 import PaneSplits
 import SessionConnection
@@ -35,6 +36,11 @@ extension Workspace {
         var new: [UUID] = []
         var minimumSizes: [UUID: CGSize] = [:], focusViews: [UUID: NSView] = [:]
         let view = SplitPaneView(pane: pane) { leaf in
+            if let browser = layout.browser(leaf) {
+                let page = browserPane(of: browser)
+                (minimumSizes[leaf], focusViews[leaf]) = (BrowserPaneController.minimumSize, page.focusView)
+                return page.view
+            }
             if let thread = connection.overview.thread(leaf) {
                 let chat = chatPane(of: thread).chat
                 (minimumSizes[leaf], focusViews[leaf]) = (chat.minimumSize, chat.view)
@@ -103,7 +109,7 @@ extension Workspace {
         let next = pane.leaves[(index + step + pane.leaves.count) % pane.leaves.count]
         lastFocusedLeaf = next
         let view = connection.overview.thread(next) != nil ? threadPanes.existing(next)?.chat.view : panes.existing(next)?.content.focusView
-        if let view { window.window.makeFirstResponder(view) }
+        if let view = browserPanes[next]?.focusView ?? view { window.window.makeFirstResponder(view) }
     }
 
     @objc func selectNextPane(_ sender: Any?) { focusPane(by: 1) }

@@ -1,5 +1,6 @@
 import AlertNotifications
 import AppKit
+import BrowserPane
 import DataStorage
 import ListContent
 import MainWindow
@@ -28,6 +29,10 @@ final class Workspace: NSObject {
     let layoutStore: WindowLayoutStore
     let panes: SessionPanes
     let threadPanes = ThreadPanes()
+    /// The web pages of the rows, from the first time that a row shows one.
+    var browserPanes: [UUID: BrowserPaneController] = [:]
+    /// Whether the web pages keep their data, such as a login. A test keeps none.
+    var keepsWebsiteData = true
     /// The view of the row with splits that the third pane shows.
     var splitView: SplitPaneView?
     /// The pane of a row with splits that had the keyboard focus last,

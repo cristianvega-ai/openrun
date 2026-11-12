@@ -180,9 +180,9 @@ let package = Package(
         .target(name: "OpenRunApplication", dependencies: [
             "SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "MainWindow", "ProjectsList", "SessionsList",
             "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "TerminalView", "PaneAppearance",
-            "AlertNotifications", "ChatView", "AgentConversation", "SettingsWindow", "PaneSplits", "ToolInstallation",
+            "AlertNotifications", "ChatView", "AgentConversation", "SettingsWindow", "PaneSplits", "ToolInstallation", "BrowserPane",
         ]),
-        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "ToolInstallation", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "AlertNotifications", "ChatView", "AgentConversation", "SessionConnection", "fake-agent"]),
+        .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "ToolInstallation", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "AlertNotifications", "ChatView", "AgentConversation", "SessionConnection", "BrowserPane", "fake-agent"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),
         .testTarget(
             name: "PseudoTerminalTests",

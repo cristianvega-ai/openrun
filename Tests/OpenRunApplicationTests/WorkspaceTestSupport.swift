@@ -43,6 +43,7 @@ struct TestWorkspace {
         workspace.activateApplication = {}
         workspace.window.window.setContentSize(NSSize(width: 1_100, height: 700))
         workspace.home = socket.folder
+        workspace.keepsWebsiteData = false
         workspace.sessionEnvironment = ["HOME": socket.folder, "ZDOTDIR": socket.folder, "PATH": "/usr/bin:/bin", "PS1": "test> "]
         return workspace
     }
