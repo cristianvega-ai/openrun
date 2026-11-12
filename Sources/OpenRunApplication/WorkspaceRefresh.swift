@@ -13,7 +13,10 @@ extension Workspace {
         // Before the first list, no session is known, and the kept rows stay.
         if connection.hasSessionList {
             // Before the first list of the threads, the rows of the threads stay.
-            layout.follow(sessions: overview.sessions.map(\.identifier), threads: connection.hasThreadList ? overview.threads.map(\.identifier) : nil)
+            let terminals = threadTerminals
+            layout.follow(
+                sessions: overview.sessions.map(\.identifier).filter { terminals[$0] == nil },
+                threads: connection.hasThreadList ? overview.threads.map(\.identifier) : nil)
         }
         threadsChanged(from: previous)
         if overview.settings != previous.settings { settingsChanged() }

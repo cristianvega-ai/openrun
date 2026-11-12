@@ -79,6 +79,9 @@ public final class MainWindowController: NSObject {
     /// starts a new session with the grid that fits it.
     public var contentAreaSize: CGSize { contentPane.contentArea.frame.size }
 
+    /// What the third pane shows now.
+    public var shownContent: PaneContent? { contentPane.content }
+
     public func updateContentTitle(_ title: String) {
         contentPane.updateTitle(title)
     }

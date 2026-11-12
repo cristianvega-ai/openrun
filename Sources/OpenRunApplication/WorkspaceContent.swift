@@ -9,7 +9,11 @@ extension Workspace {
     /// What the third pane must show now.
     var wantedContent: ShownContent {
         let row = layout.selectedRow.flatMap { layout.row($0) }
-        if let thread = row?.pane.leadingThread, connection.overview.thread(thread) != nil { return .thread(thread) }
+        if let thread = row?.pane.leadingThread, let summary = connection.overview.thread(thread) {
+            // Open in Terminal: the row of the thread shows the terminal of its conversation.
+            if let terminal = summary.terminalSession, connection.overview.session(terminal) != nil { return .session(terminal) }
+            return .thread(thread)
+        }
         guard let session = row?.pane.sessions.first, !exitedSessions.contains(session) else {
             if case .disconnected(let reason) = connection.status { return .notice(.noSessionProcess(reason: reason)) }
             return .nothing
@@ -40,7 +44,9 @@ extension Workspace {
             showChat(of: thread)
         case .session(let session):
             let (pane, isNew) = panes.pane(for: session)
-            window.showContent(PaneContent(pane.content))
+            var content = PaneContent(pane.content)
+            if let thread = threadTerminals[session] { content.topRowItems = [backToChatButton(for: thread)] }
+            window.showContent(content)
             if isNew {
                 configure(pane)
                 // The pane estimates its grid from its size, so the window lays it out first.
