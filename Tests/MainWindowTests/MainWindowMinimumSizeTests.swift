@@ -100,6 +100,8 @@ import Testing
         controller.reducesMotion = { reducesMotion }
         controller.toggleSessionsList(nil)
         await turns(seconds: 1.5)
+        // A busy Mac can take more time for the animation. The pane holds its width until the end.
+        await turns(seconds: 10) { !controller.contentPane.isHoldingWidth }
         let width = controller.window.contentRect(forFrameRect: controller.window.frame).width
         #expect(width == controller.window.contentMinSize.width && controller.contentPane.view.frame.width == 500, "\(width)")
     }
