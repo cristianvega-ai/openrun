@@ -1,5 +1,6 @@
 import AgentConversation
 import AppKit
+import PseudoTerminal
 @testable import ChatView
 import SessionConnection
 import SessionProcessHarness
@@ -126,6 +127,32 @@ import Testing
         workspace.backToChat(back)
         #expect(await waitUntil { workspace.shownThread == thread && pane.chat.facts.condition == .ready })
         #expect(workspace.connection.overview.sessions.isEmpty && test.shownRows == [thread])
+    }
+
+    @Test func inARowWithSplitsTheTerminalOfAConversationTakesThePlaceOfItsChat() async throws {
+        let test = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        workspace.loginShell = LoginShell(path: "/bin/sh")
+        workspace.newThread()
+        #expect(await waitUntil { workspace.shownThread.flatMap { workspace.threadPanes.existing($0) }?.isReplayComplete == true })
+        let thread = try #require(workspace.shownThread), chat = try #require(workspace.threadPanes.existing(thread)).chat
+        workspace.splitRight(nil)
+        #expect(await waitUntil { workspace.splitView != nil && workspace.focusedLeaf != thread })
+        workspace.selectNextPane(nil)
+        func item(_ action: Selector) -> NSMenuItem { NSMenuItem(title: "", action: action, keyEquivalent: "") }
+        let (open, back) = (item(#selector(Workspace.openFocusedThreadInTerminal(_:))), item(#selector(Workspace.returnFocusedThreadToChat(_:))))
+        #expect(workspace.focusedLeaf == thread && workspace.validateMenuItem(open) && !workspace.validateMenuItem(back))
+        // A row with splits has no top row for the button, so the menu opens the terminal.
+        workspace.openFocusedThreadInTerminal(nil)
+        #expect(await waitUntil {
+            guard let terminal = workspace.connection.overview.thread(thread)?.terminalSession else { return false }
+            return workspace.splitView?.view(of: thread) === workspace.panes.existing(terminal)?.content.view
+        })
+        #expect(test.shownRows == [thread] && workspace.focusedLeaf == thread && workspace.validateMenuItem(back) && !workspace.validateMenuItem(open))
+        workspace.returnFocusedThreadToChat(nil)
+        #expect(await waitUntil { workspace.connection.overview.thread(thread)?.terminalSession == nil && workspace.splitView?.view(of: thread) === chat.view })
+        #expect(workspace.connection.overview.sessions.count == 1 && workspace.validateMenuItem(open))
     }
 
     @Test func aCloseOfAThreadAsksFirstAndThenRemovesItsRow() async throws {

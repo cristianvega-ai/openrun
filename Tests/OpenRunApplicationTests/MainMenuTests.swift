@@ -29,8 +29,8 @@ import Testing
         #expect(file.map(\.title) == ["New Session", "New Thread", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Restart Session Process…", "Register Session Process Again"])
         #expect(file.map(key) == ["n", "t", "", "", "w", "shift-w", "", "", "", ""])
         #expect(file[0].target === workspace && file[1].target === workspace && file[4].target === workspace && file[5].target == nil && file[9].target === application)
-        #expect(session.map(\.title) == ["Rename…", "Clear", "", "Split Right", "Split Down", "Split with Browser", "Next Pane", "Previous Pane", "", "Next Session", "Previous Session"])
-        #expect(session.map(key) == ["", "k", "", "d", "shift-d", "b", "]", "[", "", "shift-]", "shift-["])
+        #expect(session.map(\.title) == ["Rename…", "Clear", "Open in Terminal", "Back to Chat", "", "Split Right", "Split Down", "Split with Browser", "Next Pane", "Previous Pane", "", "Next Session", "Previous Session"])
+        #expect(session.map(key) == ["", "k", "t", "shift-t", "", "d", "shift-d", "b", "]", "[", "", "shift-]", "shift-["])
         #expect(try items("View").map(\.title) == ["Hide Projects", "Hide Sessions", "Move Focus to Next Pane", "Move Focus to Previous Pane", "", "Make Text Bigger", "Make Text Smaller", "Reset Text Size"])
         #expect(try items("Edit").map(\.title) == ["Undo", "Redo", "", "Cut", "Copy", "Paste", "Select All", "", "Find"])
         #expect(try items("Edit").prefix(7).map(key) == ["z", "shift-z", "", "x", "c", "v", "a"])
@@ -43,14 +43,14 @@ import Testing
         #expect(!application.validateMenuItem(file[9]))
 
         // Each session command is on only when it can act.
-        #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[1]) && !workspace.validateMenuItem(file[4]) && !workspace.validateMenuItem(session[9]))
+        #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[1]) && !workspace.validateMenuItem(file[4]) && !workspace.validateMenuItem(session[11]))
         workspace.showsSessionAtStart = false
         application.applicationDidFinishLaunching(launch)
         let shell = try test.createShell()
         #expect(await waitUntil { test.shownRows == [shell] })
         #expect(workspace.validateMenuItem(file[0]) && workspace.validateMenuItem(file[1]) && !workspace.validateMenuItem(file[4]) && !workspace.validateMenuItem(session[0]))
         workspace.select(row: shell)
-        #expect(workspace.validateMenuItem(file[4]) && workspace.validateMenuItem(session[0]) && workspace.validateMenuItem(session[9]))
+        #expect(workspace.validateMenuItem(file[4]) && workspace.validateMenuItem(session[0]) && workspace.validateMenuItem(session[11]))
         let commands = try #require(file[2].submenu)
         workspace.menuNeedsUpdate(commands)
         #expect(commands.items.map(\.title) == ["Claude Code", "Codex"] && commands.items.allSatisfy { $0.target === workspace })

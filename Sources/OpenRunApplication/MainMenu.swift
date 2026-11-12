@@ -78,6 +78,9 @@ enum MainMenu {
         let session = submenu("Session", in: menu)
         session.addItem(item("Rename…", #selector(Workspace.renameSession(_:)), target: workspace))
         session.addItem(item("Clear", #selector(Workspace.clearSession(_:)), "k", target: workspace))
+        // The two buttons of the top row of a chat, also for a chat in a row with splits.
+        session.addItem(item("Open in Terminal", #selector(Workspace.openFocusedThreadInTerminal(_:)), "t", [.command, .control], target: workspace))
+        session.addItem(item("Back to Chat", #selector(Workspace.returnFocusedThreadToChat(_:)), "t", [.command, .control, .shift], target: workspace))
         session.addItem(.separator())
         // A split starts a login shell beside or under the pane with the focus.
         session.addItem(item("Split Right", #selector(Workspace.splitRight(_:)), "d", target: workspace))

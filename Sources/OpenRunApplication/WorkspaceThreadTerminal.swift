@@ -25,6 +25,25 @@ extension Workspace {
         perform("The conversation could not go back to the chat") { try $0.returnThreadFromTerminal(thread) }
     }
 
+    /// The thread of the pane with the keyboard focus, and whether its
+    /// conversation is open in a terminal now.
+    var focusedThread: (thread: UUID, isInTerminal: Bool)? {
+        guard let leaf = focusedLeaf else { return nil }
+        if let thread = connection.overview.thread(leaf) { return (leaf, thread.terminalSession != nil) }
+        // A row with one thread shows the terminal of its conversation as a session.
+        return threadTerminals[leaf].map { ($0, true) }
+    }
+
+    /// Session > Open in Terminal and Back to Chat, for the thread with
+    /// the focus. A row with splits has no top row for the two buttons.
+    @objc func openFocusedThreadInTerminal(_ sender: Any?) {
+        if let focused = focusedThread, !focused.isInTerminal { openThreadInTerminal(focused.thread) }
+    }
+
+    @objc func returnFocusedThreadToChat(_ sender: Any?) {
+        if let focused = focusedThread, focused.isInTerminal { returnThreadFromTerminal(focused.thread) }
+    }
+
     /// The button of the top row that ends the terminal session of a thread.
     func backToChatButton(for thread: UUID) -> NSButton {
         let button = BackToChatButton(title: "Back to Chat", target: self, action: #selector(backToChat(_:)))

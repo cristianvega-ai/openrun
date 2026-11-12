@@ -42,6 +42,10 @@ extension Workspace {
             if shownThread == thread.identifier { shownIsStale = true }
         }
         updateThreadPanes()
+        // In a row with splits, the terminal of a conversation takes the place of its chat, and the chat comes back after it.
+        if case .split(_, let pane) = shown, pane.threads.contains(where: { overview.thread($0)?.terminalSession != previous.thread($0)?.terminalSession }) {
+            shownIsStale = true
+        }
         // An agent that starts to wait for an answer of the user gives a
         // notification, unless the user looks at its chat.
         for thread in overview.threads where thread.state != previous.thread(thread.identifier)?.state {

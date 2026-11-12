@@ -69,7 +69,9 @@ extension Workspace {
     private func deactivateShownPanes() {
         switch shown {
         case .session(let session): panes.existing(session)?.deactivate()
-        case .split(_, let pane): for session in pane.sessions { panes.existing(session)?.deactivate() }
+        case .split(_, let pane):
+            let terminals = pane.threads.compactMap { connection.overview.thread($0)?.terminalSession }
+            for session in pane.sessions + terminals { panes.existing(session)?.deactivate() }
         case .thread, .nothing, .notice: break
         }
     }

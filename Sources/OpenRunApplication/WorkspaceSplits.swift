@@ -41,13 +41,16 @@ extension Workspace {
                 (minimumSizes[leaf], focusViews[leaf]) = (BrowserPaneController.minimumSize, page.focusView)
                 return page.view
             }
-            if let thread = connection.overview.thread(leaf) {
+            let thread = connection.overview.thread(leaf)
+            // Open in Terminal: the terminal of the conversation takes the place of the chat.
+            let terminal = thread?.terminalSession.flatMap { connection.overview.session($0)?.identifier }
+            if let thread, terminal == nil {
                 let chat = chatPane(of: thread).chat
                 (minimumSizes[leaf], focusViews[leaf]) = (chat.minimumSize, chat.view)
                 return chat.view
             }
-            let (session, isNew) = panes.pane(for: leaf)
-            if isNew { new.append(leaf) }
+            let (session, isNew) = panes.pane(for: terminal ?? leaf)
+            if isNew { new.append(terminal ?? leaf) }
             (minimumSizes[leaf], focusViews[leaf]) = (session.minimumSize, session.content.focusView)
             return session.content.view
         }
