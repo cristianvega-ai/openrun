@@ -34,6 +34,12 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
     case claudeCodeProgram = "claude-code-program"
     /// The most agent processes that run at one time. Protected.
     case agentProcessLimit = "agent-process-limit"
+    /// The other accounts of Claude Code, after the one of the login
+    /// shell. Protected, because the folder of an account holds the
+    /// settings of the agent, and they can widen what it may do.
+    case claudeCodeAccounts = "claude-code-accounts"
+    /// The other accounts of Codex. Protected for the same reason.
+    case codexAccounts = "codex-accounts"
 
     /// The permission modes of Claude Code that OpenRun uses, from the
     /// strictest to the widest.
@@ -45,6 +51,7 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
     public var isProtected: Bool {
         switch self {
         case .sessionLimit, .asksBeforeUnsafePaste, .claudeCodePermissionMode, .claudeCodeProgram, .agentProcessLimit: true
+        case .claudeCodeAccounts, .codexAccounts: true
         default: false
         }
     }
@@ -67,6 +74,7 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
         case .optionAsAlt: .choice(OptionKeyBehavior.allCases.map(\.rawValue))
         case .scrollbackLimit: .wholeNumber(0...1_000_000)
         case .newSessionCommands: .commands
+        case .claudeCodeAccounts, .codexAccounts: .accounts
         case .linkDestination: .choice(LinkDestination.allCases.map(\.rawValue))
         case .showsNotifications, .asksBeforeUnsafePaste: .flag
         case .sessionLimit: .wholeNumber(1...1000)
@@ -88,6 +96,7 @@ public enum SettingName: String, CaseIterable, Hashable, Sendable {
         case .claudeCodePermissionMode: .choice("default")
         case .claudeCodeProgram: .text("claude")
         case .agentProcessLimit: .wholeNumber(8)
+        case .claudeCodeAccounts, .codexAccounts: .accounts([])
         }
     }
 }

@@ -27,6 +27,8 @@ public struct SettingValues: Hashable, Sendable {
     public var claudeCodePermissionMode: String { text(of: .claudeCodePermissionMode) }
     public var claudeCodeProgram: String { text(of: .claudeCodeProgram) }
     public var agentProcessLimit: Int { wholeNumber(.agentProcessLimit) }
+    public var claudeCodeAccounts: [AgentAccount] { accounts(.claudeCodeAccounts) }
+    public var codexAccounts: [AgentAccount] { accounts(.codexAccounts) }
 
     /// The text form of a setting, as `openrun settings get` prints it.
     public func text(of name: SettingName) -> String {
@@ -52,6 +54,11 @@ public struct SettingValues: Hashable, Sendable {
     /// Puts a value that was checked against the kind of its name.
     mutating func set(_ name: SettingName, checked value: SettingValue) {
         values[name] = value
+    }
+
+    private func accounts(_ name: SettingName) -> [AgentAccount] {
+        if case .accounts(let accounts) = values[name] { return accounts }
+        return []
     }
 
     private func wholeNumber(_ name: SettingName) -> Int {

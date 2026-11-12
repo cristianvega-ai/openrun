@@ -69,6 +69,13 @@ struct SettingsPane {
             SettingRow(name: SettingName.agentProcessLimit.rawValue, label: "Agents", note: "The most agents that work at one time. Each one uses about 400 MB of memory.") {
                 NumberSettingControl(1...32)
             },
+            SettingRow(
+                name: SettingName.claudeCodeAccounts.rawValue, label: "Claude Code accounts",
+                note: "The other logins of Claude Code, each with the folder of its settings. The login of your shell needs no entry."
+            ) { EntryListSettingControl(.settingsFolder) },
+            SettingRow(name: SettingName.codexAccounts.rawValue, label: "Codex accounts", note: "The other logins of Codex, each with its Codex home folder.") {
+                EntryListSettingControl(.settingsFolder)
+            },
         ])
     }
 

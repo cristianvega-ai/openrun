@@ -17,9 +17,12 @@ extension SessionProcessIntegration {
                     "theme", "font-name", "font-size", "option-as-alt", "scrollback-limit", "new-session-commands",
                     "open-links-in", "notifications", "session-limit", "ask-before-unsafe-paste",
                     "claude-code-model", "claude-code-permission-mode", "claude-code-program", "agent-process-limit",
+                    "claude-code-accounts", "codex-accounts",
                 ])
-                #expect(settings.filter(\.isProtected).map(\.name)
-                    == ["session-limit", "ask-before-unsafe-paste", "claude-code-permission-mode", "claude-code-program", "agent-process-limit"])
+                #expect(settings.filter(\.isProtected).map(\.name) == [
+                    "session-limit", "ask-before-unsafe-paste", "claude-code-permission-mode", "claude-code-program", "agent-process-limit",
+                    "claude-code-accounts", "codex-accounts",
+                ])
                 #expect(settings.first { $0.name == "session-limit" }?.text == "100")
                 // Nothing was written: a process that changed nothing leaves no file.
                 #expect(!FileManager.default.fileExists(atPath: process.directory.appendingPathComponent("settings.json").path))

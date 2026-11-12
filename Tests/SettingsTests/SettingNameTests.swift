@@ -9,9 +9,12 @@ import Testing
             "theme", "font-name", "font-size", "option-as-alt", "scrollback-limit", "new-session-commands",
             "open-links-in", "notifications", "session-limit", "ask-before-unsafe-paste",
             "claude-code-model", "claude-code-permission-mode", "claude-code-program", "agent-process-limit",
+            "claude-code-accounts", "codex-accounts",
         ])
-        #expect(SettingName.allCases.filter { $0.isProtected }
-            == [.sessionLimit, .asksBeforeUnsafePaste, .claudeCodePermissionMode, .claudeCodeProgram, .agentProcessLimit])
+        #expect(SettingName.allCases.filter { $0.isProtected } == [
+            .sessionLimit, .asksBeforeUnsafePaste, .claudeCodePermissionMode, .claudeCodeProgram, .agentProcessLimit,
+            .claudeCodeAccounts, .codexAccounts,
+        ])
     }
 
     @Test(arguments: SettingName.allCases)

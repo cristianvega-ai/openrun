@@ -9,6 +9,8 @@ import Testing
         .linkDestination: "browser-split", .showsNotifications: "off", .sessionLimit: "1", .asksBeforeUnsafePaste: "off",
         .claudeCodeModel: "claude-sonnet-5-5", .claudeCodePermissionMode: "acceptEdits",
         .claudeCodeProgram: "/opt/homebrew/bin/claude", .agentProcessLimit: "32",
+        .claudeCodeAccounts: #"[{"folder":"/Users/me/.claude-work","name":"Work"}]"#,
+        .codexAccounts: #"[{"folder":"/Users/me/.codex-work","name":"Work"}]"#,
     ]
 
     @Test func everySettingRoundTripsThroughText() throws {
@@ -31,6 +33,8 @@ import Testing
         #expect(!values.asksBeforeUnsafePaste)
         #expect(values.claudeCodeModel == "claude-sonnet-5-5" && values.claudeCodePermissionMode == "acceptEdits")
         #expect(values.claudeCodeProgram == "/opt/homebrew/bin/claude" && values.agentProcessLimit == 32)
+        #expect(values.claudeCodeAccounts == [AgentAccount(name: "Work", settingsFolder: "/Users/me/.claude-work")])
+        #expect(values.codexAccounts.map(\.settingsFolder) == ["/Users/me/.codex-work"])
         // The case of a choice does not count, and the value keeps its own spelling.
         try values.change(.claudeCodePermissionMode, to: " DONTASK ", requestedBy: .application)
         #expect(values.claudeCodePermissionMode == "dontAsk")
@@ -50,6 +54,7 @@ import Testing
         #expect(values.asksBeforeUnsafePaste)
         #expect(values.claudeCodeModel == "opus" && values.claudeCodePermissionMode == "default")
         #expect(values.claudeCodeProgram == "claude" && values.agentProcessLimit == 8)
+        #expect(values.claudeCodeAccounts.isEmpty && values.codexAccounts.isEmpty)
     }
 
     /// The rule of 2026-10-27, in its one place: only the app changes a
