@@ -13,8 +13,16 @@ public struct ServerCapabilities: Codable, Equatable, Sendable {
     /// Whether the session process keeps agent threads and takes the
     /// thread requests. An older process answers them with a failure.
     public let threads: Bool
+    /// The identifier of the build of the session process. The app
+    /// compares it with its own build after an update. An older process
+    /// sends none.
+    public let build: String?
 
-    public init(orderedResizeConfirmation: Bool = false, sessionChanges: Bool = false, projectsAndSettings: Bool = false, threads: Bool = false) {
+    public init(
+        orderedResizeConfirmation: Bool = false, sessionChanges: Bool = false, projectsAndSettings: Bool = false, threads: Bool = false,
+        build: String? = nil
+    ) {
+        self.build = build
         self.orderedResizeConfirmation = orderedResizeConfirmation
         self.sessionChanges = sessionChanges
         self.projectsAndSettings = projectsAndSettings
@@ -26,6 +34,7 @@ public struct ServerCapabilities: Codable, Equatable, Sendable {
         case sessionChanges
         case projectsAndSettings
         case threads
+        case build
     }
 
     public init(from decoder: any Decoder) throws {
@@ -34,5 +43,6 @@ public struct ServerCapabilities: Codable, Equatable, Sendable {
         sessionChanges = try values.decodeIfPresent(Bool.self, forKey: .sessionChanges) ?? false
         projectsAndSettings = try values.decodeIfPresent(Bool.self, forKey: .projectsAndSettings) ?? false
         threads = try values.decodeIfPresent(Bool.self, forKey: .threads) ?? false
+        build = try values.decodeIfPresent(String.self, forKey: .build)
     }
 }

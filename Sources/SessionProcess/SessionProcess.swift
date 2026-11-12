@@ -121,6 +121,10 @@ public struct SessionProcess: Sendable {
                 guard arguments.count == 1 else { return usageError("--help takes no other arguments.") }
                 print(usage)
                 return 0
+            case "--build-identifier":
+                guard arguments.count == 1 else { return usageError("--build-identifier takes no other arguments.") }
+                print(BuildIdentifier.current ?? "")
+                return 0
             default:
                 return usageError("Unknown argument \(argument).")
             }
@@ -166,6 +170,7 @@ public struct SessionProcess: Sendable {
         ends after 30 seconds with no session and no client.
         Only a program that meets REQUIREMENT, in the code requirement language, receives
         and answers approval questions. The default is OpenRun.app of the team of this program.
+        With --build-identifier alone, the program prints the identifier of its build and ends.
         """
 
     private static func usageError(_ message: String) -> Int32 {

@@ -86,7 +86,9 @@ final class ClientConnection: Sendable {
                 self?.readingStopped()
             }
             do {
-                try connection.greetClient(within: ConnectionLimits.helloTimeLimit, capabilities: ServerCapabilities(orderedResizeConfirmation: true, sessionChanges: true, projectsAndSettings: true, threads: true))
+                let capabilities = ServerCapabilities(
+                    orderedResizeConfirmation: true, sessionChanges: true, projectsAndSettings: true, threads: true, build: BuildIdentifier.current)
+                try connection.greetClient(within: ConnectionLimits.helloTimeLimit, capabilities: capabilities)
                 while true {
                     var byteCount = 0
                     var room = ReadAhead.Room.shared
