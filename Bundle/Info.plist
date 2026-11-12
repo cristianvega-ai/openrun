@@ -8,6 +8,8 @@
 	<string>OpenRun</string>
 	<key>CFBundleName</key>
 	<string>OpenRun</string>
+	<key>CFBundleIconFile</key>
+	<string>OpenRun</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleInfoDictionaryVersion</key>

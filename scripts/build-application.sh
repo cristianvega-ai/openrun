@@ -45,8 +45,10 @@ binaries="$(swift build --package-path "$repository_root" --configuration releas
 
 # The bundle is assembled and signed in a staging folder.
 rm -rf "$output_folder/.staging"
-mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Helpers" "$staging/Contents/Library/LaunchAgents"
+mkdir -p "$staging/Contents/MacOS" "$staging/Contents/Helpers" "$staging/Contents/Library/LaunchAgents" "$staging/Contents/Resources"
 cp "$repository_root/Bundle/Info.plist" "$staging/Contents/Info.plist"
+# The icon comes from scripts/make-application-icon.swift.
+cp "$repository_root/Bundle/OpenRun.icns" "$staging/Contents/Resources/OpenRun.icns"
 cp "$repository_root/Bundle/$agent" "$staging/Contents/Library/LaunchAgents/$agent"
 plutil -lint "$staging/Contents/Info.plist" "$staging/Contents/Library/LaunchAgents/$agent"
 printf '%s\n' "$PROGRAMS" | while read -r product place identifier; do

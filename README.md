@@ -33,7 +33,7 @@ The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-
    scripts/build-application.sh /Applications
    ```
 
-   The bundle holds the app as `Contents/MacOS/OpenRun`, the session process as `Contents/MacOS/openrun-session`, the tool as `Contents/Helpers/openrun`, and the property list of the launch agent in `Contents/Library/LaunchAgents`.
+   The bundle holds the app as `Contents/MacOS/OpenRun`, the session process as `Contents/MacOS/openrun-session`, the tool as `Contents/Helpers/openrun`, the property list of the launch agent in `Contents/Library/LaunchAgents`, and the icon in `Contents/Resources`. To draw the icon again after a change of its script, run `swift scripts/make-application-icon.swift Bundle/OpenRun.icns`.
    The script signs with the one Apple Development identity of the keychain, and stops when there is none or more than one. Set `OPENRUN_SIGNING_IDENTITY` to the identity to use when the keychain has more than one. Set it to `-` for an ad hoc test build in a scratch folder. With an ad hoc signature, launchd ties the launch agent to the code hash of `openrun-session`, so each build that changes it needs a new registration.
    The script replaces each file of an existing bundle by a rename, so a session process that runs keeps its own file.
 
