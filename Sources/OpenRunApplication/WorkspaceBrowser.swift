@@ -24,6 +24,26 @@ extension Workspace {
         layoutStore.save(layout)
     }
 
+    /// Opens an empty web page beside the pane with the focus. Its
+    /// address field takes the focus.
+    @objc func splitWithBrowser(_ sender: Any?) {
+        guard let leaf = focusedLeaf else { return }
+        let browser = LayoutBrowser(address: BrowserAddress.blank)
+        guard layout.addBrowser(browser, beside: leaf, direction: .sideBySide) else { return }
+        (leafToFocus, lastFocusedLeaf) = (browser.identifier, browser.identifier)
+        layoutStore.save(layout)
+        refresh()
+    }
+
+    /// The user closed a web page. Its room goes to the other half of
+    /// its split.
+    func closeBrowser(_ identifier: UUID) {
+        layout.removeBrowser(identifier)
+        browserPanes[identifier] = nil
+        layoutStore.save(layout)
+        refresh()
+    }
+
     /// Forgets the pages that no row holds now, such as the pages of a
     /// row whose last session ended.
     func forgetClosedBrowsers() {

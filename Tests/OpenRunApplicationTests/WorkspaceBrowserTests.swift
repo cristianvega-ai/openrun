@@ -21,14 +21,13 @@ import WindowLayout
         return (test, try #require(test.workspace.shownSession))
     }
 
-    @Test func aWebPageOfTheLayoutShowsBesideThePaneAndKeepsItsAddress() async throws {
+    @Test func aWebPageOpensBesideThePaneAndKeepsItsAddressInTheLayout() async throws {
         let (test, first) = try await start()
         defer { test.stop() }
         let workspace = test.workspace
-        let page = LayoutBrowser(address: BrowserAddress.blank)
-        workspace.layout.addBrowser(page, beside: first, direction: .sideBySide)
-        (workspace.leafToFocus, workspace.lastFocusedLeaf) = (page.identifier, page.identifier)
-        workspace.refresh()
+        #expect(workspace.validateMenuItem(NSMenuItem(title: "", action: #selector(Workspace.splitWithBrowser(_:)), keyEquivalent: "")))
+        workspace.splitWithBrowser(nil)
+        let page = try #require(workspace.layout.rows.first?.pane.browsers.first)
         let browser = try #require(workspace.browserPanes[page.identifier])
         // The row keeps its place, and the page shows beside the terminal with the focus in its address.
         #expect(workspace.layout.rows.first?.pane.leaves == [first, page.identifier] && test.shownRows == [first])
@@ -39,5 +38,20 @@ import WindowLayout
         // The pane keeps its views, and the file of the layout has the address.
         #expect(workspace.splitView === split && workspace.shown == .split(row: first, pane: try #require(workspace.layout.rows.first?.pane)))
         #expect(await waitUntil { workspace.layoutStore.load().browser(page.identifier)?.address == "http://localhost:3000/docs" })
+    }
+
+    @Test func commandWClosesAWebPageAndTheEndOfItsRowForgetsIt() async throws {
+        let (test, first) = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        workspace.splitWithBrowser(nil)
+        #expect(workspace.browserPanes.count == 1 && workspace.focusedLeaf != first)
+        workspace.closeSession(nil)
+        #expect(workspace.shown == .session(first) && workspace.browserPanes.isEmpty && workspace.layout.rows.first?.pane == .session(first))
+        // A web page alone is no row: it goes with the last session of its row.
+        workspace.splitWithBrowser(nil)
+        #expect(workspace.browserPanes.count == 1)
+        _ = try test.process.runCommand(["kill", first.uuidString.lowercased()])
+        #expect(await waitUntil { workspace.layout.rows.isEmpty && workspace.browserPanes.isEmpty && workspace.shown == .nothing })
     }
 }

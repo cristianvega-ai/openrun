@@ -119,6 +119,7 @@ extension Workspace {
     /// the pane with the focus. The session asks first when a program
     /// other than a shell at its prompt runs in it.
     func closeLeaf(_ leaf: UUID) {
+        if layout.browser(leaf) != nil { return closeBrowser(leaf) }
         if connection.overview.thread(leaf) != nil { return closeThread(leaf) }
         guard let session = connection.overview.session(leaf) else { return }
         let end = { [weak self] in

@@ -81,6 +81,7 @@ enum MainMenu {
         // A split starts a login shell beside or under the pane with the focus.
         session.addItem(item("Split Right", #selector(Workspace.splitRight(_:)), "d", target: workspace))
         session.addItem(item("Split Down", #selector(Workspace.splitDown(_:)), "d", [.command, .shift], target: workspace))
+        session.addItem(item("Split with Browser", #selector(Workspace.splitWithBrowser(_:)), "b", [.command, .option], target: workspace))
         session.addItem(item("Next Pane", #selector(Workspace.selectNextPane(_:)), "]", target: workspace))
         session.addItem(item("Previous Pane", #selector(Workspace.selectPreviousPane(_:)), "[", target: workspace))
         session.addItem(.separator())

@@ -54,6 +54,7 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         case #selector(renameSession(_:)): window.window.isVisible && window.sessionsList.selection != nil
         case #selector(clearSession(_:)): window.window.isVisible && shownSession != nil
         case #selector(splitRight(_:)), #selector(splitDown(_:)): connection.status == .connected && window.window.isVisible && focusedLeaf != nil
+        case #selector(splitWithBrowser(_:)): window.window.isVisible && focusedLeaf != nil
         case #selector(selectNextPane(_:)), #selector(selectPreviousPane(_:)): if case .split = shown { window.window.isVisible } else { false }
         case #selector(selectNextSession(_:)), #selector(selectPreviousSession(_:)): !window.sessionsList.shownIdentifiers.isEmpty
         default: true
