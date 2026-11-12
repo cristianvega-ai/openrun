@@ -28,6 +28,8 @@ final class SessionChangeFeed: Sendable {
         /// The watchers that asked for the threads too. An older client
         /// did not ask, and it does not know their messages.
         var threadWatchers: [ObjectIdentifier: Send] = [:]
+        /// Hears of each session that ends, such as the terminal of a thread.
+        var endObserver: (@Sendable (UUID) -> Void)?
     }
 
     private let state = Mutex(State())
@@ -55,7 +57,13 @@ final class SessionChangeFeed: Sendable {
         state.withLock { state in
             guard state.summaries.removeValue(forKey: identifier) != nil else { return }
             for send in state.watchers.values { send(.sessionEnded(identifier: identifier)) }
+            state.endObserver?(identifier)
         }
+    }
+
+    /// Calls `observer` at the end of each session, after the watchers heard of it.
+    func observeEnds(_ observer: @escaping @Sendable (UUID) -> Void) {
+        state.withLock { $0.endObserver = observer }
     }
 
     /// Keeps the new list of the projects and sends it to every watcher.

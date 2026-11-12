@@ -65,6 +65,10 @@ actor ThreadRunner {
     /// Whether the process must end after the turn that runs, because
     /// the user chose another model or permission mode.
     var endsAfterTurn = false
+    /// Whether the conversation is open in a terminal session (proposal
+    /// 6). A second process on it would split the conversation in two,
+    /// so the thread takes no message until the session ends.
+    var isInTerminal = false
     /// The wait for the quiet time of the process.
     var quietTask: Task<Void, Never>?
     let quietTime: Duration

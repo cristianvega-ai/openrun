@@ -14,6 +14,7 @@ extension ThreadRunner {
     @discardableResult
     func send(text: String, images: [MessageImage] = []) async throws -> UUID {
         guard !isClosed else { throw ThreadRunnerError.threadIsClosed }
+        guard !isInTerminal else { throw ThreadRequestError.openInTerminal }
         guard waitingMessages.count < Self.waitingMessageLimit else {
             throw ThreadRunnerError.tooManyWaitingMessages(limit: Self.waitingMessageLimit)
         }
@@ -32,6 +33,19 @@ extension ThreadRunner {
     /// The user gave the thread a new name, which the registry saved.
     func setName(_ name: String?) {
         record.name = name
+    }
+
+    func setInTerminal() {
+        isInTerminal = true
+    }
+
+    /// The terminal session of the thread ended. The turns that the user
+    /// made there come into the events, and the thread takes messages again.
+    func returnedFromTerminal(events: [ConversationEvent]) async {
+        // The conversation has turns now, also when the terminal started it.
+        (isInTerminal, record.hasConversation) = (false, true)
+        for event in events { emit(event.kind, sourceLine: event.sourceLine) }
+        await changed(self)
     }
 
     /// The user chose another model or permission mode, which the

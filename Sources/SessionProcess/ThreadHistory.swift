@@ -1,3 +1,4 @@
+import AgentConversation
 import AgentThreads
 import ClaudeCodeAgent
 import Foundation
@@ -21,17 +22,33 @@ enum ThreadHistory {
     ///   - before: The `before` of the page that the client has, or nil
     ///     for the newest page.
     static func page(of record: ThreadRecord, environment: [String: String], before: Int?) throws -> Page {
-        guard record.hasConversation, let conversation = UUID(uuidString: record.conversationIdentifier), (before ?? 0) >= 0 else { return Page() }
-        var environment = environment
-        if let account = record.account { environment["CLAUDE_CONFIG_DIR"] = account.settingsFolder }
-        let home = URL(fileURLWithPath: environment["HOME"] ?? NSHomeDirectory())
-        let settings = ClaudeCodeHistoryLocation.configurationFolder(environment: environment, homeFolder: home)
-        guard let file = ClaudeCodeHistoryLocation.locate(configurationFolder: settings, workingFolder: record.folder, conversationIdentifier: conversation) else {
-            return Page()
-        }
+        guard record.hasConversation, (before ?? 0) >= 0, let file = file(of: record, environment: environment) else { return Page() }
         let reader = try ClaudeCodeHistoryReader(fileURL: file, before: before.map { UInt64($0) })
         let encoder = JSONEncoder()
         let events = try reader.previousTurns().map { try encoder.encode($0) }
         return Page(events: events, before: reader.hasReachedStart ? nil : Int(reader.cursor))
+    }
+
+    /// The history file of the conversation of a thread, when one exists.
+    static func file(of record: ThreadRecord, environment: [String: String]) -> URL? {
+        guard let conversation = UUID(uuidString: record.conversationIdentifier) else { return nil }
+        var environment = environment
+        if let account = record.account { environment["CLAUDE_CONFIG_DIR"] = account.settingsFolder }
+        let home = URL(fileURLWithPath: environment["HOME"] ?? NSHomeDirectory())
+        let settings = ClaudeCodeHistoryLocation.configurationFolder(environment: environment, homeFolder: home)
+        return ClaudeCodeHistoryLocation.locate(configurationFolder: settings, workingFolder: record.folder, conversationIdentifier: conversation)
+    }
+
+    /// The size of the history file now, or 0 when there is none: where
+    /// the turns of a terminal session start.
+    static func fileSize(of record: ThreadRecord, environment: [String: String]) -> UInt64 {
+        let size = file(of: record, environment: environment).flatMap { try? FileManager.default.attributesOfItem(atPath: $0.path)[.size] as? NSNumber }
+        return size?.uint64Value ?? 0
+    }
+
+    /// The events of the turns that came into the history after `offset`.
+    static func events(of record: ThreadRecord, environment: [String: String], after offset: UInt64) throws -> [ConversationEvent] {
+        guard let file = file(of: record, environment: environment) else { return [] }
+        return try ClaudeCodeHistoryReader.events(inFileAt: file, after: offset)
     }
 }
