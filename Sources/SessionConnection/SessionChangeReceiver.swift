@@ -36,23 +36,27 @@ public final class SessionChangeReceiver: Sendable {
     /// Whether the client asked for the agent threads. Their list then
     /// comes one time, after the settings.
     public let includesThreads: Bool
+    /// The identifier of the build of the session process, or `nil` from
+    /// an older one.
+    public let build: String?
     private let connection: MessageConnection
     private let initialList: [SessionSummary]
     private let isReceiving = Atomic<Bool>(false)
 
-    private init(connection: MessageConnection, initialList: [SessionSummary], includesThreads: Bool) {
-        (self.connection, self.initialList, self.includesThreads) = (connection, initialList, includesThreads)
+    private init(connection: MessageConnection, initialList: [SessionSummary], includesThreads: Bool, build: String?) {
+        (self.connection, self.initialList, self.includesThreads, self.build) = (connection, initialList, includesThreads, build)
     }
 
     /// Asks for the changes, and returns once the present list is there.
     ///
     /// - Parameter includesThreads: Asks for the agent threads too. Only a
     ///   session process with the capability `threads` knows them.
-    static func open(on connection: MessageConnection, includesThreads: Bool = false) throws -> SessionChangeReceiver {
+    static func open(on connection: MessageConnection, includesThreads: Bool = false, build: String? = nil) throws -> SessionChangeReceiver {
         let request = ClientMessage.receiveSessionChanges(includesThreads: includesThreads ? true : nil)
         try SessionConnectionError.wrapping { try connection.send(request) }
         switch try SessionConnectionError.wrapping({ try connection.receive(ServerMessage.self) }) {
-        case .sessionList(let list): return SessionChangeReceiver(connection: connection, initialList: list, includesThreads: includesThreads)
+        case .sessionList(let list):
+            return SessionChangeReceiver(connection: connection, initialList: list, includesThreads: includesThreads, build: build)
         case .failure(let failure): throw SessionConnectionError.requestFailed(failure)
         case nil: throw SessionConnectionError.connectionClosed
         default: throw SessionConnectionError.unexpectedAnswer(request: "receiveSessionChanges")
@@ -104,6 +108,6 @@ extension SessionClient {
     /// takes no more requests. Check `capabilities.sessionChanges` first: an
     /// older session process refuses the request.
     public func receiveSessionChanges() throws -> SessionChangeReceiver {
-        try SessionChangeReceiver.open(on: connection, includesThreads: capabilities.threads)
+        try SessionChangeReceiver.open(on: connection, includesThreads: capabilities.threads, build: capabilities.build)
     }
 }

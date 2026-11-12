@@ -52,6 +52,8 @@ import Testing
         connection.start()
         let session = try first.createSession(program: ["/bin/sh"])
         #expect(await waitUntil { connection.overview.sessions.count == 1 })
+        // The session process tells its build, which the app compares with its own after an update.
+        #expect(connection.sessionProcessBuild.flatMap(UUID.init(uuidString:)) != nil)
         // The record of the session must be in its file before the stop.
         let records = folder.appendingPathComponent("sessions.json")
         #expect(await waitUntil { FileManager.default.fileExists(atPath: records.path) })

@@ -20,6 +20,9 @@ public final class SessionOverviewConnection {
     /// Whether a list of the agent threads came since the start. A
     /// session process of an older build sends none.
     public private(set) var hasThreadList = false
+    /// The identifier of the build of the session process of the present
+    /// connection. An older session process tells none.
+    public private(set) var sessionProcessBuild: String?
     /// Whether every list of the start came: the sessions, and the threads
     /// from a session process that keeps threads. Only then does an empty
     /// overview mean that nothing runs.
@@ -84,7 +87,7 @@ public final class SessionOverviewConnection {
         switch result {
         case .success(let receiver):
             self.receiver = receiver
-            expectsThreadList = receiver.includesThreads
+            (expectsThreadList, sessionProcessBuild) = (receiver.includesThreads, receiver.build)
             retryDelay = firstRetryDelay
             setStatus(.connected)
             let pending = PendingChanges()
