@@ -57,6 +57,34 @@ import Testing
         await runner.close()
     }
 
+    @Test func aTurnOfCodexReachesTheListsAndItsAppServerCountsAsAnAgent() async throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // The file holds a Codex thread in the folder of the recorded exchanges.
+        let store = ThreadStore(dataFolder: DataFolder(path: folder.path))
+        var list = ThreadList()
+        try list.add(record)
+        try store.save(list)
+        let fixtures = URL(fileURLWithPath: "../CodexAgentTests/Fixtures", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
+        let scripts = ["handshake", "thread-start", "plain-turn"].map { fixtures.appending(path: $0 + ".jsonl").path }.joined(separator: ":")
+        var settings = FakeAgentSettings.make(environment: ["FAKE_CODEX_SCRIPTS": scripts])
+        settings.codexProgram = RunningSessionProcess.productsDirectory.appendingPathComponent("fake-codex").path
+        let registry = ThreadRegistry(store: store) { [settings] in settings }
+        #expect(await !registry.isStartedByAgent(getpid()))
+
+        _ = try await registry.running(for: record.identifier).send(text: "Reply with the single word ok.", images: [])
+        #expect(await eventually { await registry.summary(record.identifier)?.state == "finishedTurn" })
+        let summary = try #require(await registry.summary(record.identifier))
+        #expect(summary.agent == "codex" && !summary.isProcessRunning && summary.usageWindows != nil && summary.title == "Reply with the single word ok.")
+        #expect(try store.load().list.thread(record.identifier)?.hasConversation == true)
+        // A command of Codex is a child of the app-server, so the app-server counts as an agent of a thread.
+        let servers = try #require(await registry.codexServers?.processIdentifiers())
+        #expect(servers.count == 1)
+        let (isAgent, isTest) = await (registry.isStartedByAgent(servers[0]), registry.isStartedByAgent(getpid()))
+        #expect(isAgent && !isTest)
+        await registry.terminateAll()
+    }
+
     @Test func theRegistryKeepsACodexThreadWithItsOwnChoices() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

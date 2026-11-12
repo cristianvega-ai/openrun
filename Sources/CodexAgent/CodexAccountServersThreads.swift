@@ -1,4 +1,5 @@
 import AgentConversation
+import Foundation
 
 /// The threads and the readings of each account.
 extension CodexAccountServers {
@@ -24,6 +25,16 @@ extension CodexAccountServers {
 
     public func readUsage(account: String?) async throws -> UsageReading {
         try await use(account) { server, _ in (try await server.readUsage(), nil) }
+    }
+
+    /// The processes of the app-servers that run. A program that one of
+    /// them started works for an agent, and not for the user.
+    public func processIdentifiers() async -> [pid_t] {
+        var identifiers: [pid_t] = []
+        for entry in entries.values {
+            if let identifier = (try? await entry.server.value)?.processIdentifier { identifiers.append(identifier) }
+        }
+        return identifiers
     }
 
     /// Ends every server, such as when the session process ends.

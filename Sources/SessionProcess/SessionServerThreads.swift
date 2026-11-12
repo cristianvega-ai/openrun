@@ -12,7 +12,7 @@ extension SessionServer {
         // In version 1 only a program outside every session and every
         // thread may use the threads (decision of 2026-11-10). An agent
         // must not drive another agent without the user.
-        guard await registry.place(of: peer) == .outsideEverySession, await threads.thread(startedProcess: peer.processIdentifier) == nil else {
+        guard await registry.place(of: peer) == .outsideEverySession, await !threads.isStartedByAgent(peer.processIdentifier) else {
             return Self.refusal("Only a program outside every session and every thread may use the agent threads.")
         }
         do {
@@ -80,7 +80,7 @@ extension SessionServer {
     func answerPermission(_ request: String, ofThread thread: UUID, allows: Bool, message: String?, from peer: PeerProcess) async -> ServerMessage {
         let isApplication = Self.acceptsAnswerer(
             at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken))
-        guard isApplication, await threads.thread(startedProcess: peer.processIdentifier) == nil else {
+        guard isApplication, await !threads.isStartedByAgent(peer.processIdentifier) else {
             return Self.refusal("Only OpenRun.app answers a permission request.")
         }
         guard let runner = try? await threads.running(for: thread), await runner.answerPermission(request, allows: allows, message: message) else {

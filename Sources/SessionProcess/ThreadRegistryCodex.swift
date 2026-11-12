@@ -31,6 +31,15 @@ extension ThreadRegistry {
         return servers
     }
 
+    /// Whether an agent of a thread started the process: Claude Code, or
+    /// an app-server of Codex, whose commands are its children. Such a
+    /// program may not use the threads (decision of 2026-11-10).
+    func isStartedByAgent(_ process: pid_t) async -> Bool {
+        if thread(startedProcess: process) != nil { return true }
+        guard let servers = await codexServers?.processIdentifiers(), !servers.isEmpty else { return false }
+        return ProcessAncestry.ancestor(of: process, among: Set(servers)) != nil
+    }
+
     /// A Codex runner has a new title, state or turn. The record goes to
     /// the file when it changed, and the summary goes to the clients.
     func codexRunnerChanged(_ runner: CodexThreadRunner) async {

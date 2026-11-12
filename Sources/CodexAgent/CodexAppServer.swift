@@ -1,5 +1,6 @@
 import AgentConversation
 import AgentProgram
+import Foundation
 
 /// One `codex app-server` for one account, and its open threads.
 ///
@@ -40,7 +41,12 @@ public actor CodexAppServer {
     init(transport: any CodexTransport, options: CodexServerOptions) {
         connection = CodexConnection(transport: transport, lineByteLimit: options.lineByteLimit)
         self.options = options
+        processIdentifier = (transport as? AgentProgram)?.processIdentifier
     }
+
+    /// The process of the app-server, or nil for a transport of a test.
+    /// The commands of every thread of the account are its children.
+    public nonisolated let processIdentifier: pid_t?
 
     /// Starts to read, then sends `initialize` with the experimental
     /// capability that the stop needs, and `initialized`.
