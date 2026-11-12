@@ -8,9 +8,17 @@ import SessionProtocol
 /// The agent threads in the main window: their chats in the third pane,
 /// and what the user does with a thread (proposal 1 of 2026-11-10).
 extension Workspace {
-    /// Shows the chat of a thread. A new pane attaches to its thread.
+    /// Shows the chat of a thread.
     func showChat(of thread: UUID) {
         guard let summary = connection.overview.thread(thread) else { return window.showContent(nil) }
+        let pane = chatPane(of: summary)
+        window.showContent(PaneContent(
+            viewController: pane.chat, title: pane.chat.facts.title, minimumSize: pane.chat.minimumSize, topRowItems: pane.chat.topRowItems))
+    }
+
+    /// The chat pane of a thread. A new pane attaches to its thread.
+    func chatPane(of summary: ThreadSummary) -> ThreadPaneController {
+        let thread = summary.identifier
         let (pane, isNew) = threadPanes.pane(for: thread) { ThreadPaneController(summary: summary, socket: socket, home: home) }
         if isNew {
             pane.failed = { [weak self] in self?.showFailure("The thread could not do that", $0) }
@@ -18,8 +26,7 @@ extension Workspace {
             pane.returnFromTerminal = { [weak self] in self?.returnThreadFromTerminal(thread) }
             pane.attach()
         }
-        window.showContent(PaneContent(
-            viewController: pane.chat, title: pane.chat.facts.title, minimumSize: pane.chat.minimumSize, topRowItems: pane.chat.topRowItems))
+        return pane
     }
 
     /// A batch of changes came. The chat of a thread that closed goes
