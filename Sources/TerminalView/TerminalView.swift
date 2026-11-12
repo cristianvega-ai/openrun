@@ -140,7 +140,9 @@ public final class TerminalView: NSView {
         try terminal.setEventHandler(TerminalEventHandler(
             bell: { [weak self] in MainActor.assumeIsolated { self?.bellFlash?.ring() } },
             titleChanged: { [weak self] in MainActor.assumeIsolated { self?.titleChanged() } },
-            renderHold: { [weak self] isHeld in MainActor.assumeIsolated { self?.renderHold(isHeld) } }))
+            renderHold: { [weak self] isHeld in MainActor.assumeIsolated { self?.renderHold(isHeld) } },
+            // OSC 52: a program, such as an editor over ssh, copies text for the user.
+            clipboardWrite: { [weak self] text in MainActor.assumeIsolated { self?.pasteboard.write(plainText: text) != nil } }))
         autoscrollTimer = SelectionAutoscrollTimer(clock: clock) { [weak self] in self?.autoscrollSelection() }
         schedule = DisplaySchedule(view: self) { [weak self] in self?.drawNextFrame() }
         let observer = AppearanceObserver(appearance: effectiveAppearance)

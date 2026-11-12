@@ -4,6 +4,18 @@ import Testing
 @testable import TerminalView
 
 @MainActor @Suite struct MenuItemValidationTests {
+    /// OSC 52: an editor over ssh copies text for the user.
+    @Test func aProgramPutsTextOnThePasteboardOfTheView() throws {
+        let view = try TerminalView()
+        let pasteboard = FakePasteboard()
+        view.pasteboard = pasteboard
+        var isApplied = false
+        view.write(Array("\u{1B}]52;c;aGVsbG8=\u{07}".utf8))
+        view.afterPendingOutput { isApplied = true }
+        wait(seconds: 5) { isApplied }
+        #expect(pasteboard.text == "hello" && pasteboard.plainTextReads == 0)
+    }
+
     @Test func copyNeedsASelectionAndPasteNeedsText() throws {
         let view = try TerminalView()
         let board = FakePasteboard()
