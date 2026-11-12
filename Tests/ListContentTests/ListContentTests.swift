@@ -118,6 +118,10 @@ import WindowLayout
         let content = content().content
         #expect(content.title(of: .allSessions) == "All Projects" && content.title(of: .needsYou) == "Needs You")
         #expect(content.title(of: .noProject) == "Other Folders" && content.title(of: .project(site.identifier)) == "Web Site")
+        // The second pane tells where new work starts, and names an empty project.
+        #expect(content.place(of: .project(site.identifier)) == "In Web Site" && content.place(of: .allSessions) == "In Your Home Folder")
+        #expect(content.emptyMessage(of: .project(site.identifier)) == "Nothing in Web Site Yet" && content.emptyMessage(of: .needsYou) == "Nothing Needs You")
+        #expect(content.emptyMessage(of: .allSessions) == nil)
         #expect(content.title(of: .project(app.identifier)) == "app" && content.title(of: .project(UUID())) == "")
     }
 }

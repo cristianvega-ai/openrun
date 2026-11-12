@@ -30,7 +30,7 @@ public final class SessionsListController: NSObject {
 
     public override init() {
         arrangementButton = PaneButton.make(symbol: "line.3.horizontal.decrease", label: "Filter and Order", target: nil, action: nil)
-        newSessionButton = PaneButton.make(symbol: "square.and.pencil", label: "New Session", target: nil, action: nil)
+        newSessionButton = PaneButton.make(symbol: "square.and.pencil", label: "New Thread or Terminal", target: nil, action: nil)
         super.init()
         (arrangementButton.target, arrangementButton.action) = (self, #selector(showArrangementMenu))
         (newSessionButton.target, newSessionButton.action) = (self, #selector(showNewSessionMenu))
@@ -103,7 +103,7 @@ public final class SessionsListController: NSObject {
             (table.view(atColumn: 0, row: index, makeIfNecessary: false) as? SessionCellView)?.show(rows[index])
         }
         isShowingChanges = false
-        emptyView.message.stringValue = SessionsEmptyView.message(for: filter)
+        emptyView.message.stringValue = SessionsEmptyView.message(for: filter, ofList: content.emptyMessage)
         emptyView.isHidden = !rows.isEmpty
         guard selection != selected else { return }
         select(selected)

@@ -30,7 +30,19 @@ import Testing
         try choose("New Terminal", in: menu)
         #expect(host.requests == [.thread(agent: "Codex"), .terminal(command: nil)])
         #expect(list.topRow.trailingItems.arrangedSubviews == [list.arrangementButton, list.newSessionButton])
-        #expect(list.newSessionButton.accessibilityLabel() == "New Session")
+        #expect(list.newSessionButton.accessibilityLabel() == "New Thread or Terminal")
+    }
+
+    @Test func theNewSessionMenuTellsWhereTheWorkStarts() throws {
+        let (list, host, window, _) = makeSessionsList()
+        defer { window.close() }
+        list.show(SessionsListContent(agents: ["Claude Code"], place: "In openrun"))
+        let menu = list.newSessionMenu()
+        #expect(menu.items.map(\.title) == ["In openrun", "New Claude Code Thread", "", "New Terminal"])
+        // The heading is no command.
+        #expect(menu.items[0].action == nil && menu.items[0].isSectionHeader && menu.items[0].target == nil)
+        try choose("New Terminal", in: menu)
+        #expect(host.requests == [.terminal(command: nil)])
     }
 
     @Test func theNewSessionMenuOffersAThreadUnderEachOtherAccountOfAnAgent() throws {

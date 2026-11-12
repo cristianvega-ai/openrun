@@ -42,6 +42,8 @@ extension SessionsListController {
     /// accounts, then a terminal.
     func newSessionMenu() -> NSMenu {
         let menu = NSMenu()
+        // The heading tells where the new work starts, so a user sees that it belongs to the project.
+        if let place = content.place { menu.addItem(.sectionHeader(title: place)) }
         for agent in content.agents {
             menu.addItem(withTitle: "New \(agent) Thread", action: #selector(requestThread), keyEquivalent: "").representedObject = [agent]
             for account in content.accounts[agent] ?? [] {
@@ -54,7 +56,7 @@ extension SessionsListController {
         for command in content.terminalCommands {
             menu.addItem(withTitle: "New Terminal with \(command)", action: #selector(requestCommand), keyEquivalent: "").representedObject = command
         }
-        for item in menu.items { item.target = self }
+        for item in menu.items where item.action != nil { item.target = self }
         return menu
     }
 

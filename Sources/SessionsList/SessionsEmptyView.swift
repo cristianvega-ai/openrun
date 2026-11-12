@@ -6,7 +6,7 @@ import PaneAppearance
 @MainActor
 final class SessionsEmptyView: NSView {
     let message = NSTextField(labelWithString: "")
-    let startButton = NSButton(title: "New Session", target: nil, action: nil)
+    let startButton = NSButton(title: "New Thread or Terminal", target: nil, action: nil)
 
     init() {
         super.init(frame: .zero)
@@ -31,12 +31,14 @@ final class SessionsEmptyView: NSView {
         fatalError("SessionsEmptyView does not come from a storyboard.")
     }
 
-    /// The message names the filter, so an empty filter does not look like an empty project.
-    static func message(for filter: SessionsFilter) -> String {
+    /// The message names the filter, so an empty filter does not look like
+    /// an empty project. With no filter, the host can name the list, such
+    /// as "Nothing in openrun yet".
+    static func message(for filter: SessionsFilter, ofList emptyMessage: String? = nil) -> String {
         switch filter {
-        case .all: "No Sessions"
-        case .inProgress: "No Sessions in Progress"
-        case .finished: "No Finished Sessions"
+        case .all: emptyMessage ?? "No Threads or Terminals"
+        case .inProgress: "Nothing in Progress"
+        case .finished: "Nothing Finished"
         }
     }
 }

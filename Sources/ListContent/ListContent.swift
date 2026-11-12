@@ -93,6 +93,22 @@ public struct ListContent {
         }
     }
 
+    /// Where the new work of an entry starts, for the menu of the
+    /// new-session button: in the selected project, or else in the home
+    /// folder.
+    public func place(of entry: ProjectsListEntry) -> String {
+        if case .project = entry { "In " + title(of: entry) } else { "In Your Home Folder" }
+    }
+
+    /// What the second pane says while an entry has no row.
+    public func emptyMessage(of entry: ProjectsListEntry) -> String? {
+        switch entry {
+        case .project: "Nothing in \(title(of: entry)) Yet"
+        case .needsYou: "Nothing Needs You"
+        case .allSessions, .noProject: nil
+        }
+    }
+
     /// The name that the user gave, or the last name of the folder.
     static func name(of project: ProjectSummary) -> String {
         if let name = project.name, !name.isEmpty { return name }

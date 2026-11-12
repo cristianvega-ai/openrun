@@ -62,7 +62,8 @@ extension Workspace {
         let agents = connection.hasThreadList ? Self.threadAgents.map(ThreadRowFacts.agentName) : []
         let accounts = [ThreadRowFacts.agentName("claude-code"): settings.claudeCodeAccounts.map(\.name), ThreadRowFacts.agentName("codex"): settings.codexAccounts.map(\.name)]
         window.sessionsList.show(SessionsListContent(
-            title: content.title(of: entry), rows: content.rows(of: entry), agents: agents, accounts: accounts, terminalCommands: commands))
+            title: content.title(of: entry), rows: content.rows(of: entry), agents: agents, accounts: accounts, terminalCommands: commands,
+            place: content.place(of: entry), emptyMessage: content.emptyMessage(of: entry)))
         window.sessionsList.select(layout.selectedRow)
         showSelectedRow()
         // The third pane has the title of its row, so the user reads one
