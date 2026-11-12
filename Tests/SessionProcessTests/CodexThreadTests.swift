@@ -11,12 +11,17 @@ import Testing
 /// place of Codex, so no test spends the subscription of the owner.
 @Suite struct CodexThreadTests {
     /// The recorded exchanges that the fake app-server plays, in order.
-    private func servers(_ scripts: [String]) -> @Sendable () async throws -> CodexAccountServers {
+    ///
+    /// - Parameter restart: The exchanges of a later start of the
+    ///   app-server, with the file that marks the first start.
+    private func servers(_ scripts: [String], restart: (scripts: [String], mark: String)? = nil) -> @Sendable () async throws -> CodexAccountServers {
         let fixtures = URL(fileURLWithPath: "../CodexAgentTests/Fixtures", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
-        let paths = scripts.map { fixtures.appending(path: $0 + ".jsonl").path }.joined(separator: ":")
+        func paths(_ names: [String]) -> String { names.map { fixtures.appending(path: $0 + ".jsonl").path }.joined(separator: ":") }
+        var environment = ["PATH": "/usr/bin:/bin", "FAKE_CODEX_SCRIPTS": paths(scripts)]
+        if let restart { (environment["FAKE_CODEX_RESTART_SCRIPTS"], environment["FAKE_CODEX_RESTART_MARK"]) = (paths(restart.scripts), restart.mark) }
         let launch = CodexServerLaunch(
             executablePath: RunningSessionProcess.productsDirectory.appendingPathComponent("fake-codex").path,
-            environment: ["PATH": "/usr/bin:/bin", "FAKE_CODEX_SCRIPTS": paths], folder: NSTemporaryDirectory())
+            environment: environment, folder: NSTemporaryDirectory())
         let pool = CodexAccountServers(launch: launch)
         return { pool }
     }
@@ -77,6 +82,27 @@ import Testing
         // A thread with no turn has no history, and it opens no app-server for the question.
         let new = CodexThreadRunner(record: record, servers: { throw ThreadRunnerError.threadIsClosed })
         #expect(try await new.historyPage(cursor: nil) == CodexHistoryPage(events: [], olderCursor: nil))
+        await runner.close()
+    }
+
+    @Test func aCodexThreadLeavesTheAppServerForATerminalAndTakesTheTurnsOfTheTerminal() async throws {
+        // The app-server of the account ends when its last thread leaves, and a new one starts for the resume.
+        let mark = NSTemporaryDirectory() + "fake-codex-" + UUID().uuidString
+        defer { try? FileManager.default.removeItem(atPath: mark) }
+        let scripts = ["handshake", "thread-start", "plain-turn", "unsubscribe"]
+        let runner = CodexThreadRunner(record: record, servers: servers(scripts, restart: (["handshake", "resume", "history"], mark)))
+        try await runner.send(text: "Reply with the single word ok.")
+        #expect(await eventually { await runner.facts.state == .finishedTurn })
+        let arguments = await runner.terminalArguments
+        #expect(arguments == ["resume", "00000000-0000-7000-8000-000000000001", "--sandbox", "workspace-write"])
+        // Codex in the terminal has the thread now, so the chat sends nothing.
+        await runner.leaveForTerminal()
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await runner.send(text: "More") }
+        let before = await runner.transcript.items.count
+        await runner.returnedFromTerminal()
+        // The history holds turns after the turn of the chat. They come after it, and the thread takes messages again.
+        let (after, inTerminal) = await (runner.transcript.items.count, runner.isInTerminal)
+        #expect(after > before && !inTerminal)
         await runner.close()
     }
 

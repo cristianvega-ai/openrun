@@ -23,6 +23,9 @@ actor CodexThreadRunner {
     /// Whether a turn runs, from its start to its end.
     var isTurnRunning = false
     var isClosed = false
+    /// Whether Codex in a terminal session has the thread (proposal 6).
+    /// The thread takes no message until the session ends.
+    var isInTerminal = false
     var usageReadAt: Date?
     let hadConversationAtStart: Bool
     /// Opens the app-servers of the accounts, at the first need.

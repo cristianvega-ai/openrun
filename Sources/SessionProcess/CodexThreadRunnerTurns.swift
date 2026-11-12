@@ -8,6 +8,7 @@ extension CodexThreadRunner {
     @discardableResult
     func send(text: String, images: [MessageImage] = []) async throws -> UUID {
         guard !isClosed else { throw ThreadRunnerError.threadIsClosed }
+        guard !isInTerminal else { throw ThreadRequestError.openInTerminal }
         guard waitingMessages.count < ThreadRunner.waitingMessageLimit else {
             throw ThreadRunnerError.tooManyWaitingMessages(limit: ThreadRunner.waitingMessageLimit)
         }
