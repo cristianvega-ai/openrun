@@ -13,7 +13,7 @@ public final class ContentPaneController {
     /// this place later, so nothing else in the pane depends on one view.
     let contentArea = NSView()
     let titleLabel = NSTextField(labelWithString: "")
-    let emptyLabel = NSTextField(labelWithString: "No Session Selected")
+    let emptyLabel = NSTextField(labelWithString: "No Thread or Terminal Selected")
     public private(set) var content: PaneContent?
     /// The constraint that gives the content the width of the pane, and the
     /// one that holds the width while the panes change their widths.
