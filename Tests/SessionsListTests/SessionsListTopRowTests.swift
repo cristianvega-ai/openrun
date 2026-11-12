@@ -33,6 +33,19 @@ import Testing
         #expect(list.newSessionButton.accessibilityLabel() == "New Session")
     }
 
+    @Test func theNewSessionMenuOffersAThreadUnderEachOtherAccountOfAnAgent() throws {
+        let (list, host, window, _) = makeSessionsList()
+        defer { window.close() }
+        list.show(SessionsListContent(agents: ["Claude Code", "Codex"], accounts: ["Claude Code": ["Work", "Home"]]))
+        let menu = list.newSessionMenu()
+        #expect(menu.items.map(\.title) == [
+            "New Claude Code Thread", "New Claude Code Thread on Work", "New Claude Code Thread on Home", "New Codex Thread", "", "New Terminal",
+        ])
+        try choose("New Claude Code Thread on Home", in: menu)
+        try choose("New Claude Code Thread", in: menu)
+        #expect(host.requests == [.thread(agent: "Claude Code", account: "Home"), .thread(agent: "Claude Code")])
+    }
+
     @Test func theNewSessionMenuOffersATerminalWithEachCommandOfTheSettings() throws {
         let (list, host, window, _) = makeSessionsList()
         defer { window.close() }

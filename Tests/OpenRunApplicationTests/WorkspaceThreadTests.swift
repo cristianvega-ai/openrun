@@ -39,6 +39,18 @@ import Testing
         #expect(await waitUntil { row(test, thread)?.title == "Notes" && pane.chat.facts.title == "Notes" })
     }
 
+    @Test func theButtonForANewThreadOffersEachAccountOfTheSettings() async throws {
+        let test = try await start(isApplication: true)
+        defer { test.stop() }
+        let workspace = test.workspace
+        let accounts = #"[{"folder":"\#(test.process.directory.path)","name":"Work"}]"#
+        try SessionClient(location: workspace.socket).changeSetting(named: "claude-code-accounts", to: accounts)
+        #expect(await waitUntil { workspace.window.sessionsList.content.accounts == ["Claude Code": ["Work"], "Codex": []] })
+        workspace.sessionsList(workspace.window.sessionsList, didRequest: .thread(agent: "Claude Code", account: "Work"))
+        #expect(await waitUntil { workspace.shownThread.flatMap { row(test, $0) }?.kind == .agentThread(agent: "Claude Code", model: "Opus", account: "Work") })
+        #expect(workspace.threadPanes.existing(try #require(workspace.shownThread))?.chat.facts.accountName == "Work")
+    }
+
     @Test func theButtonForANewThreadOffersCodexWithItsOwnChoices() async throws {
         let test = try await start()
         defer { test.stop() }

@@ -38,11 +38,16 @@ extension SessionsListController {
         return menu
     }
 
-    /// A thread with each agent that the host offers, then a terminal.
+    /// A thread with each agent that the host offers, under each of its
+    /// accounts, then a terminal.
     func newSessionMenu() -> NSMenu {
         let menu = NSMenu()
         for agent in content.agents {
-            menu.addItem(withTitle: "New \(agent) Thread", action: #selector(requestThread), keyEquivalent: "").representedObject = agent
+            menu.addItem(withTitle: "New \(agent) Thread", action: #selector(requestThread), keyEquivalent: "").representedObject = [agent]
+            for account in content.accounts[agent] ?? [] {
+                let item = menu.addItem(withTitle: "New \(agent) Thread on \(account)", action: #selector(requestThread), keyEquivalent: "")
+                item.representedObject = [agent, account]
+            }
         }
         if !content.agents.isEmpty { menu.addItem(.separator()) }
         menu.addItem(withTitle: "New Terminal", action: #selector(requestTerminal), keyEquivalent: "")
@@ -78,7 +83,8 @@ extension SessionsListController {
     }
 
     @objc private func requestThread(_ item: NSMenuItem) {
-        if let agent = item.representedObject as? String { delegate?.sessionsList(self, didRequest: .thread(agent: agent)) }
+        guard let words = item.representedObject as? [String], let agent = words.first else { return }
+        delegate?.sessionsList(self, didRequest: .thread(agent: agent, account: words.dropFirst().first))
     }
 
     @objc func requestTerminal() {

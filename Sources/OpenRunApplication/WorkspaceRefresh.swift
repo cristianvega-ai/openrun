@@ -59,7 +59,9 @@ extension Workspace {
         let commands = settings.newSessionCommands.filter { !$0.commandLine.isEmpty }.map(\.name)
         // A thread is a chat with one of the agents. An older session process keeps no threads.
         let agents = connection.hasThreadList ? Self.threadAgents.map(ThreadRowFacts.agentName) : []
-        window.sessionsList.show(SessionsListContent(title: content.title(of: entry), rows: content.rows(of: entry), agents: agents, terminalCommands: commands))
+        let accounts = [ThreadRowFacts.agentName("claude-code"): settings.claudeCodeAccounts.map(\.name), ThreadRowFacts.agentName("codex"): settings.codexAccounts.map(\.name)]
+        window.sessionsList.show(SessionsListContent(
+            title: content.title(of: entry), rows: content.rows(of: entry), agents: agents, accounts: accounts, terminalCommands: commands))
         window.sessionsList.select(layout.selectedRow)
         showSelectedRow()
         // The third pane has the title of its row, so the user reads one

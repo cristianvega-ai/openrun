@@ -57,11 +57,12 @@ extension Workspace {
     static let threadAgents = ["claude-code", "codex"]
 
     /// Makes a thread with an agent in the folder of the selected
-    /// project, or in the home folder. Its row takes the selection and
-    /// the focus when the feed brings it.
-    func newThread(agent: String = Workspace.threadAgents[0]) {
+    /// project, or in the home folder, under an account of the settings
+    /// or under the one of the login shell. Its row takes the selection
+    /// and the focus when the feed brings it.
+    func newThread(agent: String = Workspace.threadAgents[0], account: String? = nil) {
         let folder = selectedProjectFolder ?? home
-        requests.perform({ try $0.createThread(agent: agent, folder: folder).identifier }, then: { [weak self] result in
+        requests.perform({ try $0.createThread(agent: agent, folder: folder, account: account).identifier }, then: { [weak self] result in
             switch result {
             case .success(let thread): self?.select(newSession: thread)
             case .failure(let failure): self?.showFailure("The thread could not start", failure.message)
