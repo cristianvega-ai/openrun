@@ -11,6 +11,8 @@ enum SettingKind: Sendable {
     /// One of these raw values.
     case choice([String])
     case commands
+    /// The other accounts of one agent.
+    case accounts
 
     /// What a valid value is, for the message of an error.
     var requirement: String {
@@ -27,6 +29,10 @@ enum SettingKind: Sendable {
             "a JSON list of at most \(NewSessionCommand.countLimit) objects, each with a \"name\" of 1 to "
                 + "\(NewSessionCommand.nameLengthLimit) characters and a \"command\" of at most "
                 + "\(NewSessionCommand.commandLineLengthLimit), with no control characters"
+        case .accounts:
+            "a JSON list of at most \(AgentAccount.countLimit) objects, each with a \"name\" of 1 to "
+                + "\(AgentAccount.nameLengthLimit) characters, which no other object has, and a \"folder\" "
+                + "with a full path of at most \(AgentAccount.folderLengthLimit), with no control characters"
         }
     }
 
@@ -39,6 +45,10 @@ enum SettingKind: Sendable {
         case (.choice(let options), .choice(let choice)): options.contains(choice)
         case (.commands, .commands(let commands)):
             commands.count <= NewSessionCommand.countLimit && commands.allSatisfy(\.isValid)
+        case (.accounts, .accounts(let accounts)):
+            // A thread names its account, so two accounts cannot share a name.
+            accounts.count <= AgentAccount.countLimit && accounts.allSatisfy(\.isValid)
+                && Set(accounts.map { $0.name.lowercased() }).count == accounts.count
         default: false
         }
     }

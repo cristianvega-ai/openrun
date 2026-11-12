@@ -60,4 +60,18 @@ import Testing
             #expect(SettingTextForm.value(of: bad, as: kind) == nil)
         }
     }
+
+    @Test func theAccountsNeedObjectsWithANameOfTheirOwnAndAFullPath() {
+        let kind = SettingKind.accounts
+        #expect(SettingTextForm.value(of: "[]", as: kind) == .accounts([]))
+        let work = AgentAccount(name: "Work", settingsFolder: "/Users/me/.claude-work")
+        #expect(SettingTextForm.value(of: #"[{"name":"Work","folder":"/Users/me/.claude-work"}]"#, as: kind) == .accounts([work]))
+        #expect(SettingTextForm.text(of: .accounts([work])) == #"[{"folder":"/Users/me/.claude-work","name":"Work"}]"#)
+        let tooMany = "[" + (0...10).map { #"{"name":"a\#($0)","folder":"/a"}"# }.joined(separator: ",") + "]"
+        // A thread names its account, so a name comes one time, whatever its case.
+        for bad in ["", #"[{"name":"a"}]"#, #"[{"name":"a","folder":"~/.claude"}]"#, #"[{"name":"","folder":"/a"}]"#,
+                    #"[{"name":"a","folder":"/a\nb"}]"#, #"[{"name":"Work","folder":"/a"},{"name":"work","folder":"/b"}]"#, tooMany] {
+            #expect(SettingTextForm.value(of: bad, as: kind) == nil)
+        }
+    }
 }

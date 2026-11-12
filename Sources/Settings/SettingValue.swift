@@ -6,4 +6,5 @@ enum SettingValue: Hashable, Sendable {
     /// The raw value of `OptionKeyBehavior` or `LinkDestination`.
     case choice(String)
     case commands([NewSessionCommand])
+    case accounts([AgentAccount])
 }

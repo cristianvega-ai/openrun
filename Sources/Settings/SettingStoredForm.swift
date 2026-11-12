@@ -8,6 +8,8 @@ enum SettingStoredForm {
         case .flag(let flag): .flag(flag)
         case .commands(let commands):
             .array(commands.map { .object(["name": .string($0.name), "command": .string($0.commandLine)]) })
+        case .accounts(let accounts):
+            .array(accounts.map { .object(["name": .string($0.name), "folder": .string($0.settingsFolder)]) })
         }
     }
 
@@ -21,6 +23,7 @@ enum SettingStoredForm {
         case (.wholeNumber, .number(let number)): Int(exactly: number).map(SettingValue.wholeNumber)
         case (.flag, .flag(let flag)): .flag(flag)
         case (.commands, .array(let entries)): commands(from: entries).map(SettingValue.commands)
+        case (.accounts, .array(let entries)): accounts(from: entries).map(SettingValue.accounts)
         default: nil
         }
         guard let value, kind.accepts(value) else { return nil }
@@ -38,5 +41,15 @@ enum SettingStoredForm {
             commands.append(NewSessionCommand(name: name, commandLine: commandLine))
         }
         return commands
+    }
+
+    private static func accounts(from entries: [StoredValue]) -> [AgentAccount]? {
+        var accounts: [AgentAccount] = []
+        for entry in entries {
+            guard case .object(let fields) = entry, case .string(let name) = fields["name"],
+                  case .string(let folder) = fields["folder"] else { return nil }
+            accounts.append(AgentAccount(name: name, settingsFolder: folder))
+        }
+        return accounts
     }
 }

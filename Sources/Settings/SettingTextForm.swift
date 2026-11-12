@@ -8,7 +8,7 @@ enum SettingTextForm {
         case .text(let text), .choice(let text): return text
         case .wholeNumber(let number): return String(number)
         case .flag(let flag): return flag ? "on" : "off"
-        case .commands:
+        case .commands, .accounts:
             // One line of JSON, so a script can read it back.
             let encoder = JSONEncoder()
             encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
@@ -34,7 +34,7 @@ enum SettingTextForm {
             }
         // The choice keeps its own spelling, such as `acceptEdits`.
         case .choice(let options): options.first { $0.lowercased() == word.lowercased() }.map(SettingValue.choice)
-        case .commands:
+        case .commands, .accounts:
             (try? JSONDecoder().decode(StoredValue.self, from: Data(text.utf8)))
                 .flatMap { SettingStoredForm.value(from: $0, as: kind) }
         }
