@@ -10,4 +10,7 @@ struct AgentLaunchSettings: Sendable {
     /// the session process (`openrun permission-request`).
     var hookCommand: String
     var hookArguments: [String]
+    /// The program of Codex: a name in the search path of the
+    /// environment, or a path. Tests name the fake app-server.
+    var codexProgram = "codex"
 }

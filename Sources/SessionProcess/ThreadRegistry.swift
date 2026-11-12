@@ -1,5 +1,6 @@
 import AgentThreads
 import ClaudeCodeAgent
+import CodexAgent
 import Dispatch
 import Foundation
 import Projects
@@ -19,6 +20,10 @@ actor ThreadRegistry {
     let launchSettings: @Sendable () async throws -> AgentLaunchSettings
     var list: ThreadList
     var runners: [UUID: ThreadRunner] = [:]
+    /// The runner of each Codex thread that is in use, and the
+    /// app-servers of Codex, from the first Codex thread that needs one.
+    var codexRunners: [UUID: CodexThreadRunner] = [:]
+    var codexServers: CodexAccountServers?
     /// The newest summary of each thread, as the lists of the clients show it.
     var summaries: [UUID: ThreadSummary] = [:]
     var projects: ProjectList

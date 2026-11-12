@@ -106,6 +106,9 @@ public struct SessionProcess: Sendable {
             case "--agent-program":
                 guard let program = remaining.popFirst(), !program.isEmpty else { return usageError("--agent-program needs a program.") }
                 agentOptions.program = program
+            case "--codex-program":
+                guard let program = remaining.popFirst(), !program.isEmpty else { return usageError("--codex-program needs a program.") }
+                agentOptions.codexProgram = program
             case "--own-environment-for-agents":
                 agentOptions.usesOwnEnvironment = true
             case "--answerer-requirement":

@@ -13,6 +13,8 @@ actor AgentLaunchProvider {
         /// A program in place of the one of the setting
         /// `claude-code-program`. Tests name the fake agent.
         var program: String?
+        /// A program in place of `codex`. Tests name the fake app-server.
+        var codexProgram: String?
         /// Whether the agents get the environment of the session process
         /// in place of the one of the login shell, for tests and for a
         /// session process that a terminal started.
@@ -49,7 +51,9 @@ actor AgentLaunchProvider {
 
     func settings() async -> AgentLaunchSettings {
         if environment == nil { environment = await readEnvironment() }
-        return AgentLaunchSettings(program: program, environment: environment ?? [:], hookCommand: toolPath, hookArguments: ["permission-request"])
+        return AgentLaunchSettings(
+            program: program, environment: environment ?? [:], hookCommand: toolPath, hookArguments: ["permission-request"],
+            codexProgram: options.codexProgram ?? "codex")
     }
 
     private func readEnvironment() async -> [String: String] {
