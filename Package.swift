@@ -117,7 +117,7 @@ let package = Package(
             name: "SessionProcess",
             dependencies: [
                 "TerminalEmulation", "TerminalTheme", "PseudoTerminal", "SessionProtocol", "SessionLaunch", "GitBranch", "UntrustedText",
-                "DataStorage", "Projects", "Settings", "AgentConversation", "ClaudeCodeAgent", "AgentProgram", "AgentThreads",
+                "DataStorage", "Projects", "Settings", "AgentConversation", "ClaudeCodeAgent", "AgentProgram", "AgentThreads", "CodexAgent",
             ]
         ),
         .executableTarget(
