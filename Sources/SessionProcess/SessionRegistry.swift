@@ -14,6 +14,8 @@ actor SessionRegistry {
     /// itself, and a loop must not start them without end.
     static let defaultSessionLimit = 100
     private var sessionLimit: Int
+    /// The first line of a session that came back after a restart.
+    static let restoredNotice = "[OpenRun started this session again after a restart. The text from before is gone.]"
     /// The line limit of the scrollback of each new session. A session
     /// keeps the limit that it started with.
     private var scrollbackLimit: Int
@@ -90,7 +92,9 @@ actor SessionRegistry {
         summary.name = kept?.name
         let startFolder = Self.realPath(of: folder)
         summary.projectIdentifier = projects.project(holding: startFolder)?.identifier
-        let session = try Session(summary: summary, launch: launch, changes: changes, scrollbackLimit: scrollbackLimit) { [self] identifier in
+        // A session that comes back has no text from before, and the line tells why.
+        let notice = kept == nil ? nil : Self.restoredNotice
+        let session = try Session(summary: summary, launch: launch, changes: changes, scrollbackLimit: scrollbackLimit, openingNotice: notice) { [self] identifier in
             await remove(identifier)
         }
         sessions[identifier] = session

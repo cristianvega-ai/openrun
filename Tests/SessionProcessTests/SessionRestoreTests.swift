@@ -32,6 +32,8 @@ import Testing
         // OpenRun does not guess what ran in the session: the login shell starts.
         let shell = try RunningSessionProcess.loginShellFromDirectoryService()
         #expect(restored.name == "Build" && restored.command == [shell])
+        // The first line of the screen tells why the text from before is gone.
+        #expect(await second.waitForScreen(of: kept, containing: "[OpenRun started this session again after a restart."))
         // A folder that went away gives the home folder.
         #expect(sessions.allSatisfy { $0.folder == NSHomeDirectory() } && second.log.contains("Started the 2 sessions of the last run again."))
     }

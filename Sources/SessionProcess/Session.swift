@@ -74,6 +74,8 @@ actor Session {
     /// before it leaves no program running without a session.
     ///
     /// - Parameters:
+    ///   - openingNotice: A line that shows above the first output of
+    ///     the program, also for a client that attaches later.
     ///   - answerTimeLimit: How long a new size waits for a line editor.
     ///   - installReplyHandler: Installs the handler on the terminal. Tests
     ///     replace it to make the installation fail, or to fix the scheme.
@@ -82,6 +84,7 @@ actor Session {
         launch: ProgramLaunch,
         changes: SessionChangeFeed? = nil,
         scrollbackLimit: Int = Session.scrollbackLimit,
+        openingNotice: String? = nil,
         onFinish: @escaping @Sendable (UUID) async -> Void,
         answerTimeLimit: Duration = .milliseconds(500),
         installReplyHandler: (Terminal, @escaping TerminalReplyHandler) throws -> Void = { try Session.installReplies(on: $0, handler: $1) }
@@ -93,6 +96,7 @@ actor Session {
         let gate = ReplyGate()
         replyGate = gate
         terminal = try Terminal(size: TerminalSize(summary.size), scrollbackLimit: scrollbackLimit)
+        if let openingNotice { terminal.write(Array("\u{1B}[2m\(openingNotice)\u{1B}[0m\r\n".utf8)) }
         prompts = ShellPromptTracker(terminal: terminal)
         try terminal.setEventHandler(terminalEvents.handler)
         // The terminal answers queries such as "where is the cursor", unless a
