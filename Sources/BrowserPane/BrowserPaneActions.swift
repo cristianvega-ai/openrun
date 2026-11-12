@@ -27,9 +27,11 @@ extension BrowserPaneController {
 
     func pageChanged() {
         (backButton.isEnabled, forwardButton.isEnabled) = (webView.canGoBack, webView.canGoForward)
-        guard let shown = webView.url?.absoluteString, shown != address else { return }
-        address = shown
+        let shown = webView.url?.absoluteString ?? address
+        // The field follows the page, but not while the user types in it.
         if addressField.currentEditor() == nil { addressField.stringValue = shown == BrowserAddress.blank ? "" : shown }
+        guard shown != address else { return }
+        address = shown
         addressChanged?(shown)
     }
 }

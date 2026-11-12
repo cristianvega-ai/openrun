@@ -28,6 +28,10 @@ import Testing
         #expect(!browser.backButton.isEnabled && !browser.forwardButton.isEnabled)
         #expect(browser.webView.frame.size == NSSize(width: 480, height: 320 - BrowserPaneController.barHeight))
         #expect(!browser.open("file:///etc/passwd") && !browser.open("two words") && browser.address == BrowserAddress.blank)
+        // A page that comes back with its row shows its address at once. No program listens on the port.
+        let (kept, other) = makeBrowser("http://127.0.0.1:9/docs")
+        defer { other.close() }
+        #expect(kept.addressField.stringValue == "http://127.0.0.1:9/docs" && kept.focusView === kept.webView)
     }
 
     @Test func thePageTellsItsNewAddressAndTheFieldShowsIt() async {
