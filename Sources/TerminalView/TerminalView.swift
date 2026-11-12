@@ -707,6 +707,8 @@ public final class TerminalView: NSView {
     func drawFrame(into target: some RenderTarget) throws -> Bool {
         // While a program holds the screen, the view draws the frame that it took when the hold began.
         if hold?.isHeld != true { try state.update(from: terminal) }
+        // The marks of Find follow the text and the place of the viewport.
+        if let search { renderer.markedRuns = findMarks(of: search) }
         blink?.update(programBlinks: state.cursor.isBlinking, windowIsKey: renderer.isFocused)
         updateScrollBar()
         try renderer.prepare(from: state, viewportSize: (width: target.texture.width, height: target.texture.height))
@@ -732,7 +734,7 @@ public final class TerminalView: NSView {
             let fonts = FontSet(pointSize: fontSize.pointSize, scale: scale, fontName: fontName)
             let new = try TerminalRenderer(device: device, fonts: fonts, selectionColor: theme.selection)
             (new.isFocused, new.markedText, new.isCursorShown, new.isFlashing) = (renderer.isFocused, renderer.markedText, renderer.isCursorShown, renderer.isFlashing)
-            (new.markedTextSelection, new.underlinedRuns) = (renderer.markedTextSelection, renderer.underlinedRuns)
+            (new.markedTextSelection, new.underlinedRuns, new.markedRuns) = (renderer.markedTextSelection, renderer.underlinedRuns, renderer.markedRuns)
             renderer = new
         } catch {
             logger.error("The renderer failed: \(String(describing: error), privacy: .private)")

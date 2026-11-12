@@ -1,6 +1,7 @@
 import AppKit
 import os
 import TerminalEmulation
+import TerminalRendering
 
 /// Find in the terminal (Command-F): the text of the screen and the
 /// scrollback. The match that the user is at shows as the selection.
@@ -40,8 +41,23 @@ extension TerminalView {
     public func hideFind() {
         guard let bar = findBar else { return }
         bar.removeFromSuperview()
-        (findBar, search) = (nil, nil)
+        (findBar, search, renderer.markedRuns) = (nil, nil, [])
         window?.makeFirstResponder(self)
+        requestFrame()
+    }
+
+    /// The cells of the matches that the viewport shows, apart from the
+    /// selected match, for the marks of the renderer. A match that goes
+    /// on in the next row has a run in each of its rows.
+    func findMarks(of search: TerminalSearch) -> [ViewportCellRun] {
+        let columnCount = Int(terminal.size.columns)
+        return search.viewportMatches(includesSelected: false).flatMap { match in
+            (Int(match.first.row)...Int(match.last.row)).map { row in
+                let start = row == Int(match.first.row) ? Int(match.first.column) : 0
+                let end = row == Int(match.last.row) ? Int(match.last.column) + 1 : columnCount
+                return ViewportCellRun(row: row, columns: start..<end)
+            }
+        }
     }
 
     /// Looks for the text and selects its newest match.

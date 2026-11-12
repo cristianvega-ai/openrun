@@ -1,4 +1,6 @@
 import AppKit
+import Metal
+import TerminalRendering
 import Testing
 @testable import TerminalView
 
@@ -39,6 +41,25 @@ import Testing
         bar.field.stringValue = "pear"
         bar.typed()
         #expect(bar.countLabel.stringValue == "No matches" && !view.terminal.hasSelection)
+    }
+
+    @Test func theOtherMatchesOfTheViewportGetAMark() throws {
+        let view = try makeView()
+        view.performFindPanelAction(item(.showFindPanel))
+        let bar = try #require(view.findBar)
+        bar.field.stringValue = "apple"
+        bar.typed()
+        // The newest match, in the third row, is the selection. The two others get a mark.
+        let marks = view.findMarks(of: try #require(view.search)).sorted { $0.row < $1.row }
+        #expect(marks == [ViewportCellRun(row: 0, columns: 4..<9), ViewportCellRun(row: 1, columns: 4..<9)])
+        view.performFindPanelAction(item(.next))
+        #expect(view.findMarks(of: try #require(view.search)).map(\.row).sorted() == [0, 2])
+        // A frame gives the marks to the renderer, and the end of Find takes them away.
+        let size = view.renderer.pixelSize(for: view.terminal.size)
+        let target = try OffscreenTarget(device: try #require(MTLCreateSystemDefaultDevice()), width: size.width, height: size.height)
+        #expect(try view.drawFrame(into: target) && view.renderer.markedRuns.count == 2)
+        bar.finish()
+        #expect(view.renderer.markedRuns.isEmpty && view.search == nil)
     }
 
     @Test func doneKeepsTheSelectedMatchAndAStepWithNoBarShowsTheBar() throws {

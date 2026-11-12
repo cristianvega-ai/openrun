@@ -42,6 +42,8 @@ import Testing
         let matches = search.viewportMatches().sorted { $0.first.row < $1.first.row }
         #expect(matches.map(\.first) == (0...2).map { ViewportCell(column: 7, row: $0) })
         #expect(matches.map(\.last) == (0...2).map { ViewportCell(column: 11, row: $0) })
+        // The selected match is the newest one, in the last row. It shows as the selection.
+        #expect(search.viewportMatches(includesSelected: false).map(\.first.row).sorted() == [0, 1])
         // The list follows the output that came after the search started.
         terminal.write("\r\nno fruit here")
         #expect(search.viewportMatches().map(\.first.row).sorted() == [0, 1])

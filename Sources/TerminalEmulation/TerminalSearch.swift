@@ -64,7 +64,10 @@ public final class TerminalSearch {
     /// from its first cell to its last one, so a view can mark them. The
     /// search catches up with the terminal first. A match that lies
     /// partly above or under the viewport is left out.
-    public func viewportMatches() -> [(first: ViewportCell, last: ViewportCell)] {
+    ///
+    /// - Parameter includesSelected: False leaves out the selected match,
+    ///   which shows as the selection of the terminal.
+    public func viewportMatches(includesSelected: Bool = true) -> [(first: ViewportCell, last: ViewportCell)] {
         guard ghostty_search_run(handle) == GHOSTTY_SUCCESS else { return [] }
         var buffer = GhosttySelectionBuffer(ptr: nil, cap: 0, len: 0)
         // The first call only counts the matches.
@@ -76,11 +79,16 @@ public final class TerminalSearch {
             var filled = GhosttySelectionBuffer(ptr: pointer.baseAddress, cap: pointer.count, len: 0)
             return ghostty_search_get(handle, GHOSTTY_SEARCH_DATA_VIEWPORT_MATCHES, &filled) == GHOSTTY_SUCCESS ? filled.len : 0
         }
-        return selections.prefix(count).compactMap { selection in
-            guard let start = viewportCell(of: selection.start), let end = viewportCell(of: selection.end) else { return nil }
-            // The endpoints keep the direction of a selection, so the earlier one comes first.
-            return (start.row, start.column) <= (end.row, end.column) ? (start, end) : (end, start)
-        }
+        var selected = sized
+        let hasSelected = !includesSelected && ghostty_search_get(handle, GHOSTTY_SEARCH_DATA_SELECTED_MATCH, &selected) == GHOSTTY_SUCCESS
+        let left = hasSelected ? cells(of: selected) : nil
+        return selections.prefix(count).compactMap(cells).filter { match in left.map { $0 != match } ?? true }
+    }
+
+    private func cells(of selection: GhosttySelection) -> (first: ViewportCell, last: ViewportCell)? {
+        guard let start = viewportCell(of: selection.start), let end = viewportCell(of: selection.end) else { return nil }
+        // The endpoints keep the direction of a selection, so the earlier one comes first.
+        return (start.row, start.column) <= (end.row, end.column) ? (start, end) : (end, start)
     }
 
     private func viewportCell(of reference: GhosttyGridRef) -> ViewportCell? {
