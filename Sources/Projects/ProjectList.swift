@@ -33,7 +33,7 @@ public struct ProjectList: Hashable, Sendable {
 
     /// The project of a session that started in `folder`: the project whose
     /// folder holds it, and the deepest one when several do. `nil` means
-    /// that the session shows under "Other Folders".
+    /// that the session shows under "All Projects" only.
     ///
     /// Names compare whole, so `/work/app` does not hold
     /// `/work/application`. The folder should be the real path that the
@@ -81,7 +81,7 @@ public struct ProjectList: Hashable, Sendable {
     }
 
     /// Removes a project, also one without a folder. Its sessions keep
-    /// running and show under "Other Folders".
+    /// running and show under "All Projects".
     public mutating func remove(identifier: UUID) throws {
         if let hidden = projectsWithoutFolder.firstIndex(where: { $0.identifier == identifier }) {
             projectsWithoutFolder.remove(at: hidden)

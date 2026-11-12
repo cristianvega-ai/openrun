@@ -27,10 +27,11 @@ import Testing
 
     @Test func eachEntryKeepsItsMeaningAndAnUnknownWordMeansEverySession() throws {
         let project = UUID()
-        for entry in [LayoutEntry.allSessions, .needsYou, .noProject, .project(project)] {
+        for entry in [LayoutEntry.allSessions, .needsYou, .project(project)] {
             let data = try JSONEncoder().encode([entry])
             #expect(try JSONDecoder().decode([LayoutEntry].self, from: data) == [entry])
         }
-        #expect(try JSONDecoder().decode([LayoutEntry].self, from: Data(#"["later-word"]"#.utf8)) == [.allSessions])
+        // An earlier build wrote `no-project` for an entry that the first pane has no more.
+        #expect(try JSONDecoder().decode([LayoutEntry].self, from: Data(#"["later-word", "no-project"]"#.utf8)) == [.allSessions, .allSessions])
     }
 }

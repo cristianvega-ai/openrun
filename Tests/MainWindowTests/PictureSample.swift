@@ -13,7 +13,7 @@ struct PictureSample {
         let counts = [2, 0, 1]
         return ProjectsListContent(projects: (0..<3).map {
             ProjectDisplay(identifier: projectIdentifiers[$0], name: names[$0], folder: "~/Projects/\(names[$0])", attentionCount: counts[$0])
-        }, needsYouCount: 3, noProjectAttentionCount: 0, showsOtherFolders: true)
+        }, needsYouCount: 3)
     }
 
     /// Made once, so the identifiers of the rows stay the same.

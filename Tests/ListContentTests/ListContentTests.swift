@@ -31,7 +31,7 @@ import WindowLayout
             ProjectDisplay(identifier: site.identifier, name: "Web Site", folder: "~/site"),
             ProjectDisplay(identifier: gone.identifier, name: "Project", folder: "No folder on this Mac"),
         ])
-        #expect(projects.needsYouCount == 2 && projects.noProjectAttentionCount == 1)
+        #expect(projects.needsYouCount == 2)
     }
 
     @Test func eachEntryShowsItsRowsInTheOrderOfTheUser() {
@@ -41,8 +41,8 @@ import WindowLayout
         #expect(content.rows(of: .needsYou).map(\.identifier) == [identifiers[2], identifiers[0]])
         #expect(content.rows(of: .project(app.identifier)).map(\.identifier) == [identifiers[0]])
         #expect(content.rows(of: .project(gone.identifier)).isEmpty)
-        // A session whose project the list does not hold is outside every project.
-        #expect(content.rows(of: .noProject).map(\.identifier) == [identifiers[2]])
+        // A session whose project the list does not hold is outside every project. It tells its folder.
+        #expect(content.rows(of: .allSessions).first?.folder.isEmpty == false)
     }
 
     @Test func aRowTellsItsPlaceByItsProject() {
@@ -117,7 +117,7 @@ import WindowLayout
     @Test func theTitleOfAnEntryIsItsName() {
         let content = content().content
         #expect(content.title(of: .allSessions) == "All Projects" && content.title(of: .needsYou) == "Needs You")
-        #expect(content.title(of: .noProject) == "Other Folders" && content.title(of: .project(site.identifier)) == "Web Site")
+        #expect(content.title(of: .project(site.identifier)) == "Web Site")
         // The second pane tells where new work starts, and names an empty project.
         #expect(content.place(of: .project(site.identifier)) == "In Web Site" && content.place(of: .allSessions) == "In Your Home Folder")
         #expect(content.emptyMessage(of: .project(site.identifier)) == "Nothing in Web Site Yet" && content.emptyMessage(of: .needsYou) == "Nothing Needs You")

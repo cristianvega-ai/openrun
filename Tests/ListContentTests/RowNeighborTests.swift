@@ -16,7 +16,7 @@ import WindowLayout
 
     @Test func anEntryOfTheFirstPaneAndOfTheLayoutMapBothWays() {
         let project = UUID()
-        for entry in [LayoutEntry.allSessions, .needsYou, .noProject, .project(project)] {
+        for entry in [LayoutEntry.allSessions, .needsYou, .project(project)] {
             #expect(ProjectsListEntry(entry).layoutEntry == entry)
         }
         #expect(ProjectsListEntry(.project(project)) == .project(project))

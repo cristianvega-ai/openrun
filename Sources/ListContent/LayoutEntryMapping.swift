@@ -9,7 +9,6 @@ extension ProjectsListEntry {
         case .allSessions: self = .allSessions
         case .needsYou: self = .needsYou
         case .project(let identifier): self = .project(identifier)
-        case .noProject: self = .noProject
         }
     }
 
@@ -18,7 +17,6 @@ extension ProjectsListEntry {
         case .allSessions: .allSessions
         case .needsYou: .needsYou
         case .project(let identifier): .project(identifier)
-        case .noProject: .noProject
         }
     }
 }

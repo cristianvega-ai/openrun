@@ -50,9 +50,7 @@ public struct ListContent {
                            folder: project.folder.map { FolderText.shown($0, home: home) } ?? Self.missingFolder,
                            attentionCount: attention.count { $0.project == project.identifier })
         }
-        return ProjectsListContent(
-            projects: displays, needsYouCount: attention.count, noProjectAttentionCount: attention.count { $0.project == nil },
-            showsOtherFolders: rows.contains { $0.project == nil }, accounts: accounts)
+        return ProjectsListContent(projects: displays, needsYouCount: attention.count, accounts: accounts)
     }
 
     /// The rows of one entry of the first pane, in the user's order.
@@ -61,7 +59,6 @@ public struct ListContent {
         case .allSessions: rows.map { placed($0, inListOfItsProject: false) }
         case .needsYou: rows.filter { $0.display.alert != nil }.map { placed($0, inListOfItsProject: false) }
         case .project(let identifier): rows.filter { $0.project == identifier }.map { placed($0, inListOfItsProject: true) }
-        case .noProject: rows.filter { $0.project == nil }.map(\.display)
         }
     }
 
@@ -89,7 +86,6 @@ public struct ListContent {
         case .allSessions: "All Projects"
         case .needsYou: "Needs You"
         case .project(let identifier): projectSummaries.first { $0.identifier == identifier }.map(Self.name(of:)) ?? ""
-        case .noProject: "Other Folders"
         }
     }
 
@@ -105,7 +101,7 @@ public struct ListContent {
         switch entry {
         case .project: "Nothing in \(title(of: entry)) Yet"
         case .needsYou: "Nothing Needs You"
-        case .allSessions, .noProject: nil
+        case .allSessions: nil
         }
     }
 
