@@ -13,6 +13,7 @@ import Testing
         #expect(DataFile.settings.scope == .shared)
         #expect(DataFile.layout.name == "layout.json")
         #expect(DataFile.layout.scope == .thisMac)
+        #expect(DataFile.sessions.name == "sessions.json" && DataFile.sessions.scope == .thisMac)
         #expect(Set(DataFile.all.map(\.name)).count == DataFile.all.count)
     }
 

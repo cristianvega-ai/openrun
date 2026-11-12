@@ -25,7 +25,11 @@ public struct DataFile: Hashable, Sendable, CustomStringConvertible {
     /// The agent threads: their agents, conversations, accounts and folders.
     public static let threads = DataFile(name: "threads.json", scope: .thisMac)
 
-    public static let all: [DataFile] = [.projects, .projectFolders, .settings, .layout, .threads]
+    /// The terminal sessions that run, so that they come back after a
+    /// restart: the folder, the name and the size of each one.
+    public static let sessions = DataFile(name: "sessions.json", scope: .thisMac)
+
+    public static let all: [DataFile] = [.projects, .projectFolders, .settings, .layout, .threads, .sessions]
 
     public var description: String { name }
 }
