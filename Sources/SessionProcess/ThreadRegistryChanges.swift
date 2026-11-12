@@ -69,7 +69,7 @@ extension ThreadRegistry {
         summaries[identifier] = nil
         changes?.threadEnded(identifier)
         await runners.removeValue(forKey: identifier)?.close()
-        if let next = slots.remove(identifier) { await runners[next]?.sendNextMessage() }
+        if let next = slots.remove(identifier) { await start(next) }
     }
 
     /// The runner of a thread, which starts with the first use.
@@ -90,7 +90,11 @@ extension ThreadRegistry {
         let ((record, state, process, waiting, holdsProcessSlot), usage) = await (runner.facts, runner.usage)
         guard runners[record.identifier] === runner, let kept = list.thread(record.identifier) else { return }
         // The agent ended, so the thread that waited longest can start its agent.
-        if !holdsProcessSlot, let next = slots.release(record.identifier) { await runners[next]?.sendNextMessage() }
+        if !holdsProcessSlot {
+            // A thread with no message, such as after a stop, waits for no slot.
+            if waiting == 0 { slots.leaveLine(record.identifier) }
+            if let next = slots.release(record.identifier) { await start(next) }
+        }
         agentProcesses = agentProcesses.filter { $0.value != record.identifier }
         if let process { agentProcesses[process] = record.identifier }
         let isRunning = process != nil
@@ -131,6 +135,15 @@ extension ThreadRegistry {
         let events = await Task.detached { (try? ThreadHistory.events(of: record, environment: environment, after: terminal.historyEnd)) ?? [] }.value
         await runner.returnedFromTerminal(events: events)
         publish(thread)
+    }
+
+    /// A thread in line got a slot. Its agent starts with its next
+    /// message. A thread with no message gives the slot to the thread
+    /// after it, through `runnerChanged`.
+    func start(_ thread: UUID) async {
+        guard let runner = runners[thread] else { return }
+        await runner.sendNextMessage()
+        await runnerChanged(runner)
     }
 
     /// A runner wants to start its agent. When every slot is taken, an

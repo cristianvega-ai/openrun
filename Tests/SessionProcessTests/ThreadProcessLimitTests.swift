@@ -83,6 +83,21 @@ import Testing
         await fixture.end()
     }
 
+    @Test func aThreadThatLostItsMessagesLeavesTheSlotToTheThreadAfterIt() async throws {
+        let fixture = try await Fixture(mode: "neverEnds")
+        let third = try await fixture.registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        try await fixture.firstRunner.send(text: "One.")
+        #expect(await eventually { await fixture.registry.summary(fixture.first)?.state == "inProgress" })
+        // The second thread waits in line, and a stop removes its message.
+        try await fixture.secondRunner.send(text: "Two.")
+        try await fixture.registry.runner(for: third).send(text: "Three.")
+        await fixture.secondRunner.stop()
+        await fixture.firstRunner.stop()
+        #expect(await eventually { await fixture.registry.summary(third)?.isProcessRunning == true })
+        #expect(await fixture.runs() == [false, false])
+        await fixture.end()
+    }
+
     @Test func theCloseOfAThreadGivesItsSlotToTheThreadThatWaits() async throws {
         let fixture = try await Fixture(mode: "neverEnds")
         try await fixture.firstRunner.send(text: "One.")

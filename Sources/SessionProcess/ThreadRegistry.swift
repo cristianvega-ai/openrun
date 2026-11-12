@@ -66,7 +66,7 @@ actor ThreadRegistry {
     func updateSettings(model: String, permissionMode: String, processLimit: Int, version: Int) async {
         guard version > settingsVersion else { return }
         (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
-        for thread in slots.setLimit(processLimit) { await runners[thread]?.sendNextMessage() }
+        for thread in slots.setLimit(processLimit) { await start(thread) }
         // The setting is the widest mode of every thread, so a thread with a wider one comes down to it.
         for record in list.threads {
             if Self.offeredModes(upTo: permissionMode).contains(record.permissionMode) {

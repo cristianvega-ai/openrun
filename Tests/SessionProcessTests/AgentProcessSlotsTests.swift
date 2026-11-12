@@ -47,6 +47,7 @@ import Testing
     @Test func aClosedThreadLeavesTheLineAndGivesItsSlotBack() {
         var slots = AgentProcessSlots(limit: 1)
         _ = (slots.take(for: first), slots.take(for: second), slots.take(for: third))
+        slots.leaveLine(fourth)
         let fromLine = slots.remove(second)
         #expect(fromLine == nil && slots.waiting == [third])
         let fromHolder = slots.remove(first)

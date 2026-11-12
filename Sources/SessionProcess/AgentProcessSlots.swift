@@ -53,6 +53,12 @@ struct AgentProcessSlots {
         return granted
     }
 
+    /// The thread has no message for its agent any more, such as after a
+    /// stop, so it leaves the line.
+    mutating func leaveLine(_ thread: UUID) {
+        waiting.removeAll { $0 == thread }
+    }
+
     /// The thread closed: it holds no slot and waits for none.
     mutating func remove(_ thread: UUID) -> UUID? {
         waiting.removeAll { $0 == thread }
