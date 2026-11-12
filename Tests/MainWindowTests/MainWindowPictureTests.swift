@@ -72,7 +72,7 @@ struct MainWindowPictureTests {
         try capture(controller.window, to: output.appendingPathComponent("main-projects-hidden.png"))
         controller.toggleProjectsList(nil)
         controller.projectsList.show(ProjectsListContent())
-        controller.sessionsList.show(SessionsListContent(title: "All Sessions", rows: [], agents: ["Claude Code", "Codex"]))
+        controller.sessionsList.show(SessionsListContent(title: "All Projects", rows: [], agents: ["Claude Code", "Codex"]))
         controller.showContent(nil)
         for (name, appearance) in [("light", NSAppearance.Name.aqua), ("dark", .darkAqua)] {
             controller.window.appearance = NSAppearance(named: appearance)

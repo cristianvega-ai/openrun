@@ -20,7 +20,7 @@ extension Workspace: ProjectsListDelegate {
     }
 
     func projectsList(_ list: ProjectsListController, didRemoveProject identifier: UUID) {
-        // The sessions of the project stay, and show under "No Project".
+        // The sessions of the project stay, and show under "Other Folders".
         perform("The project could not be removed") { try $0.removeProject(identifier) }
     }
 

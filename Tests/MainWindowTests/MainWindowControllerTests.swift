@@ -58,7 +58,7 @@ import Testing
     @Test func theEmptyMessagesShareOneLine() {
         let controller = makeMainWindow()
         defer { controller.window.close() }
-        controller.sessionsList.show(SessionsListContent(title: "All Sessions", rows: [], agents: []))
+        controller.sessionsList.show(SessionsListContent(title: "All Projects", rows: [], agents: []))
         controller.window.layoutIfNeeded()
         let sessions = controller.sessionsList.emptyView.message, content = controller.contentPane.emptyLabel
         #expect(!sessions.isHidden && !content.isHidden)

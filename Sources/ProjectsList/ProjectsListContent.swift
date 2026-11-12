@@ -1,5 +1,5 @@
 /// Everything that the first pane shows: the projects in the user's order,
-/// and the counts of rows that need the user. "All Sessions" shows no count,
+/// and the counts of rows that need the user. "All Projects" shows no count,
 /// because "Needs You" under it shows the same number.
 public struct ProjectsListContent: Equatable, Sendable {
     public var projects: [ProjectDisplay]

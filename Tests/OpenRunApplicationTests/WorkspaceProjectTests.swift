@@ -62,7 +62,7 @@ import Testing
         #expect(await waitUntil { projectNames(test) == ["Web Site", "app"] })
         workspace.projectsList(projects, didRemoveProject: second)
         #expect(await waitUntil { projectNames(test) == ["app"] })
-        // The first pane goes to "All Sessions" when its project went away.
+        // The first pane goes to "All Projects" when its project went away.
         #expect(projects.selection == .allSessions && workspace.layout.selectedEntry == .allSessions)
     }
 

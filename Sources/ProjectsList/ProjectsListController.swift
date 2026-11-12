@@ -2,9 +2,9 @@ import AppKit
 import ListUpdates
 import PaneAppearance
 
-/// The first pane: "All Sessions", "Needs You", the projects in the user's
-/// order, and "No Project". It shows display values and reports what the user does
-/// through its delegate.
+/// The first pane: "All Projects", "Needs You", and under the heading
+/// "Projects" the projects in the user's order, then "Other Folders". It
+/// shows display values and reports what the user does through its delegate.
 @MainActor
 public final class ProjectsListController: NSObject {
     /// The pane: its top row over the list, on the color of the first pane.
@@ -41,7 +41,7 @@ public final class ProjectsListController: NSObject {
     }
 
     /// Shows new content. Only the rows that changed update, and the
-    /// selection stays on its entry, or goes to "All Sessions" when its
+    /// selection stays on its entry, or goes to "All Projects" when its
     /// project went away.
     public func show(_ content: ProjectsListContent) {
         let selected = selection

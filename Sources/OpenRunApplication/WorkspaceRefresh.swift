@@ -53,7 +53,7 @@ extension Workspace {
             window.projectsList.select(.project(project))
             projectToSelect = nil
         }
-        // The first pane goes to "All Sessions" when its project went away.
+        // The first pane goes to "All Projects" when its project went away.
         let entry = window.projectsList.selection
         layout.selectedEntry = entry.layoutEntry
         // The login shell is "New Terminal", and each other command of the settings has an item of its own.
