@@ -193,6 +193,20 @@ public struct SessionClient: Sendable {
         try requestAcknowledgement(.renameThread(identifier: identifier, name: name), named: "thread rename")
     }
 
+    /// Open in Terminal: resumes the conversation of a thread with its
+    /// agent in a new terminal session, and returns that session.
+    public func openThreadInTerminal(_ identifier: UUID, size: SessionSize) throws -> SessionSummary {
+        guard case .sessionCreated(let summary) = try request(.openThreadInTerminal(identifier: identifier, size: size)) else {
+            throw SessionConnectionError.unexpectedAnswer(request: "open in terminal")
+        }
+        return summary
+    }
+
+    /// Ends the terminal session of a thread, so the thread takes messages again.
+    public func returnThreadFromTerminal(_ identifier: UUID) throws {
+        try requestAcknowledgement(.returnThreadFromTerminal(identifier: identifier), named: "return from terminal")
+    }
+
     /// Changes the model, the permission mode, or both. The mode must be
     /// one of `permissionModes` of the summary of the thread.
     public func changeThread(_ identifier: UUID, model: String? = nil, permissionMode: String? = nil) throws {

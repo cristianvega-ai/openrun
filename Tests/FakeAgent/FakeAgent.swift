@@ -41,7 +41,34 @@ struct FakeAgent {
 
     let environment: [String: String]
 
+    /// The fake agent in a terminal session, as Claude Code runs for Open
+    /// in Terminal. It writes a line, adds the lines of the file in
+    /// `FAKE_AGENT_TERMINAL_TURN` to the history of the conversation, and
+    /// waits for the end of its input.
+    func runInTerminal(arguments: [String]) -> Int32 {
+        guard let flag = arguments.firstIndex(where: { $0 == "--resume" || $0 == "--session-id" }), flag + 1 < arguments.count else {
+            return fail("a run in a terminal needs a conversation", status: 64)
+        }
+        let conversation = arguments[flag + 1]
+        print("The fake agent runs in a terminal with the conversation \(conversation).")
+        fflush(stdout)
+        if let turn = environment["FAKE_AGENT_TERMINAL_TURN"], let settings = environment["CLAUDE_CONFIG_DIR"], let lines = FileManager.default.contents(atPath: turn) {
+            let folder = settings + "/projects/fake-agent", file = folder + "/" + conversation + ".jsonl"
+            try? FileManager.default.createDirectory(atPath: folder, withIntermediateDirectories: true)
+            if !FileManager.default.fileExists(atPath: file) { FileManager.default.createFile(atPath: file, contents: nil) }
+            if let handle = FileHandle(forWritingAtPath: file) {
+                handle.seekToEndOfFile()
+                handle.write(lines)
+                try? handle.close()
+            }
+        }
+        while readLine() != nil {}
+        return 0
+    }
+
     func run(arguments: [String]) -> Int32 {
+        // Claude Code without `-p` is the program for a terminal.
+        if !arguments.contains("-p") { return runInTerminal(arguments: arguments) }
         guard let parsed = FakeAgentArguments(arguments) else {
             return fail("the arguments are not the ones that OpenRun gives", status: 64)
         }
