@@ -97,6 +97,7 @@ openrun-session     -> SessionProcess  -> SessionProtocol
                                        -> Projects, Settings, DataStorage, UntrustedText
                                        -> AgentThreads -> DataStorage, UntrustedText
                                        -> ClaudeCodeAgent, AgentProgram, AgentConversation
+                                       -> CodexAgent
 openrun-application -> OpenRunApplication -> MainWindow, ProjectsList, SessionsList
                                           -> SessionPane -> TerminalView
                                           -> SessionOverview -> SessionConnection
@@ -135,7 +136,7 @@ ChatView          -> AgentConversation
 The session process owns the projects and the settings. Every client reads and changes them through the socket. The tool uses `Projects` only for `ProjectFolderPath`, to find the project of a folder that the user typed, and `Settings` only for the message about an unknown name.
 `SessionProtocol` does not use `Projects` or `Settings`. It has its own plain types, `ProjectSummary` and `SettingSummary`, so a client needs no other module to read them.
 `UntrustedText`, `DataStorage`, `Projects` and `Settings` use only Foundation and the modules above, so the session process, the tool and the app can all use them.
-The session process runs Claude Code in the threads through `AgentConversation`, `ClaudeCodeAgent`, `AgentProgram` and `AgentThreads`. No program uses `CodexAgent` yet.
+The session process runs Claude Code in the threads through `AgentConversation`, `ClaudeCodeAgent`, `AgentProgram` and `AgentThreads`, and Codex through `CodexAgent`.
 `SessionConnection` uses `AgentConversation` only for the events of a thread, which it decodes for the app. The tool uses `ClaudeCodeAgent` only for the request and the answer of the permission hook.
 `AgentConversation` depends on no other module, and it knows no agent. `ClaudeCodeAgent` does not start a process, and `AgentProgram` knows no agent. `AgentProgram` uses only `ProgramExit` and `LoginShell` of `PseudoTerminal`. `CodexAgent` starts its app-server through `AgentProgram`, and uses only `ProgramExit` of `PseudoTerminal`. None of the four uses AppKit (proposal 13 of 2026-11-10).
 `OpenRunApplication` puts `ChatView` in the third pane.
@@ -436,6 +437,8 @@ The window changes nothing itself and knows no socket. It tells its host the nam
 | `SessionChangeFeed` | The latest summary of each session, the projects, the settings, and the connections that watch them. It sends each change under one lock, so every watcher gets the same order |
 | `ThreadRegistry` | An actor on a serial queue of its own. The records of the agent threads, which it keeps in `threads.json`, and the runner of each thread in use. See "Threads in the session process" |
 | `ThreadRunner` | An actor. One thread in use: the process of its agent, its transcript, the events that it keeps, the messages that wait, the permission requests, and the attached clients |
+| `ThreadRunning` | What each thread in use does for its clients, whatever its agent: attach, a message, a stop, a close, and the answer to a permission request |
+| `CodexThreadRunner` | An actor. One Codex thread in use: its thread on the app-server of its account, its transcript, the events that it keeps, and the messages that wait |
 | `ThreadEventBuffer` | The newest events of a thread, at most 4 MiB, for a client that attaches |
 | `AgentProcessSlots` | The threads that may run the process of an agent now, at most the number of the setting `agent-process-limit`, and the threads that wait in line |
 | `AgentLaunchProvider` | How an agent starts: its program, the environment of the login shell of the user, read once, and the permission hook |
@@ -578,7 +581,7 @@ A write uses the socket's send timeout (`SO_SNDTIMEO`) for its deadline, because
 
 An agent thread is a chat with one agent, one account and one model (proposal 1 of 2026-11-10).
 Five modules hold the parts: `AgentConversation`, the model; `ClaudeCodeAgent`, the adapter of Claude Code; `CodexAgent`, the adapter of Codex; `AgentProgram`, the process on pipes; and `AgentThreads`, the records.
-The session process joins them for Claude Code (see "Threads in the session process"), and the app shows a thread as a chat. Codex does not run in a thread yet.
+The session process joins them for Claude Code and for Codex (see "Threads in the session process"), and the app shows a thread as a chat.
 
 ### The event model
 
@@ -716,6 +719,7 @@ The session process owns the threads, as it owns the sessions, so the agent of a
 - **Quiet time and the limit.** A process that had no work for five minutes ends, and the next message starts a new one, which resumes the conversation. A turn that runs keeps its process. At most eight agent processes run at one time (`AgentProcessSlots`, the setting `agent-process-limit`), because one idle Claude Code uses 300 to 400 MB. When every slot is taken, the agent that had no work for the longest time ends to make room. When every agent works, the message waits, the chat says so, and the thread gets the slot of the next agent that ends. A process that OpenRun asked to end takes no new message: the message waits for the end and then starts a new process.
 - **Model and mode.** `changeThread` gives a thread another model or permission mode. Claude Code takes both only at its start, so a process with no work ends at once, and a process in a turn ends after the turn. The next message starts a process with the new values, which resumes the conversation. A thread can take each mode up to the one of the setting `claude-code-permission-mode`, in the order of `ClaudeCodePermissionMode.fromStrictestToWidest` (proposal 9). So the user can leave plan mode in the chat, and a wider mode needs the settings window. A new thread follows the same rule, and a stricter setting brings each wider thread down to it.
 - **The lists.** The registry gives the `ThreadSummary` of each thread to `SessionChangeFeed`: the facts of the record, the state of the transcript (`idle`, `inProgress`, `needsUser`, `finishedTurn` or `failed`), whether the process runs, the count of the messages that wait, and the project of the folder. Only a watcher that asked with `includesThreads` gets them.
+- **Codex.** A thread with the agent `codex` gets a `CodexThreadRunner`. Codex has one `codex app-server` for each account, for all threads of that account (`CodexAccountServers`), so the runner holds no process and takes no slot. The registry makes the app-servers at the first need, with the environment of the login shell. The first message opens the thread: a new thread of Codex, whose identifier the record then keeps, or a resume by that identifier, also after a restart of the session process. A message is one turn (`CodexTurn`), with the model and the sandbox of the record, so a change of them applies to the next turn. The model `default` is the one of the configuration of Codex, and the two permission modes are its sandboxes, `readOnly` and `workspaceWrite`. The approval policy is always `untrusted`, and a request of Codex shows in the chat as one of Claude Code does: `answerToolPermission` gives the answer of the user to the app-server. A Codex thread has no hook and no terminal, so `requestToolPermission` and `openThreadInTerminal` are only for Claude Code. `--codex-program PROGRAM` names another program, which the tests use for the fake app-server. `readThreadHistory` gives no events for a Codex thread yet.
 - **Who may use the threads.** Only a program outside every session and every thread may send a request of the threads (decision of 2026-11-10), so an agent cannot drive another agent without the user. `ProcessAncestry` finds the agent of a thread among the parents of the caller.
 
 ### The permission requests of a thread
@@ -878,7 +882,7 @@ Client to server:
 | `moveProject` | `identifier`, `place` (0 is the first) | `acknowledged`. A place outside the list gets a `failure` |
 | `listSettings` | none | `settingList` |
 | `changeSetting` | `name`, `text` | `acknowledged`. An unknown name, a value that is not valid, and a protected setting from a caller that may not change it get a `failure` with reason `invalidRequest` and the message of `SettingError`. See "Projects and settings" |
-| `createThread` | `agent` (`claude-code`), `folder`, and optional `model`, `permissionMode` and `name` | `threadCreated`. A `failure` with reason `invalidRequest` for an agent that this build does not run, a folder that does not exist, or a list that is full |
+| `createThread` | `agent` (`claude-code` or `codex`), `folder`, and optional `model`, `permissionMode` and `name` | `threadCreated`. A `failure` with reason `invalidRequest` for an agent that this build does not run, a folder that does not exist, or a list that is full |
 | `listThreads` | none | `threadList` |
 | `renameThread` | `identifier`, `name` (absent or empty removes the name) | `acknowledged` |
 | `changeThread` | `identifier`, and optional `model` and `permissionMode` | `acknowledged`. The agent takes the new values at its next start. A `failure` with reason `invalidRequest` for a mode that is not in `permissionModes` of the summary, and for a model name that could pass for a flag |
@@ -1230,7 +1234,7 @@ openrun settings list
 openrun settings get NAME
 openrun settings set NAME VALUE
 openrun thread list [--json]
-openrun thread new [--folder PATH] [--model MODEL] [--mode MODE] [--name NAME] [-- TEXT]
+openrun thread new [--agent AGENT] [--folder PATH] [--model MODEL] [--mode MODE] [--name NAME] [-- TEXT]
 openrun thread send THREAD TEXT
 openrun thread read THREAD [--json]
 openrun thread stop THREAD
@@ -1252,7 +1256,7 @@ A PROJECT is a unique start of a project identifier, or the folder of the projec
 `settings set` joins the words of VALUE, and the words after `--`, with one space, and prints nothing. A protected setting changes only from OpenRun.app, so the tool gets the message "The setting NAME is protected. Change it in the settings window of OpenRun.", unless `--answerer-requirement` names it.
 The `thread` commands use the agent threads (`ThreadCommand`). A THREAD is a unique start of a thread identifier (`ThreadMatch`). The session process refuses them from a program in a session or in a thread, and the tool prints that reason.
 `thread list` prints one line for each thread, oldest first: the identifier, the state, the folder and the shown name (the name, or else the title), separated by tabs and escaped as in `list`. `thread list --json` prints an object with one key, `threads`. Each thread has every one of these keys, with `null` for a fact that it does not have: `identifier` (lower case), `agent`, `name`, `title`, `folder`, `model`, `permissionMode`, `accountName`, `state`, `isProcessRunning`, `waitingMessageCount`, `createdAt`, `lastActivityAt` (ISO 8601) and `projectIdentifier` (`ListedThread`).
-`thread new` makes a thread with Claude Code in the folder after `--folder`, or in the current folder, and prints its identifier. The words after `--` are the first message. `thread send` joins the words after THREAD, and the words after `--`, with one space. Both return when the session process took the message, and they do not wait for the turn.
+`thread new` makes a thread with Claude Code, or with Codex after `--agent codex`, in the folder after `--folder`, or in the current folder, and prints its identifier. The words after `--` are the first message. `thread send` joins the words after THREAD, and the words after `--`, with one space. Both return when the session process took the message, and they do not wait for the turn.
 `thread read` attaches to the thread, takes the events that the thread keeps, and leaves (`ThreadEvents`). It prints the conversation as plain text (`ThreadText`): one block for each message, tool call, file change, permission request, task, notice and turn that failed or stopped, with an empty line between two blocks. The agent chose that text, so each control character is escaped, and only the line breaks of a message stay. `thread read --json` prints each event as one line of JSON, in the form of a `threadEvent` frame.
 `thread stop`, `thread rename` and `thread close` print nothing. No command answers a permission request: only OpenRun.app does that (proposal 2).
 `notify` raises the alert of the session in `OPENRUN_SESSION`, or of the session after `--session`, with the words of TEXT joined by one space. It is for the hooks of an agent. When there is no such session, no session process answers within 5 seconds of `hello`, or the session process does not know the session from `OPENRUN_SESSION`, it writes `ESC ] 777 ; notify ; OpenRun ; TEXT ESC \` to `/dev/tty` instead, without waiting. OpenRun and other terminals show that as a notification. A refusal by the rule for callers is an error, with no write to the terminal, and so is a session after `--session` that the session process does not know, or an identifier that matches more than one session. `notify` exits with 0 when the alert went out and with 1 otherwise. It never exits with 2, also not for wrong arguments, because exit code 2 from a hook of Claude Code blocks the action of the agent.
