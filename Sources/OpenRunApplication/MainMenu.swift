@@ -75,6 +75,7 @@ enum MainMenu {
     private static func addSessionMenu(to menu: NSMenu, workspace: Workspace) {
         let session = submenu("Session", in: menu)
         session.addItem(item("Rename…", #selector(Workspace.renameSession(_:)), target: workspace))
+        session.addItem(item("Clear", #selector(Workspace.clearSession(_:)), "k", target: workspace))
         session.addItem(.separator())
         // The keys of the next and the previous tab of other Mac apps.
         session.addItem(item("Next Session", #selector(Workspace.selectNextSession(_:)), "]", [.command, .shift], target: workspace))

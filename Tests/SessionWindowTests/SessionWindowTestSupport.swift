@@ -67,6 +67,7 @@ final class FakeAttachment: AttachedSession {
             if confirms { deliver(.sizeChanged(size)) }
         }
     }
+    func clearScrollback() throws {}
     func detach() { record.withLock { $0.detached = true } }
     func shutdown() { record.withLock { $0.shutDown = true } }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {

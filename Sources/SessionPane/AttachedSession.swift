@@ -9,6 +9,7 @@ protocol AttachedSession: AnyObject, Sendable {
     func send(input: Data) throws
     func send(size: SessionSize) throws
     func send(size: SessionSize, requestsConfirmation: Bool) throws
+    func clearScrollback() throws
     func detach() throws
     func shutdown()
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void)

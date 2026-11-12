@@ -242,6 +242,13 @@ public final class SessionPaneController: NSObject, TerminalViewDelegate {
         send { try attachment.send(size: SessionSize(columns: size.columns, rows: size.rows), requestsConfirmation: true) }
     }
 
+    /// Command-K: clears the scrollback of the session, and its screen
+    /// when a shell waits at its prompt.
+    public func clearScrollback() {
+        guard !isClosed, !hasConnectionFailure, let attachment else { return }
+        send { try attachment.clearScrollback() }
+    }
+
     private func send(_ operation: @escaping @Sendable () throws -> Void) {
         let report: @MainActor @Sendable (String) -> Void = { [weak self] in self?.connectionFailed($0) }
         work.run {

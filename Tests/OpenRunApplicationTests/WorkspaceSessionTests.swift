@@ -5,6 +5,7 @@ import SessionProtocol
 import SessionsList
 import Testing
 @testable import OpenRunApplication
+@testable import TerminalView
 
 @MainActor @Suite(.serialized) struct WorkspaceSessionTests {
     /// A started workspace whose new sessions read no start file of the user.
@@ -17,6 +18,23 @@ import Testing
         test.workspace.start()
         #expect(await waitUntil { test.workspace.connection.hasSessionList })
         return test
+    }
+
+    @Test func commandKClearsTheScrollbackOfTheShownSession() async throws {
+        let test = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        let item = NSMenuItem(title: "Clear", action: #selector(Workspace.clearSession(_:)), keyEquivalent: "k")
+        #expect(!workspace.validateMenuItem(item))
+        workspace.newSession()
+        #expect(await waitUntil { workspace.shownSession.flatMap { workspace.panes.existing($0)?.terminalView } != nil })
+        let session = try #require(workspace.shownSession), view = try #require(workspace.panes.existing(session)?.terminalView)
+        _ = try test.process.runCommand(["send", SessionSummary.text(for: session), "--enter", "seq 1 300"])
+        #expect(await waitUntil { view.terminal.scrollbackLineCount > 200 })
+        #expect(workspace.validateMenuItem(item))
+        workspace.clearSession(nil)
+        // The clear comes back as output, so the copy of the view loses its scrollback too.
+        #expect(await waitUntil { view.terminal.scrollbackLineCount == 0 })
     }
 
     @Test func aNewSessionStartsInTheHomeFolderAndTakesTheSelectionAndTheFocus() async throws {

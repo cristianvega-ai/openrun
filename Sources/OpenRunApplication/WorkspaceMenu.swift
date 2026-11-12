@@ -23,6 +23,11 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         if let row = window.sessionsList.selection { window.sessionsList.beginRename(of: row) }
     }
 
+    /// Command-K: clears the scrollback of the session that the third pane shows.
+    @objc func clearSession(_ sender: Any?) {
+        shownSession.flatMap { panes.existing($0) }?.clearScrollback()
+    }
+
     @objc func selectNextSession(_ sender: Any?) {
         moveSelection(by: 1)
     }
@@ -43,6 +48,7 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         case #selector(showSettings(_:)): !connection.overview.settings.isEmpty
         case #selector(closeSession(_:)): window.window.isVisible && layout.selectedRow != nil
         case #selector(renameSession(_:)): window.window.isVisible && window.sessionsList.selection != nil
+        case #selector(clearSession(_:)): window.window.isVisible && shownSession != nil
         case #selector(selectNextSession(_:)), #selector(selectPreviousSession(_:)): !window.sessionsList.shownIdentifiers.isEmpty
         default: true
         }

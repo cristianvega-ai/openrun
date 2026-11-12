@@ -23,6 +23,7 @@ private final class TracedAttachment: AttachedSession {
     }
     func send(size: SessionSize) throws { try real.send(size: size) }
     func send(size: SessionSize, requestsConfirmation: Bool) throws { try real.send(size: size, requestsConfirmation: requestsConfirmation) }
+    func clearScrollback() throws { try real.clearScrollback() }
     func detach() throws { try real.detach() }
     func shutdown() { record.withLock { $0.shutdowns += 1 }; real.shutdown() }
     func startReceiving(_ handler: @escaping @Sendable (SessionAttachmentEvent) -> Void) {
