@@ -368,6 +368,17 @@ actor Session {
         refreshFactsWhileActive()
     }
 
+    /// Command-K: erases the scrollback, for the session and for each
+    /// client, because the erase goes out as output. When a shell waits
+    /// at its prompt, the screen goes too, and a form feed makes the
+    /// shell draw its prompt again at the top. Any other program keeps
+    /// its screen, because it would not draw it again.
+    func clearScrollback() {
+        let isAtPrompt = waitingLineEditor() != nil
+        show(ArraySlice(Array((isAtPrompt ? "\u{1B}[H\u{1B}[2J\u{1B}[3J" : "\u{1B}[3J").utf8)))
+        if isAtPrompt { Task { try? await type([0x0C]) } }
+    }
+
     /// Reads the foreground program, its folder, the branch of the folder
     /// and the mode of the terminal. A folder that the system does not
     /// report keeps the last one.

@@ -61,6 +61,12 @@ public final class SessionAttachment: Sendable {
         }
     }
 
+    /// Command-K: asks the session to clear its scrollback, and its
+    /// screen when a shell waits at its prompt. The clear comes as output.
+    public func clearScrollback() throws {
+        try SessionConnectionError.wrapping { try connection.send(ClientMessage.clearScrollback) }
+    }
+
     /// Asks the session process to detach this client. The session goes on.
     public func detach() throws {
         try SessionConnectionError.wrapping { try connection.send(ClientMessage.detach) }

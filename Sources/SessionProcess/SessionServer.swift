@@ -292,6 +292,8 @@ actor SessionServer {
                         break messages
                     }
                 }
+            case .clearScrollback:
+                await attachedSession?.clearScrollback()
             case .detach:
                 client.markHandled(received)
                 break messages

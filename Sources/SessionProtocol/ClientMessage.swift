@@ -50,6 +50,10 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// the other clients that asked receive `sizeChanged`. A client may ask
     /// for its own ordered `sizeChanged` with `requestsConfirmation`.
     case resize(SessionSize, requestsConfirmation: Bool? = nil)
+    /// Clears the scrollback of the attached session, and also its
+    /// screen when a shell waits at its prompt (Command-K). No answer:
+    /// the clear comes to each client as output.
+    case clearScrollback
     /// Leaves the session running and closes this connection.
     case detach
 
@@ -206,6 +210,7 @@ extension ClientMessage {
         case .attach: "attach"
         case .input: "input"
         case .resize: "resize"
+        case .clearScrollback: "clearScrollback"
         case .detach: "detach"
         case .receiveApprovalQuestions: "receiveApprovalQuestions"
         case .answerApprovalQuestion: "answerApprovalQuestion"
