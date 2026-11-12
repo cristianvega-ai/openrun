@@ -5,7 +5,7 @@ import Testing
 @Suite struct ProjectsListRowTests {
     private let first = UUID(), second = UUID()
 
-    @Test func theFixedEntriesComeFirstAndNoProjectLast() {
+    @Test func theProjectsComeLastUnderTheirHeading() {
         let content = ProjectsListContent(
             projects: [ProjectDisplay(identifier: first, name: "openrun", folder: "/p/openrun", attentionCount: 2),
                        ProjectDisplay(identifier: second, name: "website", folder: "/p/website")],
@@ -23,6 +23,9 @@ import Testing
         #expect(ProjectsListRow.rows(for: ProjectsListContent(projects: [project])).map(\.name) == ["All Projects", "Needs You", "Projects", "openrun"])
         let outside = ProjectsListRow.rows(for: ProjectsListContent(projects: [project], showsOtherFolders: true))
         #expect(outside.last?.entry == .noProject && outside.last?.name == "Other Folders")
+        // With no project, the heading has a hint in place of its rows.
+        let empty = ProjectsListRow.rows(for: ProjectsListContent())
+        #expect(empty.map(\.kind) == [.entry(.allSessions), .entry(.needsYou), .heading, .hint] && empty[3].name == ProjectsListRow.emptyHint)
     }
 
     @Test func voiceOverHearsTheCount() {

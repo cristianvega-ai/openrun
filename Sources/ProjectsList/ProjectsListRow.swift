@@ -16,6 +16,9 @@ struct ProjectsListRow: Equatable {
     var help: String?
     var attentionCount: Int
 
+    /// What the pane says under the heading while the user has no project.
+    static let emptyHint = "Add a folder with the plus button"
+
     /// The table row of the first project, under the two fixed entries at
     /// the top and the heading of the projects.
     static let firstProjectRow = 3
@@ -27,11 +30,13 @@ struct ProjectsListRow: Equatable {
     /// that the work belongs to them.
     static func rows(for content: ProjectsListContent) -> [ProjectsListRow] {
         [ProjectsListRow(kind: .entry(.allSessions), name: "All Projects", symbol: "square.stack", help: "The threads and the terminals of every project", attentionCount: 0),
-         ProjectsListRow(kind: .entry(.needsYou), name: "Needs You", symbol: "bell", help: nil, attentionCount: content.needsYouCount),
+         ProjectsListRow(kind: .entry(.needsYou), name: "Needs You", symbol: "bell", help: "The threads and the terminals that wait for you", attentionCount: content.needsYouCount),
          ProjectsListRow(kind: .heading, name: "Projects", symbol: "", help: nil, attentionCount: 0)]
             + content.projects.map {
                 ProjectsListRow(kind: .entry(.project($0.identifier)), name: $0.name, symbol: "folder", help: $0.folder, attentionCount: $0.attentionCount)
             }
+            // A heading with nothing under it looks unfinished, so it tells how a project comes in.
+            + (content.projects.isEmpty ? [ProjectsListRow(kind: .hint, name: emptyHint, symbol: "", help: nil, attentionCount: 0)] : [])
             + (content.showsOtherFolders ? [ProjectsListRow(
                 kind: .entry(.noProject), name: "Other Folders", symbol: "tray", help: "The threads and the terminals in folders of no project",
                 attentionCount: content.noProjectAttentionCount)] : [])
