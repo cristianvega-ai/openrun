@@ -39,6 +39,8 @@ actor ThreadRegistry {
     /// from the settings.
     var defaultModel: String
     var defaultPermissionMode: String
+    /// The accounts that a new thread can name.
+    var accountChoices: ThreadAccountChoices
     private var settingsVersion = 0
 
     /// Loads the threads. A file that cannot be read never stops the
@@ -46,11 +48,11 @@ actor ThreadRegistry {
     init(
         store: ThreadStore, projects: ProjectList = ProjectList(), changes: SessionChangeFeed? = nil,
         processLimit: Int = AgentProcessSlots.defaultLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
-        defaultModel: String = "opus", defaultPermissionMode: String = "default",
+        defaultModel: String = "opus", defaultPermissionMode: String = "default", accountChoices: ThreadAccountChoices = ThreadAccountChoices(),
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings
     ) {
         (self.store, self.projects, self.changes, self.launchSettings) = (store, projects, changes, launchSettings)
-        (self.defaultModel, self.defaultPermissionMode) = (defaultModel, defaultPermissionMode)
+        (self.defaultModel, self.defaultPermissionMode, self.accountChoices) = (defaultModel, defaultPermissionMode, accountChoices)
         (slots, self.quietTime) = (AgentProcessSlots(limit: processLimit), quietTime)
         var loaded = ThreadList()
         do {
@@ -68,9 +70,11 @@ actor ThreadRegistry {
 
     /// Takes newer settings. They apply to the next thread and to the
     /// next start of an agent, and the agents that run stay.
-    func updateSettings(model: String, permissionMode: String, processLimit: Int, version: Int) async {
+    func updateSettings(model: String, permissionMode: String, processLimit: Int, accountChoices: ThreadAccountChoices? = nil, version: Int) async {
         guard version > settingsVersion else { return }
         (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
+        // A thread keeps its account, because a resume runs under the same account. Only a new thread sees the change.
+        self.accountChoices = accountChoices ?? self.accountChoices
         for thread in slots.setLimit(processLimit) { await start(thread) }
         // The setting is the widest mode of every thread, so a thread with a wider one comes down to it.
         for record in list.threads {

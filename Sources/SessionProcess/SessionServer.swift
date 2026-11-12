@@ -47,7 +47,8 @@ actor SessionServer {
         self.agents = agents
         threads = ThreadRegistry(
             store: ThreadStore(dataFolder: dataFolder), projects: loadedProjects, changes: changes, processLimit: loadedSettings.agentProcessLimit,
-            defaultModel: loadedSettings.claudeCodeModel, defaultPermissionMode: loadedSettings.claudeCodePermissionMode
+            defaultModel: loadedSettings.claudeCodeModel, defaultPermissionMode: loadedSettings.claudeCodePermissionMode,
+            accountChoices: ThreadAccountChoices(loadedSettings)
         ) { await agents.settings() }
         changes.observeEnds { [threads] session in Task { await threads.sessionEnded(session) } }
         // The path of the program is read at the start, because a new build
@@ -479,7 +480,8 @@ actor SessionServer {
             let (values, version) = try await settings.change(name: name, to: text, requestedBy: requester)
             await registry.updateLimits(sessionLimit: values.sessionLimit, scrollbackLimit: values.scrollbackLimit, version: version)
             await threads.updateSettings(
-                model: values.claudeCodeModel, permissionMode: values.claudeCodePermissionMode, processLimit: values.agentProcessLimit, version: version)
+                model: values.claudeCodeModel, permissionMode: values.claudeCodePermissionMode, processLimit: values.agentProcessLimit,
+                accountChoices: ThreadAccountChoices(values), version: version)
             await agents.setProgram(values.claudeCodeProgram)
             return .acknowledged
         } catch {

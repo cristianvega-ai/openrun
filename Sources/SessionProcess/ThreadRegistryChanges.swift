@@ -8,8 +8,13 @@ import SessionProtocol
 /// facts that a runner reports.
 extension ThreadRegistry {
     /// Makes a thread. Its folder must exist, because the agent starts there.
-    func create(agent: String, folder: String, model: String?, permissionMode: String?, name: String?) throws -> ThreadSummary {
+    func create(agent: String, folder: String, model: String?, permissionMode: String?, name: String?, account: String? = nil) throws -> ThreadSummary {
         guard let kind = ThreadAgent(rawValue: agent) else { throw ThreadRequestError.unsupportedAgent(agent) }
+        // Without a name, the thread runs under the account of the login shell.
+        let chosen = try account.map { name -> ThreadAccount in
+            guard let found = accountChoices.account(named: name, of: kind) else { throw ThreadRequestError.unknownAccount }
+            return found
+        }
         var isFolder: ObjCBool = false
         guard folder.hasPrefix("/"), FileManager.default.fileExists(atPath: folder, isDirectory: &isFolder), isFolder.boolValue else {
             throw ThreadRequestError.folderDoesNotExist
@@ -21,7 +26,7 @@ extension ThreadRegistry {
         let realFolder = String(cString: resolved)
         let usual = kind == .codex ? (CodexThreadRunner.configuredModel, CodexSandbox.workspaceWrite.rawValue) : (defaultModel, defaultPermissionMode)
         let mode = try offered(permissionMode ?? usual.1, for: kind)
-        let record = ThreadRecord(agent: kind, folder: realFolder, model: model ?? usual.0, permissionMode: mode, name: name)
+        let record = ThreadRecord(agent: kind, account: chosen, folder: realFolder, model: model ?? usual.0, permissionMode: mode, name: name)
         let previous = list
         try list.add(record)
         try save(restoring: previous)
