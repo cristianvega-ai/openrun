@@ -19,6 +19,8 @@ final class ThreadPaneController: NSObject {
     /// each later batch as an update.
     var isReplayComplete = false
     private var isClosed = false
+    /// The other accounts of the agent, for the box of a login that failed.
+    private var otherAccounts: [ChatAccount]
     /// What asks for the next page of the earlier turns: a place in the
     /// history file of Claude Code, or a cursor of Codex. Nil asks for
     /// the newest page.
@@ -43,7 +45,7 @@ final class ThreadPaneController: NSObject {
     var connect: @Sendable (SocketLocation, UUID) throws -> ThreadAttachment = { try SessionClient(location: $0).attachThread($1) }
 
     init(summary: ThreadSummary, socket: SocketLocation, home: String, otherAccounts: [ChatAccount] = []) {
-        (thread, self.socket) = (summary.identifier, socket)
+        (thread, self.socket, self.otherAccounts) = (summary.identifier, socket, otherAccounts)
         chat = ChatViewController(facts: Self.facts(of: summary, home: home, otherAccounts: otherAccounts))
         super.init()
         chat.delegate = self
@@ -67,6 +69,17 @@ final class ThreadPaneController: NSObject {
         return .ready
     }
 
+    /// The transcript changed. When its newest turn failed for the login
+    /// of the agent, the chat tells the user to sign in, and it stops to
+    /// tell so with the next turn.
+    func refreshSignInAdvice() {
+        if case .notSignedIn = chat.facts.condition, !transcript.needsSignIn {
+            chat.facts.condition = .ready
+        } else if chat.facts.condition == .ready, transcript.needsSignIn {
+            chat.facts.condition = .notSignedIn(otherAccounts: otherAccounts)
+        }
+    }
+
     private static func model(_ identifier: String) -> ChatChoice {
         ChatChoice(identifier: identifier, title: ThreadRowFacts.modelTitle(identifier))
     }
@@ -77,8 +90,10 @@ final class ThreadPaneController: NSObject {
 
     /// The thread has new facts, such as a name.
     func update(_ summary: ThreadSummary, home: String, otherAccounts: [ChatAccount] = []) {
+        self.otherAccounts = otherAccounts
         var facts = Self.facts(of: summary, home: home, otherAccounts: otherAccounts)
         (facts.hasEarlierHistory, facts.isLoadingEarlierHistory) = (chat.facts.hasEarlierHistory, chat.facts.isLoadingEarlierHistory)
+        if facts.condition == .ready, transcript.needsSignIn { facts.condition = .notSignedIn(otherAccounts: otherAccounts) }
         if facts != chat.facts { chat.facts = facts }
     }
 

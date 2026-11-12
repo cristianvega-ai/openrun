@@ -49,6 +49,29 @@ import Testing
         #expect(pane.chat.facts.condition == .atLimit(resetTime: reset, otherAccounts: [ChatAccount(identifier: "Work", name: "Work")]) && chosen == ["Work"])
     }
 
+    @Test func aTurnThatFailsForTheLoginTellsTheUserToSignIn() async throws {
+        let process = try FakeAgentProcess.start(turns: ["authentication-failure", "plain-turn"])
+        defer { process.stop() }
+        let socket = try SocketLocation(path: process.socketPath)
+        let thread = try SessionClient(location: socket).createThread(agent: "claude-code", folder: process.directory.path)
+        let pane = ThreadPaneController(summary: thread, socket: socket, home: process.directory.path)
+        pane.attach()
+        defer { pane.close() }
+        #expect(await waitUntil { pane.isReplayComplete })
+        pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Hi"))
+        #expect(await waitUntil { pane.chat.facts.condition == .notSignedIn(otherAccounts: []) })
+        // The box offers the terminal, where the user signs in, and the other accounts of the settings.
+        var opened = 0
+        pane.openInTerminal = { opened += 1 }
+        pane.chatViewControllerOpenInTerminal(pane.chat)
+        let other = [ChatAccount(identifier: "Work", name: "Work")]
+        pane.update(thread, home: process.directory.path, otherAccounts: other)
+        #expect(opened == 1 && pane.chat.facts.condition == .notSignedIn(otherAccounts: other))
+        // The next turn works, and the advice goes away.
+        pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
+        #expect(await waitUntil { pane.transcript.state == .finishedTurn && pane.chat.facts.condition == .ready })
+    }
+
     @Test func theChatTakesTheEarlierTurnsFromTheHistoryOfTheAgent() async throws {
         let settings = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: settings) }

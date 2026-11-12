@@ -47,5 +47,6 @@ extension ThreadPaneController {
             }
         }
         if isReplayComplete, !change.isEmpty { chat.update(transcript, change: change) }
+        refreshSignInAdvice()
     }
 }
