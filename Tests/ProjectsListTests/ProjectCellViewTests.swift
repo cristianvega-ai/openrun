@@ -8,7 +8,7 @@ import Testing
         let project = ProjectDisplay(identifier: UUID(), name: "openrun", folder: "/p/openrun", attentionCount: 2)
         let rows = ProjectsListRow.rows(for: ProjectsListContent(projects: [project]))
         let cell = ProjectCellView()
-        cell.show(rows[2])
+        cell.show(rows[3])
         #expect(cell.name.stringValue == "openrun" && cell.count.stringValue == "2" && cell.toolTip == "/p/openrun")
         #expect(cell.icon.image != nil)
         #expect(cell.accessibilityLabel() == "openrun, 2 need you")
@@ -28,7 +28,7 @@ import Testing
     @Test func aCutNameKeepsItsDistanceFromTheCount() {
         let project = ProjectDisplay(identifier: UUID(), name: "infrastructure-terraform-modules", folder: "/p/i", attentionCount: 1)
         let cell = ProjectCellView()
-        cell.show(ProjectsListRow.rows(for: ProjectsListContent(projects: [project]))[2])
+        cell.show(ProjectsListRow.rows(for: ProjectsListContent(projects: [project]))[3])
         cell.layoutSubtreeIfNeeded()
         #expect(cell.name.frame.width < cell.name.intrinsicContentSize.width)
         #expect(cell.count.alignmentRect(forFrame: cell.count.frame).minX - cell.name.frame.maxX >= 8)
@@ -43,7 +43,7 @@ import Testing
         let cell = ProjectCellView()
         window.contentView = cell
         let project = ProjectDisplay(identifier: UUID(), name: "openrun", folder: "/p/openrun")
-        cell.show(ProjectsListRow.rows(for: ProjectsListContent(projects: [project]))[2])
+        cell.show(ProjectsListRow.rows(for: ProjectsListContent(projects: [project]))[3])
         cell.name.isEditable = true
         window.makeFirstResponder(cell.name)
         let editor = try #require(cell.name.currentEditor() as? NSTextView)

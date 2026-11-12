@@ -16,15 +16,19 @@ struct ProjectsListRow: Equatable {
     var help: String?
     var attentionCount: Int
 
-    /// The table row of the first project, under the two fixed entries at the top.
-    static let firstProjectRow = 2
+    /// The table row of the first project, under the two fixed entries at
+    /// the top and the heading of the projects.
+    static let firstProjectRow = 3
 
     /// "All Projects" and "Needs You" first, then the projects in the user's
     /// order, then "Other Folders": the threads and the terminals in
     /// folders of no project. It shows only when such work exists.
+    /// The projects have the heading "Projects" over them, so a user sees
+    /// that the work belongs to them.
     static func rows(for content: ProjectsListContent) -> [ProjectsListRow] {
         [ProjectsListRow(kind: .entry(.allSessions), name: "All Projects", symbol: "square.stack", help: "The threads and the terminals of every project", attentionCount: 0),
-         ProjectsListRow(kind: .entry(.needsYou), name: "Needs You", symbol: "bell", help: nil, attentionCount: content.needsYouCount)]
+         ProjectsListRow(kind: .entry(.needsYou), name: "Needs You", symbol: "bell", help: nil, attentionCount: content.needsYouCount),
+         ProjectsListRow(kind: .heading, name: "Projects", symbol: "", help: nil, attentionCount: 0)]
             + content.projects.map {
                 ProjectsListRow(kind: .entry(.project($0.identifier)), name: $0.name, symbol: "folder", help: $0.folder, attentionCount: $0.attentionCount)
             }

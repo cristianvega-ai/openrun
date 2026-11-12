@@ -52,7 +52,9 @@ public final class ProjectsListController: NSObject {
         isShowingChanges = true
         defer { isShowingChanges = false }
         changes.apply(to: table) { index in
-            (table.view(atColumn: 0, row: index, makeIfNecessary: false) as? ProjectCellView)?.show(rows[index])
+            let view = table.view(atColumn: 0, row: index, makeIfNecessary: false)
+            (view as? ProjectCellView)?.show(rows[index])
+            (view as? ProjectsHeadingCellView)?.show(rows[index])
         }
         if selection != selected {
             select(rows.contains { $0.entry == selected } ? selected : .allSessions)

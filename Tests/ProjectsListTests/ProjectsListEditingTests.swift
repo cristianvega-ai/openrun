@@ -21,7 +21,7 @@ import Testing
         defer { window.close() }
         list.select(.project(identifiers[1]))
         list.table.keyDown(with: try key(36, "\r", in: window))
-        let field = try #require(list.cell(at: 3)?.name)
+        let field = try #require(list.cell(at: 4)?.name)
         #expect(field.isEditable && field.currentEditor() != nil)
         try type("  site  ", into: field, of: list)
         #expect(host.renames.count == 1 && host.renames.first?.0 == identifiers[1] && host.renames.first?.1 == "site")
@@ -32,7 +32,7 @@ import Testing
         let (list, host, window, identifiers) = makeProjectsList()
         defer { window.close() }
         list.beginRename(of: identifiers[0])
-        let field = try #require(list.cell(at: 2)?.name)
+        let field = try #require(list.cell(at: 3)?.name)
         try type("   ", into: field, of: list)
         #expect(field.stringValue == "openrun")
         list.beginRename(of: identifiers[0])

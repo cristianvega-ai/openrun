@@ -6,9 +6,13 @@ import Testing
     @Test func theListShowsTheEntriesAndStartsOnAllSessions() {
         let (list, host, window, _) = makeProjectsList()
         defer { window.close() }
-        #expect(list.table.numberOfRows == 6 && list.selection == .allSessions && host.selections.isEmpty)
-        #expect(list.cell(at: 1)?.name.stringValue == "Needs You" && list.cell(at: 2)?.name.stringValue == "openrun")
-        #expect(list.cell(at: 5)?.name.stringValue == "Other Folders")
+        #expect(list.table.numberOfRows == 7 && list.selection == .allSessions && host.selections.isEmpty)
+        #expect(list.cell(at: 1)?.name.stringValue == "Needs You" && list.cell(at: 3)?.name.stringValue == "openrun")
+        #expect(list.cell(at: 6)?.name.stringValue == "Other Folders")
+        // The heading of the projects is a row that takes no selection.
+        let heading = list.table.view(atColumn: 0, row: 2, makeIfNecessary: false) as? ProjectsHeadingCellView
+        #expect(heading?.label.stringValue == "Projects" && list.table.rect(ofRow: 2).height > list.table.rect(ofRow: 1).height)
+        #expect(list.tableView(list.table, selectionIndexesForProposedSelection: IndexSet(integer: 2)) == IndexSet(integer: 0))
         list.scroll.scrollerStyle = .legacy
         #expect(list.scroll.scrollerStyle == .overlay)
     }
@@ -16,7 +20,7 @@ import Testing
     @Test func aSelectionByTheUserReachesTheHost() {
         let (list, host, window, identifiers) = makeProjectsList()
         defer { window.close() }
-        list.table.selectRowIndexes(IndexSet(integer: 3), byExtendingSelection: false)
+        list.table.selectRowIndexes(IndexSet(integer: 4), byExtendingSelection: false)
         list.table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
         #expect(host.selections == [.project(identifiers[1]), .needsYou])
         list.select(.noProject)
@@ -28,13 +32,13 @@ import Testing
         let (list, _, window, identifiers) = makeProjectsList()
         defer { window.close() }
         list.select(.project(identifiers[2]))
-        let cells = (0..<6).map { list.cell(at: $0) }
+        let cells = (0..<7).map { list.cell(at: $0) }
         var content = list.content
         (content.projects[0].attentionCount, content.needsYouCount) = (2, 2)
         list.show(content)
-        #expect(list.cell(at: 2)?.count.stringValue == "2" && list.cell(at: 3)?.count.stringValue == "")
+        #expect(list.cell(at: 3)?.count.stringValue == "2" && list.cell(at: 4)?.count.stringValue == "")
         #expect(list.cell(at: 1)?.count.stringValue == "2" && list.cell(at: 0)?.count.stringValue == "")
-        #expect(zip(cells, (0..<6).map { list.cell(at: $0) }).allSatisfy { $0 === $1 })
+        #expect(zip(cells, (0..<7).map { list.cell(at: $0) }).allSatisfy { $0 === $1 })
         #expect(list.selection == .project(identifiers[2]))
     }
 
@@ -45,7 +49,7 @@ import Testing
         var content = list.content
         content.projects.removeFirst()
         list.show(content)
-        #expect(list.table.numberOfRows == 5 && list.selection == .allSessions && host.selections == [.allSessions])
+        #expect(list.table.numberOfRows == 6 && list.selection == .allSessions && host.selections == [.allSessions])
     }
 
     @Test func theAddButtonAsksTheHostForANewProject() {
@@ -72,10 +76,10 @@ import Testing
     @Test func aDraggedProjectMovesAtOnceAndTheHostHearsOfIt() {
         let (list, host, window, identifiers) = makeProjectsList()
         defer { window.close() }
-        #expect(list.moveProject(row: 2, dropRow: 5))
+        #expect(list.moveProject(row: 3, dropRow: 6))
         #expect(list.content.projects.map(\.identifier) == [identifiers[1], identifiers[2], identifiers[0]])
-        #expect(list.cell(at: 4)?.name.stringValue == "openrun")
+        #expect(list.cell(at: 5)?.name.stringValue == "openrun")
         #expect(host.moves.count == 1 && host.moves.first?.0 == identifiers[0] && host.moves.first?.1 == 2)
-        #expect(!list.moveProject(row: 1, dropRow: 3) && !list.moveProject(row: 3, dropRow: 3))
+        #expect(!list.moveProject(row: 1, dropRow: 4) && !list.moveProject(row: 4, dropRow: 4))
     }
 }
