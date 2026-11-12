@@ -19,6 +19,8 @@ actor SessionServer {
     let threads: ThreadRegistry
     let agents: AgentLaunchProvider
     let records: SessionRecordKeeper
+    /// Tells `SessionProcess.run` that the app asked the process to end.
+    private let (endRequests, endRequested) = AsyncStream.makeStream(of: Void.self)
     /// The sessions of the last run, until `restoreSessions` starts them.
     private var recordsToRestore: [SessionRecord]
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
@@ -96,6 +98,11 @@ actor SessionServer {
                 self.accept(accepted.connection, peer: accepted.peer)
             }
         }
+    }
+
+    /// Returns when OpenRun.app asked the session process to end.
+    nonisolated func waitForEndRequest() async {
+        for await _ in endRequests { return }
     }
 
     /// Stops accepting, ends every program, and closes every client. The
@@ -389,6 +396,16 @@ actor SessionServer {
                 client.send(.settingList(SettingKeeper.summaries(of: await settings.values)))
             case .changeSetting(let name, let text):
                 client.send(await changeSetting(name, to: text, for: peer))
+            case .endSessionProcess:
+                // The request ends every program, so only the app of the user may send it.
+                let isApplication = Self.acceptsAnswerer(
+                    at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken))
+                guard isApplication else {
+                    client.send(Self.refusal("Only OpenRun.app may end the session process."))
+                    break
+                }
+                client.send(.acknowledged)
+                endRequested.yield()
             case .createThread, .listThreads, .renameThread, .changeThread, .closeThread, .attachThread, .readThreadHistory, .sendThreadMessage,
                  .stopThread, .openThreadInTerminal, .returnThreadFromTerminal:
                 guard attachedSession == nil else {

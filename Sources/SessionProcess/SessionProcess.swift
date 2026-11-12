@@ -63,6 +63,10 @@ public struct SessionProcess: Sendable {
                     return "No session and no client for \(idleExit.timeLimit)."
                 }
             }
+            group.addTask {
+                await server.waitForEndRequest()
+                return "OpenRun.app asked the session process to end."
+            }
             let first = await group.next() ?? "Stopped."
             group.cancelAll()
             return first

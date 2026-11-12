@@ -253,6 +253,13 @@ public struct SessionClient: Sendable {
         try ThreadAttachment.attach(on: connection, to: identifier)
     }
 
+    /// Asks the session process to end, as after an update of the app.
+    /// Every program ends, and the sessions come back at its next start.
+    /// Only OpenRun.app may ask. Check `capabilities.build` first.
+    public func endSessionProcess() throws {
+        try requestAcknowledgement(.endSessionProcess, named: "end the session process")
+    }
+
     private func requestAcknowledgement(_ message: ClientMessage, named name: String) throws {
         guard case .acknowledged = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: name) }
     }

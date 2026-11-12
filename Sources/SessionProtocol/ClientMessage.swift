@@ -112,6 +112,12 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     /// `openrun settings set`. Only OpenRun.app may change a protected
     /// setting. Answer: `acknowledged`.
     case changeSetting(name: String, text: String)
+    /// Ends the session process as a stop signal does: every program
+    /// ends, and the sessions come back at the next start. Only
+    /// OpenRun.app may send it, such as after an update. Check
+    /// `capabilities.build` first: an older process does not know the
+    /// message. Answer: `acknowledged`.
+    case endSessionProcess
 
     // Agent threads. Check `capabilities.threads` first. Only a program
     // outside every session and every thread may send these (decision of
@@ -229,6 +235,7 @@ extension ClientMessage {
         case .moveProject: "moveProject"
         case .listSettings: "listSettings"
         case .changeSetting: "changeSetting"
+        case .endSessionProcess: "endSessionProcess"
         case .createThread: "createThread"
         case .listThreads: "listThreads"
         case .renameThread: "renameThread"
