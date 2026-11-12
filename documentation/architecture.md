@@ -63,6 +63,7 @@ A module uses another module only through its public types.
 | `SessionOverview` | What the session process holds, kept live for the app: the sessions, the projects, the settings and the agent threads from the feed, and the sender of the requests of the app | `SessionOverview`, `SessionOverviewConnection`, `ConnectionStatus`, `SessionRequests`, `SessionRequestFailure` |
 | `WindowLayout` | What the main window keeps between two runs of the app in `layout.json`: the rows of the sessions list with their splits, the selection, the filter and the order | `WindowLayout`, `LayoutRow`, `LayoutPane`, `LayoutSplit`, `LayoutEntry`, `WindowLayoutStore` |
 | `ListContent` | What the two lists show, made from the facts of the session process and the layout | `ListContent`, `SessionRowFacts`, `ThreadRowFacts`, `RowNeighbor` |
+| `SettingsWindow` | The settings window: one pane for each group of settings, and a control for each setting | `SettingsWindowController` |
 | `AlertNotifications` | The notifications of macOS for sessions that need the user, behind a type that tests replace | `AlertNotification`, `AlertNotifier`, `SystemAlertNotifier` |
 | `OpenRunApplication` | The app: the setup of the launch agent, the host that joins the main window with the session process, the chat panes of the threads, and the menus | `OpenRunApplication` |
 | `AgentConversation` | The model of an agent thread: the events of every agent, the transcript that a chat shows, and the state of the thread | `ConversationEvent`, `ConversationEventKind`, `SourceLine`, `Transcript`, `TranscriptItem`, `TranscriptItemContent`, `TranscriptChange`, `TranscriptLimits`, `ThreadState`, `AgentMessage`, `AgentStart`, `AgentStatus`, `AgentText`, `AgentTextDelta`, `BoundedText`, `FileChange`, `JSONValue`, `LineSplitter`, `MessageImage`, `Notice`, `PermissionEnd`, `PermissionRequest`, `PermissionRequestItem`, `ProcessEnd`, `TaskEnd`, `TaskItem`, `TaskMessage`, `TaskStart`, `Thinking`, `TokenUsage`, `ToolCallInput`, `ToolCallInputDelta`, `ToolCallItem`, `ToolCallOutput`, `ToolCallRefusal`, `ToolCallResult`, `ToolCallStart`, `TurnEnd`, `TurnStart`, `UnknownLine`, `UsageReading`, `UsageWindow`, `UserMessage` |
@@ -100,6 +101,7 @@ openrun-application -> OpenRunApplication -> MainWindow, ProjectsList, SessionsL
                                           -> WindowLayout -> DataStorage
                                           -> ListContent -> SessionOverview, WindowLayout, ProjectsList, SessionsList
                                           -> AlertNotifications
+                                          -> SettingsWindow -> Settings
                                           -> ChatView, AgentConversation
                                           -> Settings, PseudoTerminal
                                           -> SessionConnection
@@ -367,7 +369,14 @@ Once setup is ready, `ApprovalQuestionConnection` opens the connection for appro
 - **Projects.** The session process owns the projects, so an add (from a folder panel or a drop), a name, a move and a removal go there as requests, and the first pane shows the change when the feed brings it.
 - **Alerts.** An alert ends when the user selects its session, and at once for the session in view: the session of the third pane while the window is key and the focus is in that pane. That session shows no mark. A new alert of any other session gives a notification of macOS through `AlertNotifier`, unless the setting `notifications` is off. An alert that ended takes its notification away, and an opened notification selects the row. The Dock icon shows the number of rows that need the user.
 - **Settings.** `LiveSettings` makes the typed values from the texts of the feed. Each pane gets the font, its size, the Option key rule and the scrollback limit at its start and at each change, also a pane that the window does not show. `ask-before-unsafe-paste` turns the paste question of each pane on and off. The theme stays Graphite.
+- **The settings window.** OpenRun > Settings (Command-Comma) shows the `SettingsWindowController`, once the settings of the session process came. A change goes to the session process as `changeSetting`. The session process takes a protected setting only from OpenRun.app, so the window is the one place that changes it. After a refusal the window shows the values of the session process again, with the reason in a sheet.
 - **Failures.** A request that fails shows the reason of the session process in a sheet on the window. A sheet does not hold the main queue, so the output of the panes goes on behind it.
+
+### SettingsWindow
+
+`SettingsWindowController` makes the settings window (decision of 2026-10-15). `SettingsPane` names the four panes, General, Appearance, Terminal and Agents, and the settings of each one. Each setting of version 1 has one control in one pane, and a test compares the controls with `SettingName.allCases`. The panes are tabs in the toolbar of the window (`SettingsTabViewController`), and the window takes the height of the pane that shows.
+A control (`SettingControl`) shows the text of its setting, as `openrun settings get` prints it, and tells the new text of a change. `ChoiceSettingControl` is a menu, and it keeps a value that it does not know, such as one of a later build. `FlagSettingControl` is a checkbox. `NumberSettingControl` is a field with a stepper, and text that is no number in the range goes back. `TextSettingControl` is a field, with a list of usual values for the model. `CommandListSettingControl` is the table of the new-session commands, which tells its list as one line of JSON.
+The window changes nothing itself and knows no socket. It tells its host the name and the new text, the host sends `changeSetting`, and the host gives the window the texts of the feed: at the start, after each change, and after a refusal. So a value that the session process refused never stays on the screen. `SettingsWindowPictureTests` save a picture of each pane when `OPENRUN_RENDER_OUTPUT` names a folder.
 
 ### SessionOverview
 
