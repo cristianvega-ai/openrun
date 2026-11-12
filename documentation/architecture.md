@@ -196,6 +196,8 @@ The rest of `TerminalEmulation` gives a view what it needs to draw the screen an
 
 `TerminalSearch` finds text in the screen and the scrollback with the search of libghostty-vt (`ghostty_search_*`). Letters of ASCII match in each case. The match that the user is at becomes the selection of the terminal, so the renderer shows it as it shows a selection, and Copy takes it. A step to the older or the newer match first reads the output that came since, and it moves the viewport to the match. The search borrows its terminal, so each call comes from the context that uses the terminal.
 
+`TerminalEventHandler.clipboardWrite` reports a program that wants text on the clipboard of the user (OSC 52, and the forms of iTerm2 and kitty that libghostty-vt reads): plain text for the standard clipboard, at most 1 MiB. A request with no content, which would empty the clipboard, is refused. The terminal view puts the text on the pasteboard. The session process has no pasteboard and refuses. A program cannot read the clipboard: OpenRun installs no callback for that.
+
 ### TerminalTheme
 
 `TerminalTheme` holds the colors of the Graphite theme (decision of 2026-10-26): the background, the text, the cursor, the selection and the first 16 colors of the palette. The table "Graphite theme" in `documentation/product.md` lists the values.
