@@ -38,12 +38,32 @@ import WindowLayout
         #expect(await waitUntil { workspace.panes.existing(second)?.terminalView != nil && workspace.focusedLeaf == second })
         let (left, right) = (try #require(workspace.splitView?.view(of: first)), try #require(workspace.splitView?.view(of: second)))
         #expect(left.frame.width > 100 && right.frame.minX > left.frame.maxX - 1 && workspace.validateMenuItem(item(#selector(Workspace.selectNextPane(_:)))))
+        // The pane that the row showed alone has its place in the split.
+        #expect(left.window === workspace.window.window && right.window === workspace.window.window)
 
         workspace.selectNextPane(nil)
         #expect(workspace.focusedLeaf == first)
         workspace.splitDown(nil)
         #expect(await waitUntil { workspace.layout.rows.first?.pane.leaves.count == 3 })
         #expect(workspace.layout.rows.count == 1 && workspace.layout.rows.first?.pane.leaves.first == first)
+    }
+
+    @Test func aRowWithSplitsOfTheLayoutShowsEachOfItsSessionsAtTheStart() async throws {
+        let test = try TestWorkspace()
+        defer { test.stop() }
+        let workspace = test.workspace
+        let (first, second) = (try test.createShell(), try test.createShell())
+        workspace.layout.follow(sessions: [first, second])
+        workspace.layout.split(first, with: second, direction: .stacked)
+        workspace.layout.selectedRow = first
+        workspace.start()
+        #expect(await waitUntil { workspace.panes.existing(first)?.terminalView != nil && workspace.panes.existing(second)?.terminalView != nil })
+        for session in [first, second] {
+            let view = try #require(workspace.panes.existing(session)?.terminalView)
+            #expect(view.window === workspace.window.window && view.frame.height > 50 && view.frame.width > 50)
+            #expect(workspace.splitView?.leaf(holding: view) == session)
+        }
+        #expect(test.shownRows == [first])
     }
 
     @Test func commandWClosesThePaneWithTheFocusAndTheOtherHalfTakesTheRoom() async throws {

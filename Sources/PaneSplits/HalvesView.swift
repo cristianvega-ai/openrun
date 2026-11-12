@@ -19,7 +19,11 @@ import WindowLayout
         super.init(frame: .zero)
         divider.wantsLayer = true
         divider.layer?.backgroundColor = NSColor.separatorColor.cgColor
-        for view in [first, second, divider] { addSubview(view) }
+        for view in [first, second, divider] {
+            // A half that the third pane showed alone had constraints. Here its frame is set.
+            view.translatesAutoresizingMaskIntoConstraints = true
+            addSubview(view)
+        }
     }
 
     @available(*, unavailable)
