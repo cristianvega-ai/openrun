@@ -41,6 +41,8 @@ The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-
 
    File > New Thread (Command-T) starts a thread with Claude Code in the folder of the selected project. A thread is a chat: you write a message, and the agent answers with its text, its tool calls and its file changes. When the agent wants a permission, the chat shows the request, and only your answer in the chat allows it. The line under the message field has the model and the permission mode of the thread. Open in Terminal, in the top row of the chat, moves the conversation to Claude Code in a terminal, and Back to Chat brings it back with the turns that you made there. A thread stays after a restart, and its chat loads the earlier turns from the history of Claude Code. OpenRun uses the `claude` that you installed and signed in to, and it never reads your credentials.
 
+   OpenRun > Install Command-Line Tool puts the command `openrun` into `/usr/local/bin`, so it works in every terminal. A session of OpenRun finds the command with no install.
+
    OpenRun > Settings (Command-Comma) opens the settings window: the font and its size, the Option key, the scrollback, the commands of the new-session button, and the model, the permission mode and the limit of the agents. In a terminal, Edit > Find (Command-F) finds text in the screen and the scrollback, and Session > Clear (Command-K) clears the scrollback.
 
 For an isolated development run, use a nondefault socket and a scratch bundle. Start the session process yourself; the app does not register or wake the launch agent for this socket.

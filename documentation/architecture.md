@@ -64,6 +64,7 @@ A module uses another module only through its public types.
 | `WindowLayout` | What the main window keeps between two runs of the app in `layout.json`: the rows of the sessions list with their splits, the selection, the filter and the order | `WindowLayout`, `LayoutRow`, `LayoutPane`, `LayoutSplit`, `LayoutEntry`, `WindowLayoutStore` |
 | `ListContent` | What the two lists show, made from the facts of the session process and the layout | `ListContent`, `SessionRowFacts`, `ThreadRowFacts`, `RowNeighbor` |
 | `PaneSplits` | The view of a row with splits: the views of its sessions and threads, with a divider between the two halves of each split | `SplitPaneView` |
+| `ToolInstallation` | Install Command-Line Tool: the link to the `openrun` program of the app bundle in a folder of the search path | `ToolInstallation` |
 | `SettingsWindow` | The settings window: one pane for each group of settings, and a control for each setting | `SettingsWindowController` |
 | `AlertNotifications` | The notifications of macOS for sessions that need the user, behind a type that tests replace | `AlertNotification`, `AlertNotifier`, `SystemAlertNotifier` |
 | `OpenRunApplication` | The app: the setup of the launch agent, the host that joins the main window with the session process, the chat panes of the threads, and the menus | `OpenRunApplication` |
@@ -104,6 +105,7 @@ openrun-application -> OpenRunApplication -> MainWindow, ProjectsList, SessionsL
                                           -> AlertNotifications
                                           -> SettingsWindow -> Settings
                                           -> PaneSplits -> WindowLayout
+                                          -> ToolInstallation
                                           -> ChatView, AgentConversation
                                           -> Settings, PseudoTerminal
                                           -> SessionConnection
@@ -377,6 +379,7 @@ Once setup is ready, `ApprovalQuestionConnection` opens the connection for appro
 - **Alerts.** An alert ends when the user selects its session, and at once for the session in view: the session of the third pane while the window is key and the focus is in that pane. That session shows no mark. A new alert of any other session gives a notification of macOS through `AlertNotifier`, unless the setting `notifications` is off. An alert that ended takes its notification away, and an opened notification selects the row. The Dock icon shows the number of rows that need the user.
 - **Settings.** `LiveSettings` makes the typed values from the texts of the feed. Each pane gets the font, its size, the Option key rule and the scrollback limit at its start and at each change, also a pane that the window does not show. `ask-before-unsafe-paste` turns the paste question of each pane on and off. The theme stays Graphite.
 - **The settings window.** OpenRun > Settings (Command-Comma) shows the `SettingsWindowController`, once the settings of the session process came. A change goes to the session process as `changeSetting`. The session process takes a protected setting only from OpenRun.app, so the window is the one place that changes it. After a refusal the window shows the values of the session process again, with the reason in a sheet.
+- **The command-line tool.** OpenRun > Install Command-Line Tool makes a link to `Contents/Helpers/openrun` of the app bundle in `/usr/local/bin` (`ToolInstallation`), after a question. A session of OpenRun needs no link, because the helper folder is first in its search path. When the folder belongs to the administrator, the app runs `mkdir` and `ln` through `do shell script … with administrator privileges`, so macOS asks for the password and the app never sees it. The item is on only in an app bundle that holds the tool.
 - **Failures.** A request that fails shows the reason of the session process in a sheet on the window. A sheet does not hold the main queue, so the output of the panes goes on behind it.
 
 ### SettingsWindow
