@@ -191,7 +191,7 @@ let package = Package(
             name: "SessionProcessTests",
             dependencies: [
                 "SessionProcessHarness", "SessionProcess", "SessionProtocol", "SessionLaunch", "TerminalEmulation", "DataStorage", "Projects",
-                "Settings", "AgentConversation", "ClaudeCodeAgent", "AgentProgram", "AgentThreads", "fake-agent", "SessionConnection",
+                "Settings", "AgentConversation", "ClaudeCodeAgent", "AgentProgram", "AgentThreads", "fake-agent", "fake-codex", "CodexAgent", "SessionConnection",
             ]
         ),
         .testTarget(
