@@ -4,12 +4,13 @@ import SessionPane
 
 /// What the panes and the window tell the host.
 extension Workspace: SessionPaneDelegate, MainWindowDelegate {
-    /// Gives a new pane its host and the settings of the user.
-    func configure(_ pane: SessionPaneController) {
+    /// Gives the new pane of a session its host and the settings of the user.
+    func configure(_ pane: SessionPaneController, of session: UUID) {
         pane.delegate = self
         pane.asksBeforeUnsafePaste = settings.asksBeforeUnsafePaste
         pane.configureTerminalView = { [weak self] view in
             if let self { LiveSettings.apply(self.settings, to: view) }
+            view.webLinkAction = { [weak self] link in self?.openInBrowserSplit(link, from: session) ?? false }
         }
     }
 

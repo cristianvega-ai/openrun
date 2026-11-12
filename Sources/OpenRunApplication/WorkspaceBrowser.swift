@@ -35,6 +35,22 @@ extension Workspace {
         refresh()
     }
 
+    /// Opens a web link of a session or a thread in a web page of its
+    /// row, when the setting `open-links-in` asks for the browser split:
+    /// in the first page of the row, or else in a new page beside the
+    /// pane of the link. The keyboard focus stays where it is.
+    ///
+    /// - Returns: False when the link must open with the default program.
+    func openInBrowserSplit(_ link: URL, from leaf: UUID) -> Bool {
+        guard settings.linkDestination == .browserSplit, BrowserAddress.url(from: link.absoluteString) != nil,
+              let row = layout.rows.first(where: { $0.pane.leaves.contains(leaf) }) else { return false }
+        if let page = row.pane.browsers.first { return browserPane(of: page).open(link.absoluteString) }
+        guard layout.addBrowser(LayoutBrowser(address: link.absoluteString), beside: leaf, direction: .sideBySide) else { return false }
+        layoutStore.save(layout)
+        refresh()
+        return true
+    }
+
     /// The user closed a web page. Its room goes to the other half of
     /// its split.
     func closeBrowser(_ identifier: UUID) {

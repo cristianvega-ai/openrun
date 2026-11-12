@@ -32,10 +32,12 @@ extension ThreadPaneController: ChatViewControllerDelegate {
         }
     }
 
-    /// A link in the text of an agent opens only as a web address.
+    /// A link in the text of an agent opens only as a web address: in a
+    /// web page of the row when the host takes it, or else with the
+    /// default program.
     func chatViewController(_ controller: ChatViewController, openLink target: String) {
         guard let url = URL(string: target), ["http", "https"].contains(url.scheme?.lowercased() ?? "") else { return }
-        NSWorkspace.shared.open(url)
+        if webLinkAction?(url) != true { NSWorkspace.shared.open(url) }
     }
 
     func chatViewController(_ controller: ChatViewController, selectModel identifier: String) {

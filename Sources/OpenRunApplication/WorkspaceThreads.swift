@@ -24,6 +24,7 @@ extension Workspace {
         }
         if isNew {
             pane.continueOnAccount = { [weak self] in self?.continueThread(thread, onAccount: $0) }
+            pane.webLinkAction = { [weak self] in self?.openInBrowserSplit($0, from: thread) ?? false }
             pane.failed = { [weak self] in self?.showFailure("The thread could not do that", $0) }
             pane.openInTerminal = { [weak self] in self?.openThreadInTerminal(thread) }
             pane.returnFromTerminal = { [weak self] in self?.returnThreadFromTerminal(thread) }

@@ -1,5 +1,6 @@
 import AppKit
 import PseudoTerminal
+import SessionConnection
 import SessionProcessHarness
 import Testing
 import WindowLayout
@@ -38,6 +39,27 @@ import WindowLayout
         // The pane keeps its views, and the file of the layout has the address.
         #expect(workspace.splitView === split && workspace.shown == .split(row: first, pane: try #require(workspace.layout.rows.first?.pane)))
         #expect(await waitUntil { workspace.layoutStore.load().browser(page.identifier)?.address == "http://localhost:3000/docs" })
+    }
+
+    /// The links go to a port of this Mac on which no program listens.
+    @Test func aWebLinkOpensInAWebPageOfItsRowWhenTheSettingAsksForIt() async throws {
+        let (test, first) = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        let (link, next) = (try #require(URL(string: "http://127.0.0.1:9/docs")), try #require(URL(string: "http://127.0.0.1:9/next")))
+        // With the usual setting, the link goes to the default program.
+        #expect(!workspace.openInBrowserSplit(link, from: first) && workspace.browserPanes.isEmpty)
+        try SessionClient(location: workspace.socket).changeSetting(named: "open-links-in", to: "browser-split")
+        #expect(await waitUntil { workspace.settings.linkDestination == .browserSplit })
+        // The terminal view gives its web links to the host, and the focus stays in the terminal.
+        #expect(workspace.panes.existing(first)?.terminalView?.webLinkAction?(link) == true)
+        let page = try #require(workspace.layout.rows.first?.pane.browsers.first)
+        #expect(page.address == link.absoluteString && workspace.layout.rows.first?.pane.leaves == [first, page.identifier])
+        #expect(workspace.browserPanes[page.identifier] != nil && workspace.focusedLeaf == first)
+        // The next link uses the page of the row, and a link that is no web address does not.
+        #expect(workspace.openInBrowserSplit(next, from: first) && !workspace.openInBrowserSplit(URL(fileURLWithPath: "/etc/hosts"), from: first))
+        #expect(await waitUntil { workspace.layout.browser(page.identifier)?.address == next.absoluteString })
+        #expect(workspace.layout.rows.first?.pane.browsers.count == 1)
     }
 
     @Test func commandWClosesAWebPageAndTheEndOfItsRowForgetsIt() async throws {

@@ -56,7 +56,7 @@ extension Workspace {
             if let thread = threadTerminals[session] { content.topRowItems = [backToChatButton(for: thread)] }
             window.showContent(content)
             if isNew {
-                configure(pane)
+                configure(pane, of: session)
                 // The pane estimates its grid from its size, so the window lays it out first.
                 window.window.layoutIfNeeded()
                 pane.attach()

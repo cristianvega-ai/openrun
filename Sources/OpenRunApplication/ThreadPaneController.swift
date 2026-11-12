@@ -32,6 +32,8 @@ final class ThreadPaneController: NSObject {
     /// Asks the host for the conversation in a terminal, and for the way back.
     var openInTerminal: (() -> Void)?
     var returnFromTerminal: (() -> Void)?
+    /// Takes a web link of the chat, when the host shows web pages itself.
+    var webLinkAction: ((URL) -> Bool)?
     /// The user chose a new thread under the account with this name. The
     /// empty name is the account of the login shell.
     var continueOnAccount: ((String) -> Void)?

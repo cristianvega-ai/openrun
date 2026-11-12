@@ -57,7 +57,7 @@ extension Workspace {
         lastFocusedLeaf = leaf
         let minimum = SplitPaneView.minimumSize(of: pane) { minimumSizes[$0] ?? .zero }
         window.showContent(PaneContent(view: view, title: "", minimumSize: minimum, focusView: leaf.flatMap { focusViews[$0] }))
-        for session in new { panes.existing(session).map(configure) }
+        for session in new { panes.existing(session).map { configure($0, of: session) } }
         window.window.layoutIfNeeded()
         for session in new { panes.existing(session)?.attach() }
     }
