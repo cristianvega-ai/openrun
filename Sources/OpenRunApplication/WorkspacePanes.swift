@@ -18,6 +18,8 @@ extension Workspace: SessionPaneDelegate, MainWindowDelegate {
     func settingsChanged() {
         settings = LiveSettings.values(from: connection.overview.settings)
         settingsWindow?.show(settingTexts)
+        // A chat offers the accounts of the settings to a thread at its limit.
+        updateThreadPanes()
         for pane in panes.all {
             pane.asksBeforeUnsafePaste = settings.asksBeforeUnsafePaste
             if let view = pane.terminalView { LiveSettings.apply(settings, to: view) }

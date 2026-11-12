@@ -19,8 +19,11 @@ extension Workspace {
     /// The chat pane of a thread. A new pane attaches to its thread.
     func chatPane(of summary: ThreadSummary) -> ThreadPaneController {
         let thread = summary.identifier
-        let (pane, isNew) = threadPanes.pane(for: thread) { ThreadPaneController(summary: summary, socket: socket, home: home) }
+        let (pane, isNew) = threadPanes.pane(for: thread) {
+            ThreadPaneController(summary: summary, socket: socket, home: home, otherAccounts: otherAccounts(of: summary))
+        }
         if isNew {
+            pane.continueOnAccount = { [weak self] in self?.continueThread(thread, onAccount: $0) }
             pane.failed = { [weak self] in self?.showFailure("The thread could not do that", $0) }
             pane.openInTerminal = { [weak self] in self?.openThreadInTerminal(thread) }
             pane.returnFromTerminal = { [weak self] in self?.returnThreadFromTerminal(thread) }
@@ -37,9 +40,7 @@ extension Workspace {
             threadPanes.close(thread.identifier)
             if shownThread == thread.identifier { shownIsStale = true }
         }
-        for pane in threadPanes.all {
-            if let summary = overview.thread(pane.thread) { pane.update(summary, home: home) }
-        }
+        updateThreadPanes()
         // An agent that starts to wait for an answer of the user gives a
         // notification, unless the user looks at its chat.
         for thread in overview.threads where thread.state != previous.thread(thread.identifier)?.state {

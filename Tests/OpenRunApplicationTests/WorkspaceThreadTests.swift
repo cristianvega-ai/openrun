@@ -1,6 +1,6 @@
 import AgentConversation
 import AppKit
-import ChatView
+@testable import ChatView
 import SessionConnection
 import SessionProcessHarness
 import SessionProtocol
@@ -49,6 +49,28 @@ import Testing
         workspace.sessionsList(workspace.window.sessionsList, didRequest: .thread(agent: "Claude Code", account: "Work"))
         #expect(await waitUntil { workspace.shownThread.flatMap { row(test, $0) }?.kind == .agentThread(agent: "Claude Code", model: "Opus", account: "Work") })
         #expect(workspace.threadPanes.existing(try #require(workspace.shownThread))?.chat.facts.accountName == "Work")
+    }
+
+    @Test func aThreadGoesOnInANewThreadUnderAnotherAccountWithItsWordsAsTheDraft() async throws {
+        let test = try await start(isApplication: true)
+        defer { test.stop() }
+        let workspace = test.workspace
+        let accounts = #"[{"folder":"\#(test.process.directory.path)","name":"Work"}]"#
+        try SessionClient(location: workspace.socket).changeSetting(named: "claude-code-accounts", to: accounts)
+        workspace.newThread()
+        #expect(await waitUntil { workspace.shownThread.flatMap { workspace.threadPanes.existing($0) }?.isReplayComplete == true })
+        let thread = try #require(workspace.shownThread), pane = try #require(workspace.threadPanes.existing(thread))
+        pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
+        #expect(await waitUntil { pane.transcript.state == .finishedTurn && !workspace.settings.claudeCodeAccounts.isEmpty })
+        let earlier = try #require(workspace.connection.overview.thread(thread))
+        #expect(workspace.otherAccounts(of: earlier) == [ChatAccount(identifier: "Work", name: "Work")])
+        pane.chatViewController(pane.chat, startNewThreadOnAccount: "Work")
+        #expect(await waitUntil { workspace.shownThread != thread && workspace.shownThread.flatMap { workspace.threadPanes.existing($0) } != nil })
+        let new = try #require(workspace.shownThread.flatMap { workspace.connection.overview.thread($0) })
+        #expect(new.accountName == "Work" && new.folder == earlier.folder && new.model == earlier.model)
+        #expect(workspace.otherAccounts(of: new).map(\.name) == ["the Account of Your Shell"])
+        let draft = try #require(workspace.threadPanes.existing(new.identifier)).chat.composer.draft.text
+        #expect(draft.hasPrefix("Go on with the work of this earlier conversation.") && draft.hasSuffix("User:\nReply with the single word ok.\n\nAgent:\nok"))
     }
 
     @Test func theButtonForANewThreadOffersCodexWithItsOwnChoices() async throws {
