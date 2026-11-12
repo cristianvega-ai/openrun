@@ -20,11 +20,12 @@ struct ThreadCommand {
             let threads = try client.threads()
             // JSON escapes every control character, so a field cannot forge a line.
             return printsJSON ? try ListedThread.document(of: threads) : threads.map { Self.line(of: $0) + "\n" }.joined()
-        case .new(let agent, let folder, let model, let mode, let name, let text):
+        case .new(let agent, let folder, let model, let mode, let name, let account, let text):
             // The session process may run in another folder than this command, so it gets an absolute path.
             let current = FileManager.default.currentDirectoryPath
             let absoluteFolder = URL(fileURLWithPath: folder ?? current, relativeTo: URL(fileURLWithPath: current, isDirectory: true)).standardizedFileURL.path
-            let thread = try client.createThread(agent: agent ?? "claude-code", folder: absoluteFolder, model: model, permissionMode: mode, name: name)
+            let thread = try client.createThread(
+                agent: agent ?? "claude-code", folder: absoluteFolder, model: model, permissionMode: mode, name: name, account: account)
             if let text { _ = try client.sendThreadMessage(thread.identifier, text: text) }
             return thread.identifierText + "\n"
         case .send(let typed, let text):

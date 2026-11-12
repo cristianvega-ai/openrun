@@ -21,6 +21,8 @@ import Testing
             == .new(agent: nil, folder: "/work", model: "opus", mode: "plan", name: "Notes", text: "Run the tests"))
         #expect(try action("new", "--agent", "codex") == .new(agent: "codex", folder: nil, model: nil, mode: nil, name: nil, text: nil))
         #expect(usageMessage("list", "--agent", "codex") == "--agent does not belong to thread list. It works with thread new.")
+        #expect(try action("new", "--account", "Work") == .new(agent: nil, folder: nil, model: nil, mode: nil, name: nil, account: "Work", text: nil))
+        #expect(usageMessage("send", "abc", "--account", "Work", "Hello") == "--account does not belong to thread send. It works with thread new.")
         #expect(usageMessage("new", "abc") == "thread new takes no identifier. Put the first message after --.")
     }
 

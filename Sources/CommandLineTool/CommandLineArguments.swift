@@ -26,7 +26,7 @@ struct CommandLineArguments: Equatable {
         var folder: String?
         var session: String?
         var projectName: String?
-        var (model, mode, agent): (String?, String?, String?)
+        var (model, mode, agent, account): (String?, String?, String?, String?)
         var positional: [String] = []
 
         var remaining = words[...]
@@ -44,6 +44,8 @@ struct CommandLineArguments: Equatable {
                 model = try Self.value(of: word, from: &remaining)
             case "--agent":
                 agent = try Self.value(of: word, from: &remaining)
+            case "--account":
+                account = try Self.value(of: word, from: &remaining)
             case "--mode":
                 mode = try Self.value(of: word, from: &remaining)
             case "--enter":
@@ -91,7 +93,8 @@ struct CommandLineArguments: Equatable {
         if projectName != nil, name != "project", name != "thread" {
             throw CommandLineToolError.usage("--name does not belong to \(name). It works with project add and thread new.")
         }
-        if let option = [("--model", model), ("--mode", mode), ("--agent", agent)].first(where: { $0.1 != nil })?.0, name != "thread" {
+        let threadOptions = [("--model", model), ("--mode", mode), ("--agent", agent), ("--account", account)]
+        if let option = threadOptions.first(where: { $0.1 != nil })?.0, name != "thread" {
             throw CommandLineToolError.usage("\(option) does not belong to \(name). It works with thread new.")
         }
         if session != nil, name != "notify" { throw CommandLineToolError.usage("--session does not belong to \(name). It works with notify.") }
@@ -152,7 +155,8 @@ struct CommandLineArguments: Equatable {
             command = try Self.settingsCommand(rest + (afterSeparator ?? []))
         case "thread":
             try Self.requireNoOptions(name, nil, pressEnter, includeScrollback, nil)
-            let options = ThreadOptions(agent: agent, folder: folder, model: model, mode: mode, name: projectName, printsJSON: printsJSON)
+            let options = ThreadOptions(
+                agent: agent, account: account, folder: folder, model: model, mode: mode, name: projectName, printsJSON: printsJSON)
             command = try Self.threadCommand(rest, afterSeparator: afterSeparator, options: options)
         case "help":
             guard rest.isEmpty else { throw CommandLineToolError.usage("help takes no arguments.") }
@@ -241,7 +245,7 @@ struct CommandLineArguments: Equatable {
     static func namesNotify(_ arguments: [String]) -> Bool {
         var words = arguments.prefix { $0 != "--" }[...]
         while let word = words.popFirst() {
-            if ["--socket", "--folder", "--session", "--name", "--model", "--mode", "--agent"].contains(word) { _ = words.popFirst(); continue }
+            if ["--socket", "--folder", "--session", "--name", "--model", "--mode", "--agent", "--account"].contains(word) { _ = words.popFirst(); continue }
             if !word.hasPrefix("-") { return word == "notify" }
         }
         return false
