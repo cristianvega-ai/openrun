@@ -8,13 +8,12 @@ import Synchronization
 /// The fake agent in place of Claude Code, so that no test runs the real
 /// agent and spends the subscription of the owner.
 enum FakeAgentSettings {
-    static let fixtures = URL(fileURLWithPath: "../ClaudeCodeAgentTests/Fixtures", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
-    static let executable = RunningSessionProcess.productsDirectory.appendingPathComponent("fake-agent").path
+    static let fixtures = RunningSessionProcess.fakeAgentFixtures
+    static let executable = RunningSessionProcess.fakeAgentExecutable
 
     /// - Parameter turns: The names of the recorded turns that the agent plays, in order.
     static func make(turns: [String] = ["plain-turn"], mode: String = "replay", environment: [String: String] = [:]) -> AgentLaunchSettings {
-        let paths = turns.map { fixtures.appending(path: $0 + ".jsonl").path }
-        let base = ["PATH": "/usr/bin:/bin", "FAKE_AGENT_TURNS": paths.joined(separator: ":"), "FAKE_AGENT_MODE": mode]
+        let base = ["PATH": "/usr/bin:/bin"].merging(RunningSessionProcess.fakeAgentEnvironment(turns: turns, mode: mode)) { $1 }
         return AgentLaunchSettings(program: executable, environment: base.merging(environment) { $1 }, hookCommand: "/usr/bin/false", hookArguments: [])
     }
 
@@ -23,8 +22,7 @@ enum FakeAgentSettings {
     static func sessionProcess(
         turns: [String] = ["plain-turn"], mode: String = "replay", environment: [String: String] = [:], arguments: [String] = []
     ) throws -> RunningSessionProcess {
-        let settings = make(turns: turns, mode: mode, environment: environment)
-        return try RunningSessionProcess(arguments: ["--agent-program", executable, "--own-environment-for-agents"] + arguments, environment: settings.environment)
+        try RunningSessionProcess.withFakeAgent(turns: turns, mode: mode, arguments: arguments, environment: ["PATH": "/usr/bin:/bin"].merging(environment) { $1 })
     }
 
     static func record(folder: String = NSTemporaryDirectory()) -> ThreadRecord {
