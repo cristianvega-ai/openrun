@@ -66,7 +66,7 @@ import Testing
     }
 
     @Test func theCommandsAreOneLineOfJSON() {
-        let control = CommandListSettingControl()
+        let control = EntryListSettingControl()
         let told = changes(of: control)
         control.show(#"[{"command":"","name":"Shell"},{"command":"claude","name":"Claude Code"}]"#)
         #expect(control.table.numberOfRows == 2 && control.entries.map(\.name) == ["Shell", "Claude Code"])
@@ -79,6 +79,20 @@ import Testing
         #expect(told().count == 4 && told().last == #"[{"command":"claude --model opus","name":"Claude Code"},{"command":"","name":"Monitor"}]"#)
         // Text that is no list changes nothing.
         control.show("{}")
+        #expect(control.entries.count == 2)
+    }
+
+    @Test func theAccountsAreAListOfNamesAndSettingsFolders() {
+        let control = EntryListSettingControl(.settingsFolder)
+        let told = changes(of: control)
+        control.show(#"[{"folder":"/Users/me/.claude-work","name":"Work"}]"#)
+        #expect(control.entries == [.init(name: "Work", detail: "/Users/me/.claude-work")])
+        #expect(control.table.tableColumns.map(\.title) == ["Name", "Settings Folder"])
+        control.add()
+        control.take(row: 1, isName: false, text: "/Users/me/.claude-home")
+        #expect(told().last == #"[{"folder":"/Users/me/.claude-work","name":"Work"},{"folder":"/Users/me/.claude-home","name":"New Account"}]"#)
+        // The commands are no accounts, so they do not show.
+        control.show(#"[{"command":"claude","name":"Claude Code"}]"#)
         #expect(control.entries.count == 2)
     }
 }

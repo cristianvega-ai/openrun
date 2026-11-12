@@ -1,23 +1,41 @@
 import AppKit
 
-/// The commands of the new-session button: a table of names and command
-/// lines, with a button to add an entry and one to remove the selected
-/// entry. The setting is one line of JSON, as `openrun settings` shows it.
-@MainActor final class CommandListSettingControl: NSObject, SettingControl, NSTableViewDataSource, NSTableViewDelegate {
-    struct Entry: Codable, Equatable {
-        var name: String
-        var command: String
+/// A setting that is a list of entries, each with a name and one more
+/// text: the commands of the new-session button, or the other accounts of
+/// an agent. A table shows them, with a button to add an entry and one to
+/// remove the selected entry. The setting is one line of JSON, as
+/// `openrun settings` shows it.
+@MainActor final class EntryListSettingControl: NSObject, SettingControl, NSTableViewDataSource, NSTableViewDelegate {
+    /// What the second text of an entry is.
+    struct Detail {
+        /// Its key in the JSON of the setting.
+        let key: String
+        let title: String
+        let placeholder: String
+        /// The name of an entry that the user adds.
+        let newName: String
+
+        /// An empty command line starts the login shell.
+        static let command = Detail(key: "command", title: "Command", placeholder: "Login shell", newName: "New Command")
+        static let settingsFolder = Detail(key: "folder", title: "Settings Folder", placeholder: "/Users/you/.claude-work", newName: "New Account")
     }
 
+    struct Entry: Equatable {
+        var name: String
+        var detail: String
+    }
+
+    let detail: Detail
     private(set) var entries: [Entry] = []
     let table = NSTableView()
     private let stack = NSStackView()
     var changed: ((String) -> Void)?
     var view: NSView { stack }
 
-    override init() {
+    init(_ detail: Detail = .command) {
+        self.detail = detail
         super.init()
-        for (identifier, title, width) in [("name", "Name", 130.0), ("command", "Command", 250.0)] {
+        for (identifier, title, width) in [("name", "Name", 130.0), ("detail", detail.title, 250.0)] {
             let column = NSTableColumn(identifier: NSUserInterfaceItemIdentifier(identifier))
             (column.title, column.width) = (title, width)
             table.addTableColumn(column)
@@ -34,7 +52,14 @@ import AppKit
     }
 
     func show(_ text: String) {
-        entries = (try? JSONDecoder().decode([Entry].self, from: Data(text.utf8))) ?? entries
+        // The other keys of an entry, such as one of a later build, do not count.
+        if let list = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] {
+            let shown = list.compactMap { fields -> Entry? in
+                guard let name = fields["name"] as? String, let text = fields[detail.key] as? String else { return nil }
+                return Entry(name: name, detail: text)
+            }
+            if shown.count == list.count { entries = shown }
+        }
         table.reloadData()
     }
 
@@ -42,10 +67,9 @@ import AppKit
 
     func tableView(_ tableView: NSTableView, viewFor tableColumn: NSTableColumn?, row: Int) -> NSView? {
         let isName = tableColumn?.identifier.rawValue == "name"
-        let field = NSTextField(string: isName ? entries[row].name : entries[row].command)
+        let field = NSTextField(string: isName ? entries[row].name : entries[row].detail)
         (field.isBordered, field.drawsBackground, field.target, field.action) = (false, false, self, #selector(edited(_:)))
-        // An empty command line starts the login shell.
-        field.placeholderString = isName ? "" : "Login shell"
+        field.placeholderString = isName ? "" : detail.placeholder
         field.tag = isName ? 0 : 1
         return field
     }
@@ -59,7 +83,7 @@ import AppKit
     /// Takes the new text of one cell and tells the new list.
     func take(row: Int, isName: Bool, text: String) {
         let before = entries
-        if isName { entries[row].name = text } else { entries[row].command = text }
+        if isName { entries[row].name = text } else { entries[row].detail = text }
         if entries != before { tell() }
     }
 
@@ -68,7 +92,7 @@ import AppKit
     }
 
     func add() {
-        entries.append(Entry(name: "New Command", command: ""))
+        entries.append(Entry(name: detail.newName, detail: ""))
         tell()
     }
 
@@ -82,7 +106,7 @@ import AppKit
         table.reloadData()
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.sortedKeys, .withoutEscapingSlashes]
-        guard let data = try? encoder.encode(entries) else { return }
+        guard let data = try? encoder.encode(entries.map { ["name": $0.name, detail.key: $0.detail] }) else { return }
         changed?(String(decoding: data, as: UTF8.self))
     }
 }

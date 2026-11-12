@@ -47,7 +47,7 @@ struct SettingsPane {
                 FlagSettingControl(title: "Ask before a paste that could run a command")
             },
             SettingRow(name: SettingName.newSessionCommands.rawValue, label: "New sessions", note: "The commands of the new-session button. An empty command starts the login shell.") {
-                CommandListSettingControl()
+                EntryListSettingControl()
             },
         ])
     }
