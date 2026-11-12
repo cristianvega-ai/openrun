@@ -1,5 +1,6 @@
 import AgentThreads
 import ClaudeCodeAgent
+import CodexAgent
 import Foundation
 import SessionProtocol
 
@@ -12,6 +13,7 @@ extension SessionServer {
     func openInTerminal(_ thread: UUID, size: SessionSize) async throws -> ServerMessage {
         let record = try await threads.record(thread)
         guard await threads.terminalSession(of: thread) == nil else { throw ThreadRequestError.openInTerminal }
+        if record.agent == .codex { return try await openCodexInTerminal(record, size: size) }
         guard let conversation = UUID(uuidString: record.conversationIdentifier), let mode = ClaudeCodePermissionMode(rawValue: record.permissionMode) else {
             throw ClaudeCodeLaunchError.invalidModel
         }
@@ -30,7 +32,34 @@ extension SessionServer {
         let summary = try await registry.create(folder: record.folder, command: [settings.program] + launch.terminalArguments, size: size, environment: environment)
         // The thread keeps the conversation, so its terminal does not come back after a restart.
         await records.exclude(summary.identifier)
+        return await openedInTerminal(thread, session: summary, historyEnd: historyEnd)
+    }
+
+    /// Codex has the conversation under the identifier of its thread.
+    /// The thread leaves the app-server, and `codex resume` goes on with
+    /// it in a new session, under the account of the thread.
+    private func openCodexInTerminal(_ record: ThreadRecord, size: SessionSize) async throws -> ServerMessage {
+        guard record.hasConversation, UUID(uuidString: record.conversationIdentifier) != nil,
+              let runner = try await threads.running(for: record.identifier) as? CodexThreadRunner else { throw ThreadRequestError.noTurnYet }
+        await runner.leaveForTerminal()
+        let settings = await agents.settings()
+        var environment = settings.environment
+        if let account = record.account { environment["CODEX_HOME"] = account.settingsFolder }
+        do {
+            let command = [settings.codexProgram] + (await runner.terminalArguments)
+            let summary = try await registry.create(folder: record.folder, command: command, size: size, environment: environment)
+            return await openedInTerminal(record.identifier, session: summary, historyEnd: 0)
+        } catch {
+            // No terminal started, so the app-server takes the thread again.
+            await runner.returnedFromTerminal()
+            throw error
+        }
+    }
+
+    private func openedInTerminal(_ thread: UUID, session summary: SessionSummary, historyEnd: UInt64) async -> ServerMessage {
         await threads.openedInTerminal(thread, session: summary.identifier, historyEnd: historyEnd)
+        // A program that ended at once ended before the thread knew its session.
+        if await registry.session(for: summary.identifier) == nil { await threads.sessionEnded(summary.identifier) }
         SessionLog.write("Opened a thread in the terminal session \(summary.identifierText)")
         return .sessionCreated(summary)
     }

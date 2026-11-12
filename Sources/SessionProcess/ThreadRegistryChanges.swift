@@ -141,7 +141,13 @@ extension ThreadRegistry {
     /// the history of the agent, and the thread takes messages again.
     func sessionEnded(_ session: UUID) async {
         guard let thread = terminals.first(where: { $0.value.session == session })?.key, let terminal = terminals.removeValue(forKey: thread),
-              let record = list.thread(thread), let runner = try? runner(for: thread) else { return }
+              let record = list.thread(thread) else { return }
+        if let runner = codexRunners[thread] {
+            // Codex keeps the turns itself, and the runner reads them from its history.
+            await runner.returnedFromTerminal()
+            return publish(thread)
+        }
+        guard let runner = try? runner(for: thread) else { return }
         let environment = (try? await launchSettings().environment) ?? [:]
         // The read waits for the disk, so it runs off this actor.
         let events = await Task.detached { (try? ThreadHistory.events(of: record, environment: environment, after: terminal.historyEnd)) ?? [] }.value

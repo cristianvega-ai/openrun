@@ -6,6 +6,7 @@ enum ThreadRequestError: Error, Equatable, CustomStringConvertible {
     case openInTerminal
     case notInTerminal
     case unknownAccount
+    case noTurnYet
     /// The mode is no mode of the agent, or it is wider than the setting allows.
     case permissionModeNotOffered(offered: [String])
 
@@ -16,6 +17,7 @@ enum ThreadRequestError: Error, Equatable, CustomStringConvertible {
         case .onlyForClaudeCode: "Only a thread with Claude Code can do that."
         case .openInTerminal: "The conversation is open in a terminal. Go back to the chat first."
         case .notInTerminal: "The conversation is not open in a terminal."
+        case .noTurnYet: "A thread with Codex opens in a terminal after its first turn."
         case .unknownAccount: "The agent has no account with that name. The settings window of OpenRun lists the accounts of each agent."
         case .permissionModeNotOffered(let offered):
             "A thread can take these permission modes: \(offered.joined(separator: ", ")). "

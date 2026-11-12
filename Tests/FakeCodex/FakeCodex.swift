@@ -14,6 +14,8 @@ import Foundation
 /// Codex ends an app-server with no thread and starts a new one later.
 /// With `FAKE_CODEX_RESTART_MARK`, the first start makes that file, and
 /// each later start plays the files of `FAKE_CODEX_RESTART_SCRIPTS`.
+/// `FAKE_CODEX_IGNORED_MEMBERS` names the expected members that a test
+/// cannot give, separated by colons, such as `cwd` for a folder of the test.
 struct FakeCodex {
     let environment: [String: String]
 
@@ -90,7 +92,8 @@ struct FakeCodex {
         if method == "answer" ? message["method"] != nil : message["method"] as? String != method {
             return "OpenRun sent \(message["method"] ?? "an answer") in place of \(method)"
         }
-        for (key, value) in expect ?? [:] where !((content[key] as? NSObject)?.isEqual(value) ?? false) {
+        let ignored = (environment["FAKE_CODEX_IGNORED_MEMBERS"] ?? "").split(separator: ":").map(String.init)
+        for (key, value) in expect ?? [:] where !ignored.contains(key) && !((content[key] as? NSObject)?.isEqual(value) ?? false) {
             return "the member \(key) of \(method) is not the expected one"
         }
         return nil

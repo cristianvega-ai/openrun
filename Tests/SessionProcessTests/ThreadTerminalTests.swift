@@ -42,6 +42,36 @@ import Testing
         #expect(await eventually { (try? client.threads().first?.isProcessRunning) == true })
     }
 
+    /// The fake app-server is no Codex for a terminal: it ends at once
+    /// there, and the thread comes back with the turns of the history.
+    @Test func aCodexThreadGoesToATerminalSessionAndComesBack() async throws {
+        let mark = NSTemporaryDirectory() + "fake-codex-" + UUID().uuidString
+        defer { try? FileManager.default.removeItem(atPath: mark) }
+        let fixtures = URL(fileURLWithPath: "../CodexAgentTests/Fixtures", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
+        func paths(_ names: [String]) -> String { names.map { fixtures.appending(path: $0 + ".jsonl").path }.joined(separator: ":") }
+        let fake = RunningSessionProcess.productsDirectory.appendingPathComponent("fake-codex").path
+        let process = try RunningSessionProcess(arguments: ["--codex-program", fake, "--own-environment-for-agents"], environment: [
+            "FAKE_CODEX_SCRIPTS": paths(["handshake", "thread-start", "plain-turn", "unsubscribe"]), "FAKE_CODEX_IGNORED_MEMBERS": "cwd",
+            "FAKE_CODEX_RESTART_SCRIPTS": paths(["handshake", "resume", "history"]), "FAKE_CODEX_RESTART_MARK": mark,
+        ])
+        defer { process.stop() }
+        let client = try SessionClient(location: try SocketLocation(path: process.socketPath))
+        let thread = try client.createThread(agent: "codex", folder: process.directory.path).identifier
+        // Codex goes on with a conversation, so the thread needs a turn first.
+        #expect(throws: SessionConnectionError.self) { try client.openThreadInTerminal(thread, size: size) }
+        _ = try client.sendThreadMessage(thread, text: "Reply with the single word ok.")
+        #expect(await eventually { (try? client.threads().first?.state) == "finishedTurn" })
+        let session = try client.openThreadInTerminal(thread, size: size)
+        #expect(session.command == [fake, "resume", "00000000-0000-7000-8000-000000000001", "--sandbox", "workspace-write"])
+        #expect(await eventually { (try? client.threads().first.map { $0.terminalSession == nil }) == true })
+        let text = try process.runCommand(["thread", "read", SessionSummary.text(for: thread)]).standardOutput
+        // The three turns of the history come after the turn of the chat, the oldest first.
+        #expect(text.hasPrefix("You:\nReply with the single word ok.\n\nAgent:\nok\n\nYou:\nWrite the numbers from 1 to 300"))
+        #expect(text.contains("\n\nYou:\nRun the command `touch x4.txt` with your shell tool.\n\nNotice: Codex keeps only"))
+        // The thread takes messages again.
+        _ = try client.sendThreadMessage(thread, text: "More.")
+    }
+
     @Test func aNewThreadStartsItsConversationInTheTerminal() async throws {
         let process = try FakeAgentSettings.sessionProcess()
         defer { process.stop() }
