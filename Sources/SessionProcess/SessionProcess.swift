@@ -48,6 +48,7 @@ public struct SessionProcess: Sendable {
         // socket opens is not lost.
         let signals = ShutdownSignals()
         let server = try SessionServer(location: socketLocation, dataFolder: dataFolder, answererRequirement: answererRequirement, agentOptions: agentOptions)
+        await server.restoreSessions()
         await server.start()
         SessionLog.write("Listening on ", detail: socketLocation.path)
         let wakeService = machServiceName.flatMap(startWakeService)

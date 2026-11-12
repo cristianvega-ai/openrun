@@ -47,7 +47,13 @@ actor SessionRegistry {
     }
 
     /// Starts a session and adds it to the list.
-    func create(folder: String, command: [String]?, size: SessionSize, environment: [String: String]) async throws -> SessionSummary {
+    ///
+    /// - Parameter kept: The identifier, the name and the age of a session
+    ///   of the last run of the session process, which comes back.
+    func create(
+        folder: String, command: [String]?, size: SessionSize, environment: [String: String],
+        restoring kept: (identifier: UUID, name: String?, createdAt: Date)? = nil
+    ) async throws -> SessionSummary {
         // This check must come before the first suspension point. The program
         // starts in `Session.init`, and the list `terminateAll` ends is
         // already fixed by then.
@@ -55,7 +61,7 @@ actor SessionRegistry {
         // The session joins the list before the first suspension point, so
         // two requests at once cannot both pass the limit.
         guard sessions.count < sessionLimit else { throw SessionProcessError.sessionLimitReached(limit: sessionLimit) }
-        let identifier = UUID()
+        let identifier = kept?.identifier ?? UUID()
         var programEnvironment = helperSearchPath.adding(to: environment)
         programEnvironment.merge(
             SessionEnvironment.variables(sessionIdentifier: identifier, socketPath: socketPath),
@@ -80,7 +86,8 @@ actor SessionRegistry {
             shownCommand = [shell.path]
         }
 
-        var summary = SessionSummary(identifier: identifier, folder: folder, command: shownCommand, size: size, createdAt: Date())
+        var summary = SessionSummary(identifier: identifier, folder: folder, command: shownCommand, size: size, createdAt: kept?.createdAt ?? Date())
+        summary.name = kept?.name
         let startFolder = Self.realPath(of: folder)
         summary.projectIdentifier = projects.project(holding: startFolder)?.identifier
         let session = try Session(summary: summary, launch: launch, changes: changes, scrollbackLimit: scrollbackLimit) { [self] identifier in

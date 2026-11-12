@@ -62,10 +62,10 @@ import Testing
         let second = try RunningSessionProcess(directory: folder, logName: "log2")
         defer { second.stop() }
         let new = try second.createSession(program: ["/bin/sh"])
-        #expect(await waitUntil { connection.status == .connected && connection.overview.sessions.map(\.identifierText) == [new] })
+        #expect(await waitUntil { connection.status == .connected && connection.overview.sessions.map(\.identifierText) == [session, new] })
         connection.stop()
         _ = try second.createSession(program: ["/bin/sh"])
         try await Task.sleep(for: .milliseconds(300))
-        #expect(connection.overview.sessions.count == 1)
+        #expect(connection.overview.sessions.count == 2)
     }
 }

@@ -19,6 +19,8 @@ actor SessionServer {
     let threads: ThreadRegistry
     let agents: AgentLaunchProvider
     let records: SessionRecordKeeper
+    /// The sessions of the last run, until `restoreSessions` starts them.
+    private var recordsToRestore: [SessionRecord]
     private var handlers: [ObjectIdentifier: Task<Void, Never>] = [:]
     private var clients: [ObjectIdentifier: ClientConnection] = [:]
     private var acceptTask: Task<Void, Never>?
@@ -60,7 +62,31 @@ actor SessionServer {
             sessionLimit: loadedSettings.sessionLimit, scrollbackLimit: loadedSettings.scrollbackLimit
         )
         records = SessionRecordKeeper(store: SessionRecordStore(dataFolder: dataFolder))
+        recordsToRestore = records.load()
         records.follow(changes)
+    }
+
+    /// Starts each session of the last run again, before the first client
+    /// connects: a login shell in the folder of the session, with its
+    /// identifier, its name and its size (decision of 2026-10-15). So the
+    /// window finds its rows and its splits. OpenRun does not guess what
+    /// ran in the session.
+    func restoreSessions() async {
+        let home = NSHomeDirectory()
+        for record in recordsToRestore {
+            var isFolder: ObjCBool = false
+            let exists = FileManager.default.fileExists(atPath: record.folder, isDirectory: &isFolder) && isFolder.boolValue
+            let size = SessionSize(columns: UInt16(clamping: record.columns), rows: UInt16(clamping: record.rows))
+            do {
+                _ = try await registry.create(
+                    folder: exists ? record.folder : home, command: nil, size: size, environment: ProcessInfo.processInfo.environment,
+                    restoring: (record.identifier, record.name, record.createdAt))
+            } catch {
+                SessionLog.write("A session of the last run did not come back: ", detail: "\(error)")
+            }
+        }
+        if !recordsToRestore.isEmpty { SessionLog.write("Started the \(recordsToRestore.count) sessions of the last run again.") }
+        recordsToRestore = []
     }
 
     func start() {
