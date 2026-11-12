@@ -49,7 +49,7 @@ import Testing
         let fixture = try Fixture()
         defer { fixture.remove() }
         let registry = fixture.registry, folder = fixture.folder.path
-        await #expect(throws: ThreadRequestError.unsupportedAgent("codex")) { try await registry.create(agent: "codex", folder: folder, model: nil, permissionMode: nil, name: nil) }
+        await #expect(throws: ThreadRequestError.unsupportedAgent("gemini")) { try await registry.create(agent: "gemini", folder: folder, model: nil, permissionMode: nil, name: nil) }
         await #expect(throws: ThreadRequestError.folderDoesNotExist) { try await registry.create(agent: "claude-code", folder: folder + "/missing", model: nil, permissionMode: nil, name: nil) }
         await #expect(throws: ThreadListError.invalidModel) { try await registry.create(agent: "claude-code", folder: folder, model: "--flag", permissionMode: nil, name: nil) }
         await #expect(throws: ThreadListError.unknownThread(UUID(uuidString: "00000000-0000-4000-8000-000000000001")!)) {

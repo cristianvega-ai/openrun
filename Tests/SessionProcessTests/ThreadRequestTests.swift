@@ -111,7 +111,7 @@ import Testing
             return "no failure"
         }
         let unknown = UUID()
-        #expect(message { _ = try client.createThread(agent: "codex", folder: "/") } == "OpenRun runs threads with Claude Code. Give claude-code as the agent.")
+        #expect(message { _ = try client.createThread(agent: "gemini", folder: "/") } == "OpenRun runs threads with Claude Code and with Codex. Give claude-code or codex as the agent.")
         #expect(message { _ = try client.createThread(agent: "claude-code", folder: "/no/such/folder") }.hasPrefix("The folder of a thread must be"))
         #expect(message { _ = try client.sendThreadMessage(unknown, text: "Hello") } == "No thread has the identifier \(unknown.uuidString.lowercased()).")
         #expect(message { try client.stopThread(unknown) }.hasPrefix("No thread has the identifier"))

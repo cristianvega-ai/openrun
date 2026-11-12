@@ -74,7 +74,7 @@ actor ThreadRegistry {
         for thread in slots.setLimit(processLimit) { await start(thread) }
         // The setting is the widest mode of every thread, so a thread with a wider one comes down to it.
         for record in list.threads {
-            if Self.offeredModes(upTo: permissionMode).contains(record.permissionMode) {
+            if record.agent != .claudeCode || Self.offeredModes(upTo: permissionMode).contains(record.permissionMode) {
                 publish(record.identifier)
             } else {
                 try? await change(record.identifier, model: nil, permissionMode: permissionMode)
@@ -128,7 +128,11 @@ actor ThreadRegistry {
             permissionMode: record.permissionMode, name: record.name, title: record.title, accountName: record.account?.name,
             createdAt: record.createdAt, lastActivityAt: record.lastActivityAt,
             projectIdentifier: projects.project(holding: record.folder)?.identifier,
-            models: ClaudeCodeModelChoices.choices(with: [defaultModel, record.model]), permissionModes: offeredModes(upTo: widestMode))
+            models: record.agent == .codex
+                ? [CodexThreadRunner.configuredModel] + (record.model == CodexThreadRunner.configuredModel ? [] : [record.model])
+                : ClaudeCodeModelChoices.choices(with: [defaultModel, record.model]),
+            // Codex has two sandboxes, and the wider one is its usual one (decision of 2026-11-10).
+            permissionModes: record.agent == .codex ? CodexSandbox.allCases.map(\.rawValue) : offeredModes(upTo: widestMode))
     }
 
     /// Saves the list, or puts back the list before the change, so the

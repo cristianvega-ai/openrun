@@ -1,4 +1,5 @@
 import AgentThreads
+import CodexAgent
 import Foundation
 import Projects
 import SessionProtocol
@@ -8,9 +9,7 @@ import SessionProtocol
 extension ThreadRegistry {
     /// Makes a thread. Its folder must exist, because the agent starts there.
     func create(agent: String, folder: String, model: String?, permissionMode: String?, name: String?) throws -> ThreadSummary {
-        guard ThreadAgent(rawValue: agent) == .claudeCode else {
-            throw ThreadRequestError.unsupportedAgent(agent)
-        }
+        guard let kind = ThreadAgent(rawValue: agent) else { throw ThreadRequestError.unsupportedAgent(agent) }
         var isFolder: ObjCBool = false
         guard folder.hasPrefix("/"), FileManager.default.fileExists(atPath: folder, isDirectory: &isFolder), isFolder.boolValue else {
             throw ThreadRequestError.folderDoesNotExist
@@ -20,8 +19,9 @@ extension ThreadRegistry {
         guard let resolved = realpath(folder, nil) else { throw ThreadRequestError.folderDoesNotExist }
         defer { free(resolved) }
         let realFolder = String(cString: resolved)
-        let mode = try offered(permissionMode ?? defaultPermissionMode)
-        let record = ThreadRecord(agent: .claudeCode, folder: realFolder, model: model ?? defaultModel, permissionMode: mode, name: name)
+        let usual = kind == .codex ? (CodexThreadRunner.configuredModel, CodexSandbox.workspaceWrite.rawValue) : (defaultModel, defaultPermissionMode)
+        let mode = try offered(permissionMode ?? usual.1, for: kind)
+        let record = ThreadRecord(agent: kind, folder: realFolder, model: model ?? usual.0, permissionMode: mode, name: name)
         let previous = list
         try list.add(record)
         try save(restoring: previous)
@@ -33,8 +33,8 @@ extension ThreadRegistry {
 
     /// The mode, when a thread can take it. A wider mode than the one of
     /// the setting changes only in the settings window (proposal 9).
-    private func offered(_ mode: String) throws -> String {
-        let offered = Self.offeredModes(upTo: defaultPermissionMode)
+    private func offered(_ mode: String, for agent: ThreadAgent) throws -> String {
+        let offered = agent == .codex ? CodexSandbox.allCases.map(\.rawValue) : Self.offeredModes(upTo: defaultPermissionMode)
         guard offered.contains(mode) else { throw ThreadRequestError.permissionModeNotOffered(offered: offered) }
         return mode
     }
@@ -42,13 +42,17 @@ extension ThreadRegistry {
     /// Changes the model, the permission mode, or both. The agent takes
     /// them at its next start.
     func change(_ identifier: UUID, model: String?, permissionMode: String?) async throws {
-        let mode = try permissionMode.map(offered)
+        guard let agent = list.thread(identifier)?.agent else { throw ThreadListError.unknownThread(identifier) }
+        let mode = try permissionMode.map { try offered($0, for: agent) }
         let previous = list
         try list.update(identifier) { record in
             (record.model, record.permissionMode) = (model ?? record.model, mode ?? record.permissionMode)
         }
         try save(restoring: previous)
-        if let record = list.thread(identifier) { await runners[identifier]?.setLaunchFacts(model: record.model, permissionMode: record.permissionMode) }
+        if let record = list.thread(identifier) {
+            await runners[identifier]?.setLaunchFacts(model: record.model, permissionMode: record.permissionMode)
+            await codexRunners[identifier]?.setTurnFacts(model: record.model, permissionMode: record.permissionMode)
+        }
         publish(identifier)
     }
 
@@ -57,6 +61,7 @@ extension ThreadRegistry {
         try list.update(identifier) { $0.name = name }
         try save(restoring: previous)
         await runners[identifier]?.setName(list.thread(identifier)?.name)
+        await codexRunners[identifier]?.setName(list.thread(identifier)?.name)
         publish(identifier)
     }
 
@@ -69,6 +74,7 @@ extension ThreadRegistry {
         summaries[identifier] = nil
         changes?.threadEnded(identifier)
         await runners.removeValue(forKey: identifier)?.close()
+        await codexRunners.removeValue(forKey: identifier)?.close()
         if let next = slots.remove(identifier) { await start(next) }
     }
 
@@ -76,6 +82,7 @@ extension ThreadRegistry {
     func runner(for identifier: UUID) throws -> ThreadRunner {
         if let runner = runners[identifier] { return runner }
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
+        guard record.agent == .claudeCode else { throw ThreadRequestError.onlyForClaudeCode }
         let runner = ThreadRunner(
             record: record, quietTime: quietTime, launchSettings: launchSettings,
             takeProcessSlot: { [weak self] in await self?.takeProcessSlot(for: $0) ?? .granted },
@@ -193,6 +200,8 @@ extension ThreadRegistry {
     /// Ends the process of every thread, when the session process stops.
     func terminateAll() async {
         for runner in runners.values { await runner.close() }
-        runners = [:]
+        for runner in codexRunners.values { await runner.close() }
+        await codexServers?.shutDown()
+        (runners, codexRunners, codexServers) = ([:], [:], nil)
     }
 }

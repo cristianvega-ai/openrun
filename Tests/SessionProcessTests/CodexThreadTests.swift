@@ -56,4 +56,22 @@ import Testing
         #expect(await !runner.answerPermission(request, allows: true, message: nil))
         await runner.close()
     }
+
+    @Test func theRegistryKeepsACodexThreadWithItsOwnChoices() async throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let registry = ThreadRegistry(store: ThreadStore(dataFolder: DataFolder(path: folder.path))) { FakeAgentSettings.make() }
+        let thread = try await registry.create(agent: "codex", folder: folder.path, model: nil, permissionMode: nil, name: "Notes")
+        #expect(thread.agent == "codex" && thread.model == "default" && thread.permissionMode == "workspaceWrite")
+        #expect(thread.models == ["default"] && thread.permissionModes == ["readOnly", "workspaceWrite"])
+        try await registry.change(thread.identifier, model: "gpt-5.2-codex", permissionMode: "readOnly")
+        let changed = try #require(await registry.summary(thread.identifier))
+        #expect(changed.model == "gpt-5.2-codex" && changed.permissionMode == "readOnly" && changed.models == ["default", "gpt-5.2-codex"])
+        // The modes of Claude Code are no sandbox of Codex, and only a thread with Claude Code has a terminal and a hook.
+        await #expect(throws: ThreadRequestError.self) { try await registry.change(thread.identifier, model: nil, permissionMode: "plan") }
+        await #expect(throws: ThreadRequestError.onlyForClaudeCode) { try await registry.runner(for: thread.identifier) }
+        #expect(try await registry.running(for: thread.identifier) is CodexThreadRunner)
+        try await registry.close(thread.identifier)
+        #expect(await registry.allSummaries.isEmpty)
+    }
 }

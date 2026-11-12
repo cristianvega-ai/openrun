@@ -8,7 +8,7 @@ import SessionProtocol
 extension SessionServer {
     /// Answers a request for a thread. An attach sends its own answers
     /// and returns nil.
-    func answer(threadRequest message: ClientMessage, from client: ClientConnection, peer: PeerProcess, attached: inout ThreadRunner?) async -> ServerMessage? {
+    func answer(threadRequest message: ClientMessage, from client: ClientConnection, peer: PeerProcess, attached: inout (any ThreadRunning)?) async -> ServerMessage? {
         // In version 1 only a program outside every session and every
         // thread may use the threads (decision of 2026-11-10). An agent
         // must not drive another agent without the user.
@@ -36,9 +36,9 @@ extension SessionServer {
                 return .acknowledged
             case .sendThreadMessage(let identifier, let text, let images):
                 let images = (images ?? []).map { MessageImage(mediaType: $0.mediaType, data: $0.data) }
-                return .threadMessageSent(identifier: try await threads.runner(for: identifier).send(text: text, images: images))
+                return .threadMessageSent(identifier: try await threads.running(for: identifier).send(text: text, images: images))
             case .stopThread(let identifier):
-                try await threads.runner(for: identifier).stop()
+                try await threads.running(for: identifier).stop()
                 return .acknowledged
             case .readThreadHistory(let identifier, let before):
                 let (record, environment) = (try await threads.record(identifier), await agents.settings().environment)
@@ -83,7 +83,7 @@ extension SessionServer {
         guard isApplication, await threads.thread(startedProcess: peer.processIdentifier) == nil else {
             return Self.refusal("Only OpenRun.app answers a permission request.")
         }
-        guard let runner = try? await threads.runner(for: thread), await runner.answerPermission(request, allows: allows, message: message) else {
+        guard let runner = try? await threads.running(for: thread), await runner.answerPermission(request, allows: allows, message: message) else {
             return Self.refusal("That permission request does not wait for an answer.")
         }
         return .acknowledged
@@ -91,8 +91,8 @@ extension SessionServer {
 
     /// Attaches a client to a thread: the summary first, then what the
     /// runner gives, in its order.
-    private func attach(_ client: ClientConnection, toThread identifier: UUID) async throws -> ThreadRunner {
-        let runner = try await threads.runner(for: identifier)
+    private func attach(_ client: ClientConnection, toThread identifier: UUID) async throws -> any ThreadRunning {
+        let runner = try await threads.running(for: identifier)
         guard let summary = await threads.summary(identifier) else { throw ThreadListError.unknownThread(identifier) }
         client.send(.threadAttached(summary))
         await runner.attach(ObjectIdentifier(client)) { delivery in

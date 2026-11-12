@@ -157,7 +157,7 @@ actor SessionServer {
     private func serve(_ client: ClientConnection, peer: PeerProcess) async {
         let owner = ObjectIdentifier(client)
         var attachedSession: Session?
-        var attachedThread: ThreadRunner?
+        var attachedThread: (any ThreadRunning)?
         var isWatching = false
 
         messages: for await received in client.messages {
