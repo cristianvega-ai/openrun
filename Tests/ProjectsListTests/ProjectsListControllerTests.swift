@@ -6,9 +6,9 @@ import Testing
     @Test func theListShowsTheEntriesAndStartsOnAllSessions() {
         let (list, host, window, _) = makeProjectsList()
         defer { window.close() }
-        #expect(list.table.numberOfRows == 7 && list.selection == .allSessions && host.selections.isEmpty)
+        #expect(list.table.numberOfRows == 6 && list.selection == .allSessions && host.selections.isEmpty)
         #expect(list.cell(at: 1)?.name.stringValue == "Needs You" && list.cell(at: 3)?.name.stringValue == "openrun")
-        #expect(list.cell(at: 6)?.name.stringValue == "Other Folders")
+        #expect(list.cell(at: 5)?.name.stringValue == "notes")
         // The heading of the projects is a row that takes no selection.
         let heading = list.table.view(atColumn: 0, row: 2, makeIfNecessary: false) as? ProjectsHeadingCellView
         #expect(heading?.label.stringValue == "Projects" && list.table.rect(ofRow: 2).height > list.table.rect(ofRow: 1).height)
@@ -23,8 +23,8 @@ import Testing
         list.table.selectRowIndexes(IndexSet(integer: 4), byExtendingSelection: false)
         list.table.selectRowIndexes(IndexSet(integer: 1), byExtendingSelection: false)
         #expect(host.selections == [.project(identifiers[1]), .needsYou])
-        list.select(.noProject)
-        #expect(list.selection == .noProject && host.selections.count == 2)
+        list.select(.project(identifiers[2]))
+        #expect(list.selection == .project(identifiers[2]) && host.selections.count == 2)
     }
 
     /// A new count changes the text of one row, in the view that it already has.
@@ -32,13 +32,13 @@ import Testing
         let (list, _, window, identifiers) = makeProjectsList()
         defer { window.close() }
         list.select(.project(identifiers[2]))
-        let cells = (0..<7).map { list.cell(at: $0) }
+        let cells = (0..<6).map { list.cell(at: $0) }
         var content = list.content
         (content.projects[0].attentionCount, content.needsYouCount) = (2, 2)
         list.show(content)
         #expect(list.cell(at: 3)?.count.stringValue == "2" && list.cell(at: 4)?.count.stringValue == "")
         #expect(list.cell(at: 1)?.count.stringValue == "2" && list.cell(at: 0)?.count.stringValue == "")
-        #expect(zip(cells, (0..<7).map { list.cell(at: $0) }).allSatisfy { $0 === $1 })
+        #expect(zip(cells, (0..<6).map { list.cell(at: $0) }).allSatisfy { $0 === $1 })
         #expect(list.selection == .project(identifiers[2]))
     }
 
@@ -49,7 +49,7 @@ import Testing
         var content = list.content
         content.projects.removeFirst()
         list.show(content)
-        #expect(list.table.numberOfRows == 6 && list.selection == .allSessions && host.selections == [.allSessions])
+        #expect(list.table.numberOfRows == 5 && list.selection == .allSessions && host.selections == [.allSessions])
     }
 
     @Test func theAddButtonAsksTheHostForANewProject() {

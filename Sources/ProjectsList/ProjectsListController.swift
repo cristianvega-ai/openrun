@@ -3,7 +3,7 @@ import ListUpdates
 import PaneAppearance
 
 /// The first pane: "All Projects", "Needs You", and under the heading
-/// "Projects" the projects in the user's order, then "Other Folders". It
+/// "Projects" the projects in the user's order. It
 /// shows display values and reports what the user does through its delegate.
 @MainActor
 public final class ProjectsListController: NSObject {

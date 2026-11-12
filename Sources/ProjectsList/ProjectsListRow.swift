@@ -24,12 +24,11 @@ struct ProjectsListRow: Equatable {
     static let firstProjectRow = 3
 
     /// "All Projects" and "Needs You" first, then the projects in the user's
-    /// order, then "Other Folders": the threads and the terminals in
-    /// folders of no project. It shows only when such work exists.
-    /// The projects have the heading "Projects" over them, so a user sees
-    /// that the work belongs to them.
+    /// order. The projects have the heading "Projects" over them, so a user
+    /// sees that the work belongs to them. Work in a folder of no project
+    /// has no entry of its own: "All Projects" shows it.
     static func rows(for content: ProjectsListContent) -> [ProjectsListRow] {
-        [ProjectsListRow(kind: .entry(.allSessions), name: "All Projects", symbol: "square.stack", help: "The threads and the terminals of every project", attentionCount: 0),
+        [ProjectsListRow(kind: .entry(.allSessions), name: "All Projects", symbol: "square.stack", help: "Every thread and every terminal", attentionCount: 0),
          ProjectsListRow(kind: .entry(.needsYou), name: "Needs You", symbol: "bell", help: "The threads and the terminals that wait for you", attentionCount: content.needsYouCount),
          ProjectsListRow(kind: .heading, name: "Projects", symbol: "", help: nil, attentionCount: 0)]
             + content.projects.map {
@@ -37,9 +36,6 @@ struct ProjectsListRow: Equatable {
             }
             // A heading with nothing under it looks unfinished, so it tells how a project comes in.
             + (content.projects.isEmpty ? [ProjectsListRow(kind: .hint, name: emptyHint, symbol: "", help: nil, attentionCount: 0)] : [])
-            + (content.showsOtherFolders ? [ProjectsListRow(
-                kind: .entry(.noProject), name: "Other Folders", symbol: "tray", help: "The threads and the terminals in folders of no project",
-                attentionCount: content.noProjectAttentionCount)] : [])
     }
 
     /// The entry of a row that the user can select.

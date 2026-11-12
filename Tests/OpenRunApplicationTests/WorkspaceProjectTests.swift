@@ -39,9 +39,10 @@ import Testing
         let session = try #require(workspace.connection.overview.session(shown))
         #expect(session.projectIdentifier == project && session.folder.hasSuffix("/app"))
 
-        projects.select(.noProject)
-        workspace.projectsList(projects, didSelect: .noProject)
-        #expect(test.shownRows == [outside] && workspace.layout.selectedEntry == .noProject)
+        // The shell outside every project has no entry of its own. "All Projects" shows it.
+        projects.select(.allSessions)
+        workspace.projectsList(projects, didSelect: .allSessions)
+        #expect(Set(test.shownRows) == [outside, shown] && workspace.layout.selectedEntry == .allSessions)
     }
 
     @Test func theUserAddsNamesMovesAndRemovesProjects() async throws {

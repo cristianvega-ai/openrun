@@ -31,7 +31,7 @@ func makeProjectsList() -> (ProjectsListController, RecordingProjectsHost, NSWin
     let identifiers = [UUID(), UUID(), UUID()]
     list.show(ProjectsListContent(projects: zip(identifiers, ["openrun", "website", "notes"]).map {
         ProjectDisplay(identifier: $0, name: $1, folder: "/Users/user/Projects/\($1)")
-    }, showsOtherFolders: true))
+    }))
     window.layoutIfNeeded()
     return (list, host, window, identifiers)
 }
