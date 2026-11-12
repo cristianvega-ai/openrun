@@ -15,6 +15,7 @@ public final class ProjectsListController: NSObject {
     public internal(set) var content = ProjectsListContent()
     let table = ProjectsTableView()
     let scroll = OverlayScrollView()
+    let usage = AccountUsageView()
     let addButton: NSButton
     var rows = ProjectsListRow.rows(for: ProjectsListContent())
     /// The table selects a row while it shows a change, and that is no choice of the user.
@@ -47,6 +48,7 @@ public final class ProjectsListController: NSObject {
         let newRows = ProjectsListRow.rows(for: content)
         let changes = RowChanges(from: rows, to: newRows) { $0.entry }
         (self.content, rows) = (content, newRows)
+        usage.show(content.accounts)
         isShowingChanges = true
         defer { isShowingChanges = false }
         changes.apply(to: table) { index in
@@ -82,18 +84,22 @@ public final class ProjectsListController: NSObject {
     }
 
     private func layOut() {
+        // The list takes the room that the usage of the accounts leaves. A hidden foot takes none.
+        let body = NSStackView(views: [scroll, usage])
+        (body.orientation, body.alignment, body.spacing) = (.vertical, .width, 0)
+        usage.setContentHuggingPriority(.required, for: .vertical)
         topRow.translatesAutoresizingMaskIntoConstraints = false
-        scroll.translatesAutoresizingMaskIntoConstraints = false
-        view.addSubview(scroll)
+        body.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(body)
         view.addSubview(topRow)
         NSLayoutConstraint.activate([
             topRow.topAnchor.constraint(equalTo: view.topAnchor),
             topRow.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             topRow.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: topRow.bottomAnchor),
-            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+            body.topAnchor.constraint(equalTo: topRow.bottomAnchor),
+            body.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            body.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            body.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
     }
 }

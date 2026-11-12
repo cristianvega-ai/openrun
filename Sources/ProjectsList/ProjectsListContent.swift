@@ -6,8 +6,10 @@ public struct ProjectsListContent: Equatable, Sendable {
     /// The rows that need the user in every project, for "Needs You".
     public var needsYouCount: Int
     public var noProjectAttentionCount: Int
+    /// The usage of each account that gave a reading, for the foot of the pane.
+    public var accounts: [AccountUsageDisplay]
 
-    public init(projects: [ProjectDisplay] = [], needsYouCount: Int = 0, noProjectAttentionCount: Int = 0) {
-        (self.projects, self.needsYouCount, self.noProjectAttentionCount) = (projects, needsYouCount, noProjectAttentionCount)
+    public init(projects: [ProjectDisplay] = [], needsYouCount: Int = 0, noProjectAttentionCount: Int = 0, accounts: [AccountUsageDisplay] = []) {
+        (self.projects, self.needsYouCount, self.noProjectAttentionCount, self.accounts) = (projects, needsYouCount, noProjectAttentionCount, accounts)
     }
 }

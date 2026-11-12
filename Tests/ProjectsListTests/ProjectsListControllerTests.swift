@@ -55,6 +55,20 @@ import Testing
         #expect(host.newProjectRequests == 1 && list.topRow.trailingItems.arrangedSubviews.contains(list.addButton))
     }
 
+    @Test func theUsageOfTheAccountsTakesRoomUnderTheListOnlyWithAReading() {
+        let (list, _, window, _) = makeProjectsList()
+        defer { window.close() }
+        let listHeight = list.scroll.frame.height
+        #expect(list.usage.isHidden && listHeight > 300)
+        let reading = AccountUsageDisplay(title: "Codex", windows: [.init(name: "Week", usedFraction: 0.4)], readTime: "09:15", help: "")
+        list.show(ProjectsListContent(accounts: [reading]))
+        window.layoutIfNeeded()
+        #expect(!list.usage.isHidden && list.usage.frame.height > 30 && list.scroll.frame.height == listHeight - list.usage.frame.height)
+        list.show(ProjectsListContent())
+        window.layoutIfNeeded()
+        #expect(list.usage.isHidden && list.scroll.frame.height == listHeight)
+    }
+
     @Test func aDraggedProjectMovesAtOnceAndTheHostHearsOfIt() {
         let (list, host, window, identifiers) = makeProjectsList()
         defer { window.close() }
