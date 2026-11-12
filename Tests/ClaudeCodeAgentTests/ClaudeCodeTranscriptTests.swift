@@ -70,5 +70,10 @@ import Testing
         #expect(failed.state == .failed)
         guard case .turnEnd(let end) = failed.items.last?.content else { return }
         #expect(end.errorText?.hasPrefix("Failed to authenticate") == true)
+        // Claude Code names the kind of the error, so a chat can tell the user to sign in.
+        #expect(end.errorKind == TurnEnd.notSignedIn && failed.needsSignIn && !stopped.needsSignIn)
+        var later = failed
+        later.apply(ConversationEvent(.userMessage(UserMessage(identifier: "next", text: "Hi", isAccepted: true))))
+        #expect(!later.needsSignIn)
     }
 }

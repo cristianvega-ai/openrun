@@ -7,6 +7,16 @@ public struct Transcript: Sendable, Hashable {
     public let limits: TranscriptLimits
     var storage = TranscriptStorage()
     public private(set) var state: ThreadState = .idle
+
+    /// Whether the newest turn failed because the agent has no valid
+    /// login. A chat then tells the user to sign in.
+    public var needsSignIn: Bool {
+        guard state == .failed else { return false }
+        for item in items.reversed() {
+            if case .turnEnd(let end) = item.content { return end.errorKind == TurnEnd.notSignedIn }
+        }
+        return false
+    }
     /// The thinking that goes on now, or nil.
     public private(set) var thinking: Thinking?
     /// The newest facts of the agent's process.

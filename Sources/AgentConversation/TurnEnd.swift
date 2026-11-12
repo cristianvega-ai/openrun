@@ -12,6 +12,12 @@ public struct TurnEnd: Codable, Sendable, Hashable {
     public var outcome: Outcome
     /// What went wrong, for a failed turn.
     public var errorText: String?
+    /// The kind of the error, when the agent names one: `notSignedIn`, or
+    /// the agent's own word for another kind.
+    public var errorKind: String?
+    /// The agent has no valid login, so each turn fails until the user
+    /// signs in.
+    public static let notSignedIn = "notSignedIn"
     public var usage: TokenUsage?
     /// The time of the whole turn.
     public var durationMilliseconds: Int?
@@ -22,11 +28,11 @@ public struct TurnEnd: Codable, Sendable, Hashable {
     public var estimatedCostInDollars: Double?
 
     public init(
-        outcome: Outcome, errorText: String? = nil, usage: TokenUsage? = nil, durationMilliseconds: Int? = nil,
+        outcome: Outcome, errorText: String? = nil, errorKind: String? = nil, usage: TokenUsage? = nil, durationMilliseconds: Int? = nil,
         serviceDurationMilliseconds: Int? = nil, estimatedCostInDollars: Double? = nil
     ) {
         self.outcome = outcome
-        self.errorText = errorText
+        (self.errorText, self.errorKind) = (errorText, errorKind)
         self.usage = usage
         self.durationMilliseconds = durationMilliseconds
         self.serviceDurationMilliseconds = serviceDurationMilliseconds

@@ -18,6 +18,9 @@ struct ClaudeCodeLineDecoder: Sendable {
     /// came. Each line holds one block, in the order of the blocks.
     var assistantMessage: String?
     var assistantBlockCount = 0
+    /// The kind of the error of the last error message, in the word of
+    /// Claude Code, for the end of its turn.
+    var errorKind: String?
     /// The tasks that run a sub-agent, as opposed to a command.
     var agentTasks: Set<String> = []
 
@@ -28,7 +31,12 @@ struct ClaudeCodeLineDecoder: Sendable {
         case "stream_event": return streamEvents(line)
         case "assistant": return assistantEvents(line)
         case "user": return userEvents(line)
-        case "result": return [.turnEnded(Self.turnEnd(line))]
+        case "result":
+            var end = Self.turnEnd(line)
+            // The result line tells the text of an error, and the message before it told its kind.
+            if end.outcome == .failed { end.errorKind = errorKind == "authentication_failed" ? TurnEnd.notSignedIn : errorKind }
+            errorKind = nil
+            return [.turnEnded(end)]
         case "rate_limit_event": return [.usage(ClaudeCodeUsage.reading(from: line["rate_limit_info"] ?? .null))]
         case "command_lifecycle":
             let state = line["state"]?.string
@@ -44,6 +52,7 @@ struct ClaudeCodeLineDecoder: Sendable {
         let message = line["message"] ?? .null
         let blocks = message["content"]?.array ?? []
         if line["is_api_error_message"]?.bool == true || line["error"] != nil {
+            errorKind = line["error"]?.string
             return [.notice(Notice(level: .error, text: ClaudeCodeContent.text(of: message["content"] ?? .null)))]
         }
         if let task = line["parent_tool_use_id"]?.string {
