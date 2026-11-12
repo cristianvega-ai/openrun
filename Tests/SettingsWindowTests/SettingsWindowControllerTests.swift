@@ -22,6 +22,23 @@ import Testing
         #expect(links?.popup.itemTitles == ["The Default Browser", "A Web Page Beside the Session"])
     }
 
+    @Test func aPaneShowsTheHeadingOfEachSectionOverItsSettings() throws {
+        let pane = SettingsPane(title: "Test", symbolName: "gearshape", sections: [
+            SettingsSection(title: "Notifications", rows: [SettingRow(name: "notifications", label: "") { FlagSettingControl(title: "Notify me") }]),
+            SettingsSection(title: "Links", note: "Where a link opens.", rows: [
+                SettingRow(name: "open-links-in", label: "Open links") { ChoiceSettingControl([("a", "A")]) },
+            ]),
+        ])
+        let controller = SettingsPaneController(pane)
+        controller.loadViewIfNeeded()
+        let grid = try #require(controller.view.subviews.first as? NSGridView)
+        let texts = grid.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
+        #expect(texts == ["Notifications", "", "Links", "Where a link opens.", "Open links:"])
+        #expect(pane.rows.map(\.name) == ["notifications", "open-links-in"] && controller.controls.count == 2)
+        // The second heading stands apart from the section over it, and each heading goes over both columns.
+        #expect(grid.row(at: 2).topPadding > grid.row(at: 0).topPadding && grid.cell(atColumnIndex: 1, rowIndex: 2).contentView === grid.cell(atColumnIndex: 0, rowIndex: 2).contentView)
+    }
+
     @Test func theControlsShowTheTextsAndTellAChangeWithTheNameOfTheSetting() throws {
         var changes: [String] = []
         controller.change = { changes.append("\($0)=\($1)") }

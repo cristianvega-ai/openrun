@@ -1,11 +1,23 @@
 import AppKit
 import Settings
 
-/// One pane of the settings window: its title, its symbol and its rows.
+/// One pane of the settings window: its title, its symbol, and its
+/// settings in sections.
 struct SettingsPane {
     let title: String
     let symbolName: String
-    let rows: [SettingRow]
+    let sections: [SettingsSection]
+
+    var rows: [SettingRow] { sections.flatMap(\.rows) }
+
+    init(title: String, symbolName: String, sections: [SettingsSection]) {
+        (self.title, self.symbolName, self.sections) = (title, symbolName, sections)
+    }
+
+    /// A pane with one group that has no heading.
+    init(title: String, symbolName: String, rows: [SettingRow]) {
+        self.init(title: title, symbolName: symbolName, sections: [SettingsSection(rows: rows)])
+    }
 
     /// - Parameter permissionModeTitle: The words of the app for a
     ///   permission mode of Claude Code, as the chat shows them.
