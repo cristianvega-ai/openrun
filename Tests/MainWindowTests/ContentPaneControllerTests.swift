@@ -20,4 +20,17 @@ import Testing
         pane.show(nil)
         #expect(second.superview == nil && !pane.emptyLabel.isHidden && pane.titleLabel.stringValue.isEmpty && changes == 4)
     }
+
+    /// A session that gets a split: its view is one half of the new content.
+    @Test func aViewThatMovedIntoTheNewContentKeepsItsNewPlace() {
+        let pane = ContentPaneController()
+        let session = NSView(), split = NSView()
+        pane.show(PaneContent(view: session, title: "zsh", minimumSize: .zero))
+        split.addSubview(session)
+        pane.show(PaneContent(view: split, title: "zsh", minimumSize: .zero))
+        #expect(session.superview === split && split.superview === pane.contentArea)
+        // The way back takes the view out of the split.
+        pane.show(PaneContent(view: session, title: "zsh", minimumSize: .zero))
+        #expect(session.superview === pane.contentArea && split.superview == nil)
+    }
 }

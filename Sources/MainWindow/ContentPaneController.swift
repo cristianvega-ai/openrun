@@ -45,7 +45,9 @@ public final class ContentPaneController {
 
     /// Shows the content in place of the one before it, or the empty state.
     func show(_ content: PaneContent?) {
-        self.content?.view.removeFromSuperview()
+        // The new content can hold the view of the old one, such as a
+        // session that got a split. That view has its new place already.
+        if let old = self.content?.view, old.superview === contentArea { old.removeFromSuperview() }
         (contentTrailing, heldWidth) = (nil, nil)
         self.content?.topRowItems.forEach { $0.removeFromSuperview() }
         self.content = content
