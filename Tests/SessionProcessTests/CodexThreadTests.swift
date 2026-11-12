@@ -57,6 +57,15 @@ import Testing
         await runner.close()
     }
 
+    @Test func twoCallersAtTheSameTimeOpenTheThreadOfCodexOnce() async throws {
+        let runner = CodexThreadRunner(record: record, servers: servers(["handshake", "thread-start"]))
+        async let first = runner.openThread(), second = runner.openThread()
+        // The script has one start. A second start would get an empty answer and fail.
+        let (one, other) = try await (first.identifier, second.identifier)
+        #expect(one == other)
+        await runner.close()
+    }
+
     @Test func aTurnOfCodexReachesTheListsAndItsAppServerCountsAsAnAgent() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

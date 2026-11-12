@@ -17,6 +17,8 @@ actor CodexThreadRunner {
     var buffer = ThreadEventBuffer()
     var listeners: [ObjectIdentifier: ThreadRunner.Listener] = [:]
     var thread: CodexThread?
+    /// The open of the thread that runs now.
+    var opening: Task<CodexThread, any Error>?
     var waitingMessages: [CodexTurn] = []
     /// Whether a turn runs, from its start to its end.
     var isTurnRunning = false

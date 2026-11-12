@@ -38,8 +38,17 @@ extension CodexThreadRunner {
 
     /// The thread on the app-server of its account. The first open starts
     /// a thread of Codex, and each later one resumes it by its identifier.
-    private func openThread() async throws -> CodexThread {
+    func openThread() async throws -> CodexThread {
         if let thread { return thread }
+        // A caller that comes while the open runs waits for it, so Codex gets one start or one resume.
+        if let opening { return try await opening.value }
+        let task = Task { try await self.startOrResumeThread() }
+        opening = task
+        defer { opening = nil }
+        return try await task.value
+    }
+
+    private func startOrResumeThread() async throws -> CodexThread {
         let start = CodexThreadStart(
             folder: record.folder, model: record.model == Self.configuredModel ? nil : record.model,
             sandbox: CodexSandbox(rawValue: record.permissionMode) ?? .workspaceWrite)
