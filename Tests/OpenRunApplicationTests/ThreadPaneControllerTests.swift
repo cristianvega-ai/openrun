@@ -32,6 +32,15 @@ import Testing
         pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
         #expect(await waitUntil { pane.transcript.state == .finishedTurn })
         #expect(agentTexts(pane) == ["ok"] && pane.chat.transcript == pane.transcript)
+        // The feed brings the usage reading of the turn, and a window at its limit makes the thread wait.
+        var summary = try #require(try SessionClient(location: pane.socket).threads().first)
+        #expect(summary.usageWindows != nil)
+        pane.update(summary, home: process.directory.path)
+        #expect(pane.chat.facts.usage?.contains("% used · read ") == true && pane.chat.facts.condition == .ready)
+        let reset = Date(timeIntervalSince1970: 1_800_000_000)
+        summary.usageWindows = [ThreadUsageWindow(name: "seven_day", usedFraction: 1, resetTime: reset, status: "rejected")]
+        pane.update(summary, home: process.directory.path)
+        #expect(pane.chat.facts.condition == .atLimit(resetTime: reset, otherAccounts: []))
     }
 
     @Test func theChatTakesTheEarlierTurnsFromTheHistoryOfTheAgent() async throws {

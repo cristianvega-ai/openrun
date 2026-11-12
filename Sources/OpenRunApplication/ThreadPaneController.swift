@@ -47,7 +47,15 @@ final class ThreadPaneController: NSObject {
             threadIdentifier: summary.identifierText, title: ThreadRowFacts.title(of: summary), agentName: ThreadRowFacts.agentName(summary.agent),
             accountName: summary.accountName, model: model(summary.model), models: (summary.models ?? []).map(model),
             permissionMode: mode(summary.permissionMode), permissionModes: (summary.permissionModes ?? []).map(mode),
-            folder: FolderText.shown(summary.folder, home: home), condition: summary.terminalSession == nil ? .ready : .openInTerminal)
+            folder: FolderText.shown(summary.folder, home: home), usage: ThreadRowFacts.usageText(of: summary), condition: condition(of: summary))
+    }
+
+    /// The terminal has the conversation, or the account is at its limit
+    /// and the thread waits for the reset (proposal 8).
+    private static func condition(of summary: ThreadSummary) -> ChatThreadCondition {
+        if summary.terminalSession != nil { return .openInTerminal }
+        if let resetTime = ThreadRowFacts.limitResetTime(of: summary) { return .atLimit(resetTime: resetTime, otherAccounts: []) }
+        return .ready
     }
 
     private static func model(_ identifier: String) -> ChatChoice {

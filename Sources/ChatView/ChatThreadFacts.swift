@@ -20,6 +20,9 @@ public struct ChatThreadFacts: Equatable, Hashable, Sendable {
     /// The folder, as the user reads it, such as `~/Projects/openrun`.
     public var folder: String?
     public var branch: String?
+    /// The usage of the account as one quiet line, with the time of the
+    /// reading (proposal 7), or nil with no reading.
+    public var usage: String?
     public var condition: ChatThreadCondition
     /// Whether the agent's history holds turns before the first item.
     public var hasEarlierHistory: Bool
@@ -28,7 +31,7 @@ public struct ChatThreadFacts: Equatable, Hashable, Sendable {
     public init(
         threadIdentifier: String, title: String, agentName: String, accountName: String? = nil, model: ChatChoice? = nil,
         models: [ChatChoice] = [], permissionMode: ChatChoice? = nil, permissionModes: [ChatChoice] = [],
-        folder: String? = nil, branch: String? = nil, condition: ChatThreadCondition = .ready,
+        folder: String? = nil, branch: String? = nil, usage: String? = nil, condition: ChatThreadCondition = .ready,
         hasEarlierHistory: Bool = false, isLoadingEarlierHistory: Bool = false
     ) {
         self.threadIdentifier = threadIdentifier
@@ -41,6 +44,7 @@ public struct ChatThreadFacts: Equatable, Hashable, Sendable {
         self.permissionModes = permissionModes
         self.folder = folder
         self.branch = branch
+        self.usage = usage
         self.condition = condition
         self.hasEarlierHistory = hasEarlierHistory
         self.isLoadingEarlierHistory = isLoadingEarlierHistory

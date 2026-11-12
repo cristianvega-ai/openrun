@@ -23,7 +23,7 @@ final class ComposerFooterView: NSView {
         modeButton.show(facts.permissionModes, current: facts.permissionMode, palette: palette)
         let text = NSMutableAttributedString()
         let attributes: [NSAttributedString.Key: Any] = [.font: palette.smallFont, .foregroundColor: palette.secondaryText]
-        for (symbol, value) in [("folder", facts.folder), ("arrow.triangle.branch", facts.branch)] {
+        for (symbol, value) in [("folder", facts.folder), ("arrow.triangle.branch", facts.branch), ("gauge.with.needle", facts.usage)] {
             guard let value else { continue }
             if text.length > 0 { text.append(NSAttributedString(string: "   ", attributes: attributes)) }
             if let image = RowSymbol.image(symbol, pointSize: 10) {
@@ -42,7 +42,8 @@ final class ComposerFooterView: NSView {
         paragraph.lineBreakMode = .byTruncatingMiddle
         text.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: text.length))
         placeLabel.attributedStringValue = text
-        placeLabel.setAccessibilityLabel([facts.folder.map { "Folder \($0)" }, facts.branch.map { "branch \($0)" }].compactMap { $0 }.joined(separator: ", "))
+        let spoken = [facts.folder.map { "Folder \($0)" }, facts.branch.map { "branch \($0)" }, facts.usage.map { "usage \($0)" }]
+        placeLabel.setAccessibilityLabel(spoken.compactMap { $0 }.joined(separator: ", "))
         needsLayout = true
     }
 
