@@ -18,6 +18,9 @@ import Testing
         let names = controller.panes.flatMap { $0.controls.keys }
         #expect(Set(names) == Set(SettingName.allCases.map(\.rawValue)) && names.count == SettingName.allCases.count)
         #expect(controller.window?.contentViewController is NSTabViewController)
+        // The window has the height of its first pane, and a pane keeps its own height in a higher window.
+        let general = controller.panes[0].view
+        #expect(controller.window?.contentView?.frame.height ?? 0 < 420 && general.fittingSize.height < 300)
         let links = controller.panes[0].controls["open-links-in"] as? ChoiceSettingControl
         #expect(links?.popup.itemTitles == ["In the Default Browser", "In a Web Page Beside the Work"])
         // Each pane groups its settings in sections with a heading, so a user sees what each one does.

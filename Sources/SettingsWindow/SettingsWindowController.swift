@@ -27,6 +27,8 @@ import AppKit
             pane.changed = { [weak self] name, text in self?.change?(name, text) }
         }
         (window.contentViewController, window.isReleasedWhenClosed) = (tabs, false)
+        // The window starts with the height of its first pane, as after a choice of that pane.
+        if let first = panes.first { window.setContentSize(first.view.fittingSize) }
         window.center()
     }
 

@@ -30,7 +30,8 @@ import AppKit
         let root = NSView()
         root.addSubview(grid)
         NSLayoutConstraint.activate([
-            grid.topAnchor.constraint(equalTo: root.topAnchor, constant: 24), grid.bottomAnchor.constraint(equalTo: root.bottomAnchor, constant: -24),
+            // The grid keeps its own height at the top, so a window that is higher than the pane stretches no row.
+            grid.topAnchor.constraint(equalTo: root.topAnchor, constant: 24), grid.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -24),
             grid.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 32), grid.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -32),
             root.widthAnchor.constraint(greaterThanOrEqualToConstant: 560),
         ])
