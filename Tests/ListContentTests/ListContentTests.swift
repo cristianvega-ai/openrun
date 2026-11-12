@@ -86,6 +86,8 @@ import WindowLayout
         #expect(ThreadRowFacts.windowName(ThreadUsageWindow(name: "daily", lengthInMinutes: 1_440)) == "Day" && ThreadRowFacts.windowName(ThreadUsageWindow(name: "burst", lengthInMinutes: 90)) == "90 min")
         #expect(["plan", "dontAsk", "default", "acceptEdits", "auto", "later"].map(ThreadRowFacts.permissionModeTitle)
             == ["Plan Only", "Rules Only", "Ask First", "Accept Edits", "Auto", "later"])
+        #expect(["readOnly", "workspaceWrite"].map(ThreadRowFacts.permissionModeTitle) == ["Read Only", "Write in Folder"])
+        #expect(ThreadRowFacts.modelTitle("default") == "Default Model" && ThreadRowFacts.agentName("codex") == "Codex")
         #expect(ThreadRowFacts.display(of: layout.rows[0], thread: thread, inView: false, home: "/").isInProgress)
         // A thread that the overview does not hold gives no row.
         #expect(ListContent(overview: SessionOverview(), layout: layout, inView: nil).rows(of: .allSessions).isEmpty)

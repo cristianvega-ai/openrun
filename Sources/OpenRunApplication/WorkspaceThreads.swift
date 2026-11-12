@@ -52,12 +52,16 @@ extension Workspace {
         }
     }
 
-    /// Makes a thread with Claude Code in the folder of the selected
+    /// The agents of a new thread, as the session process names them.
+    /// The first one is the agent of File > New Thread.
+    static let threadAgents = ["claude-code", "codex"]
+
+    /// Makes a thread with an agent in the folder of the selected
     /// project, or in the home folder. Its row takes the selection and
     /// the focus when the feed brings it.
-    func newThread() {
+    func newThread(agent: String = Workspace.threadAgents[0]) {
         let folder = selectedProjectFolder ?? home
-        requests.perform({ try $0.createThread(agent: "claude-code", folder: folder).identifier }, then: { [weak self] result in
+        requests.perform({ try $0.createThread(agent: agent, folder: folder).identifier }, then: { [weak self] result in
             switch result {
             case .success(let thread): self?.select(newSession: thread)
             case .failure(let failure): self?.showFailure("The thread could not start", failure.message)

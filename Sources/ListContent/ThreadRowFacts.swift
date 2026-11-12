@@ -16,7 +16,9 @@ public enum ThreadRowFacts {
     /// - Parameter inView: Whether the user looks at the thread and types
     ///   into it. Its request then shows in the chat, and the row needs no mark.
     public static func display(of row: LayoutRow, thread: ThreadSummary, inView: Bool, home: String) -> SessionRowDisplay {
-        let kind = SessionKind.agentThread(agent: agentName(thread.agent), model: shortModelName(thread.model), account: thread.accountName)
+        // A thread with the model of the configuration of its agent shows the name of the agent.
+        let model = thread.model == "default" ? agentName(thread.agent) : shortModelName(thread.model)
+        let kind = SessionKind.agentThread(agent: agentName(thread.agent), model: model, account: thread.accountName)
         return SessionRowDisplay(
             identifier: row.identifier, title: title(of: thread), folder: FolderText.shown(thread.folder, home: home), kind: kind,
             isInProgress: thread.state == "inProgress", alert: thread.state == "needsUser" && !inView ? waitsForAnswer : nil,
@@ -42,7 +44,9 @@ public enum ThreadRowFacts {
     /// The words of a menu for a model: the family for a name of a
     /// family, such as `opus`, and the name itself for any other model.
     public static func modelTitle(_ model: String) -> String {
-        modelFamilies.contains(model.lowercased()) ? shortModelName(model) : model
+        // Codex takes the model of its own configuration under this word.
+        if model == "default" { return "Default Model" }
+        return modelFamilies.contains(model.lowercased()) ? shortModelName(model) : model
     }
 
     /// The words of a menu for a permission mode of Claude Code. They
@@ -55,6 +59,9 @@ public enum ThreadRowFacts {
         case "default", "manual": "Ask First"
         case "acceptEdits": "Accept Edits"
         case "auto": "Auto"
+        // The two sandboxes of Codex.
+        case "readOnly": "Read Only"
+        case "workspaceWrite": "Write in Folder"
         default: mode
         }
     }

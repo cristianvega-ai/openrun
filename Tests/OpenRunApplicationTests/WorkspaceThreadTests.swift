@@ -25,7 +25,7 @@ import Testing
         let test = try await start()
         defer { test.stop() }
         let workspace = test.workspace
-        #expect(workspace.window.sessionsList.content.agents == ["Claude Code"])
+        #expect(workspace.window.sessionsList.content.agents == ["Claude Code", "Codex"])
         workspace.sessionsList(workspace.window.sessionsList, didRequest: .thread(agent: "Claude Code"))
         #expect(await waitUntil { workspace.shownThread != nil && workspace.threadPanes.existing(workspace.shownThread!)?.isReplayComplete == true })
         let thread = try #require(workspace.shownThread)
@@ -37,6 +37,17 @@ import Testing
         #expect(await waitUntil { pane.transcript.state == .finishedTurn && row(test, thread)?.title == "Reply with the single word ok." })
         workspace.sessionsList(workspace.window.sessionsList, didRename: thread, to: "Notes")
         #expect(await waitUntil { row(test, thread)?.title == "Notes" && pane.chat.facts.title == "Notes" })
+    }
+
+    @Test func theButtonForANewThreadOffersCodexWithItsOwnChoices() async throws {
+        let test = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        workspace.sessionsList(workspace.window.sessionsList, didRequest: .thread(agent: "Codex"))
+        #expect(await waitUntil { workspace.shownThread.flatMap { workspace.threadPanes.existing($0) }?.isReplayComplete == true })
+        let thread = try #require(workspace.shownThread), pane = try #require(workspace.threadPanes.existing(thread))
+        #expect(row(test, thread)?.kind == .agentThread(agent: "Codex", model: "Codex", account: nil) && pane.chat.facts.agentName == "Codex")
+        #expect(pane.chat.facts.model?.title == "Default Model" && pane.chat.facts.permissionModes.map(\.title) == ["Read Only", "Write in Folder"])
     }
 
     @Test func theMenusOfTheChatChangeTheModelAndTheModeOfTheThread() async throws {
