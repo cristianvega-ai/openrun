@@ -2,6 +2,7 @@
 extension CommandLineArguments {
     /// The options that a thread command can take.
     struct ThreadOptions {
+        var agent: String?
         var folder: String?
         var model: String?
         var mode: String?
@@ -20,6 +21,7 @@ extension CommandLineArguments {
             if isUsed { throw CommandLineToolError.usage("\(option) does not belong to thread \(action). It works with \(commands).") }
         }
         if action != "new" {
+            try refuse("--agent", options.agent != nil, "thread new")
             try refuse("--folder", options.folder != nil, "new and thread new")
             try refuse("--model", options.model != nil, "thread new")
             try refuse("--mode", options.mode != nil, "thread new")
@@ -37,7 +39,9 @@ extension CommandLineArguments {
         case "new":
             guard rest.isEmpty else { throw CommandLineToolError.usage("thread new takes no identifier. Put the first message after --.") }
             let message = (afterSeparator ?? []).joined(separator: " ")
-            return .thread(.new(folder: options.folder, model: options.model, mode: options.mode, name: options.name, text: message.isEmpty ? nil : message))
+            return .thread(.new(
+                agent: options.agent, folder: options.folder, model: options.model, mode: options.mode, name: options.name,
+                text: message.isEmpty ? nil : message))
         case "send":
             guard let thread = rest.first, !thread.isEmpty, !text.isEmpty else {
                 throw CommandLineToolError.usage("thread send needs an identifier and the text of the message.")

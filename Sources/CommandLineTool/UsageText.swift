@@ -42,9 +42,10 @@ enum UsageText {
                           Change a setting.
           thread list [--json]
                           Show every agent thread: identifier, state, folder and name.
-          thread new [--folder PATH] [--model MODEL] [--mode MODE] [--name NAME] [-- TEXT]
-                          Start a thread with Claude Code and print its identifier.
-                          TEXT is the first message.
+          thread new [--agent AGENT] [--folder PATH] [--model MODEL] [--mode MODE]
+                     [--name NAME] [-- TEXT]
+                          Start a thread and print its identifier. AGENT is claude-code,
+                          which is the default, or codex. TEXT is the first message.
           thread send THREAD TEXT
                           Send a message to a thread. It waits behind a turn that runs.
           thread read THREAD [--json]

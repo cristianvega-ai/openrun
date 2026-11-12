@@ -16,9 +16,11 @@ import Testing
     }
 
     @Test func newTakesItsOptionsAndTheFirstMessageAfterTheSeparator() throws {
-        #expect(try action("new") == .new(folder: nil, model: nil, mode: nil, name: nil, text: nil))
+        #expect(try action("new") == .new(agent: nil, folder: nil, model: nil, mode: nil, name: nil, text: nil))
         #expect(try action("new", "--folder", "/work", "--model", "opus", "--mode", "plan", "--name", "Notes", "--", "Run", "the tests")
-            == .new(folder: "/work", model: "opus", mode: "plan", name: "Notes", text: "Run the tests"))
+            == .new(agent: nil, folder: "/work", model: "opus", mode: "plan", name: "Notes", text: "Run the tests"))
+        #expect(try action("new", "--agent", "codex") == .new(agent: "codex", folder: nil, model: nil, mode: nil, name: nil, text: nil))
+        #expect(usageMessage("list", "--agent", "codex") == "--agent does not belong to thread list. It works with thread new.")
         #expect(usageMessage("new", "abc") == "thread new takes no identifier. Put the first message after --.")
     }
 
