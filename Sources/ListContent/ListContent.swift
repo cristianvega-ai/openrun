@@ -18,6 +18,7 @@ public struct ListContent {
     /// The rows in the user's order, each with the project of its first split.
     private let rows: [(display: SessionRowDisplay, project: UUID?)]
     private let projectSummaries: [ProjectSummary]
+    private let accounts: [AccountUsageDisplay]
     private let home: String
 
     /// - Parameter inView: The session that the user looks at and types
@@ -37,7 +38,7 @@ public struct ListContent {
             let project = row.pane.sessions.lazy.compactMap { sessions[$0] }.first?.projectIdentifier
             return (display, project.flatMap { known.contains($0) ? $0 : nil })
         }
-        (projectSummaries, self.home) = (overview.projects, home)
+        (projectSummaries, accounts, self.home) = (overview.projects, AccountUsageFacts.displays(of: overview.threads), home)
     }
 
     /// The content of the first pane.
@@ -48,7 +49,8 @@ public struct ListContent {
                            folder: project.folder.map { FolderText.shown($0, home: home) } ?? Self.missingFolder,
                            attentionCount: attention.count { $0.project == project.identifier })
         }
-        return ProjectsListContent(projects: displays, needsYouCount: attention.count, noProjectAttentionCount: attention.count { $0.project == nil })
+        return ProjectsListContent(
+            projects: displays, needsYouCount: attention.count, noProjectAttentionCount: attention.count { $0.project == nil }, accounts: accounts)
     }
 
     /// The rows of one entry of the first pane, in the user's order.
