@@ -21,6 +21,8 @@ import Testing
             (ClientMessage.readThreadHistory(identifier: identifier, before: 4096), #"{"readThreadHistory":{"before":4096,"identifier":\#(name)}}"#),
             (ServerMessage.threadHistoryPage(before: 1024), #"{"threadHistoryPage":{"before":1024}}"#),
             (ServerMessage.threadHistoryPage(), #"{"threadHistoryPage":{}}"#),
+            (ClientMessage.readThreadHistory(identifier: identifier, cursor: "c1"), #"{"readThreadHistory":{"cursor":"c1","identifier":\#(name)}}"#),
+            (ServerMessage.threadHistoryPage(cursor: "c2"), #"{"threadHistoryPage":{"cursor":"c2"}}"#),
             (ClientMessage.sendThreadMessage(identifier: identifier, text: "Go on."), #"{"sendThreadMessage":{"identifier":\#(name),"text":"Go on."}}"#),
             (ClientMessage.stopThread(identifier: identifier), #"{"stopThread":{"identifier":\#(name)}}"#),
             (ServerMessage.threadReplayComplete(hasEarlierEvents: true), #"{"threadReplayComplete":{"hasEarlierEvents":true}}"#),

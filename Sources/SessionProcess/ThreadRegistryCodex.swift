@@ -31,6 +31,12 @@ extension ThreadRegistry {
         return servers
     }
 
+    /// A page of the earlier turns of a Codex thread, from Codex itself.
+    func codexHistoryPage(of identifier: UUID, cursor: String?) async throws -> CodexHistoryPage {
+        guard let runner = try running(for: identifier) as? CodexThreadRunner else { return CodexHistoryPage(events: [], olderCursor: nil) }
+        return try await runner.historyPage(cursor: cursor)
+    }
+
     /// Whether an agent of a thread started the process: Claude Code, or
     /// an app-server of Codex, whose commands are its children. Such a
     /// program may not use the threads (decision of 2026-11-10).

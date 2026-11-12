@@ -148,9 +148,10 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     case attachThread(identifier: UUID)
     /// Asks for a page of the earlier turns of a thread, from the history
     /// of its agent. `before` is the `before` of the page that the client
-    /// has, or nil for the newest page. Answer: the events of whole
-    /// turns, oldest first, and then `threadHistoryPage`.
-    case readThreadHistory(identifier: UUID, before: Int? = nil)
+    /// has, or nil for the newest page. A page of a Codex thread names
+    /// its place with `cursor` in place of `before`. Answer: the events
+    /// of whole turns, oldest first, and then `threadHistoryPage`.
+    case readThreadHistory(identifier: UUID, before: Int? = nil, cursor: String? = nil)
     /// Sends a message of the user to a thread. It waits behind a turn
     /// that runs. Answer: `threadMessageSent`.
     case sendThreadMessage(identifier: UUID, text: String, images: [ThreadImage]? = nil)

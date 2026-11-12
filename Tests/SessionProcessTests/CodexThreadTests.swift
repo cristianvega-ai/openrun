@@ -66,6 +66,20 @@ import Testing
         await runner.close()
     }
 
+    @Test func theEarlierTurnsOfACodexThreadComeFromCodexInPages() async throws {
+        var kept = record
+        kept.hasConversation = true
+        let runner = CodexThreadRunner(record: kept, servers: servers(["handshake", "resume", "history"]))
+        let newest = try await runner.historyPage(cursor: nil)
+        #expect(!newest.events.isEmpty && newest.olderCursor != nil)
+        let older = try await runner.historyPage(cursor: newest.olderCursor)
+        #expect(!older.events.isEmpty && older.events != newest.events)
+        // A thread with no turn has no history, and it opens no app-server for the question.
+        let new = CodexThreadRunner(record: record, servers: { throw ThreadRunnerError.threadIsClosed })
+        #expect(try await new.historyPage(cursor: nil) == CodexHistoryPage(events: [], olderCursor: nil))
+        await runner.close()
+    }
+
     @Test func aTurnOfCodexReachesTheListsAndItsAppServerCountsAsAnAgent() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -108,6 +122,7 @@ import Testing
         await #expect(throws: ThreadRequestError.self) { try await registry.change(thread.identifier, model: nil, permissionMode: "plan") }
         await #expect(throws: ThreadRequestError.onlyForClaudeCode) { try await registry.runner(for: thread.identifier) }
         #expect(try await registry.running(for: thread.identifier) is CodexThreadRunner)
+        #expect(try await registry.codexHistoryPage(of: thread.identifier, cursor: nil).events.isEmpty)
         try await registry.close(thread.identifier)
         #expect(await registry.allSummaries.isEmpty)
     }

@@ -19,8 +19,11 @@ final class ThreadPaneController: NSObject {
     /// each later batch as an update.
     var isReplayComplete = false
     private var isClosed = false
-    /// What asks for the next page of the earlier turns. Nil asks for the newest page.
+    /// What asks for the next page of the earlier turns: a place in the
+    /// history file of Claude Code, or a cursor of Codex. Nil asks for
+    /// the newest page.
     var historyCursor: Int?
+    var historyToken: String?
     var historyPageCount = 0
     var isLoadingHistory = false
     let socket: SocketLocation

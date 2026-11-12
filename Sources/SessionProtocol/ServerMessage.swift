@@ -71,9 +71,9 @@ public enum ServerMessage: Codable, Equatable, Sendable {
     /// went away, so the history of the agent holds more.
     case threadReplayComplete(hasEarlierEvents: Bool)
     /// The page of the history is complete: its events came before this
-    /// message. `before` asks for the page before it, and it is absent
-    /// at the start of the history.
-    case threadHistoryPage(before: Int? = nil)
+    /// message. `before`, or `cursor` for a Codex thread, asks for the
+    /// page before it. Both are absent at the start of the history.
+    case threadHistoryPage(before: Int? = nil, cursor: String? = nil)
     /// The thread took the message. Its events carry the identifier.
     case threadMessageSent(identifier: UUID)
     /// A new thread, or new facts of a thread, on a connection that asked

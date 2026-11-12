@@ -40,8 +40,16 @@ extension SessionServer {
             case .stopThread(let identifier):
                 try await threads.running(for: identifier).stop()
                 return .acknowledged
-            case .readThreadHistory(let identifier, let before):
-                let (record, environment) = (try await threads.record(identifier), await agents.settings().environment)
+            case .readThreadHistory(let identifier, let before, let cursor):
+                let record = try await threads.record(identifier)
+                if record.agent == .codex {
+                    // Codex gives the turns of a thread itself, by a cursor.
+                    let page = try await threads.codexHistoryPage(of: identifier, cursor: cursor)
+                    let encoder = JSONEncoder()
+                    for event in page.events { client.send(.threadEvent(try encoder.encode(event))) }
+                    return .threadHistoryPage(cursor: page.olderCursor)
+                }
+                let environment = await agents.settings().environment
                 // The read waits for the disk, so it runs off this actor.
                 let page = try await Task.detached { try ThreadHistory.page(of: record, environment: environment, before: before) }.value
                 for event in page.events { client.send(.threadEvent(event)) }

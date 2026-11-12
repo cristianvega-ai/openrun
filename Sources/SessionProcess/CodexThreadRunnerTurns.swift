@@ -82,6 +82,13 @@ extension CodexThreadRunner {
         await sendNextMessage()
     }
 
+    /// A page of the earlier turns, which Codex keeps. The thread opens
+    /// on the app-server for the read. A thread with no turn has none.
+    func historyPage(cursor: String?) async throws -> CodexHistoryPage {
+        guard record.hasConversation else { return CodexHistoryPage(events: [], olderCursor: nil) }
+        return try await openThread().historyPage(cursor: cursor)
+    }
+
     /// Stops the turn. The messages that waited do not go out.
     func stop() async {
         if !waitingMessages.isEmpty {

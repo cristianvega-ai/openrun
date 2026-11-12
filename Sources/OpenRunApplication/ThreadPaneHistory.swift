@@ -12,14 +12,14 @@ extension ThreadPaneController {
         guard !isLoadingHistory else { return }
         isLoadingHistory = true
         chat.facts.isLoadingEarlierHistory = true
-        let (socket, thread, before) = (socket, thread, historyCursor)
+        let (socket, thread, before, token) = (socket, thread, historyCursor, historyToken)
         work.async { [weak self] in
-            let result = Result { try SessionClient(location: socket).threadHistory(thread, before: before) }
+            let result = Result { try SessionClient(location: socket).threadHistory(thread, before: before, cursor: token) }
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.tookHistory(result) } }
         }
     }
 
-    private func tookHistory(_ result: Result<(events: [ConversationEvent], before: Int?), any Error>) {
+    private func tookHistory(_ result: Result<(events: [ConversationEvent], before: Int?, cursor: String?), any Error>) {
         isLoadingHistory = false
         var hasEarlier = chat.facts.hasEarlierHistory
         switch result {
@@ -27,10 +27,10 @@ extension ThreadPaneController {
             historyPageCount += 1
             let removedBefore = transcript.removedItemCount
             let stayed = transcript.prepend(history: page.events, label: "history\(historyPageCount)")
-            historyCursor = page.before
+            (historyCursor, historyToken) = (page.before, page.cursor)
             // The limits of the transcript have no room for older turns.
             let isFull = transcript.removedItemCount > removedBefore
-            hasEarlier = page.before != nil && !isFull
+            hasEarlier = (page.before != nil || page.cursor != nil) && !isFull
             // The history also holds the turns that the chat has. A page
             // of only such turns shows nothing, so the page before it comes at once.
             if hasEarlier, stayed == 0 { return loadEarlierHistory() }
