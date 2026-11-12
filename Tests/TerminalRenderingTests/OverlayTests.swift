@@ -50,3 +50,28 @@ import TerminalEmulation
         #expect(underlinePixel(plain, column: 3) != screen.state.colors.foreground)
     }
 }
+
+@Suite struct FindMarkTests {
+    @Test func aMarkedRunTintsItsCellsWithTheTextColorAndRedrawsOnlyItsRow() throws {
+        let device = try #require(MTLCreateSystemDefaultDevice())
+        let screen = try makeScreen("\u{1B}[?25lone two\r\nnext", columns: 12, rows: 3)
+        let renderer = try TerminalRenderer(device: device, fonts: testFonts, selectionColor: selectionColor)
+        let size = renderer.pixelSize(for: screen.terminal.size)
+        // The top left pixel of a cell is over the letters, so it shows the background.
+        func corner(_ target: OffscreenTarget, column: Int) -> TerminalColor {
+            target.pixel(horizontalPosition: testPadding + column * testFonts.metrics.width, verticalPosition: testPadding)
+        }
+        try renderer.prepare(from: screen.state)
+        let plain = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: plain))
+        renderer.markedRuns = [ViewportCellRun(row: 0, columns: 4..<7)]
+        let marked = try OffscreenTarget(device: device, width: size.width, height: size.height)
+        #expect(renderer.draw(into: marked) && renderer.rowsDrawn == 1)
+        let (background, foreground) = (screen.state.colors.background, screen.state.colors.foreground)
+        func mixed(_ from: UInt8, _ toward: UInt8) -> Int { Int((Double(from) * 0.78 + Double(toward) * 0.22).rounded()) }
+        let tint = corner(marked, column: 4)
+        #expect(abs(Int(tint.red) - mixed(background.red, foreground.red)) <= 1 && abs(Int(tint.blue) - mixed(background.blue, foreground.blue)) <= 1)
+        #expect(corner(marked, column: 6) == tint && corner(marked, column: 3) == background && corner(marked, column: 7) == background)
+        #expect(corner(plain, column: 4) == background)
+    }
+}

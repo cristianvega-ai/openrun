@@ -10,6 +10,19 @@ enum OverlayQuadrilaterals {
         return quadrilateral
     }
 
+    /// The mark of a match of Find that is not the selected one: a
+    /// translucent rectangle of the text color over its cells, so the
+    /// text under it stays readable.
+    static func marks(of runs: [ViewportCellRun], color: TerminalColor, metrics: CellMetrics, padding: Int) -> [CellQuadrilateral] {
+        runs.filter { !$0.columns.isEmpty }.map { run in
+            var mark = CellQuadrilateral.rectangle(
+                horizontalPosition: padding + run.columns.lowerBound * metrics.width, verticalPosition: padding + run.row * metrics.height,
+                width: run.columns.count * metrics.width, height: metrics.height, color: color)
+            mark.color.w = 0.22
+            return mark
+        }
+    }
+
     /// The underline of a link under the pointer, in the text color, at the place
     /// of a single underline. It goes over the text, as the lines of the cells do.
     static func underlines(of runs: [ViewportCellRun], color: TerminalColor, metrics: CellMetrics, padding: Int) -> [CellQuadrilateral] {
