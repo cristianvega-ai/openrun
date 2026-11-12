@@ -49,6 +49,7 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         case #selector(newThread(_:)): connection.status == .connected && connection.hasThreadList
         // The window shows the values of the session process, so it needs them first.
         case #selector(showSettings(_:)): !connection.overview.settings.isEmpty
+        case #selector(installCommandLineTool(_:)): toolInstallation != nil
         case #selector(closeSession(_:)): window.window.isVisible && layout.selectedRow != nil
         case #selector(renameSession(_:)): window.window.isVisible && window.sessionsList.selection != nil
         case #selector(clearSession(_:)): window.window.isVisible && shownSession != nil

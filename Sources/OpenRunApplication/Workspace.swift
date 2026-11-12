@@ -12,6 +12,7 @@ import SessionProtocol
 import SessionsList
 import Settings
 import SettingsWindow
+import ToolInstallation
 import WindowLayout
 
 /// The host of the main window. It joins the window with the session
@@ -86,6 +87,12 @@ final class Workspace: NSObject {
     lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
     /// Asks before the close of a thread with this title. Tests set it.
     lazy var confirmCloseOfThread: (String, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeCloseOfThread($0, then: $1) }
+    /// The install of the command-line tool of this app bundle, or nil
+    /// outside a bundle. Tests set it, with its questions.
+    var toolInstallation = ToolInstallation(bundlePath: Bundle.main.bundlePath)
+    lazy var confirmToolInstallation: (ToolInstallation, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeToolInstallation($0, then: $1) }
+    var runAsAdministrator: (String) throws -> Void = AdministratorCommandFailure.run
+    lazy var tellToolInstallation: (String, String) -> Void = { [weak self] in self?.showToolInstallationResult($0, $1) }
     /// Tells why a setting did not change. Tests set it.
     lazy var showSettingFailure: (String) -> Void = { [weak self] in self?.showSettingFailureSheet($0) }
     /// Asks for the folders of new projects. Tests set it.
