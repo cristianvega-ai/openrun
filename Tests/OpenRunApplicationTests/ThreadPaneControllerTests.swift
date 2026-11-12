@@ -41,6 +41,12 @@ import Testing
         summary.usageWindows = [ThreadUsageWindow(name: "seven_day", usedFraction: 1, resetTime: reset, status: "rejected")]
         pane.update(summary, home: process.directory.path)
         #expect(pane.chat.facts.condition == .atLimit(resetTime: reset, otherAccounts: []))
+        // The chat offers the other accounts of the agent, and a choice goes to the host.
+        var chosen: [String] = []
+        pane.continueOnAccount = { chosen.append($0) }
+        pane.update(summary, home: process.directory.path, otherAccounts: [ChatAccount(identifier: "Work", name: "Work")])
+        pane.chatViewController(pane.chat, startNewThreadOnAccount: "Work")
+        #expect(pane.chat.facts.condition == .atLimit(resetTime: reset, otherAccounts: [ChatAccount(identifier: "Work", name: "Work")]) && chosen == ["Work"])
     }
 
     @Test func theChatTakesTheEarlierTurnsFromTheHistoryOfTheAgent() async throws {

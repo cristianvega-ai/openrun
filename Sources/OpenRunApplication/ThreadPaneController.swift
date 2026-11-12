@@ -32,32 +32,36 @@ final class ThreadPaneController: NSObject {
     /// Asks the host for the conversation in a terminal, and for the way back.
     var openInTerminal: (() -> Void)?
     var returnFromTerminal: (() -> Void)?
+    /// The user chose a new thread under the account with this name. The
+    /// empty name is the account of the login shell.
+    var continueOnAccount: ((String) -> Void)?
     /// Tells the host why a request or the connection failed.
     var failed: ((String) -> Void)?
     /// Attaches to the thread. Tests give their own.
     var connect: @Sendable (SocketLocation, UUID) throws -> ThreadAttachment = { try SessionClient(location: $0).attachThread($1) }
 
-    init(summary: ThreadSummary, socket: SocketLocation, home: String) {
+    init(summary: ThreadSummary, socket: SocketLocation, home: String, otherAccounts: [ChatAccount] = []) {
         (thread, self.socket) = (summary.identifier, socket)
-        chat = ChatViewController(facts: Self.facts(of: summary, home: home))
+        chat = ChatViewController(facts: Self.facts(of: summary, home: home, otherAccounts: otherAccounts))
         super.init()
         chat.delegate = self
     }
 
     /// What the chat shows of the thread beside its transcript.
-    static func facts(of summary: ThreadSummary, home: String) -> ChatThreadFacts {
+    static func facts(of summary: ThreadSummary, home: String, otherAccounts: [ChatAccount] = []) -> ChatThreadFacts {
         ChatThreadFacts(
             threadIdentifier: summary.identifierText, title: ThreadRowFacts.title(of: summary), agentName: ThreadRowFacts.agentName(summary.agent),
             accountName: summary.accountName, model: model(summary.model), models: (summary.models ?? []).map(model),
             permissionMode: mode(summary.permissionMode), permissionModes: (summary.permissionModes ?? []).map(mode),
-            folder: FolderText.shown(summary.folder, home: home), usage: ThreadRowFacts.usageText(of: summary), condition: condition(of: summary))
+            folder: FolderText.shown(summary.folder, home: home), usage: ThreadRowFacts.usageText(of: summary),
+            condition: condition(of: summary, otherAccounts: otherAccounts))
     }
 
     /// The terminal has the conversation, or the account is at its limit
     /// and the thread waits for the reset (proposal 8).
-    private static func condition(of summary: ThreadSummary) -> ChatThreadCondition {
+    private static func condition(of summary: ThreadSummary, otherAccounts: [ChatAccount]) -> ChatThreadCondition {
         if summary.terminalSession != nil { return .openInTerminal }
-        if let resetTime = ThreadRowFacts.limitResetTime(of: summary) { return .atLimit(resetTime: resetTime, otherAccounts: []) }
+        if let resetTime = ThreadRowFacts.limitResetTime(of: summary) { return .atLimit(resetTime: resetTime, otherAccounts: otherAccounts) }
         return .ready
     }
 
@@ -70,8 +74,8 @@ final class ThreadPaneController: NSObject {
     }
 
     /// The thread has new facts, such as a name.
-    func update(_ summary: ThreadSummary, home: String) {
-        var facts = Self.facts(of: summary, home: home)
+    func update(_ summary: ThreadSummary, home: String, otherAccounts: [ChatAccount] = []) {
+        var facts = Self.facts(of: summary, home: home, otherAccounts: otherAccounts)
         (facts.hasEarlierHistory, facts.isLoadingEarlierHistory) = (chat.facts.hasEarlierHistory, chat.facts.isLoadingEarlierHistory)
         if facts != chat.facts { chat.facts = facts }
     }

@@ -71,5 +71,7 @@ extension ThreadPaneController: ChatViewControllerDelegate {
         returnFromTerminal?()
     }
 
-    func chatViewController(_ controller: ChatViewController, startNewThreadOnAccount identifier: String) {}
+    func chatViewController(_ controller: ChatViewController, startNewThreadOnAccount identifier: String) {
+        continueOnAccount?(identifier)
+    }
 }

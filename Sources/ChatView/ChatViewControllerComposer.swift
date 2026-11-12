@@ -51,6 +51,12 @@ extension ChatViewController {
         ComposerDrafts.shared.forget(identifier)
     }
 
+    /// Puts text into the composer of a thread whose chat is not open
+    /// yet, such as a new thread that goes on with an earlier one.
+    public static func setDraft(_ text: String, ofThread identifier: String) {
+        ComposerDrafts.shared.save(ComposerDrafts.Draft(text: text), for: identifier)
+    }
+
     /// Keeps the draft of the thread that the chat leaves, and shows the
     /// draft of the new one.
     func switchDraft(from oldThread: String) {
