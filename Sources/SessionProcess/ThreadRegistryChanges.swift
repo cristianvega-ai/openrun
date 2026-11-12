@@ -189,7 +189,7 @@ extension ThreadRegistry {
     func publish(_ identifier: UUID) {
         guard let record = list.thread(identifier), var summary = summaries[identifier] else { return }
         let fresh = self.summary(of: record)
-        (summary.name, summary.title, summary.projectIdentifier) = (fresh.name, fresh.title, fresh.projectIdentifier)
+        (summary.name, summary.title, summary.projectIdentifier, summary.accountName) = (fresh.name, fresh.title, fresh.projectIdentifier, fresh.accountName)
         (summary.model, summary.permissionMode, summary.models, summary.permissionModes) = (fresh.model, fresh.permissionMode, fresh.models, fresh.permissionModes)
         summary.terminalSession = fresh.terminalSession
         summaries[identifier] = summary

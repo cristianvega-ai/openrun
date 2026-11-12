@@ -24,8 +24,14 @@ import Testing
         await #expect(throws: ThreadRequestError.unknownAccount) {
             try await registry.create(agent: "codex", folder: folder.path, model: nil, permissionMode: nil, name: nil, account: "Work")
         }
+        // The thread shows the new name of its account, and its record keeps the folder that selects the account.
+        try settings.change(.claudeCodeAccounts, to: #"[{"name":"Office","folder":"/config/claude-work"}]"#, requestedBy: .application)
+        await registry.updateSettings(model: "opus", permissionMode: "default", processLimit: 8, accountChoices: ThreadAccountChoices(settings), version: 1)
+        let renamed = await registry.summary(thread.identifier)?.accountName
+        let loaded = await ThreadRegistry(store: store, accountChoices: ThreadAccountChoices(settings)) { FakeAgentSettings.make() }.allSummaries.first?.accountName
+        #expect(renamed == "Office" && loaded == "Office")
         // The thread keeps the account that the settings lose, because a resume runs under the same account.
-        await registry.updateSettings(model: "opus", permissionMode: "default", processLimit: 8, accountChoices: ThreadAccountChoices(), version: 1)
+        await registry.updateSettings(model: "opus", permissionMode: "default", processLimit: 8, accountChoices: ThreadAccountChoices(), version: 2)
         let later = await registry.summary(thread.identifier)?.accountName
         #expect(later == "Work")
         await #expect(throws: ThreadRequestError.unknownAccount) {

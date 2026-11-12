@@ -62,7 +62,7 @@ actor ThreadRegistry {
         } catch {
             SessionLog.write("The threads could not be read, and each change of them fails until they can: ", detail: "\(error)")
         }
-        let first = loaded.threads.map { Self.summary(of: $0, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode) }
+        let first = loaded.threads.map { Self.summary(of: $0, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode, accounts: accountChoices) }
         list = loaded
         summaries = Dictionary(first.map { ($0.identifier, $0) }, uniquingKeysWith: { summary, _ in summary })
         changes?.replaceThreads(first)
@@ -73,7 +73,7 @@ actor ThreadRegistry {
     func updateSettings(model: String, permissionMode: String, processLimit: Int, accountChoices: ThreadAccountChoices? = nil, version: Int) async {
         guard version > settingsVersion else { return }
         (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
-        // A thread keeps its account, because a resume runs under the same account. Only a new thread sees the change.
+        // A thread keeps its account, because a resume runs under the same account. It shows the name that the account has now.
         self.accountChoices = accountChoices ?? self.accountChoices
         for thread in slots.setLimit(processLimit) { await start(thread) }
         // The setting is the widest mode of every thread, so a thread with a wider one comes down to it.
@@ -119,17 +119,20 @@ actor ThreadRegistry {
     }
 
     func summary(of record: ThreadRecord) -> ThreadSummary {
-        var summary = Self.summary(of: record, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode)
+        var summary = Self.summary(of: record, in: projects, defaultModel: defaultModel, widestMode: defaultPermissionMode, accounts: accountChoices)
         summary.terminalSession = terminals[record.identifier]?.session
         return summary
     }
 
     /// The summary of a thread that is not in use: idle, with no process.
     /// It holds the choices of the menus of the thread.
-    static func summary(of record: ThreadRecord, in projects: ProjectList, defaultModel: String, widestMode: String) -> ThreadSummary {
+    static func summary(
+        of record: ThreadRecord, in projects: ProjectList, defaultModel: String, widestMode: String, accounts: ThreadAccountChoices
+    ) -> ThreadSummary {
         ThreadSummary(
             identifier: record.identifier, agent: record.agent.rawValue, folder: record.folder, model: record.model,
-            permissionMode: record.permissionMode, name: record.name, title: record.title, accountName: record.account?.name,
+            permissionMode: record.permissionMode, name: record.name, title: record.title,
+            accountName: record.account.map { accounts.currentName(of: $0, of: record.agent) },
             createdAt: record.createdAt, lastActivityAt: record.lastActivityAt,
             projectIdentifier: projects.project(holding: record.folder)?.identifier,
             models: record.agent == .codex

@@ -16,6 +16,13 @@ struct ThreadAccountChoices: Equatable {
         ]
     }
 
+    /// The name that the account of a thread has now. The folder of the
+    /// settings selects the account, so a new name of its entry shows on
+    /// each thread. An account that the settings lost keeps its name.
+    func currentName(of account: ThreadAccount, of agent: ThreadAgent) -> String {
+        accounts[agent]?.first { $0.settingsFolder == account.settingsFolder }?.name ?? account.name
+    }
+
     /// The account of the agent with the name, whatever its case.
     func account(named name: String, of agent: ThreadAgent) -> ThreadAccount? {
         accounts[agent]?.first { $0.name.lowercased() == name.lowercased() }
