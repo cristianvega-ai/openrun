@@ -244,7 +244,7 @@ A drop of files types the path of each file with a space after it (`DroppedFiles
 The view keeps the selected range of marked text in UTF-16. It gives the input method the marked range and a substring, and uses the renderer's wrapped layout for the candidate position. A new renderer keeps the marked selection when the font size or backing scale changes.
 `CursorBlink` follows the program's blink choice while the window is key: half a second shown, half hidden, and one second shown after a key. An unfocused window has a hollow cursor. `BellFlash` gives a 150 ms visual flash. `SynchronizedOutputHold` ends a render hold after one second.
 
-Find (Command-F) shows `TerminalFindBar` at the top right of the view: a search field, the place of the selected match among the matches, the two steps and Done. `TerminalViewFind` takes the items of the Find menu by their tags (`performFindPanelAction`). Find Next goes to the older match, as a search from the prompt wants, and Find Previous to the newer one. After Done, the selected match stays selected.
+Find (Command-F) shows `TerminalFindBar` at the top right of the view: a search field, the place of the selected match among the matches, the two steps and Done. `TerminalViewFind` takes the items of the Find menu by their tags (`performFindPanelAction`). Find Next goes to the older match, as a search from the prompt wants, and Find Previous to the newer one. Each other match that the viewport shows has a mark: `TerminalSearch.viewportMatches` gives their cells at each frame, and the renderer draws a light tint of the text color over them (`TerminalRenderer.markedRuns`). After Done, the selected match stays selected, and the marks go away.
 
 ### PseudoTerminal
 
