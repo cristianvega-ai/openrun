@@ -26,9 +26,9 @@ import Testing
         func items(_ title: String) throws -> [NSMenuItem] { try #require(menu.item(withTitle: title)?.submenu).items }
         func key(_ item: NSMenuItem) -> String { (item.keyEquivalentModifierMask.contains(.shift) ? "shift-" : "") + item.keyEquivalent }
         let file = try items("File"), session = try items("Session")
-        #expect(file.map(\.title) == ["New Session", "New Thread", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Register Session Process Again"])
-        #expect(file.map(key) == ["n", "t", "", "", "w", "shift-w", "", "", ""])
-        #expect(file[0].target === workspace && file[1].target === workspace && file[4].target === workspace && file[5].target == nil && file[8].target === application)
+        #expect(file.map(\.title) == ["New Session", "New Thread", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Restart Session Process…", "Register Session Process Again"])
+        #expect(file.map(key) == ["n", "t", "", "", "w", "shift-w", "", "", "", ""])
+        #expect(file[0].target === workspace && file[1].target === workspace && file[4].target === workspace && file[5].target == nil && file[9].target === application)
         #expect(session.map(\.title) == ["Rename…", "Clear", "", "Split Right", "Split Down", "Split with Browser", "Next Pane", "Previous Pane", "", "Next Session", "Previous Session"])
         #expect(session.map(key) == ["", "k", "", "d", "shift-d", "b", "]", "[", "", "shift-]", "shift-["])
         #expect(try items("View").map(\.title) == ["Hide Projects", "Hide Sessions", "Move Focus to Next Pane", "Move Focus to Previous Pane", "", "Make Text Bigger", "Make Text Smaller", "Reset Text Size"])
@@ -40,7 +40,7 @@ import Testing
         #expect(find.allSatisfy { $0.action == Selector(("performFindPanelAction:")) && $0.target == nil })
         // This application has a nondefault socket and no setup of its own, so
         // the item is off. Do not send its action: it would register the real launch agent.
-        #expect(!application.validateMenuItem(file[8]))
+        #expect(!application.validateMenuItem(file[9]))
 
         // Each session command is on only when it can act.
         #expect(!workspace.validateMenuItem(file[0]) && !workspace.validateMenuItem(file[1]) && !workspace.validateMenuItem(file[4]) && !workspace.validateMenuItem(session[9]))

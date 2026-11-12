@@ -90,6 +90,8 @@ final class Workspace: NSObject {
     lazy var showFailure: (String, String) -> Void = { [weak self] in self?.showFailureSheet(title: $0, message: $1) }
     /// Asks before a close and gives the answer. Tests set it.
     lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
+    /// Asks about a restart of the session process. Tests set it.
+    lazy var confirmRestart: (NSAlert, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeRestart($0, then: $1) }
     /// Asks before the close of a thread with this title. Tests set it.
     lazy var confirmCloseOfThread: (String, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeCloseOfThread($0, then: $1) }
     /// The install of the command-line tool of this app bundle, or nil

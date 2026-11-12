@@ -70,6 +70,7 @@ enum MainMenu {
         file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command, .shift]))
         file.addItem(.separator())
         file.addItem(item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)), target: target))
+        file.addItem(item("Restart Session Process…", #selector(Workspace.restartSessionProcess(_:)), target: workspace))
         file.addItem(item("Register Session Process Again", #selector(OpenRunApplication.registerSessionProcessAgain(_:)), target: target))
     }
 
