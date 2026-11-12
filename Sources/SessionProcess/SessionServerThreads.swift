@@ -17,8 +17,9 @@ extension SessionServer {
         }
         do {
             switch message {
-            case .createThread(let agent, let folder, let model, let permissionMode, let name):
-                return .threadCreated(try await threads.create(agent: agent, folder: folder, model: model, permissionMode: permissionMode, name: name))
+            case .createThread(let agent, let folder, let model, let permissionMode, let name, let account):
+                return .threadCreated(try await threads.create(
+                    agent: agent, folder: folder, model: model, permissionMode: permissionMode, name: name, account: account))
             case .listThreads:
                 return .threadList(await threads.allSummaries)
             case .renameThread(let identifier, let name):

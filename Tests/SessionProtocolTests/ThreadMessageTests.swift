@@ -21,6 +21,7 @@ import Testing
             (ClientMessage.readThreadHistory(identifier: identifier, before: 4096), #"{"readThreadHistory":{"before":4096,"identifier":\#(name)}}"#),
             (ServerMessage.threadHistoryPage(before: 1024), #"{"threadHistoryPage":{"before":1024}}"#),
             (ServerMessage.threadHistoryPage(), #"{"threadHistoryPage":{}}"#),
+            (ClientMessage.createThread(agent: "codex", folder: "/w", account: "Work"), #"{"createThread":{"account":"Work","agent":"codex","folder":"\/w"}}"#),
             (ClientMessage.readThreadHistory(identifier: identifier, cursor: "c1"), #"{"readThreadHistory":{"cursor":"c1","identifier":\#(name)}}"#),
             (ServerMessage.threadHistoryPage(cursor: "c2"), #"{"threadHistoryPage":{"cursor":"c2"}}"#),
             (ClientMessage.sendThreadMessage(identifier: identifier, text: "Go on."), #"{"sendThreadMessage":{"identifier":\#(name),"text":"Go on."}}"#),

@@ -182,9 +182,12 @@ public struct SessionClient: Sendable {
     }
 
     /// Makes a thread. `nil` for the model or the permission mode takes
-    /// the one of the settings.
-    public func createThread(agent: String, folder: String, model: String? = nil, permissionMode: String? = nil, name: String? = nil) throws -> ThreadSummary {
-        let message = ClientMessage.createThread(agent: agent, folder: folder, model: model, permissionMode: permissionMode, name: name)
+    /// the one of the settings, and `nil` for the account takes the
+    /// account of the login shell of the user.
+    public func createThread(
+        agent: String, folder: String, model: String? = nil, permissionMode: String? = nil, name: String? = nil, account: String? = nil
+    ) throws -> ThreadSummary {
+        let message = ClientMessage.createThread(agent: agent, folder: folder, model: model, permissionMode: permissionMode, name: name, account: account)
         guard case .threadCreated(let thread) = try request(message) else { throw SessionConnectionError.unexpectedAnswer(request: "thread new") }
         return thread
     }

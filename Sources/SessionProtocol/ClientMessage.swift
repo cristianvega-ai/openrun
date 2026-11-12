@@ -118,8 +118,11 @@ public enum ClientMessage: Codable, Equatable, Sendable {
     // 2026-11-10).
 
     /// Makes a thread. `nil` for the model or the permission mode takes the
-    /// one of the settings. Answer: `threadCreated`.
-    case createThread(agent: String, folder: String, model: String? = nil, permissionMode: String? = nil, name: String? = nil)
+    /// one of the settings. `account` is the name of an account of the
+    /// agent in the settings, and `nil` takes the account of the login
+    /// shell of the user. Answer: `threadCreated`.
+    case createThread(
+        agent: String, folder: String, model: String? = nil, permissionMode: String? = nil, name: String? = nil, account: String? = nil)
     /// Answer: `threadList`.
     case listThreads
     /// Gives a thread a name, or removes it with `nil` or an empty name.
