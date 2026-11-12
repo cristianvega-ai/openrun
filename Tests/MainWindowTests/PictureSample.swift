@@ -13,7 +13,7 @@ struct PictureSample {
         let counts = [2, 0, 1]
         return ProjectsListContent(projects: (0..<3).map {
             ProjectDisplay(identifier: projectIdentifiers[$0], name: names[$0], folder: "~/Projects/\(names[$0])", attentionCount: counts[$0])
-        }, needsYouCount: 3, noProjectAttentionCount: 0)
+        }, needsYouCount: 3, noProjectAttentionCount: 0, showsOtherFolders: true)
     }
 
     /// Made once, so the identifiers of the rows stay the same.
@@ -33,7 +33,7 @@ struct PictureSample {
             ("server", "main", .terminal, false, nil, 3 * 24 * 60),
         ]
         return SessionsListContent(title: "openrun", rows: rows.map { row in
-            SessionRowDisplay(identifier: UUID(), title: row.0, folder: "~/Projects/openrun/Sources/TerminalRendering", branch: row.1, kind: row.2, isInProgress: row.3, alert: row.4,
+            SessionRowDisplay(identifier: UUID(), title: row.0, folder: "Sources/TerminalRendering", branch: row.1, kind: row.2, isInProgress: row.3, alert: row.4,
                               lastActivity: now.addingTimeInterval(-60 * row.5), startTime: now.addingTimeInterval(-3_600))
         }, agents: ["Claude Code", "Codex"])
     }
