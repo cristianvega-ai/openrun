@@ -45,6 +45,25 @@ import WindowLayout
         #expect(content.rows(of: .noProject).map(\.identifier) == [identifiers[2]])
     }
 
+    @Test func aRowTellsItsPlaceByItsProject() {
+        var sessions = (0..<3).map { SessionRowFactsTests.session(created: Double($0)) }
+        for index in sessions.indices { sessions[index].projectIdentifier = app.identifier }
+        (sessions[0].folder, sessions[0].currentFolder) = ("/Users/ana/Projects/app", "/Users/ana/Projects/app/Sources/Core")
+        (sessions[1].folder, sessions[1].currentFolder, sessions[1].branch) = ("/Users/ana/Projects/app", nil, "main")
+        // The program of the third session went to a folder outside the project.
+        (sessions[2].folder, sessions[2].currentFolder) = ("/Users/ana/Projects/app", "/tmp/build")
+        var layout = WindowLayout()
+        layout.follow(sessions: sessions.map(\.identifier))
+        let content = ListContent(overview: SessionOverview(sessions: sessions, projects: [app]), layout: layout, inView: nil, home: "/Users/ana")
+        // A list of many projects names the project. The list of the project itself does not.
+        #expect(content.rows(of: .allSessions).map(\.folder) == ["/tmp/build", "app", "app/Sources/Core"])
+        #expect(content.rows(of: .project(app.identifier)).map(\.folder) == ["/tmp/build", "", "Sources/Core"])
+        // A terminal at the root of its project with no branch keeps its folder, so its second line is not empty.
+        sessions[1].branch = nil
+        let plain = ListContent(overview: SessionOverview(sessions: sessions, projects: [app]), layout: layout, inView: nil, home: "/Users/ana")
+        #expect(plain.rows(of: .project(app.identifier))[1].folder == "~/Projects/app")
+    }
+
     @Test func theSessionInViewCountsAsNoRowThatNeedsTheUser() {
         let (first, sessions) = content()
         let layout = WindowLayout(rows: sessions.map { LayoutRow(session: $0.identifier) })
@@ -64,8 +83,10 @@ import WindowLayout
         }
         let row = content().rows(of: .project(app.identifier)).first
         #expect(row == SessionRowDisplay(
-            identifier: thread.identifier, title: "Repair the resize", folder: "~/Projects/app", kind: .agentThread(agent: "Claude Code", model: "Opus", account: nil),
+            identifier: thread.identifier, title: "Repair the resize", folder: "", kind: .agentThread(agent: "Claude Code", model: "Opus", account: nil),
             alert: "Waits for your answer", lastActivity: thread.lastActivityAt, startTime: thread.createdAt))
+        // The list of its own project shows the model alone, and a list of many projects names the project.
+        #expect(content().rows(of: .allSessions).first?.folder == "app" && content().rows(of: .needsYou).first?.folder == "app")
         #expect(content().projects.needsYouCount == 1 && content(inView: thread.identifier).projects.needsYouCount == 0)
         thread.name = "Resize"
         thread.state = "inProgress"

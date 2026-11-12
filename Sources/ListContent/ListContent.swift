@@ -15,8 +15,9 @@ public struct ListContent {
     /// can remove it.
     static let missingFolder = "No folder on this Mac"
 
-    /// The rows in the user's order, each with the project of its first split.
-    private let rows: [(display: SessionRowDisplay, project: UUID?)]
+    /// The rows in the user's order, each with the project of its first
+    /// split and the folder of its work.
+    private let rows: [(display: SessionRowDisplay, project: UUID?, folder: String)]
     private let projectSummaries: [ProjectSummary]
     private let accounts: [AccountUsageDisplay]
     private let home: String
@@ -32,11 +33,11 @@ public struct ListContent {
             if let identifier = row.pane.leadingThread {
                 guard let thread = threads[identifier] else { return nil }
                 let display = ThreadRowFacts.display(of: row, thread: thread, inView: identifier == inView, home: home)
-                return (display, thread.projectIdentifier.flatMap { known.contains($0) ? $0 : nil })
+                return (display, thread.projectIdentifier.flatMap { known.contains($0) ? $0 : nil }, thread.folder)
             }
             guard let display = SessionRowFacts.display(of: row, sessions: { sessions[$0] }, inView: inView, home: home) else { return nil }
-            let project = row.pane.sessions.lazy.compactMap { sessions[$0] }.first?.projectIdentifier
-            return (display, project.flatMap { known.contains($0) ? $0 : nil })
+            let first = row.pane.sessions.lazy.compactMap { sessions[$0] }.first
+            return (display, first?.projectIdentifier.flatMap { known.contains($0) ? $0 : nil }, first?.currentFolder ?? first?.folder ?? "")
         }
         (projectSummaries, accounts, self.home) = (overview.projects, AccountUsageFacts.displays(of: overview.threads), home)
     }
@@ -57,11 +58,29 @@ public struct ListContent {
     /// The rows of one entry of the first pane, in the user's order.
     public func rows(of entry: ProjectsListEntry) -> [SessionRowDisplay] {
         switch entry {
-        case .allSessions: rows.map(\.display)
-        case .needsYou: rows.map(\.display).filter { $0.alert != nil }
-        case .project(let identifier): rows.filter { $0.project == identifier }.map(\.display)
+        case .allSessions: rows.map { placed($0, inListOfItsProject: false) }
+        case .needsYou: rows.filter { $0.display.alert != nil }.map { placed($0, inListOfItsProject: false) }
+        case .project(let identifier): rows.filter { $0.project == identifier }.map { placed($0, inListOfItsProject: true) }
         case .noProject: rows.filter { $0.project == nil }.map(\.display)
         }
+    }
+
+    /// The row with its place told by its project, so a user sees that
+    /// the work belongs to the project: the name of the project and the
+    /// folder under it in a list of many projects, and only the folder
+    /// under it in the list of the project itself.
+    private func placed(_ row: (display: SessionRowDisplay, project: UUID?, folder: String), inListOfItsProject: Bool) -> SessionRowDisplay {
+        guard let project = projectSummaries.first(where: { $0.identifier == row.project }), let root = project.folder,
+              row.folder == root || row.folder.hasPrefix(root + "/") else { return row.display }
+        let under = String(row.folder.dropFirst(root.count + 1))
+        var display = row.display
+        if !inListOfItsProject {
+            display.folder = under.isEmpty ? Self.name(of: project) : Self.name(of: project) + "/" + under
+        } else if !under.isEmpty || display.branch != nil || display.kind != .terminal {
+            // A terminal with no other fact keeps its folder, so its second line is not empty.
+            display.folder = under
+        }
+        return display
     }
 
     /// The name of an entry, which the second pane shows as its title.
