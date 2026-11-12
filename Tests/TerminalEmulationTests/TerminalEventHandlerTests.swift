@@ -8,7 +8,8 @@ private final class EventRecorder {
             bell: { self.events.append("bell") },
             titleChanged: { self.events.append("title") },
             renderHold: { self.events.append($0 ? "hold" : "release") },
-            desktopNotification: { self.events.append("notify[\($0)|\($1)]") }
+            desktopNotification: { self.events.append("notify[\($0)|\($1)]") },
+            clipboardWrite: { self.events.append("copy[\($0)]"); return true }
         )
     }
 }
@@ -21,6 +22,19 @@ private final class EventRecorder {
         terminal.write("\u{07}\u{1B}]2;hello\u{07}\u{1B}[?2026hx\u{1B}[?2026l")
         #expect(recorder.events == ["bell", "title", "hold", "release"])
         #expect(terminal.title == "hello")
+    }
+
+    @Test func aProgramPutsPlainTextOnTheStandardClipboard() throws {
+        let terminal = try makeTerminal()
+        let recorder = EventRecorder()
+        try terminal.setEventHandler(recorder.handler)
+        // OSC 52 with the text "hello" in base64, for the clipboard and then for the primary selection.
+        terminal.write("\u{1B}]52;c;aGVsbG8=\u{07}\u{1B}]52;p;aGVsbG8=\u{07}")
+        #expect(recorder.events == ["copy[hello]"])
+        // A handler with no place for the text refuses, and the output goes on.
+        try terminal.setEventHandler(TerminalEventHandler(bell: {}, titleChanged: {}, renderHold: { _ in }))
+        terminal.write("\u{1B}]52;c;aGVsbG8=\u{07}after")
+        #expect(recorder.events.count == 1)
     }
 
     @Test func eventsAndRepliesWorkTogether() throws {

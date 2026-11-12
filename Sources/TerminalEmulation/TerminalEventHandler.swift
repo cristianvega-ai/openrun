@@ -19,6 +19,14 @@ public struct TerminalEventHandler {
     /// neither does OSC 99 of kitty. Each text holds
     /// at most `notificationByteLimit` bytes of the program, which it chose.
     public var desktopNotification: (_ title: String, _ body: String) -> Void
+    /// Called with the plain text that a program wants on the clipboard
+    /// of the user (OSC 52 and the like). It returns whether the text
+    /// went there. A terminal with no place for it, such as the one of
+    /// the session process, takes the default, which refuses.
+    public var clipboardWrite: (_ text: String) -> Bool
+
+    /// The most bytes of text that a program can put on the clipboard.
+    public static let clipboardByteLimit = 1024 * 1024
 
     /// The most bytes of a title or a body that a notification passes on.
     /// libghostty-vt drops a command of more than about 2 KiB itself.
@@ -26,12 +34,14 @@ public struct TerminalEventHandler {
 
     public init(
         bell: @escaping () -> Void, titleChanged: @escaping () -> Void, renderHold: @escaping (Bool) -> Void,
-        desktopNotification: @escaping (_ title: String, _ body: String) -> Void = { _, _ in }
+        desktopNotification: @escaping (_ title: String, _ body: String) -> Void = { _, _ in },
+        clipboardWrite: @escaping (_ text: String) -> Bool = { _ in false }
     ) {
         self.bell = bell
         self.titleChanged = titleChanged
         self.renderHold = renderHold
         self.desktopNotification = desktopNotification
+        self.clipboardWrite = clipboardWrite
     }
 }
 
@@ -59,6 +69,30 @@ extension Terminal {
         handler.desktopNotification(boundedText(notification.pointee.title), boundedText(notification.pointee.body))
     }
 
+    /// Takes only plain text for the standard clipboard. A request with
+    /// no content would empty the clipboard of the user, so it is refused.
+    private static let clipboardWriteCallback: GhosttyTerminalClipboardWriteFn = { _, userdata, write in
+        guard let write, let handler = events(userdata) else { return }
+        let request = write.pointee
+        var result = GHOSTTY_CLIPBOARD_WRITE_RESULT_UNSUPPORTED
+        if request.location == GHOSTTY_CLIPBOARD_LOCATION_STANDARD, let text = plainText(of: request) {
+            result = handler.clipboardWrite(text) ? GHOSTTY_CLIPBOARD_WRITE_RESULT_SUCCESS : GHOSTTY_CLIPBOARD_WRITE_RESULT_DENIED
+        }
+        var reply = GhosttyClipboardWriteReply(size: MemoryLayout<GhosttyClipboardWriteReply>.size, result: result, remember: false)
+        request.reply?(write, &reply)
+    }
+
+    /// The plain text of a clipboard write, when it has one within the limit.
+    private static func plainText(of request: GhosttyClipboardWrite) -> String? {
+        guard let contents = request.contents else { return nil }
+        for content in UnsafeBufferPointer(start: contents, count: request.contents_len) {
+            guard let mime = content.mime.ptr, let data = content.data.ptr, content.data.len <= TerminalEventHandler.clipboardByteLimit else { continue }
+            let kind = String(decoding: UnsafeBufferPointer(start: mime, count: content.mime.len), as: UTF8.self)
+            if kind.hasPrefix("text/plain") { return String(decoding: UnsafeBufferPointer(start: data, count: content.data.len), as: UTF8.self) }
+        }
+        return nil
+    }
+
     private static func boundedText(_ text: GhosttyString) -> String {
         guard let start = text.ptr else { return "" }
         let bytes = UnsafeBufferPointer(start: start, count: min(text.len, TerminalEventHandler.notificationByteLimit))
@@ -83,6 +117,7 @@ extension Terminal {
             (GHOSTTY_TERMINAL_OPT_TITLE_CHANGED, unsafeBitCast(Self.titleCallback, to: UnsafeRawPointer.self)),
             (GHOSTTY_TERMINAL_OPT_RENDER_HOLD, unsafeBitCast(Self.renderHoldCallback, to: UnsafeRawPointer.self)),
             (GHOSTTY_TERMINAL_OPT_DESKTOP_NOTIFICATION, unsafeBitCast(Self.desktopNotificationCallback, to: UnsafeRawPointer.self)),
+            (GHOSTTY_TERMINAL_OPT_CLIPBOARD_WRITE, unsafeBitCast(Self.clipboardWriteCallback, to: UnsafeRawPointer.self)),
         ]
         for (option, function) in callbacks {
             let value: UnsafeRawPointer? = handler == nil ? nil : function
