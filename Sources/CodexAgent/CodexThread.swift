@@ -48,4 +48,12 @@ public struct CodexThread: Sendable {
         await server.closeThread(identifier)
         await closed?()
     }
+
+    /// Ends the thread on the app-server, and waits until Codex took the
+    /// end, at most two seconds. Another program can then go on with the
+    /// thread, such as Codex in a terminal.
+    public func leave() async {
+        await server.closeThread(identifier)?.value
+        await closed?()
+    }
 }

@@ -31,12 +31,15 @@ extension CodexAppServer {
         return CodexThread(identifier: identifier, events: channel.stream, server: self, closed: nil)
     }
 
-    func closeThread(_ identifier: String) async {
+    /// - Returns: The wait until Codex took the close, for a caller that
+    ///   gives the thread to another program.
+    @discardableResult
+    func closeThread(_ identifier: String) async -> Task<Void, Never>? {
         await endApprovals(of: { $0 == identifier })
-        guard let state = threads.removeValue(forKey: identifier) else { return }
+        guard let state = threads.removeValue(forKey: identifier) else { return nil }
         state.channel.finish()
         dropLines(of: identifier)
-        unsubscribe(identifier)
+        return unsubscribe(identifier)
     }
 
     /// A thread closed. The lines that wait for it go, and the lines that
@@ -52,9 +55,10 @@ extension CodexAppServer {
     /// Tells Codex to send no more notifications of the thread here. Its
     /// answer has no use, so a close does not wait for it, even when the
     /// app-server answers nothing.
-    func unsubscribe(_ thread: String) {
+    @discardableResult
+    func unsubscribe(_ thread: String) -> Task<Void, Never> {
         let line = JSONValue.object(["threadId": .string(thread)])
-        Task {
+        return Task {
             _ = try? await connection.request("thread/unsubscribe", line, timeLimit: Self.unsubscribeTimeLimit)
             // After the answer or the time limit, a line of the thread
             // belongs to a resume.

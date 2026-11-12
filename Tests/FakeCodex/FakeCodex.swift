@@ -10,12 +10,23 @@ import Foundation
 /// play one after the other. A line of OpenRun that the step does not
 /// expect ends the program with the status 2. After the last step, each
 /// request gets an empty answer, and the end of the input ends the program.
+///
+/// Codex ends an app-server with no thread and starts a new one later.
+/// With `FAKE_CODEX_RESTART_MARK`, the first start makes that file, and
+/// each later start plays the files of `FAKE_CODEX_RESTART_SCRIPTS`.
 struct FakeCodex {
     let environment: [String: String]
 
     func run(arguments: [String]) -> Int32 {
         guard arguments == ["app-server"] else { return fail("the arguments are not `app-server`", status: 64) }
-        let files = (environment["FAKE_CODEX_SCRIPTS"] ?? "").split(separator: ":").map(String.init)
+        var files = (environment["FAKE_CODEX_SCRIPTS"] ?? "").split(separator: ":").map(String.init)
+        if let mark = environment["FAKE_CODEX_RESTART_MARK"] {
+            if FileManager.default.fileExists(atPath: mark) {
+                files = (environment["FAKE_CODEX_RESTART_SCRIPTS"] ?? "").split(separator: ":").map(String.init)
+            } else {
+                FileManager.default.createFile(atPath: mark, contents: nil)
+            }
+        }
         var request: Any = NSNull()
         var lastLine = ""
         for file in files {
