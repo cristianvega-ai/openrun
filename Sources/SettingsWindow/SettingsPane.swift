@@ -16,7 +16,9 @@ struct SettingsPane {
     @MainActor private static var general: SettingsPane {
         SettingsPane(title: "General", symbolName: "gearshape", rows: [
             SettingRow(name: SettingName.linkDestination.rawValue, label: "Open links in") {
-                ChoiceSettingControl([("default-browser", "The Default Browser"), ("browser-split", "A Browser Split in OpenRun")])
+                // The browser split is not built yet, so the window does not offer it.
+                // A value that the tool set still shows, because the menu keeps a value that it does not know.
+                ChoiceSettingControl([("default-browser", "The Default Browser")])
             },
             SettingRow(name: SettingName.showsNotifications.rawValue, label: "Notifications") {
                 FlagSettingControl(title: "Show a notification when a session needs you")

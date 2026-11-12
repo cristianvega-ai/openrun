@@ -18,6 +18,9 @@ import Testing
         let names = controller.panes.flatMap { $0.controls.keys }
         #expect(Set(names) == Set(SettingName.allCases.map(\.rawValue)) && names.count == SettingName.allCases.count)
         #expect(controller.window?.contentViewController is NSTabViewController)
+        // The window offers only what works: links open in the default browser until the browser split exists.
+        let links = controller.panes[0].controls["open-links-in"] as? ChoiceSettingControl
+        #expect(links?.popup.itemTitles == ["The Default Browser"])
     }
 
     @Test func theControlsShowTheTextsAndTellAChangeWithTheNameOfTheSetting() throws {
