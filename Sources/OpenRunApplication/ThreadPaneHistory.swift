@@ -39,5 +39,6 @@ extension ThreadPaneController {
         }
         (chat.facts.hasEarlierHistory, chat.facts.isLoadingEarlierHistory) = (hasEarlier, false)
         chat.show(transcript)
+        refreshSignInAdvice()
     }
 }

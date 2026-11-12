@@ -9,11 +9,16 @@ public struct Transcript: Sendable, Hashable {
     public private(set) var state: ThreadState = .idle
 
     /// Whether the newest turn failed because the agent has no valid
-    /// login. A chat then tells the user to sign in.
+    /// login, and the user sent no message after it. A chat then tells
+    /// the user to sign in. The items tell it, so a turn that came from
+    /// the history of the agent counts too.
     public var needsSignIn: Bool {
-        guard state == .failed else { return false }
         for item in items.reversed() {
-            if case .turnEnd(let end) = item.content { return end.errorKind == TurnEnd.notSignedIn }
+            switch item.content {
+            case .turnEnd(let end): return end.outcome == .failed && end.errorKind == TurnEnd.notSignedIn
+            case .userMessage: return false
+            default: continue
+            }
         }
         return false
     }

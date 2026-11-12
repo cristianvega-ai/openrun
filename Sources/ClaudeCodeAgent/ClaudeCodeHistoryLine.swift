@@ -25,7 +25,10 @@ enum ClaudeCodeHistoryLine {
                 imageCount: ClaudeCodeContent.imageCount(of: content), isAccepted: true))]
         case "assistant":
             if line["isApiErrorMessage"]?.bool == true {
-                return [.notice(Notice(level: .error, text: ClaudeCodeContent.text(of: content)))]
+                // The error message ends its turn, and the history has no other line for that end.
+                let text = ClaudeCodeContent.text(of: content)
+                let kind = ClaudeCodeLineDecoder.errorKind(line["error"]?.string)
+                return [.notice(Notice(level: .error, text: text)), .turnEnded(TurnEnd(outcome: .failed, errorText: text, errorKind: kind))]
             }
             let message = line["message"]?["id"]?.string ?? line["uuid"]?.string ?? ""
             let blocks = content.array ?? []

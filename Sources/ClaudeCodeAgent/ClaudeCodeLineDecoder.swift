@@ -34,7 +34,7 @@ struct ClaudeCodeLineDecoder: Sendable {
         case "result":
             var end = Self.turnEnd(line)
             // The result line tells the text of an error, and the message before it told its kind.
-            if end.outcome == .failed { end.errorKind = errorKind == "authentication_failed" ? TurnEnd.notSignedIn : errorKind }
+            if end.outcome == .failed { end.errorKind = Self.errorKind(errorKind) }
             errorKind = nil
             return [.turnEnded(end)]
         case "rate_limit_event": return [.usage(ClaudeCodeUsage.reading(from: line["rate_limit_info"] ?? .null))]
@@ -100,6 +100,11 @@ struct ClaudeCodeLineDecoder: Sendable {
 
     static func blockKind(_ type: String?) -> String {
         type == "redacted_thinking" ? "thinking" : type ?? ""
+    }
+
+    /// The kind of an error for the event model, from the word of Claude Code.
+    static func errorKind(_ word: String?) -> String? {
+        word == "authentication_failed" ? TurnEnd.notSignedIn : word
     }
 
     static func turnEnd(_ line: JSONValue) -> TurnEnd {

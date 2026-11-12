@@ -30,6 +30,26 @@ import Testing
         #expect(events.allSatisfy { $0.sourceLine?.text.contains("api-request-blob") == false })
     }
 
+    @Test func aTurnThatFailedForTheLoginComesBackAsAFailedTurn() throws {
+        // The history has the error message of the turn, and no line for the end of the turn.
+        let lines = [
+            #"{"type":"user","uuid":"u1","message":{"role":"user","content":"Hi"}}"#,
+            #"{"type":"assistant","uuid":"a1","isApiErrorMessage":true,"error":"authentication_failed","message":{"content":[{"type":"text","text":"Failed to authenticate"}]}}"#,
+        ]
+        let file = FileManager.default.temporaryDirectory.appending(path: UUID().uuidString + ".jsonl")
+        try Data((lines.joined(separator: "\n") + "\n").utf8).write(to: file)
+        defer { try? FileManager.default.removeItem(at: file) }
+        let events = try ClaudeCodeHistoryReader(fileURL: file).previousPage()
+        #expect(events.map(\.kind).suffix(2) == [
+            .notice(Notice(level: .error, text: "Failed to authenticate")),
+            .turnEnded(TurnEnd(outcome: .failed, errorText: "Failed to authenticate", errorKind: TurnEnd.notSignedIn)),
+        ])
+        // A chat that takes the turn from the history tells the user to sign in.
+        var transcript = Transcript()
+        transcript.prepend(history: events, label: "page")
+        #expect(transcript.needsSignIn && transcript.state == .idle)
+    }
+
     @Test func smallPagesComeFromTheNewestAndGiveTheSameEvents() throws {
         let whole = try ClaudeCodeHistoryReader(fileURL: history).previousPage()
         let pages = try allPages(ClaudeCodeHistoryReader(fileURL: history), pageByteCount: 1)
