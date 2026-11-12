@@ -17,12 +17,12 @@ import Testing
 
     @Test func theMenuHasTheSessionTheWindowAndTheTextCommands() async throws {
         let oldWindowsMenu = NSApplication.shared.windowsMenu
-        defer { NSApp.windowsMenu = oldWindowsMenu }
+        defer { (NSApp.windowsMenu, NSApp.helpMenu) = (oldWindowsMenu, nil) }
         let test = try TestWorkspace()
         defer { test.stop() }
         let application = makeApplication(test), workspace = test.workspace
         let menu = MainMenu.make(target: application)
-        #expect(menu.items.map(\.title) == ["OpenRun", "File", "Edit", "View", "Session", "Window"])
+        #expect(menu.items.map(\.title) == ["OpenRun", "File", "Edit", "View", "Session", "Window", "Help"] && NSApp.helpMenu === menu.items.last?.submenu)
         func items(_ title: String) throws -> [NSMenuItem] { try #require(menu.item(withTitle: title)?.submenu).items }
         func key(_ item: NSMenuItem) -> String { (item.keyEquivalentModifierMask.contains(.shift) ? "shift-" : "") + item.keyEquivalent }
         let file = try items("File"), session = try items("Session")

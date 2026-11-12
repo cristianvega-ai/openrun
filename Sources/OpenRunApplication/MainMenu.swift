@@ -55,6 +55,8 @@ enum MainMenu {
         windows.addItem(item("OpenRun", #selector(Workspace.showMainWindow(_:)), target: target.workspace))
         windows.addItem(item("Bring All to Front", #selector(NSApplication.arrangeInFront(_:))))
         NSApp.windowsMenu = windows
+        // AppKit puts its search field into the Help menu, which finds each command of the menus.
+        NSApp.helpMenu = submenu("Help", in: menu)
         return menu
     }
 
