@@ -1,7 +1,7 @@
 # OpenRun
 
 OpenRun is a native macOS terminal for work with coding agents.
-This repository holds the session process, the `openrun` command-line tool, and the app with its three-pane window: the projects, the sessions, and one session.
+This repository holds the session process, the `openrun` command-line tool, and the app with its three-pane window: the projects, the sessions and the agent threads, and one session or the chat of one thread.
 `documentation/product.md` holds the product decisions.
 `documentation/architecture.md` explains the code.
 
@@ -38,6 +38,10 @@ The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-
    The script replaces each file of an existing bundle by a rename, so a session process that runs keeps its own file.
 
 4. Open `/Applications/OpenRun.app`. The app registers its launch agent and opens its main window. The first pane lists the projects, the second pane the sessions, and the third pane shows the selected session. When no session runs, the app starts a login shell in the home folder. File > New Session (Command-N) starts another session, in the folder of the selected project. File > Close Session (Command-W) ends the selected session, and asks first when a program other than a shell runs in it. Closing the window (Command-Shift-W) or quitting the app leaves every session running, and the window shows them again when it opens.
+
+   File > New Thread (Command-T) starts a thread with Claude Code in the folder of the selected project. A thread is a chat: you write a message, and the agent answers with its text, its tool calls and its file changes. When the agent wants a permission, the chat shows the request, and only your answer in the chat allows it. The line under the message field has the model and the permission mode of the thread. Open in Terminal, in the top row of the chat, moves the conversation to Claude Code in a terminal, and Back to Chat brings it back with the turns that you made there. A thread stays after a restart, and its chat loads the earlier turns from the history of Claude Code. OpenRun uses the `claude` that you installed and signed in to, and it never reads your credentials.
+
+   OpenRun > Settings (Command-Comma) opens the settings window: the font and its size, the Option key, the scrollback, the commands of the new-session button, and the model, the permission mode and the limit of the agents. In a terminal, Edit > Find (Command-F) finds text in the screen and the scrollback, and Session > Clear (Command-K) clears the scrollback.
 
 For an isolated development run, use a nondefault socket and a scratch bundle. Start the session process yourself; the app does not register or wake the launch agent for this socket.
 
