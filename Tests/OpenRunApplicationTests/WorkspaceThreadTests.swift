@@ -50,6 +50,12 @@ import Testing
         workspace.sessionsList(workspace.window.sessionsList, didRequest: .thread(agent: "Claude Code", account: "Work"))
         #expect(await waitUntil { workspace.shownThread.flatMap { row(test, $0) }?.kind == .agentThread(agent: "Claude Code", model: "Opus", account: "Work") })
         #expect(workspace.threadPanes.existing(try #require(workspace.shownThread))?.chat.facts.accountName == "Work")
+        // File > New Thread uses the account that the user chose last, while the settings hold it.
+        let first = try #require(workspace.shownThread)
+        workspace.newThread(nil)
+        #expect(await waitUntil { workspace.shownThread != first && workspace.shownThread.flatMap { row(test, $0) }?.kind == .agentThread(agent: "Claude Code", model: "Opus", account: "Work") })
+        try SessionClient(location: workspace.socket).changeSetting(named: "claude-code-accounts", to: "[]")
+        #expect(await waitUntil { workspace.settings.claudeCodeAccounts.isEmpty } && workspace.lastAccount(of: "claude-code") == nil)
     }
 
     @Test func aThreadGoesOnInANewThreadUnderAnotherAccountWithItsWordsAsTheDraft() async throws {

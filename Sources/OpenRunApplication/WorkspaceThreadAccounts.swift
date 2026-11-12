@@ -19,6 +19,22 @@ extension Workspace {
         return all.filter { $0.identifier != (thread.accountName ?? "") }
     }
 
+    /// The account of the thread that the user started last with an
+    /// agent, when the settings still hold it, or `nil` for the account
+    /// of the login shell. File > New Thread uses it again, so a user
+    /// whose shell has no login chooses an account one time.
+    func lastAccount(of agent: String) -> String? {
+        let name = defaults.string(forKey: "LastThreadAccount." + agent) ?? ""
+        let accounts = agent == "codex" ? settings.codexAccounts : settings.claudeCodeAccounts
+        return accounts.contains { $0.name == name } ? name : nil
+    }
+
+    /// Keeps the account that the user chose for a new thread. `nil` is
+    /// the account of the login shell.
+    func rememberAccount(_ account: String?, of agent: String) {
+        defaults.set(account ?? "", forKey: "LastThreadAccount." + agent)
+    }
+
     /// Each open chat takes the new facts of its thread and of the accounts.
     func updateThreadPanes() {
         for pane in threadPanes.all {
@@ -33,6 +49,7 @@ extension Workspace {
     /// the words of the earlier one, and the user sends it.
     func continueThread(_ thread: UUID, onAccount account: String) {
         guard let earlier = connection.overview.thread(thread) else { return }
+        rememberAccount(account.isEmpty ? nil : account, of: earlier.agent)
         let text = threadPanes.existing(thread).flatMap { TranscriptHandover.message(from: $0.transcript) }
         requests.perform({ client in
             try client.createThread(

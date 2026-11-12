@@ -31,6 +31,8 @@ final class Workspace: NSObject {
     let threadPanes = ThreadPanes()
     /// The web pages of the rows, from the first time that a row shows one.
     var browserPanes: [UUID: BrowserPaneController] = [:]
+    /// Where the app keeps what the user chose last, such as the account of a new thread.
+    let defaults: UserDefaults
     /// Whether the web pages keep their data, such as a login. A test keeps none.
     var keepsWebsiteData = true
     /// The view of the row with splits that the third pane shows.
@@ -117,6 +119,7 @@ final class Workspace: NSObject {
         notifier: any AlertNotifier = SystemAlertNotifier()
     ) {
         (self.socket, self.notifier) = (socket, notifier)
+        self.defaults = defaults
         window = MainWindowController(defaults: defaults, frameName: frameName)
         connection = SessionOverviewConnection(socket: socket)
         requests = SessionRequests(socket: socket)

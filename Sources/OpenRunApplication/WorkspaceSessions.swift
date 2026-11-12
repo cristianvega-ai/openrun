@@ -18,7 +18,9 @@ extension Workspace: SessionsListDelegate {
     func sessionsList(_ list: SessionsListController, didRequest request: NewSessionRequest) {
         switch request {
         case .thread(let name, let account):
-            newThread(agent: Self.threadAgents.first { ThreadRowFacts.agentName($0) == name } ?? Self.threadAgents[0], account: account)
+            let agent = Self.threadAgents.first { ThreadRowFacts.agentName($0) == name } ?? Self.threadAgents[0]
+            rememberAccount(account, of: agent)
+            newThread(agent: agent, account: account)
         case .terminal(let name): newSession(commandNamed: name)
         }
     }

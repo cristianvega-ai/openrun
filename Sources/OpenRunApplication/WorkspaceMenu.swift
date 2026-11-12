@@ -6,8 +6,10 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         newSession()
     }
 
+    /// File > New Thread: a thread with the first agent, under the
+    /// account that the user chose last for it.
     @objc func newThread(_ sender: Any?) {
-        newThread()
+        newThread(agent: Self.threadAgents[0], account: lastAccount(of: Self.threadAgents[0]))
     }
 
     /// The item holds the shown name of a new-session command of the settings.
