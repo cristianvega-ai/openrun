@@ -30,6 +30,10 @@ import AppKit
     let table = NSTableView()
     private let stack = NSStackView()
     var changed: ((String) -> Void)?
+    /// Asks the user for the second text of a new entry, such as the
+    /// folder of an account, and gives `nil` for a cancel. With no such
+    /// question, a new entry starts with an empty text.
+    var chooseDetail: ((@escaping (String?) -> Void) -> Void)?
     var view: NSView { stack }
 
     init(_ detail: Detail = .command) {
@@ -92,8 +96,29 @@ import AppKit
     }
 
     func add() {
-        entries.append(Entry(name: detail.newName, detail: ""))
+        guard let chooseDetail else { return append("") }
+        chooseDetail { [weak self] text in
+            if let text { self?.append(text) }
+        }
+    }
+
+    /// Adds an entry with a name that no other entry has, because the
+    /// accounts of an agent cannot share a name.
+    private func append(_ text: String) {
+        let names = Set(entries.map { $0.name.lowercased() })
+        let name = ([detail.newName] + (2...99).map { "\(detail.newName) \($0)" }).first { !names.contains($0.lowercased()) } ?? detail.newName
+        entries.append(Entry(name: name, detail: text))
         tell()
+    }
+
+    /// Asks for the folder of the settings of an account. The folder of a
+    /// login often has a name that starts with a dot, so the panel shows
+    /// such folders.
+    static func chooseFolder(_ answer: @escaping (String?) -> Void) {
+        let panel = NSOpenPanel()
+        (panel.canChooseDirectories, panel.canChooseFiles, panel.showsHiddenFiles, panel.prompt) = (true, false, true, "Choose")
+        panel.message = "Choose the folder of the settings of the other login."
+        panel.begin { answer($0 == .OK ? panel.url?.path : nil) }
     }
 
     func remove(_ row: Int) {

@@ -70,11 +70,19 @@ struct SettingsPane {
             SettingRow(
                 name: SettingName.claudeCodeAccounts.rawValue, label: "Claude Code accounts",
                 note: "The other logins of Claude Code, each with the folder of its settings. The login of your shell needs no entry."
-            ) { EntryListSettingControl(.settingsFolder) },
+            ) { accountList() },
             SettingRow(name: SettingName.codexAccounts.rawValue, label: "Codex accounts", note: "The other logins of Codex, each with its Codex home folder.") {
-                EntryListSettingControl(.settingsFolder)
+                accountList()
             },
         ])
+    }
+
+    /// The list of the accounts of an agent. The plus button asks for
+    /// the folder of the new account.
+    @MainActor private static func accountList() -> EntryListSettingControl {
+        let control = EntryListSettingControl(.settingsFolder)
+        control.chooseDetail = EntryListSettingControl.chooseFolder
+        return control
     }
 
     /// The font families of this Mac in which every character has the

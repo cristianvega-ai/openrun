@@ -91,6 +91,14 @@ import Testing
         control.add()
         control.take(row: 1, isName: false, text: "/Users/me/.claude-home")
         #expect(told().last == #"[{"folder":"/Users/me/.claude-work","name":"Work"},{"folder":"/Users/me/.claude-home","name":"New Account"}]"#)
+        // The plus button asks for the folder, and a new account gets a name that no other one has.
+        var answer: String? = "/Users/me/.claude-third"
+        control.chooseDetail = { $0(answer) }
+        control.add()
+        answer = nil
+        control.add()
+        #expect(control.entries.map(\.name) == ["Work", "New Account", "New Account 2"] && control.entries.last?.detail == "/Users/me/.claude-third")
+        control.remove(2)
         // The commands are no accounts, so they do not show.
         control.show(#"[{"command":"claude","name":"Claude Code"}]"#)
         #expect(control.entries.count == 2)
