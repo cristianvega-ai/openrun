@@ -13,7 +13,7 @@ import Testing
         #expect(cell.icon.image != nil)
         #expect(cell.accessibilityLabel() == "openrun, 2 need you")
         cell.show(rows[0])
-        #expect(cell.name.stringValue == "All Sessions" && cell.count.stringValue.isEmpty && cell.toolTip == nil)
+        #expect(cell.name.stringValue == "All Projects" && cell.count.stringValue.isEmpty && cell.toolTip?.contains("every project") == true)
     }
 
     /// A cut name keeps at least 8 points from the count. A label can draw

@@ -95,8 +95,8 @@ import WindowLayout
 
     @Test func theTitleOfAnEntryIsItsName() {
         let content = content().content
-        #expect(content.title(of: .allSessions) == "All Sessions" && content.title(of: .needsYou) == "Needs You")
-        #expect(content.title(of: .noProject) == "No Project" && content.title(of: .project(site.identifier)) == "Web Site")
+        #expect(content.title(of: .allSessions) == "All Projects" && content.title(of: .needsYou) == "Needs You")
+        #expect(content.title(of: .noProject) == "Other Folders" && content.title(of: .project(site.identifier)) == "Web Site")
         #expect(content.title(of: .project(app.identifier)) == "app" && content.title(of: .project(UUID())) == "")
     }
 }

@@ -66,10 +66,10 @@ public struct ListContent {
     /// The name of an entry, which the second pane shows as its title.
     public func title(of entry: ProjectsListEntry) -> String {
         switch entry {
-        case .allSessions: "All Sessions"
+        case .allSessions: "All Projects"
         case .needsYou: "Needs You"
         case .project(let identifier): projectSummaries.first { $0.identifier == identifier }.map(Self.name(of:)) ?? ""
-        case .noProject: "No Project"
+        case .noProject: "Other Folders"
         }
     }
 

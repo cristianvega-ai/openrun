@@ -12,7 +12,7 @@ import Testing
             needsYouCount: 3, noProjectAttentionCount: 1)
         let rows = ProjectsListRow.rows(for: content)
         #expect(rows.map(\.entry) == [.allSessions, .needsYou, .project(first), .project(second), .noProject])
-        #expect(rows.map(\.name) == ["All Sessions", "Needs You", "openrun", "website", "No Project"])
+        #expect(rows.map(\.name) == ["All Projects", "Needs You", "openrun", "website", "Other Folders"])
         #expect(rows.map(\.attentionCount) == [0, 3, 2, 0, 1])
         #expect(rows[2].help == "/p/openrun" && rows[2].projectIdentifier == first && rows[1].projectIdentifier == nil)
         #expect(ProjectsListRow.firstProjectRow == 2)
@@ -21,7 +21,7 @@ import Testing
     @Test func voiceOverHearsTheCount() {
         let project = ProjectDisplay(identifier: first, name: "openrun", folder: "/p/openrun", attentionCount: 1)
         let rows = ProjectsListRow.rows(for: ProjectsListContent(projects: [project], needsYouCount: 5, noProjectAttentionCount: 4))
-        #expect(rows.map(\.accessibilityLabel) == ["All Sessions", "Needs You, 5", "openrun, 1 needs you", "No Project, 4 need you"])
+        #expect(rows.map(\.accessibilityLabel) == ["All Projects", "Needs You, 5", "openrun, 1 needs you", "Other Folders, 4 need you"])
         #expect(ProjectsListRow.rows(for: ProjectsListContent())[1].accessibilityLabel == "Needs You")
     }
 
