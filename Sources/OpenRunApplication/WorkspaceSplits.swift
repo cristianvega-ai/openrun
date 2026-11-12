@@ -46,8 +46,10 @@ extension Workspace {
             let terminal = thread?.terminalSession.flatMap { connection.overview.session($0)?.identifier }
             if let thread, terminal == nil {
                 let chat = chatPane(of: thread).chat
-                (minimumSizes[leaf], focusViews[leaf]) = (chat.minimumSize, chat.view)
-                return chat.view
+                let view = chat.view
+                // The message field takes the keyboard. The view around it cannot.
+                (minimumSizes[leaf], focusViews[leaf]) = (chat.minimumSize, chat.focusView)
+                return view
             }
             let (session, isNew) = panes.pane(for: terminal ?? leaf)
             if isNew { new.append(terminal ?? leaf) }
@@ -111,8 +113,17 @@ extension Workspace {
         guard case .split(_, let pane) = shown, let leaf = focusedLeaf, let index = pane.leaves.firstIndex(of: leaf) else { return }
         let next = pane.leaves[(index + step + pane.leaves.count) % pane.leaves.count]
         lastFocusedLeaf = next
-        let view = connection.overview.thread(next) != nil ? threadPanes.existing(next)?.chat.view : panes.existing(next)?.content.focusView
-        if let view = browserPanes[next]?.focusView ?? view { window.window.makeFirstResponder(view) }
+        if let view = focusView(of: next) { window.window.makeFirstResponder(view) }
+    }
+
+    /// The view of a pane of the shown row that takes the keyboard: the
+    /// web page, the terminal of a conversation, the message field of a
+    /// chat, or the terminal of a session.
+    func focusView(of leaf: UUID) -> NSView? {
+        if let page = browserPanes[leaf] { return page.focusView }
+        guard let thread = connection.overview.thread(leaf) else { return panes.existing(leaf)?.content.focusView }
+        if let terminal = thread.terminalSession, let pane = panes.existing(terminal) { return pane.content.focusView }
+        return threadPanes.existing(leaf)?.chat.focusView
     }
 
     @objc func selectNextPane(_ sender: Any?) { focusPane(by: 1) }

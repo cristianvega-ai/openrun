@@ -149,6 +149,8 @@ import Testing
         func item(_ action: Selector) -> NSMenuItem { NSMenuItem(title: "", action: action, keyEquivalent: "") }
         let (open, back) = (item(#selector(Workspace.openFocusedThreadInTerminal(_:))), item(#selector(Workspace.returnFocusedThreadToChat(_:))))
         #expect(workspace.focusedLeaf == thread && workspace.validateMenuItem(open) && !workspace.validateMenuItem(back))
+        // Next Pane gave the keyboard to the message field of the chat.
+        #expect(workspace.window.window.firstResponder === chat.focusView)
         // A row with splits has no top row for the button, so the menu opens the terminal.
         workspace.openFocusedThreadInTerminal(nil)
         #expect(await waitUntil {
