@@ -92,6 +92,10 @@ final class Workspace: NSObject {
     lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
     /// Asks about a restart of the session process. Tests set it.
     lazy var confirmRestart: (NSAlert, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeRestart($0, then: $1) }
+    /// Reads the build of the session process in the bundle of this app. Tests set it.
+    var readBundledBuild: @Sendable () -> String? = BundledSessionProcess.buildIdentifier
+    /// The builds of the session process that the app compared with its own, so the user hears of each one time.
+    var knownBuilds: Set<String> = []
     /// Asks before the close of a thread with this title. Tests set it.
     lazy var confirmCloseOfThread: (String, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeCloseOfThread($0, then: $1) }
     /// The install of the command-line tool of this app bundle, or nil

@@ -19,6 +19,29 @@ extension Workspace {
         }
     }
 
+    /// Tells the user one time when the session process is of another
+    /// build than this app, and offers the restart.
+    func checkBuildOfSessionProcess() {
+        guard connection.status == .connected, let running = connection.sessionProcessBuild, !knownBuilds.contains(running) else { return }
+        knownBuilds.insert(running)
+        let read = readBundledBuild
+        // The program of the bundle prints its build, which takes a moment.
+        DispatchQueue.global(qos: .utility).async { [weak self] in
+            let bundled = read()
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.compareBuild(running: running, bundled: bundled) } }
+        }
+    }
+
+    private func compareBuild(running: String, bundled: String?) {
+        guard let bundled, bundled != running, connection.sessionProcessBuild == running else { return }
+        let alert = NSAlert()
+        alert.messageText = "The session process is from another build of OpenRun"
+        alert.informativeText = "It still runs, so that your sessions stay alive. Restart it when your work allows. " + Self.restartConsequence
+        confirmRestart(alert) { [weak self] agreed in
+            if agreed { self?.perform("The session process could not end") { try $0.endSessionProcess() } }
+        }
+    }
+
     /// Shows a question about the restart. The first button keeps the
     /// sessions, so Return ends nothing.
     func askBeforeRestart(_ alert: NSAlert, then answer: @escaping (Bool) -> Void) {

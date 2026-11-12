@@ -94,6 +94,7 @@ extension Workspace {
     func statusChanged() {
         // A new connection brings a new list, so each session can try again.
         if connection.status == .connected { lostSessions = [] }
+        checkBuildOfSessionProcess()
         refresh()
     }
 }
