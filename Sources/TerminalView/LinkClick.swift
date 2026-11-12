@@ -10,6 +10,10 @@ import TerminalEmulation
 @MainActor
 final class LinkClick {
     var opener: any LinkOpener = WorkspaceLinkOpener()
+    /// A host that shows web pages itself takes a web link here. It
+    /// returns false when it does not take the link, and the link then
+    /// opens with the default program.
+    var webLinkAction: ((URL) -> Bool)?
     /// The window asks before a link opens an app or a file.
     var ask: @MainActor (String) async -> Bool = { _ in false }
     private let terminal: Terminal
@@ -46,7 +50,11 @@ final class LinkClick {
     /// or a file. An address that is not valid opens nothing.
     func open(_ address: String) {
         guard let target = LinkSchemeRule.target(for: address) else { return }
-        guard LinkSchemeRule.needsQuestion(for: target) else { return opener.open(target) }
+        guard LinkSchemeRule.needsQuestion(for: target) else {
+            let isWebLink = ["http", "https"].contains(target.scheme?.lowercased() ?? "")
+            if !isWebLink || webLinkAction?(target) != true { opener.open(target) }
+            return
+        }
         let (ask, opener) = (ask, opener)
         Task { if await ask(address) { opener.open(target) } }
     }

@@ -27,6 +27,15 @@ import Testing
         #expect(opener.targets == [URL(string: "https://example.com/docs")] && !click.isActive)
     }
 
+    @Test func aHostThatShowsWebPagesTakesAWebLink() throws {
+        let (click, opener) = try makeClick()
+        var offered: [URL] = []
+        click.webLinkAction = { offered.append($0); return $0.host == "example.com" }
+        click.open("https://example.com/docs")
+        click.open("https://other.example/x")
+        #expect(offered.count == 2 && opener.targets == [URL(string: "https://other.example/x")])
+    }
+
     @Test func aCommandClickOpensAPlainAddressAtOnceAndTheOscLinkWins() throws {
         let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 5), scrollbackLimit: 0)
         terminal.write("read https://example.com/plain. \u{1B}]8;;https://a.b/x\u{07}https://c.d\u{1B}]8;;\u{07}")

@@ -48,6 +48,14 @@ public final class TerminalView: NSView {
         }
     }
     private var appearanceObserver: AppearanceObserver?
+    /// Takes a web link that the user opens, when the host shows web
+    /// pages itself. With no action, or after a false answer, the link
+    /// opens with the default program.
+    public var webLinkAction: ((URL) -> Bool)? {
+        get { links.webLinkAction }
+        set { links.webLinkAction = newValue }
+    }
+
     public weak var delegate: TerminalViewDelegate? {
         didSet {
             if oldValue !== delegate { pasteGeneration &+= 1 }
