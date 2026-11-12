@@ -49,7 +49,9 @@ extension Workspace {
     /// a shell at its prompt runs in one of them.
     func closeRow(_ identifier: UUID) {
         guard let row = layout.row(identifier) else { return }
-        if let thread = row.pane.leadingThread { return closeThread(thread) }
+        if row.pane.leaves.count == 1, let thread = row.pane.leadingThread { return closeThread(thread) }
+        // A row with splits ends each of its sessions and closes each of its threads.
+        for thread in row.pane.threads { closeThread(thread) }
         let sessions = row.pane.sessions.compactMap { connection.overview.session($0) }
         let end = { [weak self] in
             for session in sessions {

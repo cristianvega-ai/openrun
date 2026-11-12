@@ -55,4 +55,11 @@ extension WindowLayout {
         if selectedRow == session { selectedRow = row }
         return true
     }
+
+    /// Keeps the share of the first half of a split of a row, after the
+    /// user moved its divider. `leaf` starts the second half of the split.
+    public mutating func setFraction(_ fraction: Double, ofSplitBefore leaf: UUID, inRow row: UUID) {
+        guard let index = rows.firstIndex(where: { $0.identifier == row }) else { return }
+        rows[index].pane = rows[index].pane.settingFraction(fraction, ofSplitBefore: leaf)
+    }
 }
