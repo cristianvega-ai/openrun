@@ -9,6 +9,7 @@ extension Workspace {
     /// What the third pane must show now.
     var wantedContent: ShownContent {
         let row = layout.selectedRow.flatMap { layout.row($0) }
+        if let row, let pane = living(row.pane), pane.leaves.count > 1 { return .split(row: row.identifier, pane: pane) }
         if let thread = row?.pane.leadingThread, let summary = connection.overview.thread(thread) {
             // Open in Terminal: the row of the thread shows the terminal of its conversation.
             if let terminal = summary.terminalSession, connection.overview.session(terminal) != nil { return .session(terminal) }
@@ -27,13 +28,20 @@ extension Workspace {
     /// session.
     func showSelectedRow() {
         let wanted = wantedContent
-        let asked = sessionToSelect.map { [ShownContent.session($0), .thread($0)].contains(wanted) } ?? false
+        var asked = sessionToSelect.map { [ShownContent.session($0), .thread($0)].contains(wanted) } ?? false
+        // The new pane of a split takes the focus when its row shows it.
+        if case .split(_, let pane) = wanted, let leaf = leafToFocus ?? sessionToSelect, pane.leaves.contains(leaf) { asked = true }
         let takesFocus = isContentActive || asked
         if takesFocus { sessionToSelect = nil }
         guard wanted != shown || shownIsStale else { return }
-        if let shownSession { panes.existing(shownSession)?.deactivate() }
-        (shown, shownIsStale) = (wanted, false)
+        // The pane with the focus keeps it when the row gets a new view.
+        let focus = leafToFocus ?? focusedLeaf
+        deactivateShownPanes()
+        (shown, shownIsStale, leafToFocus) = (wanted, false, nil)
+        if case .split = wanted {} else { splitView = nil }
         switch wanted {
+        case .split(let row, let pane):
+            showSplit(row: row, pane: pane, focus: focus)
         case .nothing:
             window.showContent(nil)
         case .notice(let notice):
@@ -55,6 +63,15 @@ extension Workspace {
             }
         }
         if takesFocus { window.focusContent() }
+    }
+
+    /// The panes that leave the third pane stop to take part in the size of their sessions.
+    private func deactivateShownPanes() {
+        switch shown {
+        case .session(let session): panes.existing(session)?.deactivate()
+        case .split(_, let pane): for session in pane.sessions { panes.existing(session)?.deactivate() }
+        case .thread, .nothing, .notice: break
+        }
     }
 
     /// The feed says that a session ended. Its pane closes, and the third

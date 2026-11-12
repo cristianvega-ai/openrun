@@ -3,6 +3,7 @@ import AppKit
 import DataStorage
 import ListContent
 import MainWindow
+import PaneSplits
 import ProjectsList
 import PseudoTerminal
 import SessionOverview
@@ -26,6 +27,12 @@ final class Workspace: NSObject {
     let layoutStore: WindowLayoutStore
     let panes: SessionPanes
     let threadPanes = ThreadPanes()
+    /// The view of the row with splits that the third pane shows.
+    var splitView: SplitPaneView?
+    /// The pane of a row with splits that had the keyboard focus last,
+    /// and the new pane of a split that takes the focus when it shows.
+    var lastFocusedLeaf: UUID?
+    var leafToFocus: UUID?
     /// The settings window, from its first use.
     var settingsWindow: SettingsWindowController?
     let notifier: any AlertNotifier

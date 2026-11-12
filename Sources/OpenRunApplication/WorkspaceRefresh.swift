@@ -64,7 +64,7 @@ extension Workspace {
         showSelectedRow()
         // The third pane has the title of its row, so the user reads one
         // name for a session in both places.
-        if shownSession != nil || shownThread != nil, let row = content.rows(of: .allSessions).first(where: { $0.identifier == layout.selectedRow }) {
+        if focusedLeaf != nil, let row = content.rows(of: .allSessions).first(where: { $0.identifier == layout.selectedRow }) {
             window.updateContentTitle(row.title)
         }
         updateBadge(content.projects.needsYouCount)
@@ -78,16 +78,20 @@ extension Workspace {
     /// the one in the third pane, while the window is key and the focus
     /// is in that pane.
     var sessionInView: UUID? {
-        isContentActive ? shownSession ?? shownThread : nil
+        isContentActive ? focusedLeaf : nil
     }
 
     /// The thread whose chat the third pane shows.
     var shownThread: UUID? {
-        if case .thread(let thread) = shown { thread } else { nil }
+        if case .thread(let thread) = shown { return thread }
+        if case .split = shown, let leaf = focusedLeaf, connection.overview.thread(leaf) != nil { return leaf }
+        return nil
     }
 
     /// The session whose pane the third pane shows.
     var shownSession: UUID? {
-        if case .session(let session) = shown { session } else { nil }
+        if case .session(let session) = shown { return session }
+        if case .split = shown, let leaf = focusedLeaf, connection.overview.session(leaf) != nil { return leaf }
+        return nil
     }
 }
