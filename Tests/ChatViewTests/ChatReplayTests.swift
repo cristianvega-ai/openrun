@@ -19,7 +19,7 @@ import Testing
         "edit-turn": ["userMessage", "toolCalls", "fileChange", "agentText"],
         "sub-agent-turn": ["userMessage", "task", "agentText"],
         "stopped-turn": ["notice", "toolCalls", "turnEnd"],
-        "authentication-failure": ["turnEnd"],
+        "authentication-failure": ["notice"],
     ]
 
     @Test(arguments: expectedKinds.keys.sorted())

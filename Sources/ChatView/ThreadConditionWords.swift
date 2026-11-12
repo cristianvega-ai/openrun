@@ -5,6 +5,7 @@ import Foundation
 struct ThreadConditionWords: Equatable {
     enum Choice: Equatable {
         case returnFromTerminal
+        case openInTerminal
         case newThread(account: String)
     }
 
@@ -32,6 +33,12 @@ struct ThreadConditionWords: Equatable {
             title = facts.accountName.map { "The \($0) account reached its limit" } ?? "The account reached its limit"
             detail = "The thread goes on when the account resets" + (accounts.isEmpty ? "." : ", or you can go on in a new thread.")
             choices = accounts.map { ("New Thread on \($0.name)", .newThread(account: $0.identifier)) }
+        case .notSignedIn(let accounts):
+            symbolName = "person.crop.circle.badge.exclamationmark"
+            title = facts.accountName.map { "\(facts.agentName) is not signed in on the \($0) account" } ?? "\(facts.agentName) is not signed in"
+            detail = "Open the conversation in a terminal and sign in there. Then come back and send your message again."
+                + (accounts.isEmpty ? " You can also add another login in Settings, in the Agents pane." : " Or go on in a new thread under another account.")
+            choices = [("Open in Terminal", .openInTerminal)] + accounts.map { ("New Thread on \($0.name)", .newThread(account: $0.identifier)) }
         case .openInTerminal:
             symbolName = "terminal"
             title = "This conversation is open in a terminal"

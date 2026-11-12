@@ -25,8 +25,11 @@ struct TranscriptRowBuilder {
             toolRun = []
         }
         var present = Set<String>()
+        // The text of the notice just before an item, when a notice is there.
+        var noticeBefore: String?
         for item in items {
             let identifier = item.identifier
+            defer { if case .notice(let notice) = item.content { noticeBefore = notice.text } else { noticeBefore = nil } }
             if case .toolCall = item.content {
                 if !hidden.contains(identifier) { toolRun.append(identifier) }
                 continue
@@ -43,8 +46,10 @@ struct TranscriptRowBuilder {
             case .task: rows.append(TranscriptRow(key: identifier, kind: .task(item: identifier)))
             case .notice: rows.append(TranscriptRow(key: identifier, kind: .notice(item: identifier)))
             case .turnEnd(let end):
-                // A turn that ends as it should needs no row.
-                if end.outcome != .done { rows.append(TranscriptRow(key: identifier, kind: .turnEnd(item: identifier))) }
+                // A turn that ends as it should needs no row, and neither
+                // does a failed turn whose reason the notice before it told.
+                let isTold = end.outcome == .failed && end.errorText != nil && end.errorText == noticeBefore
+                if end.outcome != .done, !isTold { rows.append(TranscriptRow(key: identifier, kind: .turnEnd(item: identifier))) }
             case .unknown: rows.append(TranscriptRow(key: identifier, kind: .unknown(item: identifier)))
             case .toolCall: break
             }

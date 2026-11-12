@@ -32,6 +32,7 @@ extension ChatViewController {
             guard let self else { return }
             switch choice {
             case .returnFromTerminal: delegate?.chatViewControllerReturnFromTerminal(self)
+            case .openInTerminal: delegate?.chatViewControllerOpenInTerminal(self)
             case .newThread(let account): delegate?.chatViewController(self, startNewThreadOnAccount: account)
             }
         }

@@ -30,6 +30,17 @@ struct ThreadConditionWordsTests {
         #expect(words?.choices.map(\.choice) == [.newThread(account: "personal")])
     }
 
+    @Test func aThreadWithNoLoginOffersTheTerminalAndTheOtherAccounts() {
+        let words = ThreadConditionWords(facts(.notSignedIn(otherAccounts: [ChatAccount(identifier: "", name: "the Account of Your Shell")])))
+        #expect(words?.title == "Claude Code is not signed in on the Work account")
+        #expect(words?.detail?.hasSuffix("Or go on in a new thread under another account.") == true)
+        #expect(words?.choices.map(\.title) == ["Open in Terminal", "New Thread on the Account of Your Shell"])
+        #expect(words?.choices.map(\.choice) == [.openInTerminal, .newThread(account: "")])
+        // With no other account, the box tells where to add one.
+        let alone = ThreadConditionWords(ChatThreadFacts(threadIdentifier: "t", title: "T", agentName: "Codex", condition: .notSignedIn(otherAccounts: [])))
+        #expect(alone?.title == "Codex is not signed in" && alone?.detail?.contains("in the Agents pane") == true && alone?.choices.count == 1)
+    }
+
     @Test func aTerminalThreadOffersTheWayBack() {
         #expect(ThreadConditionWords(facts(.openInTerminal))?.choices.map(\.choice) == [.returnFromTerminal])
     }

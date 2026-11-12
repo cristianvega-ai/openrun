@@ -16,6 +16,10 @@ public enum ChatThreadCondition: Equatable, Hashable, Sendable {
     /// thread waits for the reset, and the chat offers a new thread on one
     /// of the other accounts.
     case atLimit(resetTime: Date?, otherAccounts: [ChatAccount])
+    /// The agent has no valid login under the account of the thread. The
+    /// user signs in with the agent in a terminal, or goes on in a new
+    /// thread under one of the other accounts.
+    case notSignedIn(otherAccounts: [ChatAccount])
     /// The conversation is open in a terminal session (proposal 6), so the
     /// chat only shows it until the user comes back.
     case openInTerminal
