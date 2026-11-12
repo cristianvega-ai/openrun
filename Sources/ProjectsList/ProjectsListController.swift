@@ -37,7 +37,7 @@ public final class ProjectsListController: NSObject {
     public var focusView: NSView { table }
 
     public var selection: ProjectsListEntry {
-        rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].entry : .allSessions
+        (rows.indices.contains(table.selectedRow) ? rows[table.selectedRow].entry : nil) ?? .allSessions
     }
 
     /// Shows new content. Only the rows that changed update, and the
@@ -46,7 +46,7 @@ public final class ProjectsListController: NSObject {
     public func show(_ content: ProjectsListContent) {
         let selected = selection
         let newRows = ProjectsListRow.rows(for: content)
-        let changes = RowChanges(from: rows, to: newRows) { $0.entry }
+        let changes = RowChanges(from: rows, to: newRows) { $0.kind }
         (self.content, rows) = (content, newRows)
         usage.show(content.accounts)
         isShowingChanges = true
