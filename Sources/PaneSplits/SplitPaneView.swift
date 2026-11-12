@@ -29,7 +29,8 @@ import WindowLayout
 
     private func build(_ pane: LayoutPane, _ leafView: (UUID) -> NSView) -> NSView {
         switch pane {
-        case .session(let identifier), .thread(let identifier):
+        case .session, .thread, .browser:
+            guard let identifier = pane.leaves.first else { return NSView() }
             let view = leafView(identifier)
             leafViews[identifier] = view
             return view
@@ -56,8 +57,8 @@ import WindowLayout
     /// add their heights, each with the divider between them.
     public static func minimumSize(of pane: LayoutPane, leaf: (UUID) -> CGSize) -> CGSize {
         switch pane {
-        case .session(let identifier), .thread(let identifier):
-            return leaf(identifier)
+        case .session, .thread, .browser:
+            return pane.leaves.first.map(leaf) ?? .zero
         case .split(let split):
             let (first, second) = (minimumSize(of: split.first, leaf: leaf), minimumSize(of: split.second, leaf: leaf))
             let divider = HalvesView.dividerWidth

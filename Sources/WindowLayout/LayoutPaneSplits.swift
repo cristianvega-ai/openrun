@@ -3,11 +3,12 @@ import Foundation
 /// The changes of a pane that a split of the third pane needs (decision
 /// of 2026-11-10 on the rows).
 extension LayoutPane {
-    /// The sessions and the threads of the pane in reading order: the
-    /// first half of each split before the second.
+    /// The sessions, the threads and the web pages of the pane in reading
+    /// order: the first half of each split before the second.
     public var leaves: [UUID] {
         switch self {
         case .session(let identifier), .thread(let identifier): [identifier]
+        case .browser(let browser): [browser.identifier]
         case .split(let split): split.first.leaves + split.second.leaves
         }
     }
@@ -17,8 +18,8 @@ extension LayoutPane {
     /// Unchanged when the pane does not hold the leaf.
     public func splitting(_ leaf: UUID, with new: LayoutPane, direction: LayoutSplit.Direction) -> LayoutPane {
         switch self {
-        case .session(let identifier), .thread(let identifier):
-            return identifier == leaf ? .split(LayoutSplit(direction: direction, first: self, second: new)) : self
+        case .session, .thread, .browser:
+            return leaves == [leaf] ? .split(LayoutSplit(direction: direction, first: self, second: new)) : self
         case .split(var split):
             split.first = split.first.splitting(leaf, with: new, direction: direction)
             split.second = split.second.splitting(leaf, with: new, direction: direction)

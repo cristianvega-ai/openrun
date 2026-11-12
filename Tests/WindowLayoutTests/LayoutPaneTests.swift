@@ -31,6 +31,14 @@ import Testing
         #expect(throws: (any Error).self) { try JSONDecoder().decode(LayoutPane.self, from: Data(#"{"browser":{}}"#.utf8)) }
     }
 
+    @Test func aWebPageStaysWhileASessionOfThePaneStays() throws {
+        let page = LayoutBrowser(address: "http://localhost:3000/")
+        let pane = LayoutPane.split(LayoutSplit(direction: .sideBySide, first: .session(a), second: .browser(page)))
+        #expect(pane.leaves == [a, page.identifier] && pane.sessions == [a] && pane.browsers == [page] && pane.threads.isEmpty)
+        #expect(pane.keeping { _ in true } == pane && pane.keeping { $0 != a } == nil && LayoutPane.browser(page).keeping { _ in true } == nil)
+        #expect(try JSONDecoder().decode(LayoutPane.self, from: JSONEncoder().encode(pane)) == pane)
+    }
+
     @Test func theFractionOfASplitStaysBetweenZeroAndOne() {
         #expect(LayoutSplit(direction: .stacked, fraction: 7, first: .session(a), second: .session(b)).fraction == 1)
         #expect(LayoutSplit(direction: .stacked, fraction: -1, first: .session(a), second: .session(b)).fraction == 0)
