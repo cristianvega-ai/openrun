@@ -36,6 +36,13 @@ func makeProjectsList() -> (ProjectsListController, RecordingProjectsHost, NSWin
     return (list, host, window, identifiers)
 }
 
+extension NSView {
+    /// Every view of the type under this view, in the order of the tree.
+    func descendants<Kind: NSView>(_ kind: Kind.Type) -> [Kind] {
+        subviews.flatMap { (($0 as? Kind).map { [$0] } ?? []) + $0.descendants(kind) }
+    }
+}
+
 extension ProjectsListController {
     func cell(at row: Int) -> ProjectCellView? {
         table.view(atColumn: 0, row: row, makeIfNecessary: false) as? ProjectCellView
