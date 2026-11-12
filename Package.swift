@@ -158,6 +158,7 @@ let package = Package(
         .testTarget(name: "PaneSplitsTests", dependencies: ["PaneSplits", "WindowLayout"]),
         // Install Command-Line Tool: the link to the `openrun` program of the app bundle.
         .target(name: "ToolInstallation"),
+        .testTarget(name: "ToolInstallationTests", dependencies: ["ToolInstallation"]),
         // The settings window: one pane for each group of settings, and a control for each setting.
         .target(name: "SettingsWindow", dependencies: ["Settings"]),
         .testTarget(name: "SettingsWindowTests", dependencies: ["SettingsWindow", "Settings"]),
