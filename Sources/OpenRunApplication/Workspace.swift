@@ -10,6 +10,7 @@ import SessionPane
 import SessionProtocol
 import SessionsList
 import Settings
+import SettingsWindow
 import WindowLayout
 
 /// The host of the main window. It joins the window with the session
@@ -25,6 +26,8 @@ final class Workspace: NSObject {
     let layoutStore: WindowLayoutStore
     let panes: SessionPanes
     let threadPanes = ThreadPanes()
+    /// The settings window, from its first use.
+    var settingsWindow: SettingsWindowController?
     let notifier: any AlertNotifier
     /// The rows, the selection, the filter and the order, as `layout.json` keeps them.
     var layout: WindowLayout
@@ -76,6 +79,8 @@ final class Workspace: NSObject {
     lazy var confirmClose: (CloseQuestion, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeClose($0, then: $1) }
     /// Asks before the close of a thread with this title. Tests set it.
     lazy var confirmCloseOfThread: (String, @escaping (Bool) -> Void) -> Void = { [weak self] in self?.askBeforeCloseOfThread($0, then: $1) }
+    /// Tells why a setting did not change. Tests set it.
+    lazy var showSettingFailure: (String) -> Void = { [weak self] in self?.showSettingFailureSheet($0) }
     /// Asks for the folders of new projects. Tests set it.
     lazy var chooseProjectFolders: (@escaping ([URL]) -> Void) -> Void = { [weak self] in self?.chooseFoldersInPanel(then: $0) }
 

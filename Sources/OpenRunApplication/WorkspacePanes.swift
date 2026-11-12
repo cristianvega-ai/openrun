@@ -17,6 +17,7 @@ extension Workspace: SessionPaneDelegate, MainWindowDelegate {
     /// that the window does not show now.
     func settingsChanged() {
         settings = LiveSettings.values(from: connection.overview.settings)
+        settingsWindow?.show(settingTexts)
         for pane in panes.all {
             pane.asksBeforeUnsafePaste = settings.asksBeforeUnsafePaste
             if let view = pane.terminalView { LiveSettings.apply(settings, to: view) }

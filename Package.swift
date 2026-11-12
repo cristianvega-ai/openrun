@@ -166,7 +166,7 @@ let package = Package(
         .target(name: "OpenRunApplication", dependencies: [
             "SessionLaunch", "SessionConnection", "SessionProtocol", "SessionPane", "MainWindow", "ProjectsList", "SessionsList",
             "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "TerminalView", "PaneAppearance",
-            "AlertNotifications", "ChatView", "AgentConversation",
+            "AlertNotifications", "ChatView", "AgentConversation", "SettingsWindow",
         ]),
         .testTarget(name: "OpenRunApplicationTests", dependencies: ["OpenRunApplication", "SessionLaunch", "SessionProtocol", "SessionPane", "SessionProcessHarness", "TerminalView", "MainWindow", "ProjectsList", "SessionsList", "SessionOverview", "WindowLayout", "ListContent", "Settings", "DataStorage", "PseudoTerminal", "AlertNotifications", "ChatView", "AgentConversation", "SessionConnection", "fake-agent"]),
         .executableTarget(name: "openrun-application", dependencies: ["OpenRunApplication"]),

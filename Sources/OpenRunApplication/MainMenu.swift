@@ -10,6 +10,8 @@ enum MainMenu {
         let application = submenu("OpenRun", in: menu)
         application.addItem(item("About OpenRun", #selector(NSApplication.orderFrontStandardAboutPanel(_:))))
         application.addItem(.separator())
+        application.addItem(item("Settings…", #selector(Workspace.showSettings(_:)), ",", target: target.workspace))
+        application.addItem(.separator())
         application.addItem(item("Hide OpenRun", #selector(NSApplication.hide(_:)), "h"))
         application.addItem(item("Hide Others", #selector(NSApplication.hideOtherApplications(_:)), "h", [.command, .option]))
         application.addItem(item("Show All", #selector(NSApplication.unhideAllApplications(_:))))
