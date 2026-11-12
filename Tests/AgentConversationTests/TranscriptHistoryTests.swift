@@ -31,6 +31,15 @@ import Testing
         #expect(transcript.prepend(history: history, label: "page2") == 0 && transcript.items.count == 8)
     }
 
+    @Test func theTurnsAfterTheLastKnownTurnAreTheNewOnes() {
+        // The user made two more turns in another program, such as the agent in a terminal.
+        let later = [user("u4", "Four"), text("m4:0", "Fourth"), done, user("u5", "Five"), text("m5:0", "Fifth")]
+        let known = Transcript(events: history)
+        #expect(known.turnsAfterKnown(in: history + later) == later && known.turnsAfterKnown(in: history).isEmpty)
+        // A page with no known turn is new as a whole.
+        #expect(known.turnsAfterKnown(in: later) == later && Transcript().turnsAfterKnown(in: history) == history)
+    }
+
     @Test func aTurnThatTheHistoryCutShortShowsNoWorkInProgress() {
         var transcript = Transcript()
         let call = ConversationEvent(.toolCallInput(ToolCallInput(identifier: "t1", name: "Bash", input: .object([:]))))

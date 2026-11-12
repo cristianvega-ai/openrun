@@ -41,6 +41,19 @@ extension Transcript {
         return earlier.count - removed.count { names.contains($0) }
     }
 
+    /// The events of the turns of a page of the history that come after
+    /// the last turn that the transcript has, in their order. The turns
+    /// that the user made in another program, such as the agent in a
+    /// terminal, are such turns. When the transcript has no turn of the
+    /// page, every turn of the page is new.
+    public func turnsAfterKnown(in events: [ConversationEvent]) -> [ConversationEvent] {
+        let turns = Self.turns(of: events)
+        let lastKnown = turns.lastIndex { turn in
+            Transcript(events: turn, limits: limits).items.contains { !Self.isCounted($0.identifier) && storage.contains($0.identifier) }
+        }
+        return turns[((lastKnown ?? -1) + 1)...].flatMap { $0 }
+    }
+
     /// The events in turns: a new turn starts at each message of the user.
     static func turns(of events: [ConversationEvent]) -> [[ConversationEvent]] {
         var turns: [[ConversationEvent]] = []
