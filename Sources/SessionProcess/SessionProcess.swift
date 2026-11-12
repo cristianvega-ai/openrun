@@ -160,7 +160,8 @@ public struct SessionProcess: Sendable {
 
     private static let usage = """
         Usage: openrun-session [--socket PATH] [--data-folder PATH] [--answerer-requirement REQUIREMENT] [--launch-agent]
-                               [--agent-program PROGRAM] [--own-environment-for-agents]
+                               [--agent-program PROGRAM] [--codex-program PROGRAM] [--own-environment-for-agents]
+               openrun-session --build-identifier
 
         Runs the OpenRun session process in the foreground and logs to standard error.
         The socket is PATH, or OPENRUN_SOCKET, or ~/Library/Application Support/OpenRun/session.socket.
@@ -168,8 +169,9 @@ public struct SessionProcess: Sendable {
         and other users must not be able to write to it.
         The projects and the settings are in the folder of the socket, or in the folder
         that --data-folder names.
-        The agent of a thread is PROGRAM, or claude. It gets the environment of your login
-        shell, or with --own-environment-for-agents the environment of this process.
+        The agent of a thread is the PROGRAM of --agent-program, or claude, and for a thread
+        with Codex the PROGRAM of --codex-program, or codex. It gets the environment of your
+        login shell, or with --own-environment-for-agents the environment of this process.
         launchd gives --launch-agent: the process then answers wake requests, and it
         ends after 30 seconds with no session and no client.
         Only a program that meets REQUIREMENT, in the code requirement language, receives
