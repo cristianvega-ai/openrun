@@ -144,7 +144,7 @@ import Testing
         try await registry.change(thread.identifier, model: "gpt-5.2-codex", permissionMode: "readOnly")
         let changed = try #require(await registry.summary(thread.identifier))
         #expect(changed.model == "gpt-5.2-codex" && changed.permissionMode == "readOnly" && changed.models == ["default", "gpt-5.2-codex"])
-        // The modes of Claude Code are no sandbox of Codex, and only a thread with Claude Code has a terminal and a hook.
+        // The modes of Claude Code are no sandbox of Codex, and only a thread with Claude Code has a process of its own and a hook.
         await #expect(throws: ThreadRequestError.self) { try await registry.change(thread.identifier, model: nil, permissionMode: "plan") }
         await #expect(throws: ThreadRequestError.onlyForClaudeCode) { try await registry.runner(for: thread.identifier) }
         #expect(try await registry.running(for: thread.identifier) is CodexThreadRunner)
