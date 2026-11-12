@@ -16,6 +16,13 @@ import Testing
         #expect(cell.name.stringValue == "All Projects" && cell.count.stringValue.isEmpty && cell.toolTip?.contains("every project") == true)
     }
 
+    @Test func theHeadingOfTheProjectsIsQuietTextWithNoIconAndNoCount() {
+        let heading = ProjectsHeadingCellView()
+        heading.show(ProjectsListRow(kind: .heading, name: "Projects", symbol: "", help: nil, attentionCount: 0))
+        #expect(heading.label.stringValue == "Projects" && heading.subviews == [heading.label] && heading.accessibilityLabel() == "Projects")
+        #expect(ProjectsHeadingCellView.headingHeight > ProjectCellView.height && ProjectsHeadingCellView.hintHeight < ProjectCellView.height)
+    }
+
     /// A cut name keeps at least 8 points from the count. A label can draw
     /// its text up to its frame, 2 points past its alignment rectangle.
     @Test func aCutNameKeepsItsDistanceFromTheCount() {
