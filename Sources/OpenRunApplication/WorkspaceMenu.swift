@@ -17,6 +17,24 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         newSession(commandNamed: sender.representedObject as? String)
     }
 
+    /// What Command-W closes now, for the title of its menu item.
+    enum CloseTarget { case thread, terminal, webPage }
+
+    static func closeTitle(of target: CloseTarget?) -> String {
+        switch target {
+        case .thread: "Close Thread"
+        case .webPage: "Close Web Page"
+        case .terminal, nil: "Close Terminal"
+        }
+    }
+
+    /// The kind of the pane with the focus, or of the first pane of the selected row.
+    var closeTarget: CloseTarget? {
+        guard let leaf = focusedLeaf ?? layout.selectedRow.flatMap({ layout.row($0) })?.pane.leaves.first else { return nil }
+        if layout.browser(leaf) != nil { return .webPage }
+        return connection.overview.thread(leaf) != nil || threadTerminals[leaf] != nil ? .thread : .terminal
+    }
+
     /// Command-W: closes the selected row, or the pane with the focus
     /// when the row has splits.
     @objc func closeSession(_ sender: Any?) {
@@ -46,7 +64,8 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        switch item.action {
+        if item.action == #selector(closeSession(_:)) { item.title = Self.closeTitle(of: closeTarget) }
+        return switch item.action {
         case #selector(newSession(_:)), #selector(newSessionWithCommand(_:)): connection.status == .connected
         case #selector(newThread(_:)): connection.status == .connected && connection.hasThreadList
         // The window shows the values of the session process, so it needs them first.

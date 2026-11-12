@@ -62,13 +62,14 @@ enum MainMenu {
 
     private static func addFileMenu(to menu: NSMenu, target: OpenRunApplication) {
         let file = submenu("File", in: menu), workspace = target.workspace
-        file.addItem(item("New Session", #selector(Workspace.newSession(_:)), "n", target: workspace))
+        file.addItem(item("New Terminal", #selector(Workspace.newSession(_:)), "n", target: workspace))
         file.addItem(item("New Thread", #selector(Workspace.newThread(_:)), "t", target: workspace))
-        let commands = submenu("New Session With", in: file)
+        let commands = submenu("New Terminal With", in: file)
         commands.delegate = workspace
         file.addItem(.separator())
         // Command-W ends the work of a row, so the window closes with Shift.
-        file.addItem(item("Close Session", #selector(Workspace.closeSession(_:)), "w", target: workspace))
+        // The item takes the name of what it closes: a thread, a terminal or a web page.
+        file.addItem(item(Workspace.closeTitle(of: nil), #selector(Workspace.closeSession(_:)), "w", target: workspace))
         file.addItem(item("Close Window", #selector(NSWindow.performClose(_:)), "w", [.command, .shift]))
         file.addItem(.separator())
         file.addItem(item("Retry Session Process", #selector(OpenRunApplication.retrySessionProcess(_:)), target: target))

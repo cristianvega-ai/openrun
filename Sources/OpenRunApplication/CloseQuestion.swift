@@ -23,12 +23,12 @@ struct CloseQuestion: Equatable {
         program = foreground
     }
 
-    var title: String { "Close this session?" }
+    var title: String { "Close this terminal?" }
 
     var message: String {
-        "\(program) still runs in it. A close ends the program and every other process of the session."
+        "\(program) still runs in it. A close ends the program and every other process of the terminal."
     }
 
-    /// The first button is the default one, and it does not end the session.
-    var buttons: [String] { ["Cancel", "Close Session"] }
+    /// The first button is the default one, and it does not end the terminal.
+    var buttons: [String] { ["Cancel", "Close Terminal"] }
 }

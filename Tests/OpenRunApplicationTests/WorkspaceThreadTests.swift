@@ -33,6 +33,9 @@ import Testing
         let pane = try #require(workspace.threadPanes.existing(thread))
         #expect(workspace.layout.selectedRow == thread && row(test, thread)?.kind == .agentThread(agent: "Claude Code", model: "Opus", account: nil))
         #expect(row(test, thread)?.title == "New Thread" && pane.chat.view.window === workspace.window.window)
+        // The item of Command-W names what it closes.
+        let close = NSMenuItem(title: "", action: #selector(Workspace.closeSession(_:)), keyEquivalent: "")
+        #expect(workspace.validateMenuItem(close) && close.title == "Close Thread")
 
         pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
         #expect(await waitUntil { pane.transcript.state == .finishedTurn && row(test, thread)?.title == "Reply with the single word ok." })

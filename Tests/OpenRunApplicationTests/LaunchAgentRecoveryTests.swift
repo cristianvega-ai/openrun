@@ -134,7 +134,7 @@ private final class RecoveryRegistration: LaunchAgentStatusSource {
         let file = try #require(MainMenu.make(target: application).item(withTitle: "File")?.submenu)
         let retry = try #require(file.item(withTitle: "Retry Session Process"))
         let registerAgain = try #require(file.item(withTitle: "Register Session Process Again"))
-        let newSession = try #require(file.item(withTitle: "New Session"))
+        let newSession = try #require(file.item(withTitle: "New Terminal"))
 
         application.registerSessionProcessAgain(nil)
         await waitForRecovery { firstShellShows(application) }

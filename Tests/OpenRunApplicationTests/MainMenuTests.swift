@@ -26,7 +26,7 @@ import Testing
         func items(_ title: String) throws -> [NSMenuItem] { try #require(menu.item(withTitle: title)?.submenu).items }
         func key(_ item: NSMenuItem) -> String { (item.keyEquivalentModifierMask.contains(.shift) ? "shift-" : "") + item.keyEquivalent }
         let file = try items("File"), session = try items("Session")
-        #expect(file.map(\.title) == ["New Session", "New Thread", "New Session With", "", "Close Session", "Close Window", "", "Retry Session Process", "Restart Session Process…", "Register Session Process Again"])
+        #expect(file.map(\.title) == ["New Terminal", "New Thread", "New Terminal With", "", "Close Terminal", "Close Window", "", "Retry Session Process", "Restart Session Process…", "Register Session Process Again"])
         #expect(file.map(key) == ["n", "t", "", "", "w", "shift-w", "", "", "", ""])
         #expect(file[0].target === workspace && file[1].target === workspace && file[4].target === workspace && file[5].target == nil && file[9].target === application)
         #expect(session.map(\.title) == ["Rename…", "Clear", "Open in Terminal", "Back to Chat", "", "Split Right", "Split Down", "Split with Browser", "Next Pane", "Previous Pane", "", "Next Session", "Previous Session"])

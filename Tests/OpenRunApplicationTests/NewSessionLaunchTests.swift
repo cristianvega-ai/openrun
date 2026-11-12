@@ -37,7 +37,7 @@ import Testing
     @Test func aProgramOtherThanAShellAsksFirstAndTheFirstButtonKeepsIt() throws {
         let editor = try #require(CloseQuestion(session: session(foreground: "vim", isInProgress: false)))
         #expect(editor.program == "vim" && editor.message.hasPrefix("vim still runs in it."))
-        #expect(editor.buttons == ["Cancel", "Close Session"])
+        #expect(editor.buttons == ["Cancel", "Close Terminal"])
         #expect(CloseQuestion(session: session(foreground: "claude"))?.program == "claude")
     }
 }
