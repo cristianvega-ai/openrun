@@ -1,6 +1,5 @@
 import AppKit
 import Testing
-import WebKit
 @testable import BrowserPane
 
 /// The web page of a split. No test uses the network: a page comes from
@@ -8,7 +7,7 @@ import WebKit
 @MainActor @Suite struct BrowserPaneControllerTests {
     private func makeBrowser(_ address: String = BrowserAddress.blank) -> (BrowserPaneController, NSWindow) {
         _ = NSApplication.shared
-        let browser = BrowserPaneController(address: address, websiteData: .nonPersistent())
+        let browser = BrowserPaneController(address: address, keepsWebsiteData: false)
         let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 480, height: 320), styleMask: [.titled], backing: .buffered, defer: false)
         window.isReleasedWhenClosed = false
         window.contentView = browser.view

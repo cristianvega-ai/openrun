@@ -22,12 +22,12 @@ public final class BrowserPaneController: NSObject {
     public var addressChanged: ((String) -> Void)?
     var observations: [NSKeyValueObservation] = []
 
-    /// - Parameter websiteData: Where the pages keep their data, such as
-    ///   a login. The app uses its own lasting store, and a test uses one
-    ///   that leaves nothing behind.
-    public init(address: String, websiteData: WKWebsiteDataStore = .default()) {
+    /// - Parameter keepsWebsiteData: Whether the data of the pages, such
+    ///   as a login, stays on this Mac in the store of the app. A test
+    ///   uses a store that leaves nothing behind.
+    public init(address: String, keepsWebsiteData: Bool = true) {
         let configuration = WKWebViewConfiguration()
-        configuration.websiteDataStore = websiteData
+        configuration.websiteDataStore = keepsWebsiteData ? .default() : .nonPersistent()
         webView = WKWebView(frame: .zero, configuration: configuration)
         backButton = PaneButton.make(symbol: "chevron.left", label: "Back", target: nil, action: nil)
         forwardButton = PaneButton.make(symbol: "chevron.right", label: "Forward", target: nil, action: nil)
