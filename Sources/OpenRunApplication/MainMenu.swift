@@ -77,6 +77,12 @@ enum MainMenu {
         session.addItem(item("Rename…", #selector(Workspace.renameSession(_:)), target: workspace))
         session.addItem(item("Clear", #selector(Workspace.clearSession(_:)), "k", target: workspace))
         session.addItem(.separator())
+        // A split starts a login shell beside or under the pane with the focus.
+        session.addItem(item("Split Right", #selector(Workspace.splitRight(_:)), "d", target: workspace))
+        session.addItem(item("Split Down", #selector(Workspace.splitDown(_:)), "d", [.command, .shift], target: workspace))
+        session.addItem(item("Next Pane", #selector(Workspace.selectNextPane(_:)), "]", target: workspace))
+        session.addItem(item("Previous Pane", #selector(Workspace.selectPreviousPane(_:)), "[", target: workspace))
+        session.addItem(.separator())
         // The keys of the next and the previous tab of other Mac apps.
         session.addItem(item("Next Session", #selector(Workspace.selectNextSession(_:)), "]", [.command, .shift], target: workspace))
         session.addItem(item("Previous Session", #selector(Workspace.selectPreviousSession(_:)), "[", [.command, .shift], target: workspace))

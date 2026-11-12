@@ -15,7 +15,10 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         newSession(commandNamed: sender.representedObject as? String)
     }
 
+    /// Command-W: closes the selected row, or the pane with the focus
+    /// when the row has splits.
     @objc func closeSession(_ sender: Any?) {
+        if case .split = shown, let leaf = focusedLeaf { return closeLeaf(leaf) }
         if let row = layout.selectedRow { closeRow(row) }
     }
 
@@ -49,6 +52,8 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         case #selector(closeSession(_:)): window.window.isVisible && layout.selectedRow != nil
         case #selector(renameSession(_:)): window.window.isVisible && window.sessionsList.selection != nil
         case #selector(clearSession(_:)): window.window.isVisible && shownSession != nil
+        case #selector(splitRight(_:)), #selector(splitDown(_:)): connection.status == .connected && window.window.isVisible && focusedLeaf != nil
+        case #selector(selectNextPane(_:)), #selector(selectPreviousPane(_:)): if case .split = shown { window.window.isVisible } else { false }
         case #selector(selectNextSession(_:)), #selector(selectPreviousSession(_:)): !window.sessionsList.shownIdentifiers.isEmpty
         default: true
         }
