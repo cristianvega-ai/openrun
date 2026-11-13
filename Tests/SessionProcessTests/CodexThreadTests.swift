@@ -125,6 +125,30 @@ import Testing
         await runner.close()
     }
 
+    @Test func sharedOpeningDoesNotResumeDuringTerminalHandoff() async throws {
+        let gate = StartupGate()
+        let provider = servers(["handshake", "thread-start"])
+        let runner = CodexThreadRunner(record: record, servers: {
+            await gate.wait()
+            return try await provider()
+        })
+        let first = Task { try await runner.openThread() }
+        #expect(await eventually { await gate.entered })
+        let second = Task { try await runner.openThread() }
+        try await Task.sleep(for: .milliseconds(30))
+        let handoff = Task { await runner.leaveForTerminal() }
+        #expect(await eventually { await runner.isInTerminal })
+        await gate.release()
+        await handoff.value
+        await #expect(throws: (any Error).self) { try await first.value }
+        await #expect(throws: (any Error).self) { try await second.value }
+        #expect(await runner.isInTerminal)
+        #expect(await runner.thread == nil)
+        #expect(await !runner.record.hasConversation)
+        #expect(await gate.callCount == 1)
+        await runner.close()
+    }
+
     @Test func aTurnOfCodexReachesTheListsAndItsAppServerCountsAsAnAgent() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }
@@ -191,6 +215,20 @@ import Testing
         try await registry.close(thread.identifier)
         #expect(await registry.allSummaries.isEmpty)
     }
+}
+
+private actor StartupGate {
+    var entered = false
+    var admitted = false
+    func markAdmitted() { admitted = true }
+    var callCount = 0
+    var continuation: CheckedContinuation<Void, Never>?
+    func wait() async {
+        entered = true
+        callCount += 1
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func release() { continuation?.resume(); continuation = nil }
 }
 
 private actor ReaderChangeGate {

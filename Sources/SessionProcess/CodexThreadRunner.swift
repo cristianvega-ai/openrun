@@ -22,6 +22,10 @@ actor CodexThreadRunner {
     var readerGeneration = UUID()
     /// The open of the thread that runs now.
     var opening: Task<CodexThread, any Error>?
+    /// A Stop or a Close makes a new generation, so an open that started
+    /// before it closes its thread and gives it to no one.
+    var openingGeneration = UUID()
+    var openingTaskGeneration: UUID?
     var waitingMessages: [CodexTurn] = []
     /// Whether a turn runs, from its start to its end.
     var isTurnRunning = false

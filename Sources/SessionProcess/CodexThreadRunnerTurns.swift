@@ -46,23 +46,44 @@ extension CodexThreadRunner {
     func openThread() async throws -> CodexThread {
         guard admission.acquire() else { throw ThreadRunnerError.threadIsClosed }
         defer { admission.release() }
+        guard !isClosed else { throw ThreadRunnerError.threadIsClosed }
+        guard !isInTerminal else { throw ThreadRequestError.openInTerminal }
+        let requestedGeneration = openingGeneration
         if let thread { return thread }
         // A caller that comes while the open runs waits for it, so Codex gets one start or one resume.
-        if let opening { return try await opening.value }
-        let task = Task { try await self.startOrResumeThread() }
+        if let opening {
+            let generation = openingTaskGeneration
+            do {
+                let opened = try await opening.value
+                if generation == openingGeneration { return opened }
+            } catch {
+                if generation == openingGeneration { throw error }
+            }
+            guard requestedGeneration == openingGeneration, !isClosed, !isInTerminal else { throw CancellationError() }
+            if openingTaskGeneration == generation { self.opening = nil; openingTaskGeneration = nil }
+            return try await openThread()
+        }
+        let generation = openingGeneration
+        let task = Task { try await self.startOrResumeThread(generation: generation) }
         opening = task
-        defer { opening = nil }
+        openingTaskGeneration = generation
+        defer { if openingTaskGeneration == generation { opening = nil; openingTaskGeneration = nil } }
         return try await task.value
     }
 
-    private func startOrResumeThread() async throws -> CodexThread {
+    private func startOrResumeThread(generation: UUID) async throws -> CodexThread {
         let start = CodexThreadStart(
             folder: record.folder, model: record.model == Self.configuredModel ? nil : record.model,
             sandbox: CodexSandbox(rawValue: record.permissionMode) ?? .workspaceWrite)
         let servers = try await servers(), account = record.account?.settingsFolder
+        guard generation == openingGeneration, !isClosed else { throw CancellationError() }
         let opened = record.hasConversation
             ? try await servers.resumeThread(account: account, identifier: record.conversationIdentifier, start)
             : try await servers.startThread(account: account, start)
+        guard generation == openingGeneration, !isClosed else {
+            await opened.close()
+            throw CancellationError()
+        }
         // Codex gives the identifier of its thread, which a resume needs.
         (thread, record.conversationIdentifier, record.hasConversation) = (opened, opened.identifier, true)
         let generation = UUID()
@@ -105,6 +126,8 @@ extension CodexThreadRunner {
 
     /// Stops the turn. The messages that waited do not go out.
     func stop() async {
+        // An open that runs now gives its thread to no one, and its turn does not start.
+        openingGeneration = UUID()
         if !waitingMessages.isEmpty {
             emit(ConversationEvent(.notice(Notice(level: .information, text: "The stop removed \(waitingMessages.count) messages that waited for the agent."))))
             waitingMessages = []
@@ -120,6 +143,7 @@ extension CodexThreadRunner {
     func close() async {
         guard !isClosed else { return }
         (isClosed, waitingMessages) = (true, [])
+        openingGeneration = UUID()
         for listener in listeners.values { listener(.closed) }
         listeners = [:]
         await thread?.close()

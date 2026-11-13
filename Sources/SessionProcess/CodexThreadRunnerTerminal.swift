@@ -38,8 +38,11 @@ extension CodexThreadRunner {
     /// message until the terminal ends.
     func leaveForTerminal() async {
         isInTerminal = true
+        let leavingThread = thread
         await stop()
-        await thread?.leave()
+        // An open that ran ends first, so no thread of Codex stays on the app-server.
+        if let opening { _ = try? await opening.value }
+        await leavingThread?.leave()
         readerGeneration = UUID()
         // The old reader can miss the end of the stopped turn, so the turn ends here.
         (thread, isTurnRunning) = (nil, false)
