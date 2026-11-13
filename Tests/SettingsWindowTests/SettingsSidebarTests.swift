@@ -9,4 +9,15 @@ import Testing
         #expect(cell.textField?.stringValue == "Accounts" && cell.imageView?.image != nil && cell.accessibilityLabel() == "Accounts")
         #expect(cell.frame.height == SettingsSidebarCellView.height)
     }
+
+    @Test func theListHasALineBetweenTwoGroupsOfPanes() {
+        let panes = ["General", "Terminal", "Accounts"].map { SettingsPane(title: $0, symbolName: "gearshape", rows: []) }
+        let sidebar = SettingsSidebarController(groups: [[panes[0], panes[1]], [panes[2]]])
+        var chosen: [Int] = []
+        sidebar.chose = { chosen.append($0) }
+        sidebar.select(pane: 2)
+        sidebar.table.selectRowIndexes([1], byExtendingSelection: false)
+        #expect(sidebar.items == [0, 1, nil, 2] && sidebar.table.numberOfRows == 4 && chosen == [2, 1])
+        #expect(sidebar.tableView(sidebar.table, heightOfRow: 2) < SettingsSidebarCellView.height && sidebar.tableView(sidebar.table, selectionIndexesForProposedSelection: [2]) == [1])
+    }
 }
