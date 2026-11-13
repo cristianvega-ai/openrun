@@ -163,7 +163,8 @@ import Testing
         #expect(test.shownRows == [thread] && workspace.focusedLeaf == thread && workspace.validateMenuItem(back) && !workspace.validateMenuItem(open))
         workspace.returnFocusedThreadToChat(nil)
         #expect(await waitUntil { workspace.connection.overview.thread(thread)?.terminalSession == nil && workspace.splitView?.view(of: thread) === chat.view })
-        #expect(workspace.connection.overview.sessions.count == 1 && workspace.validateMenuItem(open))
+        // The focus comes back to the chat a moment after its view.
+        #expect(await waitUntil { workspace.validateMenuItem(open) } && workspace.connection.overview.sessions.count == 1)
     }
 
     @Test func aCloseOfAThreadAsksFirstAndThenRemovesItsRow() async throws {
