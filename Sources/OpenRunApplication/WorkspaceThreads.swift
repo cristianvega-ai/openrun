@@ -28,8 +28,8 @@ extension Workspace {
             pane.failed = { [weak self] in self?.showFailure("The thread could not do that", $0) }
             pane.openInTerminal = { [weak self] in self?.openThreadInTerminal(thread) }
             pane.returnFromTerminal = { [weak self] in self?.returnThreadFromTerminal(thread) }
-            pane.attach()
         }
+        pane.attach()
         return pane
     }
 

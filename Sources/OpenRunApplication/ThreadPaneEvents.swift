@@ -8,6 +8,15 @@ import SessionProtocol
 extension ThreadPaneController {
     /// Attaches to the thread. The events then come in batches.
     func attach() {
+        guard !isClosed else { return }
+        // An attach that runs or a live connection takes the request when it ends.
+        if attachment != nil || isAttaching { shouldReconnectAfterAttach = true; return }
+        isAttaching = true
+        // The new connection replays the thread, so the transcript and its history start again.
+        historyGeneration = UUID()
+        (historyCursor, historyToken, historyPageCount, isLoadingHistory) = (nil, nil, 0, false)
+        chat.facts.isLoadingEarlierHistory = false
+        (transcript, isReplayComplete) = (Transcript(), false)
         let (socket, thread, connect, batches) = (socket, thread, connect, ThreadEventBatches())
         eventBatches = batches
         work.async { [weak self] in
@@ -34,7 +43,7 @@ extension ThreadPaneController {
         }
     }
 
-    /// The connection ended, so the pane holds no attachment of it.
+    /// The connection ended. The next overview of the thread attaches again.
     func disconnected() {
         attachment?.shutdown()
         attachment = nil
@@ -69,11 +78,19 @@ extension ThreadPaneController {
             case .failed(let error):
                 disconnected()
                 failed?("The connection to the thread failed. \(error)")
-            case .threadEnded, .closed: disconnected()
+            case .closed: disconnected()
+            case .threadEnded:
+                // The thread is gone, so a new attach could only fail.
+                disconnected()
+                shouldReconnectAfterAttach = false
             case .messageSent: break
             }
         }
         if isReplayComplete, hasEvent { chat.update(transcript, change: change) }
         refreshSignInAdvice()
+        if attachment == nil, !isAttaching, shouldReconnectAfterAttach {
+            shouldReconnectAfterAttach = false
+            attach()
+        }
     }
 }

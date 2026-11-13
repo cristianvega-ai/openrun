@@ -40,6 +40,7 @@ extension Workspace {
         for pane in threadPanes.all {
             guard let summary = connection.overview.thread(pane.thread) else { continue }
             pane.update(summary, home: home, otherAccounts: otherAccounts(of: summary))
+            pane.attach()
         }
     }
 

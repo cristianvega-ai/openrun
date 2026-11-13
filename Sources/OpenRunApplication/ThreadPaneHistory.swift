@@ -12,14 +12,15 @@ extension ThreadPaneController {
         guard !isLoadingHistory else { return }
         isLoadingHistory = true
         chat.facts.isLoadingEarlierHistory = true
-        let (socket, thread, before, token) = (socket, thread, historyCursor, historyToken)
+        let (socket, thread, before, token, generation) = (socket, thread, historyCursor, historyToken, historyGeneration)
         work.async { [weak self] in
             let result = Result { try SessionClient(location: socket).threadHistory(thread, before: before, cursor: token) }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.tookHistory(result) } }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.tookHistory(result, generation: generation) } }
         }
     }
 
-    private func tookHistory(_ result: Result<(events: [ConversationEvent], before: Int?, cursor: String?), any Error>) {
+    func tookHistory(_ result: Result<(events: [ConversationEvent], before: Int?, cursor: String?), any Error>, generation: UUID) {
+        guard historyGeneration == generation, !isClosed else { return }
         isLoadingHistory = false
         var hasEarlier = chat.facts.hasEarlierHistory
         switch result {

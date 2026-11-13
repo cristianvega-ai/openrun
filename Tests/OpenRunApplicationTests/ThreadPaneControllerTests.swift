@@ -23,6 +23,28 @@ import Testing
         pane.transcript.items.compactMap { if case .agentMessage(let message) = $0.content { message.text } else { nil } }
     }
 
+    @Test func overviewRecoveryBeforeOldCloseReconnectsTheChat() async throws {
+        let process = try FakeAgentProcess.start()
+        defer { process.stop() }
+        let pane = try await attach(to: process)
+        defer { pane.close() }
+        pane.attach()
+        pane.take([.closed])
+        #expect(await waitUntil { pane.attachment != nil && pane.isReplayComplete })
+    }
+
+
+    @Test func aThreadThatEndedDoesNotReconnect() async throws {
+        let process = try FakeAgentProcess.start()
+        defer { process.stop() }
+        let pane = try await attach(to: process)
+        defer { pane.close() }
+        pane.attach()
+        pane.take([.threadEnded])
+        #expect(pane.attachment == nil && !pane.isAttaching && !pane.shouldReconnectAfterAttach)
+    }
+
+
     @Test func aStateOnlyEventUpdatesTheChat() async throws {
         let process = try FakeAgentProcess.start()
         defer { process.stop() }
@@ -32,6 +54,21 @@ import Testing
         #expect(pane.chat.transcript == pane.transcript)
     }
 
+
+    @Test func reconnectDropsAnObsoleteHistoryPage() async throws {
+        let process = try FakeAgentProcess.start()
+        defer { process.stop() }
+        let pane = try await attach(to: process)
+        defer { pane.close() }
+        let oldGeneration = pane.historyGeneration
+        pane.historyCursor = 42
+        pane.historyToken = "old"
+        pane.disconnected()
+        pane.attach()
+        #expect(pane.historyCursor == nil && pane.historyToken == nil)
+        pane.tookHistory(.success((events: [], before: 99, cursor: "stale")), generation: oldGeneration)
+        #expect(pane.historyCursor == nil && pane.historyToken == nil)
+    }
 
 
     @Test func theChatShowsATurnOfItsThread() async throws {

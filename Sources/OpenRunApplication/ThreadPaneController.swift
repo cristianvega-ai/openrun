@@ -19,6 +19,10 @@ final class ThreadPaneController: NSObject {
     /// each later batch as an update.
     var isReplayComplete = false
     var isClosed = false
+    /// An attach runs, and whether the pane must attach again after it,
+    /// because the overview came back while the old connection ended.
+    var isAttaching = false
+    var shouldReconnectAfterAttach = false
     /// The stage of the events of the attach that runs now.
     var eventBatches: ThreadEventBatches?
     /// The other accounts of the agent, for the box of a login that failed.
@@ -26,6 +30,8 @@ final class ThreadPaneController: NSObject {
     /// What asks for the next page of the earlier turns: a place in the
     /// history file of Claude Code, or a cursor of Codex. Nil asks for
     /// the newest page.
+    /// A page of an older attach goes to no transcript.
+    var historyGeneration = UUID()
     var historyCursor: Int?
     var historyToken: String?
     var historyPageCount = 0
@@ -101,10 +107,18 @@ final class ThreadPaneController: NSObject {
 
     /// The attach ended, on the main thread.
     func attached(_ result: Result<ThreadAttachment, any Error>) {
+        isAttaching = false
+        let retry = shouldReconnectAfterAttach
+        shouldReconnectAfterAttach = false
         switch result {
         case .success(let attachment) where isClosed: attachment.shutdown()
-        case .success(let attachment): self.attachment = attachment
-        case .failure(let error): failed?("Could not connect to the thread. \(error)")
+        case .success(let attachment):
+            self.attachment = attachment
+            shouldReconnectAfterAttach = retry
+        case .failure(let error):
+            failed?("Could not connect to the thread. \(error)")
+            // The overview came back during the attach, so one more try can reach the new process.
+            if retry { attach() }
         }
     }
 
