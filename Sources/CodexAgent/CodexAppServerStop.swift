@@ -12,6 +12,12 @@ extension CodexAppServer {
         while threads[thread]?.mapper.turnToStop == nil, (threads[thread]?.startingTurnCount ?? 0) > 0, ContinuousClock.now < startDeadline {
             try? await Task.sleep(for: .milliseconds(20))
         }
+        if threads[thread]?.mapper.turnToStop == nil, (threads[thread]?.startingTurnCount ?? 0) > 0 {
+            // The server serves every thread of the account, so the stop
+            // ends only the late turn, when its answer comes.
+            threads[thread]?.stopsTheStartingTurns = true
+            return stop
+        }
         if let turn = threads[thread]?.mapper.turnToStop {
             let parameters = JSONValue.object(["threadId": .string(thread), "turnId": .string(turn)])
             stop.interruptedTurn = (try? await request("turn/interrupt", parameters)) != nil

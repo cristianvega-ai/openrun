@@ -307,6 +307,7 @@ Each row holds the date, the decision, and the reason.
 | 2026-11-13 | OpenRun keeps the MIT license of 2026-10-15. | The owner confirmed it. |
 | 2026-11-13 | Find in a terminal keeps the tint on each match that the viewport shows, as decided on 2026-11-12. | The owner confirmed it. |
 | 2026-11-13 | OpenRun.app holds one tested version of Claude Code and one of Codex, and each release of OpenRun updates them. The settings window shows the version that the app holds, and a switch uses the program that the user installed instead. This replaces "never bundles" of proposal 4. OpenRun ships a bundled Claude Code only after Anthropic confirms in writing that the Commercial Terms permit it. | A new user gets agents that work with OpenRun at once. The Codex license permits the copy. For Claude Code, the legal page names "preinstalling" but the assistant found no text on redistribution. |
+| 2026-11-13 | When Stop comes before Codex answers the start of a turn, OpenRun waits up to five seconds for the answer. After that, the turn that the late answer names ends at once with `turn/interrupt`. The app-server of the account stays, with the other threads of the account. The assistant chose this in the repair of the state machine audit, and the owner can change it. | Before, the late turn ran on after Stop. To end the app-server would also end the work of the other threads of the account. |
 
 ## Proposed decisions of 2026-11-10
 

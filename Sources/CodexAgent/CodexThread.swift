@@ -20,6 +20,11 @@ public struct CodexThread: Sendable {
         try await server.startTurn(turn, thread: identifier)
     }
 
+    /// Registers a turn start before returning the task that waits for Codex.
+    public func beginTurn(_ turn: CodexTurn) async throws -> Task<Void, any Error> {
+        try await server.beginTurn(turn, thread: identifier)
+    }
+
     /// Answers a permission request of the thread with the user's answer.
     /// Returns false when the request no longer waits, and then nothing
     /// goes to Codex.

@@ -3,6 +3,23 @@ import Testing
 @testable import CodexAgent
 
 @Suite struct CodexAppServerStopTests {
+    @Test func aTurnThatStartsAfterTheStopLimitEndsAtOnce() async throws {
+        let harness = try await CodexServerHarness(options: CodexServerOptions(stopTimeLimit: .milliseconds(50)))
+        let first = await harness.server.open("a", first: [])
+        let start = try await harness.server.beginTurn(CodexTurn(messageIdentifier: "message", text: "Go."), thread: "a")
+        let request = await harness.nextWritten()
+        #expect(request?["method"] == .string("turn/start"))
+        _ = await harness.server.stop(thread: "a")
+        // The late answer names the turn, and only that turn ends. The server of the account stays.
+        harness.serve(#"{"id":\#(request?["id"]?.integer ?? 0),"result":{"turn":{"id":"late"}}}"#)
+        let interrupt = await harness.nextWritten()
+        #expect(interrupt?["method"] == .string("turn/interrupt") && interrupt?["params"]?["turnId"] == .string("late"))
+        harness.serve(#"{"id":\#(interrupt?["id"]?.integer ?? 0),"result":{}}"#)
+        try await start.value
+        #expect(await first.next()?.kind == .userMessage(UserMessage(identifier: "message", text: "Go.", imageCount: 0, isAccepted: false)))
+        #expect(await !harness.server.hasEnded)
+    }
+
     @Test func aCodexWithoutTheExperimentalMethodsStillStopsAndSaysSo() async throws {
         let harness = try await CodexServerHarness()
         let channel = await harness.server.open("a", first: [])
