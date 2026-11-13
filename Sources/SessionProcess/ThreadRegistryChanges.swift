@@ -9,6 +9,7 @@ import SessionProtocol
 extension ThreadRegistry {
     /// Makes a thread. Its folder must exist, because the agent starts there.
     func create(agent: String, folder: String, model: String?, permissionMode: String?, name: String?, account: String? = nil) throws -> ThreadSummary {
+        guard !isStopping else { throw ThreadRunnerError.threadIsClosed }
         guard let kind = ThreadAgent(rawValue: agent) else { throw ThreadRequestError.unsupportedAgent(agent) }
         // Without a name, the thread runs under the account of the login shell.
         let chosen = try account.map { name -> ThreadAccount in
@@ -85,8 +86,9 @@ extension ThreadRegistry {
 
     /// The runner of a thread, which starts with the first use.
     func runner(for identifier: UUID) throws -> ThreadRunner {
-        if let runner = runners[identifier] { return runner }
+        guard !isStopping else { throw ThreadRunnerError.threadIsClosed }
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
+        if let runner = runners[identifier] { return runner }
         guard record.agent == .claudeCode else { throw ThreadRequestError.onlyForClaudeCode }
         let runner = ThreadRunner(
             record: record, quietTime: quietTime, launchSettings: launchSettings,
@@ -210,11 +212,23 @@ extension ThreadRegistry {
         if summaries[record.identifier]?.projectIdentifier != project { publish(record.identifier) }
     }
 
+    /// Seals the gate before the first wait of the shutdown.
+    func beginShutdown() { isStopping = true; admission.seal() }
+
     /// Ends the process of every thread, when the session process stops.
     func terminateAll() async {
+        if hasTerminated { return }
+        if isTerminating { return await withCheckedContinuation { terminationWaiters.append($0) } }
+        isTerminating = true
+        beginShutdown()
         for runner in runners.values { await runner.close() }
         for runner in codexRunners.values { await runner.close() }
         await codexServers?.shutDown()
+        await admission.waitUntilDrained()
         (runners, codexRunners, codexServers) = ([:], [:], nil)
+        (hasTerminated, isTerminating) = (true, false)
+        let waiters = terminationWaiters
+        terminationWaiters = []
+        for waiter in waiters { waiter.resume() }
     }
 }

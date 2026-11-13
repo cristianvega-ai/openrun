@@ -7,6 +7,7 @@ import SessionProtocol
 extension ThreadRegistry {
     /// The runner of a thread of any agent, which starts with the first use.
     func running(for identifier: UUID) throws -> any ThreadRunning {
+        guard !isStopping else { throw ThreadRunnerError.threadIsClosed }
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
         guard record.agent == .codex else { return try runner(for: identifier) }
         if let runner = codexRunners[identifier] { return runner }
@@ -22,8 +23,10 @@ extension ThreadRegistry {
     /// The app-servers of Codex: one for each account, for all threads of
     /// that account. They start with the environment of the login shell.
     func openCodexServers() async throws -> CodexAccountServers {
+        guard !isStopping else { throw ThreadRunnerError.threadIsClosed }
         if let codexServers { return codexServers }
         let settings = try await launchSettings()
+        guard !isStopping else { throw ThreadRunnerError.threadIsClosed }
         // Another thread can have made them during the wait.
         if let codexServers { return codexServers }
         let servers = CodexAccountServers(launch: CodexServerLaunch(executablePath: settings.codexProgram, environment: settings.environment))

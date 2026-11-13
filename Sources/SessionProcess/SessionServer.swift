@@ -110,6 +110,8 @@ actor SessionServer {
     /// about to leave.
     func shutDown() async {
         close()
+        // No thread work starts during the waits of the shutdown.
+        await threads.beginShutdown()
         await acceptTask?.value
         // The sessions that run now come back at the next start, so their records stay.
         await records.stop()
@@ -202,6 +204,12 @@ actor SessionServer {
         var isWatching = false
 
         messages: for await received in client.messages {
+            // A client that was connected at the shutdown gets no more work.
+            guard !isClosed else {
+                client.send(.failure(SessionFailure(reason: .launchFailed, message: "The session process is stopping.")))
+                client.markHandled(received)
+                break messages
+            }
             if Task.isCancelled { break }
             // An answer would mix with the changes, so a watcher only leaves.
             if isWatching, received.message != .detach {

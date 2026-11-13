@@ -15,6 +15,14 @@ import SessionProtocol
 actor ThreadRegistry {
     private let queue = DispatchSerialQueue(label: "ai.cristianvega.openrun.threads")
     nonisolated var unownedExecutor: UnownedSerialExecutor { queue.asUnownedSerialExecutor() }
+    /// The gate of new work. The shutdown seals it, and then no thread,
+    /// runner or Codex server starts (finding 5 of the state machine audit).
+    let admission = ThreadAdmission()
+    var isStopping = false
+    /// A second call of `terminateAll()` waits for the first one.
+    var isTerminating = false
+    var hasTerminated = false
+    var terminationWaiters: [CheckedContinuation<Void, Never>] = []
     let store: ThreadStore
     let changes: SessionChangeFeed?
     let launchSettings: @Sendable () async throws -> AgentLaunchSettings

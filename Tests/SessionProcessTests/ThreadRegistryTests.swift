@@ -109,6 +109,19 @@ import Testing
         #expect(fixture.changed.last?.projectIdentifier == project.identifier)
     }
 
+    @Test func shutdownRefusesNewThreadsAndRunners() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let registry = fixture.registry
+        let thread = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        await registry.terminateAll()
+        await #expect(throws: ThreadRunnerError.threadIsClosed) { try await registry.runner(for: thread) }
+        await #expect(throws: ThreadRunnerError.threadIsClosed) { try await registry.running(for: thread) }
+        await #expect(throws: ThreadRunnerError.threadIsClosed) {
+            try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil)
+        }
+    }
+
     @Test func olderSettingsCannotApplyAfterANewerUpdate() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
