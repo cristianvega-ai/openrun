@@ -656,3 +656,51 @@ They should retain controls that deliberately remove each protection and produce
 | Geometry and acknowledgement | Applying an acknowledgement is distinct from changing grid dimensions. Both operations have observable obligations. |
 | Persistent settings and consumers | The version remains attached to the value through every asynchronous hop to an owner that stores it. |
 | Pane cache and user work | Eviction releases transport and views without discarding a submitted message or a draft that the user did not delete. |
+
+## Verification
+
+The pinned Ghostty library was built with `scripts/build-ghostty-library.sh` before Swift builds.
+`swift build` completed successfully.
+The complete `swift test` invocation ran 2,104 Swift Testing tests across 40 test targets and reported two failures.
+Both failed tests passed in a subsequent focused invocation:
+
+- `aClientThatAttachesInATurnGetsEachEventOnce` assumed that the observer attached before the stand-in agent completed its turn. Its exact replay-count assertion failed under the full run.
+- `severalStalledViewersPauseTheProgramForTwoSecondsInTotal` measured a longest write of 3.690 seconds against a limit below 3 seconds. Its focused rerun measured 2.414 seconds and passed.
+
+The focused run used `swift test --skip-build --filter 'aClientThatAttachesInATurnGetsEachEventOnce|severalStalledViewersPauseTheProgramForTwoSecondsInTotal'`.
+These results establish sensitivity to execution order or load. They do not justify reporting the original full run as passing.
+
+The quick set of `scripts/check-specifications.sh` completed all 78 configurations with their expected outcomes, including its deliberate failure controls.
+The long `--all` configurations were not run.
+The owner-only launch-agent registration check was not run.
+No real Claude Code or Codex account was used by the probes.
+
+An isolated Swift package exercised the real feature modules through controlled callbacks and startup gates.
+The package and its build products are in `/tmp/openrun-state-machine-audit.ClBxEE`.
+Its source is `AuditProbe/AuditProbe.swift` and its manifest is `Package.swift` there.
+It does not modify the application's package, sources, or tests.
+
+| Probe | Observed result |
+|---|---|
+| Close inside the permission publication callback | Runner was closed; request returned the timeout denial rather than cancellation. |
+| Stop while the Codex server provider was suspended | After release, the thread opened and the turn completed with `ok`. |
+| Close while the Codex server provider was suspended | After release, the closed runner retained an open thread and completed the turn with `ok`. |
+| Thread admission after registry shutdown | `create` and `running` admitted one record and one runner after `terminateAll` returned. |
+| Headless agent calls to thread and terminal routes | Thread listing was refused; reading a marker from another terminal was permitted. The real runner launched the stand-in agent. |
+| Two concurrent terminal handoffs | Both returned success and created two terminal sessions for one conversation. |
+| Close the thread after those handoffs | Both terminal sessions remained running after the thread record and runner were removed. |
+
+Logs are `/tmp/openrun-audit-ghostty.log`, `/tmp/openrun-audit-build.log`, `/tmp/openrun-audit-tests.log`, `/tmp/openrun-audit-recheck.log`, `/tmp/openrun-audit-specifications.log`, and `/tmp/openrun-audit-probes.log`.
+The seven probes reproduce all six high-priority findings. Findings 7 to 13 are based on the referenced source paths and their event interleavings.
+
+## Repair order
+
+First close the caller-classification gap, then make conversation handoff exclusive.
+Next make startup and shutdown final across actor suspension, and register permission waits before publication.
+These changes protect work ownership and permission finality.
+
+Then repair chat disconnection, bounded delivery, held-message ownership, and permission-answer retry.
+Finally make terminal-record exclusion shared, consume unchanged-size acknowledgements, and carry versions to every stored consumer.
+Add deterministic tests that pause each operation at its suspension boundary and deliver Stop, Close, a replacement, or a second caller there.
+An inventory entry does not by itself call for an enum or a refactor.
+Use an explicit state type where several fields jointly describe a phase; keep small independent timer and queue machines narrow.
