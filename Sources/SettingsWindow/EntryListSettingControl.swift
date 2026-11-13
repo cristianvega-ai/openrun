@@ -9,8 +9,7 @@ import AppKit
     struct Detail {
         /// Its key in the JSON of the setting.
         let key: String
-        let title: String
-        let placeholder: String
+        var placeholder = ""
         /// The name of an entry that the user adds.
         let newName: String
         /// The words of the button that adds an entry, and the line beside it.
@@ -20,9 +19,9 @@ import AppKit
         var isFolder = false
 
         /// An empty command line starts the login shell.
-        static let command = Detail(key: "command", title: "Command", placeholder: "Login shell", newName: "New Command", addTitle: "Add Command", hint: "An empty command starts your login shell.")
-        static let settingsFolder = Detail(key: "folder", title: "Settings Folder", placeholder: "", newName: "New Account", addTitle: "Add Account…",
-                                           hint: "An account is the folder of the settings of one login.", isFolder: true)
+        static let command = Detail(key: "command", placeholder: "Login shell", newName: "New Command", addTitle: "Add Command", hint: "An empty command starts your login shell.")
+
+        static let settingsFolder = Detail(key: "folder", newName: "New Account", addTitle: "Add Account…", hint: "An account is the folder of the settings of one login.", isFolder: true)
     }
 
     struct Entry: Equatable {
@@ -36,8 +35,8 @@ import AppKit
     let addButton: NSButton
     private let rows = SettingRowsView()
     var changed: ((String) -> Void)?
-    /// Asks the user for the second text of a new entry, such as the
-    /// folder of an account, and gives `nil` for a cancel. With no such
+    /// Asks the user for the second text of an entry, such as the folder
+    /// of an account, and gives `nil` for a cancel. With no such
     /// question, a new entry starts with an empty text.
     var chooseDetail: ((@escaping (String?) -> Void) -> Void)?
     var view: NSView { rows }
@@ -52,14 +51,15 @@ import AppKit
     }
 
     func show(_ text: String) {
-        // The other keys of an entry, such as one of a later build, do not count.
-        if let list = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] {
-            let shown = list.compactMap { fields -> Entry? in
-                guard let name = fields["name"] as? String, let text = fields[detail.key] as? String else { return nil }
-                return Entry(name: name, detail: text)
-            }
-            if shown.count == list.count { entries = shown }
+        guard let list = (try? JSONSerialization.jsonObject(with: Data(text.utf8))) as? [[String: Any]] else { return }
+        let shown = list.compactMap { fields -> Entry? in
+            guard let name = fields["name"] as? String, let text = fields[detail.key] as? String else { return nil }
+            return Entry(name: name, detail: text)
         }
+        // The other keys of an entry, such as one of a later build, do not count.
+        // The same entries keep their rows, so a field that the user types in keeps the keyboard.
+        guard shown.count == list.count, shown != entries else { return }
+        entries = shown
         makeRows()
     }
 
@@ -79,6 +79,7 @@ import AppKit
 
     /// Takes the new text of one field and tells the new list.
     func take(row: Int, isName: Bool, text: String) {
+        guard entries.indices.contains(row) else { return }
         let before = entries
         if isName { entries[row].name = text } else { entries[row].detail = text }
         guard entries != before else { return }

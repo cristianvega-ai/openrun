@@ -70,16 +70,24 @@ import Testing
         let told = changes(of: control)
         control.show(#"[{"command":"","name":"Shell"},{"command":"claude","name":"Claude Code"}]"#)
         #expect(control.entryRows.map(\.nameField.stringValue) == ["Shell", "Claude Code"] && control.entries.map(\.name) == ["Shell", "Claude Code"])
+        // Each entry is a row of two fields, and the last row adds an entry.
+        let rows = try? #require(control.view as? SettingRowsView).rows
+        #expect(rows?.count == 3 && control.isWide && control.entryRows[0].detailField.placeholderString == "Login shell" && control.entryRows[1].detailField.isEditable)
+        control.entryRows[1].detailField.stringValue = "claude --model opus"
+        control.entryRows[1].typed(control.entryRows[1].detailField)
         control.take(row: 1, isName: false, text: "claude --model opus")
-        control.take(row: 1, isName: false, text: "claude --model opus")
-        control.add()
+        // The same list keeps its rows, so a field that the user types in keeps the keyboard.
+        let kept = control.entryRows[1]
+        control.show(#"[{"command":"","name":"Shell"},{"command":"claude --model opus","name":"Claude Code"}]"#)
+        #expect(control.entryRows[1] === kept)
+        control.addButton.performClick(nil)
         control.take(row: 2, isName: true, text: "Monitor")
-        control.remove(0)
+        control.entryRows[0].removeEntry()
         control.remove(9)
         #expect(told().count == 4 && told().last == #"[{"command":"claude --model opus","name":"Claude Code"},{"command":"","name":"Monitor"}]"#)
         // Text that is no list changes nothing.
         control.show("{}")
-        #expect(control.entries.count == 2)
+        #expect(control.entries.count == 2 && control.addButton.title == "Add Command")
     }
 
     @Test func theAccountsAreAListOfNamesAndSettingsFolders() {
