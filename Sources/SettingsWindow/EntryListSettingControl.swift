@@ -15,13 +15,20 @@ import AppKit
         /// The words of the button that adds an entry, and the line beside it.
         let addTitle: String
         let hint: String
+        /// A first row that is no entry: the account of the login shell.
+        var fixedTitle: String?
+        var fixedNote: String?
         /// The second text is a folder, which the user chooses in a panel.
         var isFolder = false
 
         /// An empty command line starts the login shell.
         static let command = Detail(key: "command", placeholder: "Login shell", newName: "New Command", addTitle: "Add Command", hint: "An empty command starts your login shell.")
 
-        static let settingsFolder = Detail(key: "folder", newName: "New Account", addTitle: "Add Account…", hint: "An account is the folder of the settings of one login.", isFolder: true)
+        /// - Parameter program: The name of the program of the agent in a shell.
+        static func account(program: String) -> Detail {
+            Detail(key: "folder", newName: "New Account", addTitle: "Add Account…", hint: "An account is the folder of the settings of one login.",
+                   fixedTitle: "Login of Your Shell", fixedNote: "The login that the \(program) command uses in a terminal. It needs no entry.", isFolder: true)
+        }
     }
 
     struct Entry: Equatable {
@@ -63,7 +70,8 @@ import AppKit
         makeRows()
     }
 
-    /// One row for each entry, and the row with the button that adds an entry.
+    /// The first row of an account list, one row for each entry, and the
+    /// row with the button that adds an entry.
     private func makeRows() {
         entryRows = entries.indices.map { index in
             let row = EntryRowView(name: entries[index].name, detail: entries[index].detail, placeholder: detail.placeholder, isFolder: detail.isFolder)
@@ -74,7 +82,8 @@ import AppKit
             }
             return row
         }
-        rows.show(entryRows + [SettingRowView(label: "", note: detail.hint, control: addButton)])
+        let first = detail.fixedTitle.map { [SettingRowView(label: $0, note: detail.fixedNote, control: nil)] } ?? []
+        rows.show(first + entryRows + [SettingRowView(label: "", note: detail.hint, control: addButton)])
     }
 
     /// Takes the new text of one field and tells the new list.
@@ -95,14 +104,19 @@ import AppKit
         }
     }
 
-    /// Adds an entry with a name that no other entry has, because the
-    /// accounts of an agent cannot share a name.
+    /// Adds an entry and gives the keyboard to the field of its name. An
+    /// account takes its name from its folder, such as "Work" for
+    /// `.claude-work`. A number makes it a name that no other entry
+    /// has, because the accounts of an agent cannot share a name.
     private func append(_ text: String) {
-        let names = Set(entries.map { $0.name.lowercased() })
-        let name = ([detail.newName] + (2...99).map { "\(detail.newName) \($0)" }).first { !names.contains($0.lowercased()) } ?? detail.newName
+        let folder = detail.isFolder ? (text as NSString).lastPathComponent : ""
+        let word = folder.split(separator: "-").dropFirst().joined(separator: " ").capitalized
+        let base = word.isEmpty ? detail.newName : word, names = Set(entries.map { $0.name.lowercased() })
+        let name = ([base] + (2...99).map { "\(base) \($0)" }).first { !names.contains($0.lowercased()) } ?? base
         entries.append(Entry(name: name, detail: text))
         makeRows()
         tell()
+        entryRows.last.map { rows.window?.makeFirstResponder($0.nameField) }
     }
 
     /// Asks for the folder of the settings of an account. The folder of a

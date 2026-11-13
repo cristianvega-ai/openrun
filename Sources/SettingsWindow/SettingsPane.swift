@@ -92,7 +92,7 @@ struct SettingsPane {
             SettingsSection(
                 title: "Accounts",
                 note: "Each account is one login of Claude Code, with the folder of its settings. The New Thread or Terminal button offers a thread under each account. The login of your shell needs no entry.",
-                rows: [SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Logins") { accountList() }]),
+                rows: [SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Logins") { accountList(program: "claude") }]),
         ])
     }
 
@@ -101,7 +101,7 @@ struct SettingsPane {
             SettingsSection(
                 title: "Accounts",
                 note: "Each account is one login of Codex, with its Codex home folder. The login of your shell needs no entry. A thread with Codex takes its model and its sandbox in its chat.",
-                rows: [SettingRow(name: SettingName.codexAccounts.rawValue, label: "Logins") { accountList() }]),
+                rows: [SettingRow(name: SettingName.codexAccounts.rawValue, label: "Logins") { accountList(program: "codex") }]),
         ])
     }
 
@@ -121,10 +121,10 @@ struct SettingsPane {
         ])
     }
 
-    /// The list of the accounts of an agent. The plus button asks for
-    /// the folder of the new account.
-    @MainActor private static func accountList() -> EntryListSettingControl {
-        let control = EntryListSettingControl(.settingsFolder)
+    /// The list of the accounts of an agent. The button that adds an
+    /// account asks for the folder of its settings.
+    @MainActor private static func accountList(program: String) -> EntryListSettingControl {
+        let control = EntryListSettingControl(.account(program: program))
         control.chooseDetail = EntryListSettingControl.chooseFolder
         return control
     }

@@ -90,25 +90,34 @@ import Testing
         #expect(control.entries.count == 2 && control.addButton.title == "Add Command")
     }
 
-    @Test func theAccountsAreAListOfNamesAndSettingsFolders() {
-        let control = EntryListSettingControl(.settingsFolder)
+    @Test func theAccountsAreRowsWithANameAndASettingsFolder() {
+        let control = EntryListSettingControl(.account(program: "claude"))
         let told = changes(of: control)
         control.show(#"[{"folder":"/Users/me/.claude-work","name":"Work"}]"#)
         #expect(control.entries == [.init(name: "Work", detail: "/Users/me/.claude-work")])
+        // The first row is the login of the shell, which is no entry. The folder of an account is a label.
+        let rows = (control.view as? SettingRowsView)?.rows ?? []
+        #expect(rows.count == 3 && (rows.first as? SettingRowView)?.label?.stringValue == "Login of Your Shell")
+        #expect((rows.first as? SettingRowView)?.note?.stringValue.contains("the claude command") == true)
         #expect(!control.entryRows[0].detailField.isEditable && control.entryRows[0].detailField.toolTip == "/Users/me/.claude-work")
         control.add()
         control.take(row: 1, isName: false, text: "/Users/me/.claude-home")
         #expect(told().last == #"[{"folder":"/Users/me/.claude-work","name":"Work"},{"folder":"/Users/me/.claude-home","name":"New Account"}]"#)
-        // The plus button asks for the folder, and a new account gets a name that no other one has.
-        var answer: String? = "/Users/me/.claude-third"
+        // The button asks for the folder. A new account takes its name from the folder, and no two accounts share a name.
+        var answer: String? = "/Users/me/.claude-team-two"
         control.chooseDetail = { $0(answer) }
         control.add()
+        control.addButton.performClick(nil)
         answer = nil
         control.add()
-        #expect(control.entries.map(\.name) == ["Work", "New Account", "New Account 2"] && control.entries.last?.detail == "/Users/me/.claude-third")
-        control.remove(2)
+        #expect(control.entries.map(\.name) == ["Work", "New Account", "Team Two", "Team Two 2"] && control.entries.last?.detail == "/Users/me/.claude-team-two")
+        // The button of a row asks for another folder.
+        answer = "/Users/me/.claude-office"
+        control.entryRows[0].chooseDetail()
+        #expect(control.entries[0] == .init(name: "Work", detail: "/Users/me/.claude-office") && control.entryRows[0].detailField.toolTip == "/Users/me/.claude-office")
+        control.remove(3)
         // The commands are no accounts, so they do not show.
         control.show(#"[{"command":"claude","name":"Claude Code"}]"#)
-        #expect(control.entries.count == 2)
+        #expect(control.entries.count == 3)
     }
 }
