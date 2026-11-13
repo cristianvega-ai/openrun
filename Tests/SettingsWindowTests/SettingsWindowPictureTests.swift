@@ -18,6 +18,8 @@ struct SettingsWindowPictureTests {
         let window = try #require(controller.window)
         defer { window.close() }
         window.orderFrontRegardless()
+        let accounts = #"[{"folder":"/Users/ana/.claude-work","name":"Work"},{"folder":"/Users/ana/.claude-home","name":"Home"}]"#
+        controller.show(["claude-code-accounts": accounts])
         for (index, pane) in controller.panes.enumerated() {
             controller.sidebar.select(pane: index)
             try save(window, as: "settings-\(pane.pane.title.lowercased().replacingOccurrences(of: " ", with: "-")).png", in: output)

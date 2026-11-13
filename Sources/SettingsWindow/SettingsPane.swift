@@ -20,12 +20,12 @@ struct SettingsPane {
     }
 
     /// The panes in the groups of the list at the left of the window:
-    /// the app, the agents, and the rest.
+    /// the app, the agents, and the limits.
     ///
     /// - Parameter permissionModeTitle: The words of the app for a
     ///   permission mode of Claude Code, as the chat shows them.
     @MainActor static func groups(permissionModeTitle: @escaping (String) -> String) -> [[SettingsPane]] {
-        [[general, appearance, terminal], [claudeCode(permissionModeTitle: permissionModeTitle), codex], [advanced]]
+        [[general, appearance, terminal], [accounts, claudeCode(permissionModeTitle: permissionModeTitle)], [limits]]
     }
 
     @MainActor private static var general: SettingsPane {
@@ -76,48 +76,42 @@ struct SettingsPane {
         ])
     }
 
+    /// The logins of each agent. The New Thread or Terminal button
+    /// offers a thread under each one.
+    @MainActor private static var accounts: SettingsPane {
+        SettingsPane(title: "Accounts", symbolName: "person.crop.circle", sections: [
+            SettingsSection(title: "Claude Code", note: "Each account is one login of Claude Code. A new thread runs under the account that you choose for it.", rows: [
+                SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Accounts") { accountList(program: "claude") },
+            ]),
+            SettingsSection(title: "Codex", note: "Each account is one login of Codex, with its Codex home folder.", rows: [
+                SettingRow(name: SettingName.codexAccounts.rawValue, label: "Accounts") { accountList(program: "codex") },
+            ]),
+        ])
+    }
+
     @MainActor private static func claudeCode(permissionModeTitle: @escaping (String) -> String) -> SettingsPane {
-        SettingsPane(title: "Claude Code", symbolName: "sparkles", sections: [
-            SettingsSection(title: "New Threads", rows: [
-                SettingRow(name: SettingName.claudeCodeModel.rawValue, label: "Model", note: "A new thread starts with this model. You can change it in each chat.") {
-                    TextSettingControl(suggestions: ["fable", "opus", "sonnet", "haiku"])
-                },
-                SettingRow(
-                    name: SettingName.claudeCodePermissionMode.rawValue, label: "Permission mode",
-                    note: "A new thread starts in this mode. In its chat, a thread can take this mode and each stricter one."
-                ) {
-                    ChoiceSettingControl(SettingName.claudeCodePermissionModes.map { ($0, permissionModeTitle($0)) })
-                },
-            ]),
-            SettingsSection(
-                title: "Accounts",
-                note: "Each account is one login of Claude Code, with the folder of its settings. The New Thread or Terminal button offers a thread under each account. The login of your shell needs no entry.",
-                rows: [SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Logins") { accountList(program: "claude") }]),
+        SettingsPane(title: "Claude Code", symbolName: "sparkles", rows: [
+            SettingRow(name: SettingName.claudeCodeModel.rawValue, label: "Model", note: "A new thread starts with this model. You can change it in each chat.") {
+                TextSettingControl(suggestions: ["fable", "opus", "sonnet", "haiku"])
+            },
+            SettingRow(
+                name: SettingName.claudeCodePermissionMode.rawValue, label: "Permission mode",
+                note: "A new thread starts in this mode. In its chat, a thread can take this mode and each stricter one."
+            ) {
+                ChoiceSettingControl(SettingName.claudeCodePermissionModes.map { ($0, permissionModeTitle($0)) })
+            },
+            SettingRow(name: SettingName.claudeCodeProgram.rawValue, label: "Program", note: "The name of the Claude Code program in your shell, or its full path.") {
+                TextSettingControl(placeholder: "claude")
+            },
         ])
     }
 
-    @MainActor private static var codex: SettingsPane {
-        SettingsPane(title: "Codex", symbolName: "curlybraces", sections: [
-            SettingsSection(
-                title: "Accounts",
-                note: "Each account is one login of Codex, with its Codex home folder. The login of your shell needs no entry. A thread with Codex takes its model and its sandbox in its chat.",
-                rows: [SettingRow(name: SettingName.codexAccounts.rawValue, label: "Logins") { accountList(program: "codex") }]),
-        ])
-    }
-
-    @MainActor private static var advanced: SettingsPane {
-        SettingsPane(title: "Advanced", symbolName: "gearshape.2", sections: [
-            SettingsSection(title: "Limits", note: "The most that run at one time. A request for one more waits or gets a refusal.", rows: [
-                SettingRow(name: SettingName.sessionLimit.rawValue, label: "Terminals") { NumberSettingControl(1...1_000) },
-                SettingRow(name: SettingName.agentProcessLimit.rawValue, label: "Agents", note: "Each agent that works uses about 400 MB of memory.") {
-                    NumberSettingControl(1...32)
-                },
-            ]),
-            SettingsSection(title: "Programs", rows: [
-                SettingRow(name: SettingName.claudeCodeProgram.rawValue, label: "Claude Code", note: "The name of the program in your shell, or its full path.") {
-                    TextSettingControl(placeholder: "claude")
-                },
-            ]),
+    @MainActor private static var limits: SettingsPane {
+        SettingsPane(title: "Limits", symbolName: "speedometer", rows: [
+            SettingRow(name: SettingName.sessionLimit.rawValue, label: "Terminals", note: "The most terminals that run at one time.") { NumberSettingControl(1...1_000) },
+            SettingRow(name: SettingName.agentProcessLimit.rawValue, label: "Agents", note: "The most agents that work at one time. Each one uses about 400 MB of memory.") {
+                NumberSettingControl(1...32)
+            },
         ])
     }
 

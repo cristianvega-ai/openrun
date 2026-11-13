@@ -37,7 +37,7 @@ struct ThreadConditionWords: Equatable {
             symbolName = "person.crop.circle.badge.exclamationmark"
             title = facts.accountName.map { "\(facts.agentName) is not signed in on the \($0) account" } ?? "\(facts.agentName) is not signed in"
             detail = "Open the conversation in a terminal and sign in there. Then come back and send your message again."
-                + (accounts.isEmpty ? " You can also add another login in Settings, in the \(facts.agentName) pane." : " Or go on in a new thread under another account.")
+                + (accounts.isEmpty ? " You can also add another login in Settings, in the Accounts pane." : " Or go on in a new thread under another account.")
             choices = [("Open in Terminal", .openInTerminal)] + accounts.map { ("New Thread on \($0.name)", .newThread(account: $0.identifier)) }
         case .openInTerminal:
             symbolName = "terminal"

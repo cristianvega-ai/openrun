@@ -38,7 +38,7 @@ struct ThreadConditionWordsTests {
         #expect(words?.choices.map(\.choice) == [.openInTerminal, .newThread(account: "")])
         // With no other account, the box tells where to add one.
         let alone = ThreadConditionWords(ChatThreadFacts(threadIdentifier: "t", title: "T", agentName: "Codex", condition: .notSignedIn(otherAccounts: [])))
-        #expect(alone?.title == "Codex is not signed in" && alone?.detail?.contains("in the Codex pane") == true && alone?.choices.count == 1)
+        #expect(alone?.title == "Codex is not signed in" && alone?.detail?.contains("in the Accounts pane") == true && alone?.choices.count == 1)
     }
 
     @Test func aTerminalThreadOffersTheWayBack() {

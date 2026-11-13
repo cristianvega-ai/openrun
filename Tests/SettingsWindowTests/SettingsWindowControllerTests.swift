@@ -13,16 +13,17 @@ import Testing
     }
 
     @Test func eachSettingHasOneControlInOnePane() {
-        #expect(controller.panes.map(\.pane.title) == ["General", "Appearance", "Terminal", "Claude Code", "Codex", "Advanced"])
+        #expect(controller.panes.map(\.pane.title) == ["General", "Appearance", "Terminal", "Accounts", "Claude Code", "Limits"])
         controller.show(defaults)
         let names = controller.panes.flatMap { $0.controls.keys }
         #expect(Set(names) == Set(SettingName.allCases.map(\.rawValue)) && names.count == SettingName.allCases.count)
         let links = controller.panes[0].controls["open-links-in"] as? ChoiceSettingControl
         #expect(links?.popup.itemTitles == ["In the Default Browser", "In a Web Page Beside the Work"])
-        // Each pane groups its settings in sections with a heading, so a user sees what each one does.
+        // The accounts of both agents have a pane of their own, apart from the values of a new thread.
+        #expect(controller.panes[3].pane.sections.map(\.title) == ["Claude Code", "Codex"] && controller.panes[3].pane.rows.map(\.name) == ["claude-code-accounts", "codex-accounts"])
+        #expect(controller.panes[4].pane.rows.map(\.name) == ["claude-code-model", "claude-code-permission-mode", "claude-code-program"])
+        #expect(controller.panes[5].pane.rows.map(\.name) == ["session-limit", "agent-process-limit"])
         #expect(controller.panes[0].pane.sections.map(\.title) == ["Notifications", "Links"])
-        #expect(controller.panes[3].pane.sections.map(\.title) == ["New Threads", "Accounts"] && controller.panes[4].pane.rows.map(\.name) == ["codex-accounts"])
-        #expect(controller.panes[5].pane.rows.map(\.name) == ["session-limit", "agent-process-limit", "claude-code-program"])
         #expect(controller.panes[2].pane.sections.map(\.title) == ["Keyboard", "Scrollback", "Paste", "New Terminals"])
     }
 
@@ -31,7 +32,7 @@ import Testing
         #expect(sidebar.items == [0, 1, 2, nil, 3, 4, nil, 5] && sidebar.table.selectedRow == 0 && content.titleLabel.stringValue == "General")
         #expect(controller.panes.map(\.view.isHidden) == [false, true, true, true, true, true])
         sidebar.table.selectRowIndexes([4], byExtendingSelection: false)
-        #expect(content.titleLabel.stringValue == "Claude Code" && content.shownPane == 3 && controller.panes.map(\.view.isHidden) == [true, true, true, false, true, true])
+        #expect(content.titleLabel.stringValue == "Accounts" && content.shownPane == 3 && controller.panes.map(\.view.isHidden) == [true, true, true, false, true, true])
         // The window has the colors and the top rows of the main window, and one width.
         let window = controller.window
         #expect(window?.styleMask.contains(.fullSizeContentView) == true && window?.contentMinSize.width == window?.contentMaxSize.width && window?.title == "Settings")
@@ -62,7 +63,7 @@ import Testing
         var changes: [String] = []
         controller.change = { changes.append("\($0)=\($1)") }
         controller.show(defaults)
-        let agents = controller.panes[3]
+        let agents = controller.panes[4]
         let mode = try #require(agents.controls["claude-code-permission-mode"] as? ChoiceSettingControl)
         // The words of the modes are the ones of the host.
         #expect(mode.popup.itemTitles == ["mode plan", "mode dontAsk", "mode default", "mode acceptEdits", "mode auto"])
