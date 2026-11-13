@@ -41,9 +41,12 @@ extension ThreadRegistry {
     /// an app-server of Codex, whose commands are its children. Such a
     /// program may not use the threads (decision of 2026-11-10).
     func isStartedByAgent(_ process: pid_t) async -> Bool {
-        if thread(startedProcess: process) != nil { return true }
-        guard let servers = await codexServers?.processIdentifiers(), !servers.isEmpty else { return false }
-        return ProcessAncestry.ancestor(of: process, among: Set(servers)) != nil
+        if await thread(startedProcess: process) != nil { return true }
+        guard let identity = await codexServers?.processIdentity() else { return false }
+        // A server that starts has no known process yet. Only a program
+        // that this process started can be its child, and the app is not one.
+        if identity.hasUnidentifiedProcess, ProcessAncestry.ancestor(of: process, among: [getpid()]) != nil { return true }
+        return ProcessAncestry.ancestor(of: process, among: Set(identity.identifiers)) != nil
     }
 
     /// A Codex runner has a new title, state or turn. The record goes to

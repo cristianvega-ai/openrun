@@ -134,6 +134,26 @@ import Testing
         await registry.terminateAll()
     }
 
+    @Test func aCodexServerThatStartsMakesNoAgentOfTheApp() async throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        // A program that never answers the handshake, so the server stays at its start.
+        let program = folder.appendingPathComponent("silent-codex")
+        try "#!/bin/sh\nexec sleep 30\n".write(to: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: program.path)
+        var settings = FakeAgentSettings.make()
+        settings.codexProgram = program.path
+        let registry = ThreadRegistry(store: ThreadStore(dataFolder: DataFolder(path: folder.path))) { [settings] in settings }
+        let servers = try await registry.openCodexServers()
+        let reading = Task { try await servers.readUsage(account: nil) }
+        #expect(await eventually { await servers.processIdentity().hasUnidentifiedProcess })
+        // A child of this process can be a child of the server. The parent of the tests stands for the app.
+        let (isApplicationAnAgent, isChildAnAgent) = await (registry.isStartedByAgent(getppid()), registry.isStartedByAgent(getpid()))
+        #expect(!isApplicationAnAgent && isChildAnAgent)
+        await registry.terminateAll()
+        _ = try? await reading.value
+    }
+
     @Test func theRegistryKeepsACodexThreadWithItsOwnChoices() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

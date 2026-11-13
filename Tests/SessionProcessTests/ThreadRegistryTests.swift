@@ -143,6 +143,25 @@ import Testing
         await registry.updateProjects(ProjectList(), version: 1)
         #expect(await registry.summary(thread)?.projectIdentifier == project.identifier)
     }
+
+    @Test func aNewAgentIsKnownBeforeItsSummaryIsPublished() async throws {
+        let fixture = try Fixture(settings: FakeAgentSettings.make(mode: "neverEnds"))
+        defer { fixture.remove() }
+        let registry = fixture.registry
+        let thread = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        let runner = try await registry.runner(for: thread)
+        _ = try await runner.send(text: "Work.")
+        #expect(await eventually { await runner.facts.process != nil })
+        let process = try #require(await runner.facts.process)
+        await registry.forgetPublishedAgentsForTest()
+        #expect(await registry.thread(startedProcess: process) == thread)
+        #expect(await registry.isStartedByAgent(process))
+        await registry.terminateAll()
+    }
+}
+
+extension ThreadRegistry {
+    fileprivate func forgetPublishedAgentsForTest() { agentProcesses = [:] }
 }
 
 private actor SettingsLaunchGate {

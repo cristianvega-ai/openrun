@@ -114,9 +114,17 @@ actor ThreadRegistry {
 
     /// The thread whose agent is this process or one of its parents. Such
     /// a program runs for the agent, and not for the user.
-    func thread(startedProcess process: pid_t) -> UUID? {
-        guard !agentProcesses.isEmpty else { return nil }
-        return ProcessAncestry.ancestor(of: process, among: Set(agentProcesses.keys)).flatMap { agentProcesses[$0] }
+    func thread(startedProcess process: pid_t) async -> UUID? {
+        if let ancestor = ProcessAncestry.ancestor(of: process, among: Set(agentProcesses.keys)), let thread = agentProcesses[ancestor] {
+            return thread
+        }
+        // A new process can connect before its runner publishes a summary.
+        let current = runners
+        for (identifier, runner) in current {
+            guard let agent = await runner.facts.process else { continue }
+            if ProcessAncestry.ancestor(of: process, among: [agent]) != nil { return identifier }
+        }
+        return nil
     }
 
     /// Whether a process of an agent runs, so the session process must stay.
