@@ -143,7 +143,6 @@ import Testing
         await runner.close()
     }
 
-
     @Test func sharedOpeningDoesNotResumeDuringTerminalHandoff() async throws {
         let gate = StartupGate()
         let provider = servers(["handshake", "thread-start"])
@@ -190,7 +189,6 @@ import Testing
         await runner.close()
     }
 
-
     @Test func closeStopsAStalledTurnStart() async throws {
         let fixtures = URL(fileURLWithPath: "../CodexAgentTests/Fixtures", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
         let script = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
@@ -208,7 +206,6 @@ import Testing
         #expect(await runner.isClosed)
         #expect(await eventually { await pool.serverCount == 0 })
     }
-
 
     @Test func aTurnOfCodexReachesTheListsAndItsAppServerCountsAsAnAgent() async throws {
         let folder = try RunningSessionProcess.makeDirectory()

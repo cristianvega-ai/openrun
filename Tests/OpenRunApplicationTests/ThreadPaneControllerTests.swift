@@ -34,7 +34,6 @@ import Testing
         #expect(await waitUntil { pane.attachment != nil && pane.isReplayComplete })
     }
 
-
     @Test func aThreadThatEndedDoesNotReconnect() async throws {
         let process = try FakeAgentProcess.start()
         defer { process.stop() }
@@ -45,7 +44,6 @@ import Testing
         #expect(pane.attachment == nil && !pane.isAttaching && !pane.shouldReconnectAfterAttach)
     }
 
-
     @Test func aStateOnlyEventUpdatesTheChat() async throws {
         let process = try FakeAgentProcess.start()
         defer { process.stop() }
@@ -54,7 +52,6 @@ import Testing
         pane.take([.event(ConversationEvent(.turnEnded(TurnEnd(outcome: .done))))])
         #expect(pane.chat.transcript == pane.transcript)
     }
-
 
     @Test func reconnectDropsAnObsoleteHistoryPage() async throws {
         let process = try FakeAgentProcess.start()
@@ -71,7 +68,6 @@ import Testing
         #expect(pane.historyCursor == nil && pane.historyToken == nil)
     }
 
-
     @Test func messageDoesNotWaitForOtherPaneWork() async throws {
         let process = try FakeAgentProcess.start()
         defer { process.stop() }
@@ -85,7 +81,6 @@ import Testing
         pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
         #expect(await waitUntil { pane.transcript.state == .finishedTurn })
     }
-
 
     @Test func theChatShowsATurnOfItsThread() async throws {
         let process = try FakeAgentProcess.start()
