@@ -27,7 +27,7 @@ extension CodexThreadRunner {
     func sendNextMessage() async {
         guard admission.acquire() else { return }
         defer { admission.release() }
-        guard !isTurnRunning, !isClosed, let turn = waitingMessages.first else { return await changed(self) }
+        guard !isTurnRunning, !isClosed, !isInTerminal, let turn = waitingMessages.first else { return await changed(self) }
         waitingMessages.removeFirst()
         isTurnRunning = true
         do {

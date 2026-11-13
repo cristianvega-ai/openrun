@@ -11,6 +11,8 @@ extension ThreadRunner {
     /// (decision of 2026-11-10).
     func startProcess() async throws -> AgentProgram {
         let settings = try await launchSettings()
+        // A handoff to a terminal can begin during the wait for the settings.
+        guard !isClosed, !isInTerminal else { throw ThreadRunnerError.threadIsClosed }
         guard let conversation = UUID(uuidString: record.conversationIdentifier),
               let mode = ClaudeCodePermissionMode(rawValue: record.permissionMode) else {
             throw ClaudeCodeLaunchError.invalidModel

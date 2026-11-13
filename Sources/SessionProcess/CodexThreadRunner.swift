@@ -26,6 +26,8 @@ actor CodexThreadRunner {
     /// Whether Codex in a terminal session has the thread (proposal 6).
     /// The thread takes no message until the session ends.
     var isInTerminal = false
+    /// The handoff to a terminal that holds the thread now.
+    var terminalReservation: UUID?
     var usageReadAt: Date?
     let hadConversationAtStart: Bool
     /// Opens the app-servers of the accounts, at the first need.

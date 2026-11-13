@@ -42,9 +42,25 @@ extension ThreadRunner {
         isInTerminal = true
     }
 
+    func reserveForTerminal() throws -> UUID {
+        guard !isClosed else { throw ThreadRunnerError.threadIsClosed }
+        guard !isInTerminal else { throw ThreadRequestError.openInTerminal }
+        let reservation = UUID()
+        (terminalReservation, isInTerminal) = (reservation, true)
+        return reservation
+    }
+
+    /// A handoff that failed gives the thread back. An older handoff cannot.
+    func cancelTerminalHandoff(_ reservation: UUID) {
+        guard !isClosed, terminalReservation == reservation else { return }
+        (terminalReservation, isInTerminal) = (nil, false)
+    }
+
     /// The terminal session of the thread ended. The turns that the user
     /// made there come into the events, and the thread takes messages again.
     func returnedFromTerminal(events: [ConversationEvent]) async {
+        guard !isClosed else { return }
+        terminalReservation = nil
         // The conversation has turns now, also when the terminal started it.
         (isInTerminal, record.hasConversation) = (false, true)
         for event in events { emit(event.kind, sourceLine: event.sourceLine) }
@@ -69,7 +85,7 @@ extension ThreadRunner {
         guard admission.acquire() else { return }
         defer { admission.release() }
         let isEnding = program != nil && endWasRequested
-        guard activeMessage == nil, !isClosed, !isEnding, let message = waitingMessages.first else { return }
+        guard activeMessage == nil, !isClosed, !isInTerminal, !isEnding, let message = waitingMessages.first else { return }
         // A slot can come free while a start waits for its answer. The call
         // comes back after that start, so the message does not wait for good.
         if isStartingProcess { startRequestedWhileStarting = true; return }

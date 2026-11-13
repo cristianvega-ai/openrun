@@ -71,6 +71,8 @@ actor ThreadRunner {
     /// 6). A second process on it would split the conversation in two,
     /// so the thread takes no message until the session ends.
     var isInTerminal = false
+    /// The handoff to a terminal that holds the thread now.
+    var terminalReservation: UUID?
     /// The time of the newest usage reading of the agent.
     var usageReadAt: Date?
     /// The wait for the quiet time of the process.

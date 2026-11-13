@@ -13,6 +13,10 @@ protocol ThreadRunning: Actor {
     func send(text: String, images: [MessageImage]) async throws -> UUID
     func stop() async
     func close() async
+    /// Takes the thread for Open in Terminal before the first wait, so a
+    /// second handoff or a message cannot start in between (proposal 6).
+    func reserveForTerminal() throws -> UUID
+    func cancelTerminalHandoff(_ reservation: UUID)
     func setName(_ name: String?)
     /// The answer of the user to a permission request. False when the
     /// request does not wait any more.

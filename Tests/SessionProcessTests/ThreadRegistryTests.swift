@@ -136,6 +136,30 @@ import Testing
         }
     }
 
+    @Test(arguments: ["claude-code", "codex"]) func runnerReferencesObserveTerminalReservation(agent: String) async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let registry = fixture.registry
+        let thread = try await registry.create(agent: agent, folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        let firstReference = try await registry.running(for: thread)
+        let secondReference = try await registry.running(for: thread)
+        let first = try await firstReference.reserveForTerminal()
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await secondReference.send(text: "Late", images: []) }
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await secondReference.reserveForTerminal() }
+
+        await firstReference.cancelTerminalHandoff(first)
+        let second = try await secondReference.reserveForTerminal()
+        await firstReference.cancelTerminalHandoff(first)
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await firstReference.send(text: "Still reserved", images: []) }
+        await secondReference.cancelTerminalHandoff(second)
+        let third = try await firstReference.reserveForTerminal()
+        try await registry.close(thread)
+        await firstReference.cancelTerminalHandoff(third)
+        await #expect(throws: ThreadRunnerError.threadIsClosed) { try await firstReference.reserveForTerminal() }
+        await #expect(throws: ThreadRunnerError.threadIsClosed) { try await firstReference.send(text: "Closed", images: []) }
+        await registry.terminateAll()
+    }
+
     @Test func olderSettingsCannotApplyAfterANewerUpdate() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
