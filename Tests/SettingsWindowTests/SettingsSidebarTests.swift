@@ -18,6 +18,10 @@ import Testing
         sidebar.select(pane: 2)
         sidebar.table.selectRowIndexes([1], byExtendingSelection: false)
         #expect(sidebar.items == [0, 1, nil, 2] && sidebar.table.numberOfRows == 4 && chosen == [2, 1])
+        // A line is lower than a pane and takes no selection. Each other row shows the title of its pane.
         #expect(sidebar.tableView(sidebar.table, heightOfRow: 2) < SettingsSidebarCellView.height && sidebar.tableView(sidebar.table, selectionIndexesForProposedSelection: [2]) == [1])
+        let cell = sidebar.tableView(sidebar.table, viewFor: nil, row: 3) as? SettingsSidebarCellView
+        #expect(cell?.textField?.stringValue == "Accounts" && !(sidebar.tableView(sidebar.table, viewFor: nil, row: 2) is SettingsSidebarCellView))
+        #expect(sidebar.view.fittingSize.width == SettingsSidebarController.width && sidebar.searchField.placeholderString == "Search")
     }
 }
