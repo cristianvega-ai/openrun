@@ -8,6 +8,7 @@ extension ThreadRegistry {
     /// The runner of a thread of any agent, which starts with the first use.
     func running(for identifier: UUID) throws -> any ThreadRunning {
         guard !isStopping else { throw ThreadRunnerError.threadIsClosed }
+        guard !terminalHandoffs.contains(identifier), !returningTerminals.contains(identifier) else { throw ThreadRequestError.openInTerminal }
         guard let record = list.thread(identifier) else { throw ThreadListError.unknownThread(identifier) }
         guard record.agent == .codex else { return try runner(for: identifier) }
         if let runner = codexRunners[identifier] { return runner }

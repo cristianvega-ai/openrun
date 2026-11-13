@@ -36,6 +36,13 @@ actor ThreadRegistry {
     var summaries: [UUID: ThreadSummary] = [:]
     var projects: ProjectList
     var projectsVersion = 0
+    /// The handoffs to a terminal that have no terminal yet, and those that
+    /// have not finished. A close ends the first, and it waits for the second.
+    var terminalHandoffs: Set<UUID> = []
+    var activeTerminalHandoffs: Set<UUID> = []
+    /// The threads whose terminal ended, while the turns of the terminal come in.
+    var returningTerminals: Set<UUID> = []
+    var terminalHandoffWaiters: [UUID: [CheckedContinuation<Void, Never>]] = [:]
     /// The process of the agent of each thread whose agent runs.
     var agentProcesses: [pid_t: UUID] = [:]
     /// The threads that are open in a terminal (proposal 6): the terminal

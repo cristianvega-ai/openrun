@@ -12,8 +12,23 @@ extension SessionServer {
     /// same conversation in a new session, in the folder of the thread.
     func openInTerminal(_ thread: UUID, size: SessionSize) async throws -> ServerMessage {
         let record = try await threads.record(thread)
-        guard await threads.terminalSession(of: thread) == nil else { throw ThreadRequestError.openInTerminal }
-        if record.agent == .codex { return try await openCodexInTerminal(record, size: size) }
+        // The registry gives no runner during a handoff, so the runner comes first.
+        let runner = try await threads.running(for: thread)
+        // The reservation comes before the first wait, so a second handoff fails at once.
+        try await threads.reserveTerminal(thread)
+        do {
+            let result = try await handOff(record, runner: runner, size: size)
+            await threads.finishTerminalHandoff(thread)
+            return result
+        } catch {
+            await threads.finishTerminalHandoff(thread)
+            throw error
+        }
+    }
+
+    private func handOff(_ record: ThreadRecord, runner: any ThreadRunning, size: SessionSize) async throws -> ServerMessage {
+        let thread = record.identifier
+        if record.agent == .codex { return try await openCodexInTerminal(record, runner: runner, size: size) }
         guard let conversation = UUID(uuidString: record.conversationIdentifier), let mode = ClaudeCodePermissionMode(rawValue: record.permissionMode) else {
             throw ClaudeCodeLaunchError.invalidModel
         }
@@ -36,9 +51,9 @@ extension SessionServer {
     /// Codex has the conversation under the identifier of its thread.
     /// The thread leaves the app-server, and `codex resume` goes on with
     /// it in a new session, under the account of the thread.
-    private func openCodexInTerminal(_ record: ThreadRecord, size: SessionSize) async throws -> ServerMessage {
+    private func openCodexInTerminal(_ record: ThreadRecord, runner: any ThreadRunning, size: SessionSize) async throws -> ServerMessage {
         guard record.hasConversation, UUID(uuidString: record.conversationIdentifier) != nil,
-              let runner = try await threads.running(for: record.identifier) as? CodexThreadRunner else { throw ThreadRequestError.noTurnYet }
+              let runner = runner as? CodexThreadRunner else { throw ThreadRequestError.noTurnYet }
         await runner.leaveForTerminal()
         let settings = await agents.settings()
         var environment = settings.environment
@@ -57,7 +72,10 @@ extension SessionServer {
     private func openedInTerminal(_ thread: UUID, session summary: SessionSummary, historyEnd: UInt64) async -> ServerMessage {
         // The thread keeps the conversation, so its terminal does not come back after a restart.
         await records.exclude(summary.identifier)
-        await threads.openedInTerminal(thread, session: summary.identifier, historyEnd: historyEnd)
+        guard await threads.openedInTerminal(thread, session: summary.identifier, historyEnd: historyEnd) else {
+            _ = await registry.session(for: summary.identifier)?.terminate()
+            return Self.refusal("The thread closed while the terminal started.")
+        }
         // A program that ended at once ended before the thread knew its session.
         if await registry.session(for: summary.identifier) == nil { await threads.sessionEnded(summary.identifier) }
         SessionLog.write("Opened a thread in the terminal session \(summary.identifierText)")

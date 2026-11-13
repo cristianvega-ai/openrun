@@ -131,11 +131,39 @@ extension ThreadRegistry {
         terminals[thread]?.session
     }
 
+    /// Takes the thread for one handoff to a terminal, before its first wait.
+    func reserveTerminal(_ thread: UUID) throws {
+        guard !isStopping, list.thread(thread) != nil else { throw ThreadRunnerError.threadIsClosed }
+        guard terminals[thread] == nil, !activeTerminalHandoffs.contains(thread), !returningTerminals.contains(thread),
+              terminalHandoffs.insert(thread).inserted else { throw ThreadRequestError.openInTerminal }
+        activeTerminalHandoffs.insert(thread)
+    }
+
+    func finishTerminalHandoff(_ thread: UUID) {
+        terminalHandoffs.remove(thread)
+        activeTerminalHandoffs.remove(thread)
+        resumeTerminalWaitersIfFinished(thread)
+    }
+
+    /// Returns when no handoff and no return of the thread runs.
+    func waitForTerminalHandoff(_ thread: UUID) async {
+        guard activeTerminalHandoffs.contains(thread) || returningTerminals.contains(thread) else { return }
+        await withCheckedContinuation { terminalHandoffWaiters[thread, default: []].append($0) }
+    }
+
+    func resumeTerminalWaitersIfFinished(_ thread: UUID) {
+        guard !activeTerminalHandoffs.contains(thread), !returningTerminals.contains(thread) else { return }
+        for waiter in terminalHandoffWaiters.removeValue(forKey: thread) ?? [] { waiter.resume() }
+    }
+
     /// Open in Terminal: the thread takes no message until the session ends.
-    func openedInTerminal(_ thread: UUID, session: UUID, historyEnd: UInt64) async {
+    /// False when the thread closed, or no handoff holds it any more.
+    func openedInTerminal(_ thread: UUID, session: UUID, historyEnd: UInt64) async -> Bool {
+        guard !isStopping, list.thread(thread) != nil, terminalHandoffs.remove(thread) != nil else { return false }
         terminals[thread] = (session, historyEnd)
         await runners[thread]?.setInTerminal()
         publish(thread)
+        return true
     }
 
     /// A session ended. When it was the terminal of a thread, the turns
@@ -144,6 +172,8 @@ extension ThreadRegistry {
     func sessionEnded(_ session: UUID) async {
         guard let thread = terminals.first(where: { $0.value.session == session })?.key, let terminal = terminals.removeValue(forKey: thread),
               let record = list.thread(thread) else { return }
+        returningTerminals.insert(thread)
+        defer { returningTerminals.remove(thread); resumeTerminalWaitersIfFinished(thread) }
         if let runner = codexRunners[thread] {
             // Codex keeps the turns itself, and the runner reads them from its history.
             await runner.returnedFromTerminal()
@@ -225,6 +255,7 @@ extension ThreadRegistry {
         for runner in codexRunners.values { await runner.close() }
         await codexServers?.shutDown()
         await admission.waitUntilDrained()
+        for thread in activeTerminalHandoffs.union(returningTerminals) { await waitForTerminalHandoff(thread) }
         (runners, codexRunners, codexServers) = ([:], [:], nil)
         (hasTerminated, isTerminating) = (true, false)
         let waiters = terminationWaiters

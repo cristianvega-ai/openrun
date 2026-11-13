@@ -160,6 +160,30 @@ import Testing
         await registry.terminateAll()
     }
 
+    @Test func terminalReturnBlocksAnotherHandoffUntilItFinishes() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let gate = TerminalReturnGate()
+        let registry = ThreadRegistry(store: fixture.store) {
+            await gate.wait()
+            return FakeAgentSettings.make()
+        }
+        let thread = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        _ = try await registry.runner(for: thread)
+        try await registry.reserveTerminal(thread)
+        let session = UUID()
+        #expect(await registry.openedInTerminal(thread, session: session, historyEnd: 0))
+        let returning = Task { await registry.sessionEnded(session) }
+        #expect(await eventually { await gate.entered })
+        await registry.finishTerminalHandoff(thread)
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await registry.reserveTerminal(thread) }
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await registry.running(for: thread) }
+        await gate.release()
+        await returning.value
+        try await registry.reserveTerminal(thread)
+        await registry.finishTerminalHandoff(thread)
+    }
+
     @Test func olderSettingsCannotApplyAfterANewerUpdate() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -213,6 +237,13 @@ import Testing
 
 extension ThreadRegistry {
     fileprivate func forgetPublishedAgentsForTest() { agentProcesses = [:] }
+}
+
+private actor TerminalReturnGate {
+    var entered = false
+    var continuation: CheckedContinuation<Void, Never>?
+    func wait() async { entered = true; await withCheckedContinuation { continuation = $0 } }
+    func release() { continuation?.resume(); continuation = nil }
 }
 
 private actor SettingsLaunchGate {
