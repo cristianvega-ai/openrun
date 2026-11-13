@@ -160,7 +160,8 @@ import Testing
             guard let terminal = workspace.connection.overview.thread(thread)?.terminalSession else { return false }
             return workspace.splitView?.view(of: thread) === workspace.panes.existing(terminal)?.content.view
         })
-        #expect(test.shownRows == [thread] && workspace.focusedLeaf == thread && workspace.validateMenuItem(back) && !workspace.validateMenuItem(open))
+        // Under load the focus can come a moment after the view of the terminal.
+        #expect(await waitUntil { test.shownRows == [thread] && workspace.focusedLeaf == thread && workspace.validateMenuItem(back) && !workspace.validateMenuItem(open) })
         workspace.returnFocusedThreadToChat(nil)
         #expect(await waitUntil { workspace.connection.overview.thread(thread)?.terminalSession == nil && workspace.splitView?.view(of: thread) === chat.view })
         // The focus comes back to the chat a moment after its view.
