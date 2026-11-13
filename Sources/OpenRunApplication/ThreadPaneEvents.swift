@@ -12,6 +12,14 @@ extension ThreadPaneController {
         eventBatches = batches
         work.async { [weak self] in
             let result = Result { try connect(socket, thread) }
+            // The pane knows its attachment before the first event of it comes.
+            DispatchQueue.main.async { MainActor.assumeIsolated {
+                guard let self else {
+                    if case .success(let attachment) = result { attachment.shutdown() }
+                    return batches.close()
+                }
+                self.attached(result)
+            } }
             if case .success(let attachment) = result {
                 attachment.startReceiving(measuring: { event, size in
                     guard batches.add(event, size: size) else { return }
@@ -23,8 +31,14 @@ extension ThreadPaneController {
                     } }
                 })
             }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self?.attached(result) } }
         }
+    }
+
+    /// The connection ended, so the pane holds no attachment of it.
+    func disconnected() {
+        attachment?.shutdown()
+        attachment = nil
+        eventBatches?.close()
     }
 
     /// Takes a batch of events. The events before the replay mark build
@@ -32,9 +46,12 @@ extension ThreadPaneController {
     /// each batch updates only the rows that it changed.
     func take(_ events: [ThreadAttachment.Event]) {
         var change = TranscriptChange()
+        // An event that changes only the state, such as the end of a turn, changes no row.
+        var hasEvent = false
         for event in events {
             switch event {
             case .event(let event):
+                hasEvent = true
                 let one = transcript.apply(event)
                 change.inserted += one.inserted
                 change.updated += one.updated
@@ -44,15 +61,19 @@ extension ThreadPaneController {
                 chat.facts.hasEarlierHistory = hasEarlierEvents
                 chat.show(transcript)
                 change = TranscriptChange()
+                hasEvent = false
                 // After a restart of the session process the thread keeps no
                 // events, so its chat starts with the newest turns of the history.
                 if hasEarlierEvents, transcript.items.isEmpty { loadEarlierHistory() }
             case .requestFailed(let failure): failed?(failure.message)
-            case .failed(let error): failed?("The connection to the thread failed. \(error)")
-            case .messageSent, .threadEnded, .closed: break
+            case .failed(let error):
+                disconnected()
+                failed?("The connection to the thread failed. \(error)")
+            case .threadEnded, .closed: disconnected()
+            case .messageSent: break
             }
         }
-        if isReplayComplete, !change.isEmpty { chat.update(transcript, change: change) }
+        if isReplayComplete, hasEvent { chat.update(transcript, change: change) }
         refreshSignInAdvice()
     }
 }

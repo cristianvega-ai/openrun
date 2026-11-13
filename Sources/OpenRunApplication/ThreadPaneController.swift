@@ -14,7 +14,7 @@ final class ThreadPaneController: NSObject {
     let thread: UUID
     let chat: ChatViewController
     var transcript = Transcript()
-    private(set) var attachment: ThreadAttachment?
+    var attachment: ThreadAttachment?
     /// Whether the events that the thread kept came, so the chat shows
     /// each later batch as an update.
     var isReplayComplete = false

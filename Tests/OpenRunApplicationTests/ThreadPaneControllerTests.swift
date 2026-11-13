@@ -23,6 +23,17 @@ import Testing
         pane.transcript.items.compactMap { if case .agentMessage(let message) = $0.content { message.text } else { nil } }
     }
 
+    @Test func aStateOnlyEventUpdatesTheChat() async throws {
+        let process = try FakeAgentProcess.start()
+        defer { process.stop() }
+        let pane = try await attach(to: process)
+        defer { pane.close() }
+        pane.take([.event(ConversationEvent(.turnEnded(TurnEnd(outcome: .done))))])
+        #expect(pane.chat.transcript == pane.transcript)
+    }
+
+
+
     @Test func theChatShowsATurnOfItsThread() async throws {
         let process = try FakeAgentProcess.start()
         defer { process.stop() }
