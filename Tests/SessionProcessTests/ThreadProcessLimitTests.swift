@@ -58,8 +58,11 @@ import Testing
         try await fixture.secondRunner.send(text: "Three.")
         let waiting = await fixture.registry.summary(fixture.second)
         #expect(waiting?.waitingMessageCount == 2 && waiting?.isProcessRunning == false)
-        let notices = await fixture.secondRunner.keptEvents.compactMap { if case .notice(let notice) = $0.kind { notice.text } else { nil } }
-        #expect(notices.count == 1 && notices.first?.contains("at most 1 agent at one time") == true)
+        // The send returns before the runner asks for a slot, so the notice comes a moment later.
+        #expect(await eventually {
+            let notices = await fixture.secondRunner.keptEvents.compactMap { if case .notice(let notice) = $0.kind { notice.text } else { nil } }
+            return notices.count == 1 && notices.first?.contains("at most 1 agent at one time") == true
+        })
 
         await fixture.firstRunner.stop()
         #expect(await eventually { await fixture.runs() == [false, true] })

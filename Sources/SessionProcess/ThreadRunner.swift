@@ -60,6 +60,8 @@ actor ThreadRunner {
     /// Whether the runner asks for a slot or starts its process now. The
     /// messages wait until that has finished.
     var isStartingProcess = false
+    /// Whether a call to send the next message came while a start ran.
+    var startRequestedWhileStarting = false
     /// Whether a message waits because every slot for a process is taken.
     var waitsForProcessSlot = false
     /// Whether the process must end after the turn that runs, because

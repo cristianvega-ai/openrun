@@ -28,7 +28,8 @@ extension ThreadRunner {
         emit(.userMessage(UserMessage(identifier: identifier.uuidString.lowercased(), text: text, imageCount: images.count, isAccepted: false)))
         if record.title == nil { record.title = ThreadList.title(from: text) }
         await changed(self)
-        await sendNextMessage()
+        // The start of a process can wait for a slot, and the caller must not wait with it.
+        Task { await self.sendNextMessage() }
         return identifier
     }
 
@@ -68,13 +69,22 @@ extension ThreadRunner {
         guard admission.acquire() else { return }
         defer { admission.release() }
         let isEnding = program != nil && endWasRequested
-        guard activeMessage == nil, !isClosed, !isStartingProcess, !isEnding, let message = waitingMessages.first else { return }
+        guard activeMessage == nil, !isClosed, !isEnding, let message = waitingMessages.first else { return }
+        // A slot can come free while a start waits for its answer. The call
+        // comes back after that start, so the message does not wait for good.
+        if isStartingProcess { startRequestedWhileStarting = true; return }
         var isActive = false
         do {
             var running = program
             if running == nil {
                 isStartingProcess = true
-                defer { isStartingProcess = false }
+                defer {
+                    isStartingProcess = false
+                    if startRequestedWhileStarting {
+                        startRequestedWhileStarting = false
+                        Task { await self.sendNextMessage() }
+                    }
+                }
                 guard await hasProcessSlot() else { return await changed(self) }
                 running = try await startProcess()
             }

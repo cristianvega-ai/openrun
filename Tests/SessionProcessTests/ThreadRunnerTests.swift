@@ -37,6 +37,7 @@ import Testing
         let settings = FakeAgentSettings.make(turns: ["plain-turn", "edit-turn"], environment: ["FAKE_AGENT_PAUSE": "25"])
         let runner = ThreadRunner(record: FakeAgentSettings.record()) { settings }
         try await runner.send(text: "Reply with the single word ok.")
+        #expect(await eventually { await runner.program != nil })
         let process = await runner.program?.processIdentifier
         try await runner.send(text: "Change the file.")
         #expect(await runner.waitingMessages.count == 1)
@@ -52,7 +53,9 @@ import Testing
 
     @Test func theSeventeenthMessageThatWaitsIsRefused() async throws {
         let runner = ThreadRunner(record: FakeAgentSettings.record()) { FakeAgentSettings.make(mode: "neverEnds") }
-        for number in 0...ThreadRunner.waitingMessageLimit { try await runner.send(text: "Message \(number)") }
+        try await runner.send(text: "First")
+        #expect(await eventually { await runner.activeMessage != nil })
+        for number in 0..<ThreadRunner.waitingMessageLimit { try await runner.send(text: "Message \(number)") }
         await #expect(throws: ThreadRunnerError.tooManyWaitingMessages(limit: 16)) { try await runner.send(text: "One more") }
         await runner.close()
         await #expect(throws: ThreadRunnerError.threadIsClosed) { try await runner.send(text: "After the close") }

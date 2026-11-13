@@ -29,6 +29,7 @@ import Testing
         settings.program = "/no/such/agent"
         let runner = ThreadRunner(record: FakeAgentSettings.record()) { [settings] in settings }
         try await runner.send(text: "First.")
+        #expect(await eventually { await !turnEnds(runner).isEmpty })
         let end = try #require(await turnEnds(runner).first)
         #expect(end.outcome == .failed && end.errorText?.hasPrefix("The agent could not take the message.") == true)
         let (isRunning, isBusy) = await (runner.isProcessRunning, runner.isBusy)
@@ -38,19 +39,21 @@ import Testing
     @Test func aFolderThatIsGoneFailsTheTurn() async throws {
         let runner = ThreadRunner(record: FakeAgentSettings.record(folder: "/no/such/folder")) { FakeAgentSettings.make() }
         try await runner.send(text: "First.")
-        #expect(await turnEnds(runner).first?.outcome == .failed)
+        #expect(await eventually { await turnEnds(runner).first?.outcome == .failed })
     }
 
     /// The events before the attach and after it are the events of the thread, each one once.
     @Test func aClientThatAttachesInATurnGetsEachEventOnce() async throws {
-        let settings = FakeAgentSettings.make(turns: ["edit-turn"], environment: ["FAKE_AGENT_PAUSE": "3"])
+        // Stop releases the result, so the late client attaches during the turn.
+        let settings = FakeAgentSettings.make(turns: ["edit-turn"], mode: "neverEnds")
         let runner = ThreadRunner(record: FakeAgentSettings.record()) { settings }
         let early = ThreadDeliveries(), late = ThreadDeliveries()
         await runner.attach(ObjectIdentifier(early), listener: early.listener)
         try await runner.send(text: "Change the file.")
         #expect(await eventually { await runner.keptEvents.count >= 6 })
         await runner.attach(ObjectIdentifier(late), listener: late.listener)
-        #expect(await eventually { await runner.state == .finishedTurn })
+        await runner.stop()
+        #expect(await eventually { await !turnEnds(runner).isEmpty })
         // A line of the agent can come after the end of the turn, so the
         // test reads the three until they agree.
         #expect(await eventually {
