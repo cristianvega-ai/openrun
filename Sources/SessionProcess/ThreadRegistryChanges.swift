@@ -73,15 +73,28 @@ extension ThreadRegistry {
 
     /// Ends the process of the thread and removes its record. The history
     /// of the agent stays where the agent keeps it.
-    func close(_ identifier: UUID) async throws {
+    /// - Returns: The terminal session of the thread, which the caller ends.
+    @discardableResult
+    func close(_ identifier: UUID) async throws -> UUID? {
+        guard admission.acquire() else { throw ThreadRunnerError.threadIsClosed }
+        defer { admission.release() }
         let previous = list
         try list.remove(identifier)
         try save(restoring: previous)
+        // A handoff that has no terminal yet fails, and its terminal ends.
+        terminalHandoffs.remove(identifier)
+        let terminal = terminals.removeValue(forKey: identifier)?.session
         summaries[identifier] = nil
         changes?.threadEnded(identifier)
-        await runners.removeValue(forKey: identifier)?.close()
-        await codexRunners.removeValue(forKey: identifier)?.close()
+        // The runner stays known while it closes, so a program of its agent still counts as one.
+        await runners[identifier]?.close()
+        runners.removeValue(forKey: identifier)
+        agentProcesses = agentProcesses.filter { $0.value != identifier }
+        await codexRunners[identifier]?.close()
+        codexRunners.removeValue(forKey: identifier)
         if let next = slots.remove(identifier) { await start(next) }
+        await waitForTerminalHandoff(identifier)
+        return terminal
     }
 
     /// The runner of a thread, which starts with the first use.

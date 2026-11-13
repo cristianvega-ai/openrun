@@ -33,7 +33,8 @@ extension SessionServer {
             case .returnThreadFromTerminal(let identifier):
                 return try await returnFromTerminal(identifier)
             case .closeThread(let identifier):
-                try await threads.close(identifier)
+                let terminal = try await threads.close(identifier)
+                if let terminal { _ = await registry.session(for: terminal)?.terminate() }
                 return .acknowledged
             case .sendThreadMessage(let identifier, let text, let images):
                 let images = (images ?? []).map { MessageImage(mediaType: $0.mediaType, data: $0.data) }

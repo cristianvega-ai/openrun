@@ -83,4 +83,14 @@ import Testing
         _ = try process.runCommand(["kill", session.identifierText])
         #expect(await eventually { (try? client.threads().first.map { $0.terminalSession == nil }) == true })
     }
+
+    @Test func closingAThreadEndsItsTerminalSession() async throws {
+        let process = try FakeAgentSettings.sessionProcess()
+        defer { process.stop() }
+        let client = try SessionClient(location: try SocketLocation(path: process.socketPath))
+        let thread = try client.createThread(agent: "claude-code", folder: process.directory.path).identifier
+        let terminal = try client.openThreadInTerminal(thread, size: size)
+        try client.closeThread(thread)
+        #expect(await eventually { (try? client.summaries().contains { $0.identifier == terminal.identifier }) == false })
+    }
 }

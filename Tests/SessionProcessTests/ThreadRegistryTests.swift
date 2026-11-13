@@ -136,6 +136,21 @@ import Testing
         }
     }
 
+    @Test func terminalReservationIsExclusiveAndCloseInvalidatesIt() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let registry = fixture.registry
+        let thread = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        try await registry.reserveTerminal(thread)
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await registry.reserveTerminal(thread) }
+        await #expect(throws: ThreadRequestError.openInTerminal) { try await registry.running(for: thread) }
+        let closing = Task { try await registry.close(thread) }
+        #expect(await eventually { (try? await registry.record(thread)) == nil })
+        #expect(await !registry.openedInTerminal(thread, session: UUID(), historyEnd: 0))
+        await registry.finishTerminalHandoff(thread)
+        _ = try await closing.value
+    }
+
     @Test(arguments: ["claude-code", "codex"]) func runnerReferencesObserveTerminalReservation(agent: String) async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }
@@ -217,6 +232,34 @@ import Testing
         await registry.updateProjects(projects, version: 2)
         await registry.updateProjects(ProjectList(), version: 1)
         #expect(await registry.summary(thread)?.projectIdentifier == project.identifier)
+    }
+
+    @Test func aClosingAgentRemainsKnownUntilItsProcessEnds() async throws {
+        let folder = try RunningSessionProcess.makeDirectory()
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let script = folder.appendingPathComponent("agent")
+        let ready = folder.appendingPathComponent("ready")
+        try "#!/bin/sh\ntrap '' TERM\necho ready > '$READY'\nwhile :; do sleep 1; done\n".replacingOccurrences(of: "'$READY'", with: "\"$READY\"").write(to: script, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: script.path)
+        let settings = AgentLaunchSettings(program: script.path, environment: ["PATH": "/usr/bin:/bin", "READY": ready.path], hookCommand: "/usr/bin/false", hookArguments: [])
+        let registry = ThreadRegistry(store: ThreadStore(dataFolder: DataFolder(path: folder.path))) { settings }
+        let identifier = try await registry.create(agent: "claude-code", folder: folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        let runner = try await registry.runner(for: identifier)
+        _ = try await runner.send(text: "Work")
+        #expect(await eventually { FileManager.default.fileExists(atPath: ready.path) })
+        #expect(await eventually { await runner.facts.process != nil })
+        let process = try #require(await runner.facts.process)
+        await registry.forgetPublishedAgentsForTest()
+        let closing = Task { try await registry.close(identifier) }
+        #expect(await eventually { (try? await registry.record(identifier)) == nil })
+        #expect(await registry.thread(startedProcess: process) == identifier)
+        let shutdownCompleted = Mutex(false)
+        let shutdown = Task { await registry.terminateAll(); shutdownCompleted.withLock { $0 = true } }
+        try await Task.sleep(for: .milliseconds(50))
+        #expect(!shutdownCompleted.withLock { $0 })
+        _ = try await closing.value
+        await shutdown.value
+        #expect(await registry.thread(startedProcess: process) == nil)
     }
 
     @Test func aNewAgentIsKnownBeforeItsSummaryIsPublished() async throws {
