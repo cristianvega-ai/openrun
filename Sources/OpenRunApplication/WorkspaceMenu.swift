@@ -35,9 +35,16 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
         return connection.overview.thread(leaf) != nil || threadTerminals[leaf] != nil ? .thread : .terminal
     }
 
+    /// Another window with the keyboard, such as the settings window.
+    /// Command-W closes that window, and no work of the main window.
+    var otherKeyWindow: NSWindow? {
+        keyWindow().flatMap { $0 !== window.window && !$0.isSheet && $0.styleMask.contains(.closable) ? $0 : nil }
+    }
+
     /// Command-W: closes the selected row, or the pane with the focus
     /// when the row has splits.
     @objc func closeSession(_ sender: Any?) {
+        if let other = otherKeyWindow { return other.performClose(sender) }
         if case .split = shown, let leaf = focusedLeaf { return closeLeaf(leaf) }
         if let row = layout.selectedRow { closeRow(row) }
     }
@@ -64,14 +71,14 @@ extension Workspace: NSMenuItemValidation, NSMenuDelegate {
     }
 
     func validateMenuItem(_ item: NSMenuItem) -> Bool {
-        if item.action == #selector(closeSession(_:)) { item.title = Self.closeTitle(of: closeTarget) }
+        if item.action == #selector(closeSession(_:)) { item.title = otherKeyWindow == nil ? Self.closeTitle(of: closeTarget) : "Close Window" }
         return switch item.action {
         case #selector(newSession(_:)), #selector(newSessionWithCommand(_:)): connection.status == .connected
         case #selector(newThread(_:)): connection.status == .connected && connection.hasThreadList
         // The window shows the values of the session process, so it needs them first.
         case #selector(showSettings(_:)): !connection.overview.settings.isEmpty
         case #selector(installCommandLineTool(_:)): toolInstallation != nil
-        case #selector(closeSession(_:)): window.window.isVisible && layout.selectedRow != nil
+        case #selector(closeSession(_:)): otherKeyWindow != nil || window.window.isVisible && layout.selectedRow != nil
         case #selector(renameSession(_:)): window.window.isVisible && window.sessionsList.selection != nil
         case #selector(clearSession(_:)): window.window.isVisible && shownSession != nil
         case #selector(splitRight(_:)), #selector(splitDown(_:)): connection.status == .connected && window.window.isVisible && focusedLeaf != nil

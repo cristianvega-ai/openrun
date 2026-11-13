@@ -43,6 +43,8 @@ final class Workspace: NSObject {
     var leafToFocus: UUID?
     /// The settings window, from its first use.
     var settingsWindow: SettingsWindowController?
+    /// The window with the keyboard. A test gives its own.
+    var keyWindow: () -> NSWindow? = { NSApp.keyWindow }
     let notifier: any AlertNotifier
     /// The rows, the selection, the filter and the order, as `layout.json` keeps them.
     var layout: WindowLayout

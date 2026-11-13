@@ -283,6 +283,7 @@ Each row holds the date, the decision, and the reason.
 | 2026-11-12 | A thread shows the name that its account has now. The folder of the settings selects the account, so a new name of an entry shows on each thread of that account. A thread whose account the settings lost keeps the name from its record. | After the owner gave an account a new name, the usage foot showed that account two times: one time with the old name of an earlier thread. |
 | 2026-11-12 | The third pane with no content says "No Thread or Terminal Selected". This changes the words of 2026-11-10. | The second pane beside it says "No Threads or Terminals", and the owner found "sessions" unclear as the name of both. |
 | 2026-11-12 | The first pane has no "Other Folders" entry. A thread or a terminal in a folder of no project shows in "All Projects", with its folder as its place, and in "Needs You" when it waits for the user. A layout file that selects the old entry opens on "All Projects". This changes the decision of this date about "Other Folders". | The owner did not like the entry. The first pane then shows only the two views of all the work and the projects. |
+| 2026-11-12 | Command-W closes the window that has the keyboard when it is not the main window, such as the settings window. Its menu item then says "Close Window". In the main window it still closes the thread, the terminal or the web page. | Command-W in the settings window closed the selected terminal of the main window, with no question for a shell at its prompt. |
 
 ## Proposed decisions of 2026-11-10
 

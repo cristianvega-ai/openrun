@@ -32,5 +32,15 @@ import Testing
         // A second call shows the same window.
         workspace.showSettings(nil)
         #expect(workspace.settingsWindow === settings)
+        // Command-W in the settings window closes that window, and the terminal of the main window stays.
+        let shell = try test.createShell()
+        #expect(await waitUntil { test.shownRows == [shell] })
+        let close = NSMenuItem(title: "", action: #selector(Workspace.closeSession(_:)), keyEquivalent: "w")
+        // The main window of this test does not show, so its own item is off.
+        #expect(!workspace.validateMenuItem(close) && close.title == "Close Terminal")
+        workspace.keyWindow = { settings.window }
+        #expect(workspace.validateMenuItem(close) && close.title == "Close Window")
+        workspace.closeSession(nil)
+        #expect(settings.window?.isVisible == false && test.shownRows == [shell] && workspace.connection.overview.sessions.count == 1)
     }
 }
