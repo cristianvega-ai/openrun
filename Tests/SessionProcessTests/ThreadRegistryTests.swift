@@ -109,6 +109,20 @@ import Testing
         #expect(fixture.changed.last?.projectIdentifier == project.identifier)
     }
 
+    @Test func shutdownSealsPreviouslyIssuedRunners() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let registry = fixture.registry
+        let claude = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        let codex = try await registry.create(agent: "codex", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        let claudeRunner = try await registry.running(for: claude)
+        let codexRunner = try await registry.running(for: codex)
+        await registry.beginShutdown()
+        await #expect(throws: ThreadRunnerError.threadIsClosed) { try await claudeRunner.send(text: "Late", images: []) }
+        await #expect(throws: ThreadRunnerError.threadIsClosed) { try await codexRunner.send(text: "Late", images: []) }
+        await registry.terminateAll()
+    }
+
     @Test func shutdownRefusesNewThreadsAndRunners() async throws {
         let fixture = try Fixture()
         defer { fixture.remove() }

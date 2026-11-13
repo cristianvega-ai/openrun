@@ -16,6 +16,8 @@ extension ThreadRunner {
     /// Shows a request of the hook to the clients and waits for its end.
     /// The hook gets an allow only for the answer of the user.
     func askPermission(_ request: ClaudeCodePermissionHookRequest, timeLimit: Duration = ThreadRunner.permissionTimeLimit) async -> ClaudeCodePermissionHookAnswer {
+        guard admission.acquire() else { return .deny(message: "The thread is closing.") }
+        defer { admission.release() }
         // A request for another conversation is not of this agent.
         guard !isClosed, request.conversationIdentifier == record.conversationIdentifier else {
             return .deny(message: "OpenRun could not ask the user for this request.")

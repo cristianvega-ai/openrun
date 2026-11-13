@@ -32,7 +32,11 @@ actor CodexThreadRunner {
     let servers: @Sendable () async throws -> CodexAccountServers
     let changed: @Sendable (CodexThreadRunner) async -> Void
 
-    init(record: ThreadRecord, servers: @escaping @Sendable () async throws -> CodexAccountServers, changed: @escaping @Sendable (CodexThreadRunner) async -> Void = { _ in }) {
+    /// The gate of the registry, as for `ThreadRunner`.
+    let admission: ThreadAdmission
+
+    init(record: ThreadRecord, servers: @escaping @Sendable () async throws -> CodexAccountServers, admission: ThreadAdmission = ThreadAdmission(), changed: @escaping @Sendable (CodexThreadRunner) async -> Void = { _ in }) {
+        self.admission = admission
         (self.record, hadConversationAtStart, self.servers, self.changed) = (record, record.hasConversation, servers, changed)
     }
 

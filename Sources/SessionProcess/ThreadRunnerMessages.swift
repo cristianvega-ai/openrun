@@ -13,6 +13,8 @@ extension ThreadRunner {
     /// - Returns: The identifier of the message, which its events carry.
     @discardableResult
     func send(text: String, images: [MessageImage] = []) async throws -> UUID {
+        guard admission.acquire() else { throw ThreadRunnerError.threadIsClosed }
+        defer { admission.release() }
         guard !isClosed else { throw ThreadRunnerError.threadIsClosed }
         guard !isInTerminal else { throw ThreadRequestError.openInTerminal }
         guard waitingMessages.count < Self.waitingMessageLimit else {
@@ -63,6 +65,8 @@ extension ThreadRunner {
     /// A process that OpenRun asked to end takes no message: its end
     /// brings the next call, which starts a new process.
     func sendNextMessage() async {
+        guard admission.acquire() else { return }
+        defer { admission.release() }
         let isEnding = program != nil && endWasRequested
         guard activeMessage == nil, !isClosed, !isStartingProcess, !isEnding, let message = waitingMessages.first else { return }
         var isActive = false

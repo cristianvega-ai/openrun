@@ -15,7 +15,7 @@ extension ThreadRegistry {
             record: record, servers: { [weak self] in
                 guard let self else { throw ThreadRunnerError.threadIsClosed }
                 return try await openCodexServers()
-            }, changed: { [weak self] in await self?.codexRunnerChanged($0) })
+            }, admission: admission, changed: { [weak self] in await self?.codexRunnerChanged($0) })
         codexRunners[identifier] = runner
         return runner
     }

@@ -7,6 +7,8 @@ import Foundation
 extension CodexThreadRunner {
     @discardableResult
     func send(text: String, images: [MessageImage] = []) async throws -> UUID {
+        guard admission.acquire() else { throw ThreadRunnerError.threadIsClosed }
+        defer { admission.release() }
         guard !isClosed else { throw ThreadRunnerError.threadIsClosed }
         guard !isInTerminal else { throw ThreadRequestError.openInTerminal }
         guard waitingMessages.count < ThreadRunner.waitingMessageLimit else {
@@ -23,6 +25,8 @@ extension CodexThreadRunner {
 
     /// Starts the turn of the next message that waits, when no turn runs.
     func sendNextMessage() async {
+        guard admission.acquire() else { return }
+        defer { admission.release() }
         guard !isTurnRunning, !isClosed, let turn = waitingMessages.first else { return await changed(self) }
         waitingMessages.removeFirst()
         isTurnRunning = true
@@ -40,6 +44,8 @@ extension CodexThreadRunner {
     /// The thread on the app-server of its account. The first open starts
     /// a thread of Codex, and each later one resumes it by its identifier.
     func openThread() async throws -> CodexThread {
+        guard admission.acquire() else { throw ThreadRunnerError.threadIsClosed }
+        defer { admission.release() }
         if let thread { return thread }
         // A caller that comes while the open runs waits for it, so Codex gets one start or one resume.
         if let opening { return try await opening.value }
@@ -86,6 +92,8 @@ extension CodexThreadRunner {
     /// A page of the earlier turns, which Codex keeps. The thread opens
     /// on the app-server for the read. A thread with no turn has none.
     func historyPage(cursor: String?) async throws -> CodexHistoryPage {
+        guard admission.acquire() else { throw ThreadRunnerError.threadIsClosed }
+        defer { admission.release() }
         guard record.hasConversation else { return CodexHistoryPage(events: [], olderCursor: nil) }
         return try await openThread().historyPage(cursor: cursor)
     }

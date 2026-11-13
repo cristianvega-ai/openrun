@@ -73,6 +73,8 @@ actor ThreadRunner {
     var usageReadAt: Date?
     /// The wait for the quiet time of the process.
     var quietTask: Task<Void, Never>?
+    /// The gate of the registry, so a runner that a caller already holds starts no work after the shutdown.
+    let admission: ThreadAdmission
     let quietTime: Duration
     /// The time of the last message or event, for the quiet time and the
     /// limit of processes.
@@ -86,9 +88,11 @@ actor ThreadRunner {
     init(
         record: ThreadRecord, bufferByteLimit: Int = ThreadEventBuffer.defaultByteLimit, quietTime: Duration = ThreadRunner.defaultQuietTime,
         launchSettings: @escaping @Sendable () async throws -> AgentLaunchSettings,
+        admission: ThreadAdmission = ThreadAdmission(),
         takeProcessSlot: @escaping @Sendable (UUID) async -> ProcessSlotAnswer = { _ in .granted },
         changed: @escaping @Sendable (ThreadRunner) async -> Void = { _ in }
     ) {
+        self.admission = admission
         (self.record, hadConversationAtStart) = (record, record.hasConversation)
         buffer = ThreadEventBuffer(byteLimit: bufferByteLimit)
         (self.quietTime, self.launchSettings, self.takeProcessSlot, self.changed) = (quietTime, launchSettings, takeProcessSlot, changed)

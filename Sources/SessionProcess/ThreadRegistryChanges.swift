@@ -91,7 +91,7 @@ extension ThreadRegistry {
         if let runner = runners[identifier] { return runner }
         guard record.agent == .claudeCode else { throw ThreadRequestError.onlyForClaudeCode }
         let runner = ThreadRunner(
-            record: record, quietTime: quietTime, launchSettings: launchSettings,
+            record: record, quietTime: quietTime, launchSettings: launchSettings, admission: admission,
             takeProcessSlot: { [weak self] in await self?.takeProcessSlot(for: $0) ?? .granted },
             changed: { [weak self] in await self?.runnerChanged($0) })
         runners[identifier] = runner
