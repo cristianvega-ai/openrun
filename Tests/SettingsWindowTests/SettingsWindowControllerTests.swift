@@ -37,21 +37,25 @@ import Testing
         #expect(window?.styleMask.contains(.fullSizeContentView) == true && window?.contentMinSize.width == window?.contentMaxSize.width && window?.title == "Settings")
     }
 
-    @Test func aPaneShowsTheHeadingOfEachSectionOverItsSettings() throws {
+    @Test func aPaneShowsEachSectionAsACardUnderItsHeading() throws {
         let pane = SettingsPane(title: "Test", symbolName: "gearshape", sections: [
-            SettingsSection(title: "Notifications", rows: [SettingRow(name: "notifications", label: "") { FlagSettingControl() }]),
+            SettingsSection(rows: [SettingRow(name: "notifications", label: "Notifications", note: "macOS tells you.") { FlagSettingControl() }]),
             SettingsSection(title: "Links", note: "Where a link opens.", rows: [
                 SettingRow(name: "open-links-in", label: "Open links") { ChoiceSettingControl([("a", "A")]) },
+                SettingRow(name: "commands", label: "Commands") { EntryListSettingControl() },
             ]),
         ])
         let controller = SettingsPaneController(pane)
         controller.loadViewIfNeeded()
-        let grid = try #require(controller.view.subviews.first as? NSGridView)
-        let texts = grid.subviews.compactMap { ($0 as? NSTextField)?.stringValue }
-        #expect(texts == ["Notifications", "", "Links", "Where a link opens.", "Open links:"])
-        #expect(pane.rows.map(\.name) == ["notifications", "open-links-in"] && controller.controls.count == 2)
-        // The second heading stands apart from the section over it, and each heading goes over both columns.
-        #expect(grid.row(at: 2).topPadding > grid.row(at: 0).topPadding && grid.cell(atColumnIndex: 1, rowIndex: 2).contentView === grid.cell(atColumnIndex: 0, rowIndex: 2).contentView)
+        let stack = try #require(controller.view as? NSStackView)
+        let texts = stack.arrangedSubviews.map { ($0 as? NSTextField)?.stringValue ?? "card" }
+        #expect(texts == ["card", "Links", "Where a link opens.", "card"])
+        #expect(pane.rows.map(\.name) == ["notifications", "open-links-in", "commands"] && controller.controls.count == 3)
+        // A row has the name and the note of its setting at the left of its control.
+        let cards = stack.arrangedSubviews.compactMap { $0 as? SettingsCardView }
+        let first = try #require(cards[0].rows.rows.first as? SettingRowView)
+        #expect(first.label?.stringValue == "Notifications" && first.note?.stringValue == "macOS tells you." && first.arrangedSubviews.last is NSSwitch)
+        #expect(cards[1].rows.rows.count == 2 && cards[1].rows.arrangedSubviews.count == 3)
     }
 
     @Test func theControlsShowTheTextsAndTellAChangeWithTheNameOfTheSetting() throws {

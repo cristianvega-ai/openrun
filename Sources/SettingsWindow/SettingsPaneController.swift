@@ -1,7 +1,9 @@
 import AppKit
+import PaneAppearance
 
-/// The view of one pane: a grid with the label of each setting at the
-/// left and its control at the right, under the heading of its section.
+/// The view of one pane: its sections one under the other. A section is
+/// a heading, a line that tells what the section does, and a card with
+/// one row for each setting.
 @MainActor final class SettingsPaneController: NSViewController {
     let pane: SettingsPane
     private(set) var controls: [String: any SettingControl] = [:]
@@ -18,58 +20,34 @@ import AppKit
     required init?(coder: NSCoder) { fatalError("init(coder:) is not used") }
 
     override func loadView() {
-        // Both columns are there from the start, because a heading goes over the two.
-        let grid = NSGridView(numberOfColumns: 2, rows: 0)
-        (grid.rowSpacing, grid.columnSpacing) = (10, 10)
-        for (index, section) in pane.sections.enumerated() {
-            if let title = section.title { addHeading(title, note: section.note, to: grid, isFirst: index == 0) }
-            for row in section.rows { add(row, to: grid) }
+        let stack = NSStackView()
+        (stack.orientation, stack.alignment, stack.spacing) = (.vertical, .leading, 4)
+        for section in pane.sections { add(section, to: stack) }
+        stack.widthAnchor.constraint(equalToConstant: SettingsCardView.width).isActive = true
+        view = stack
+    }
+
+    private func add(_ section: SettingsSection, to stack: NSStackView) {
+        var views: [NSView] = []
+        if let title = section.title {
+            let label = NSTextField(labelWithString: title)
+            (label.font, label.textColor) = (.systemFont(ofSize: NSFont.systemFontSize, weight: .semibold), PaneColor.text)
+            views.append(label)
         }
-        grid.column(at: 0).xPlacement = .trailing
-        grid.translatesAutoresizingMaskIntoConstraints = false
-        let root = NSView()
-        root.addSubview(grid)
-        NSLayoutConstraint.activate([
-            // The grid keeps its own height at the top, so a window that is higher than the pane stretches no row.
-            grid.topAnchor.constraint(equalTo: root.topAnchor, constant: 24), grid.bottomAnchor.constraint(lessThanOrEqualTo: root.bottomAnchor, constant: -24),
-            grid.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 32), grid.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -32),
-            root.widthAnchor.constraint(greaterThanOrEqualToConstant: 560),
-        ])
-        view = root
+        if let note = section.note { views.append(SettingRowView.noteLabel(note, width: SettingsCardView.width - 20)) }
+        let card = SettingsCardView(rows: section.rows.map(makeView))
+        for view in views + [card] { stack.addArrangedSubview(view) }
+        card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
+        if let last = views.last { stack.setCustomSpacing(10, after: last) }
+        // A section stands apart from the one under it.
+        stack.setCustomSpacing(26, after: card)
     }
 
-    /// The heading of a section over both columns, with the line that
-    /// tells what the section does. A section stands apart from the one
-    /// over it.
-    private func addHeading(_ title: String, note: String?, to grid: NSGridView, isFirst: Bool) {
-        let label = NSTextField(labelWithString: title)
-        label.font = .systemFont(ofSize: NSFont.systemFontSize, weight: .semibold)
-        var lines: [(view: NSTextField, topPadding: CGFloat)] = [(label, isFirst ? 0 : 18)]
-        if let note { lines.append((Self.noteLabel(note, width: 500), -6)) }
-        for line in lines {
-            let row = grid.addRow(with: [line.view])
-            row.mergeCells(in: NSRange(location: 0, length: 2))
-            (row.cell(at: 0).xPlacement, row.topPadding) = (.leading, line.topPadding)
-        }
-    }
-
-    static func noteLabel(_ note: String, width: CGFloat) -> NSTextField {
-        let text = NSTextField(wrappingLabelWithString: note)
-        (text.font, text.textColor, text.preferredMaxLayoutWidth) = (.systemFont(ofSize: NSFont.smallSystemFontSize), .secondaryLabelColor, width)
-        return text
-    }
-
-    private func add(_ row: SettingRow, to grid: NSGridView) {
+    private func makeView(of row: SettingRow) -> NSView {
         let control = row.makeControl()
         controls[row.name] = control
         control.changed = { [weak self] text in self?.changed?(row.name, text) }
-        let label = NSTextField(labelWithString: row.label.isEmpty ? "" : row.label + ":")
-        let gridRow = grid.addRow(with: [label, control.view])
-        // A tall control, such as a table, has its label at its top.
-        gridRow.rowAlignment = control.view is NSStackView && control.view.fittingSize.height > 40 ? .none : .firstBaseline
-        gridRow.yPlacement = .top
-        guard let note = row.note else { return }
-        grid.addRow(with: [NSGridCell.emptyContentView, Self.noteLabel(note, width: 400)]).topPadding = -4
+        return SettingRowView(label: row.label, note: row.note, control: control.view)
     }
 
     /// Gives each control the text of its setting.
