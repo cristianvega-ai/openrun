@@ -167,7 +167,7 @@ let package = Package(
         // Install Command-Line Tool: the link to the `openrun` program of the app bundle.
         .target(name: "ToolInstallation"),
         .testTarget(name: "ToolInstallationTests", dependencies: ["ToolInstallation"]),
-        // The settings window: one pane for each group of settings, and a control for each setting.
+        // The settings window: the list of its panes, the cards of each pane, and a control for each setting.
         .target(name: "SettingsWindow", dependencies: ["Settings", "PaneAppearance"]),
         .testTarget(name: "SettingsWindowTests", dependencies: ["SettingsWindow", "Settings"]),
         // The notifications of macOS for sessions that need the user, behind a type that tests replace.

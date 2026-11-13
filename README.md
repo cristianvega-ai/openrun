@@ -45,7 +45,7 @@ The programs are in `.build/debug/`: `openrun-session`, `openrun`, and `openrun-
 
    OpenRun > Install Command-Line Tool puts the command `openrun` into `/usr/local/bin`, so it works in every terminal. A session of OpenRun finds the command with no install.
 
-   OpenRun > Settings (Command-Comma) opens the settings window: the font and its size, the Option key, the scrollback, the commands of the new-session button, and the model, the permission mode and the limit of the agents. In a terminal, Edit > Find (Command-F) finds text in the screen and the scrollback, and Session > Clear (Command-K) clears the scrollback. Session > Split with Browser (Option-Command-B) opens a web page beside the session, such as the page of a local server, and the settings can send each web link there.
+   OpenRun > Settings (Command-Comma) opens the settings window. The list at its left chooses a pane, and the search field over the list finds a setting by its words. The settings are the font and its size, the Option key, the scrollback, the commands of the new-session button, and the model, the permission mode and the limit of the agents. In a terminal, Edit > Find (Command-F) finds text in the screen and the scrollback, and Session > Clear (Command-K) clears the scrollback. Session > Split with Browser (Option-Command-B) opens a web page beside the session, such as the page of a local server, and the settings can send each web link there.
 
 For an isolated development run, use a nondefault socket and a scratch bundle. Start the session process yourself; the app does not register or wake the launch agent for this socket.
 
