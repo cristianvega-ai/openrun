@@ -688,7 +688,10 @@ public final class TerminalView: NSView {
     }
 
     private func applySize(_ grid: TerminalSize, tellsDelegate: Bool, keeping: PromptKeeping = .nothing) {
-        guard grid != terminal.size else { return }
+        guard grid != terminal.size else {
+            delegate?.terminalView(self, didApplyGridSize: grid)
+            return
+        }
         do {
             try terminal.resize(to: grid, keeping: keeping)
         } catch {
