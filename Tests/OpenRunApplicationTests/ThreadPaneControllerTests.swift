@@ -4,6 +4,7 @@ import ChatView
 import SessionConnection
 import SessionProcessHarness
 import SessionProtocol
+import Synchronization
 import Testing
 @testable import OpenRunApplication
 
@@ -68,6 +69,21 @@ import Testing
         #expect(pane.historyCursor == nil && pane.historyToken == nil)
         pane.tookHistory(.success((events: [], before: 99, cursor: "stale")), generation: oldGeneration)
         #expect(pane.historyCursor == nil && pane.historyToken == nil)
+    }
+
+
+    @Test func messageDoesNotWaitForOtherPaneWork() async throws {
+        let process = try FakeAgentProcess.start()
+        defer { process.stop() }
+        let pane = try await attach(to: process)
+        defer { pane.close() }
+        let gate = DispatchSemaphore(value: 0)
+        let entered = Mutex(false)
+        pane.work.async { entered.withLock { $0 = true }; gate.wait() }
+        defer { gate.signal() }
+        #expect(await waitUntil { entered.withLock { $0 } })
+        pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
+        #expect(await waitUntil { pane.transcript.state == .finishedTurn })
     }
 
 

@@ -65,6 +65,20 @@ extension ChatViewController {
         composer.draft = ComposerDrafts.shared.draft(for: facts.threadIdentifier)
     }
 
+    /// A message that did not reach the thread goes back into the draft,
+    /// before the text that the user wrote since.
+    public static func restoreFailedMessage(_ message: ChatOutgoingMessage, ofThread identifier: String) {
+        var draft = ComposerDrafts.shared.draft(for: identifier)
+        draft.text = message.text + (draft.text.isEmpty ? "" : "\n\n" + draft.text)
+        draft.images = message.images + draft.images
+        draft.isSubmitted = true
+        ComposerDrafts.shared.save(draft, for: identifier)
+    }
+
+    public func showSavedDraft() {
+        composer.draft = ComposerDrafts.shared.draft(for: facts.threadIdentifier)
+    }
+
     /// The room that a waiting request needs: its heading, four lines of
     /// its text and its buttons.
     static let minimumTranscriptHeight: CGFloat = 340

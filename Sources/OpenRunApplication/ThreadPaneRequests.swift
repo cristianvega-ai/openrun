@@ -6,23 +6,28 @@ import SessionProtocol
 /// The requests of the chat on their way to the session process. The chat
 /// changes nothing itself: a new event of the thread shows each result.
 extension ThreadPaneController: ChatViewControllerDelegate {
-    /// Runs a call that waits for the socket, in order, off the main thread.
-    private func send(_ call: @escaping @Sendable (ThreadAttachment) throws -> Void) {
-        guard let attachment else { return failed?("The thread is not connected yet. Try again in a moment.") ?? () }
+    func chatViewController(_ controller: ChatViewController, send message: ChatOutgoingMessage) {
+        let (socket, thread) = (socket, thread)
+        let images = message.images.map { ThreadImage(mediaType: $0.mediaType, data: $0.data) }
         messageWork.async { [weak self] in
-            do { try call(attachment) } catch {
-                DispatchQueue.main.async { MainActor.assumeIsolated { self?.failed?("The request did not reach the thread. \(error)") } }
+            do { _ = try SessionClient(location: socket).sendThreadMessage(thread, text: message.text, images: images) }
+            catch {
+                DispatchQueue.main.async { MainActor.assumeIsolated {
+                    ChatViewController.restoreFailedMessage(message, ofThread: thread.uuidString.lowercased())
+                    self?.chat.showSavedDraft()
+                    self?.failed?("The message did not reach the thread. \(error)")
+                } }
             }
         }
     }
 
-    func chatViewController(_ controller: ChatViewController, send message: ChatOutgoingMessage) {
-        let images = message.images.map { ThreadImage(mediaType: $0.mediaType, data: $0.data) }
-        send { try $0.send(message: message.text, images: images) }
-    }
-
     func chatViewControllerStop(_ controller: ChatViewController) {
-        send { try $0.stop() }
+        let (socket, thread) = (socket, thread)
+        messageWork.async { [weak self] in
+            do { try SessionClient(location: socket).stopThread(thread) } catch {
+                DispatchQueue.main.async { MainActor.assumeIsolated { self?.failed?("The stop did not reach the thread. \(error)") } }
+            }
+        }
     }
 
     func chatViewController(_ controller: ChatViewController, answerPermissionRequest identifier: String, with answer: ChatPermissionAnswer) {
