@@ -15,7 +15,7 @@ The owner makes each decision. The assistant asks the questions and records the 
 |---|---|---|
 | 1 | What OpenRun is: vision, users, rules, scope, and license | Done |
 | 2 | Shape: the libghostty layer, the core, the clients, and the session process | Done |
-| 3 | Agents: how OpenRun runs, watches, and coordinates agents | Done for version 1. Questions 7 to 9 wait for version 2. |
+| 3 | Agents: how OpenRun runs, watches, and coordinates agents | Done. Questions 7 to 9 have their answers. |
 | 4 | Data: projects, memory, history, settings, and what leaves the Mac | Done for version 1. Memory and the library wait for version 2. |
 
 ## Vision
@@ -25,7 +25,7 @@ Version 1 is the terminal itself: built on libghostty, with a polished interface
 Version 2 brings the feature set of Claude Code Projects to the user's own terminal, with the agents and accounts the user chooses.
 In Claude Code Projects, a coordinator splits a goal into threads that run in parallel, and then assembles the results.
 OpenRun looks like a polished Mac app.
-How OpenRun coordinates the threads remains open. OpenRun can include its own orchestrator.
+An agent that the user chooses coordinates the threads through the `openrun` tool.
 
 ## Users
 
@@ -75,7 +75,7 @@ The suite goals also apply until a phase changes them:
 | Usage left on each account, with reset times | 1 | Accepted |
 | Three-pane window, as in Bear | 1 | Accepted. The panes hold projects, the sessions in a project, and one session. |
 | Themes that color the whole window as one, as in Bear | 1 | Accepted. Graphite is the only theme (2026-11-13). |
-| Claude Code Projects features: coordinator, threads, shared memory, library, and routines | 2 | Moved to version 2. Questions 7 to 9 remain open. |
+| Claude Code Projects features: coordinator, threads, shared memory, library, and routines | 2 | Moved to version 2. An agent that the user chooses coordinates the threads (2026-11-13). |
 | iOS companion | Later | Accepted for a later version |
 
 ## Decision log
@@ -300,6 +300,10 @@ Each row holds the date, the decision, and the reason.
 | 2026-11-13 | The menu of the new-session button has an item that opens the settings window at the Accounts pane. | The user adds an account where the user chooses one. |
 | 2026-11-13 | The setting of the Option key is a control with three segments: Left, Both and Neither. | The user sees all three choices at once. |
 | 2026-11-13 | Command-click on a plain web address in a terminal opens it, as it opens an OSC 8 link. This replaces "plain URL detection comes later" of 2026-10-26. | Many programs print addresses without OSC 8. |
+| 2026-11-13 | In version 2, an agent that the user chooses coordinates the threads through the `openrun` tool. This answers question 7 with option 1. | The owner leaned to this option from the start. |
+| 2026-11-13 | Version 2 builds the features of Claude Code Projects in this order: parallel threads, the coordinator, shared memory, the library, routines, and then work that goes on after the user leaves. This answers question 9. | The owner's choice. |
+| 2026-11-13 | The Linux app uses GTK 4 with libadwaita and shares the Swift core with the Mac app. It draws the terminal with OpenGL in a GTK GL area. Its session process runs as a systemd user service. It reads light or dark from the settings portal of the desktop to answer OSC 10 and OSC 11. | These answer the questions of the Linux app. |
+| 2026-11-13 | The Linux app supports Ubuntu 24.04 LTS and later. It ships as a Flatpak and as a deb package, with no Snap. It has no sync of its own: its data is in a folder that the user can sync with any tool. It keeps a key in the Secret Service when it needs one. | These answer the questions of the Linux app. |
 
 ## Proposed decisions of 2026-11-10
 
@@ -512,37 +516,7 @@ Sources: [Claude Code legal and compliance](https://code.claude.com/docs/en/lega
 
 ### Version 2
 
-**Question 7: Who coordinates the threads?**
-
-1. An agent that the user chooses. It uses OpenRun's command-line tool to start threads and send them work.
-2. OpenRun's own orchestrator, with a model that the user chooses.
-3. The user. OpenRun shows every thread and its status in one place.
-
-The owner leans to option 1: the coordinator is the main agent session, such as `claude`, with instructions for the role.
-
-**Question 8: What does a thread look like?**
-
-1. A terminal pane that shows the agent's own screen, as in cmux.
-2. A chat view that OpenRun draws from the agent's structured output. The terminal stays one action away.
-3. Both: the chat view by default, and the terminal on request.
-
-The answer also decides whether OpenRun uses the Agent Client Protocol.
-
-**Question 9: Which Claude Code Projects features does version 2 need first?**
-The candidates are the coordinator, parallel threads, shared memory, the library, routines, and work that continues after the user leaves.
-
-### Linux app
-
-These wait until the Linux app starts:
-
-- The toolkit and the language of the Linux app, such as GTK 4 with Swift, or GTK 4 with another language.
-- How the Linux app draws the terminal, such as OpenGL or Vulkan with FreeType and HarfBuzz.
-- How the session process starts on Linux, such as a systemd user service in place of launchd.
-- Where the key for the screen snapshots lives on Linux, such as the Secret Service in place of the Keychain.
-- Sync on Linux, where there is no iCloud.
-- Updates and packages, such as deb, Flatpak, or Snap, in place of Sparkle.
-- Which Ubuntu versions OpenRun supports.
-- How the session process answers the OSC 10 and OSC 11 color queries on Linux, where it cannot read the macOS appearance.
+Question 8 has its answer in proposals 1 and 10. Questions 7 and 9 have their answers in the decision log of 2026-11-13.
 
 ### Later versions
 
