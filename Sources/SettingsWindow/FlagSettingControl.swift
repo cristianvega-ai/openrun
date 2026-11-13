@@ -1,22 +1,21 @@
 import AppKit
 
-/// A checkbox for a setting that is on or off.
+/// A switch for a setting that is on or off.
 @MainActor final class FlagSettingControl: NSObject, SettingControl {
-    let checkbox: NSButton
+    let toggle = NSSwitch()
     var changed: ((String) -> Void)?
-    var view: NSView { checkbox }
+    var view: NSView { toggle }
 
-    init(title: String) {
-        checkbox = NSButton(checkboxWithTitle: title, target: nil, action: nil)
+    override init() {
         super.init()
-        (checkbox.target, checkbox.action) = (self, #selector(toggle))
+        (toggle.target, toggle.action) = (self, #selector(toggled))
     }
 
     func show(_ text: String) {
-        checkbox.state = text == "on" ? .on : .off
+        toggle.state = text == "on" ? .on : .off
     }
 
-    @objc func toggle() {
-        changed?(checkbox.state == .on ? "on" : "off")
+    @objc func toggled() {
+        changed?(toggle.state == .on ? "on" : "off")
     }
 }

@@ -39,7 +39,7 @@ import Testing
 
     @Test func aPaneShowsTheHeadingOfEachSectionOverItsSettings() throws {
         let pane = SettingsPane(title: "Test", symbolName: "gearshape", sections: [
-            SettingsSection(title: "Notifications", rows: [SettingRow(name: "notifications", label: "") { FlagSettingControl(title: "Notify me") }]),
+            SettingsSection(title: "Notifications", rows: [SettingRow(name: "notifications", label: "") { FlagSettingControl() }]),
             SettingsSection(title: "Links", note: "Where a link opens.", rows: [
                 SettingRow(name: "open-links-in", label: "Open links") { ChoiceSettingControl([("a", "A")]) },
             ]),

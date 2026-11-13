@@ -26,13 +26,13 @@ import Testing
         #expect(control.popup.titleOfSelectedItem == "later" && control.popup.numberOfItems == 3 && told() == ["left"])
     }
 
-    @Test func aFlagIsOnOrOff() {
-        let control = FlagSettingControl(title: "Ask")
+    @Test func aFlagIsASwitchThatIsOnOrOff() {
+        let control = FlagSettingControl()
         let told = changes(of: control)
         control.show("on")
-        #expect(control.checkbox.state == .on)
-        control.checkbox.state = .off
-        control.toggle()
+        #expect(control.toggle.state == .on)
+        control.toggle.state = .off
+        control.toggled()
         #expect(told() == ["off"])
     }
 

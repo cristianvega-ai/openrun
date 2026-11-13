@@ -31,8 +31,8 @@ struct SettingsPane {
     @MainActor private static var general: SettingsPane {
         SettingsPane(title: "General", symbolName: "gearshape", sections: [
             SettingsSection(title: "Notifications", rows: [
-                SettingRow(name: SettingName.showsNotifications.rawValue, label: "") {
-                    FlagSettingControl(title: "Notify me when a thread or a terminal needs me")
+                SettingRow(name: SettingName.showsNotifications.rawValue, label: "Notifications", note: "macOS tells you when a thread or a terminal needs you.") {
+                    FlagSettingControl()
                 },
             ]),
             SettingsSection(title: "Links", note: "A web link that you Command-click in a terminal, or click in a chat.", rows: [
@@ -66,8 +66,8 @@ struct SettingsPane {
                 SettingRow(name: SettingName.scrollbackLimit.rawValue, label: "Keep") { NumberSettingControl(0...1_000_000, unit: "lines") },
             ]),
             SettingsSection(title: "Paste", rows: [
-                SettingRow(name: SettingName.asksBeforeUnsafePaste.rawValue, label: "") {
-                    FlagSettingControl(title: "Ask before a paste that could run a command")
+                SettingRow(name: SettingName.asksBeforeUnsafePaste.rawValue, label: "Ask before an unsafe paste", note: "OpenRun asks before a paste that could run a command.") {
+                    FlagSettingControl()
                 },
             ]),
             SettingsSection(
