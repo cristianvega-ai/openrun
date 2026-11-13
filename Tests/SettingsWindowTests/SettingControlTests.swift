@@ -24,6 +24,9 @@ import Testing
         // A value of a later build stays in the menu, so the window shows no wrong value.
         control.show("later")
         #expect(control.popup.titleOfSelectedItem == "later" && control.popup.numberOfItems == 3 && told() == ["left"])
+        // A long name, such as one of a font, leaves the room of the words of its row.
+        control.show(String(repeating: "A Font With a Long Name ", count: 4))
+        #expect(control.popup.fittingSize.width <= 240 && TextSettingControl().field.fittingSize.width == 220)
     }
 
     @Test func aFlagIsASwitchThatIsOnOrOff() {

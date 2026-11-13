@@ -12,6 +12,8 @@ import AppKit
         super.init()
         popup.addItems(withTitles: choices.map(\.title))
         (popup.target, popup.action) = (self, #selector(choose))
+        // A long name, such as one of a font, leaves the room of the words of its row.
+        popup.widthAnchor.constraint(lessThanOrEqualToConstant: 240).isActive = true
     }
 
     func show(_ text: String) {

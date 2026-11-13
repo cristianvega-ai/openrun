@@ -18,7 +18,7 @@ import AppKit
         }
         super.init()
         field.placeholderString = placeholder
-        field.widthAnchor.constraint(equalToConstant: 260).isActive = true
+        field.widthAnchor.constraint(equalToConstant: 220).isActive = true
         (field.target, field.action) = (self, #selector(typed))
     }
 
