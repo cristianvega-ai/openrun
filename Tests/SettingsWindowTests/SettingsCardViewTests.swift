@@ -18,4 +18,11 @@ import Testing
         view.show([rows[1]])
         #expect(view.arrangedSubviews == [rows[1]] && rows[0].superview == nil)
     }
+
+    @Test func aCardHoldsItsRowsOnARoundedSheet() {
+        let card = SettingsCardView(rows: [NSView(), NSView()])
+        card.frame = NSRect(x: 0, y: 0, width: SettingsCardView.width, height: 90)
+        card.layoutSubtreeIfNeeded()
+        #expect(card.rows.rows.count == 2 && card.rows.frame == card.bounds && card.subviews == [card.rows])
+    }
 }
