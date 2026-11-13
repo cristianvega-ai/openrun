@@ -65,12 +65,15 @@ extension CodexThreadRunner {
             : try await servers.startThread(account: account, start)
         // Codex gives the identifier of its thread, which a resume needs.
         (thread, record.conversationIdentifier, record.hasConversation) = (opened, opened.identifier, true)
-        Task { await self.read(opened) }
+        let generation = UUID()
+        readerGeneration = generation
+        Task { await self.read(opened, generation: generation) }
         return opened
     }
 
-    private func read(_ opened: CodexThread) async {
+    private func read(_ opened: CodexThread, generation: UUID) async {
         for await event in opened.events {
+            guard generation == readerGeneration else { return }
             emit(event)
             if case .turnEnded = event.kind {
                 (isTurnRunning, record.lastActivityAt) = (false, Date())
@@ -80,6 +83,8 @@ extension CodexThreadRunner {
             }
         }
         // The app-server ended, or the thread closed. A turn that ran ends with it.
+        // The old reader must not change a later owner of the same conversation.
+        guard generation == readerGeneration else { return }
         if thread?.identifier == opened.identifier { thread = nil }
         if isTurnRunning {
             isTurnRunning = false

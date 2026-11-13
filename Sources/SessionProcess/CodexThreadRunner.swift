@@ -17,6 +17,9 @@ actor CodexThreadRunner {
     var buffer = ThreadEventBuffer()
     var listeners: [ObjectIdentifier: ThreadRunner.Listener] = [:]
     var thread: CodexThread?
+    /// The reader of the events of the thread that is open now. An older
+    /// reader, of a thread that left for a terminal, changes nothing.
+    var readerGeneration = UUID()
     /// The open of the thread that runs now.
     var opening: Task<CodexThread, any Error>?
     var waitingMessages: [CodexTurn] = []

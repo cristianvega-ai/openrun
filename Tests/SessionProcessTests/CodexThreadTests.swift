@@ -29,6 +29,25 @@ import Testing
     /// The recorded thread of the fixtures works in this folder.
     private let record = ThreadRecord(agent: .codex, folder: "/work/project", model: CodexThreadRunner.configuredModel, permissionMode: "workspaceWrite")
 
+    @Test func oldReaderCannotClearAReopenedConversation() async throws {
+        let mark = NSTemporaryDirectory() + "fake-codex-" + UUID().uuidString
+        defer { try? FileManager.default.removeItem(atPath: mark) }
+        let gate = ReaderChangeGate()
+        let provider = servers(["handshake", "thread-start", "unsubscribe"], restart: (["handshake", "resume", "history"], mark))
+        let runner = CodexThreadRunner(record: record, servers: provider, changed: { _ in await gate.waitOnce() })
+        _ = try await runner.openThread()
+        #expect(await eventually { await gate.entered })
+        await runner.leaveForTerminal()
+        await runner.returnedFromTerminal()
+        let generation = await runner.readerGeneration
+        #expect(await runner.thread != nil)
+        await gate.release()
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(await runner.readerGeneration == generation)
+        #expect(await runner.thread != nil)
+        await runner.close()
+    }
+
     @Test func aMessageStartsAThreadOfCodexAndRunsATurn() async throws {
         let runner = CodexThreadRunner(record: record, servers: servers(["handshake", "thread-start", "plain-turn"]))
         let client = ThreadDeliveries()
@@ -172,4 +191,15 @@ import Testing
         try await registry.close(thread.identifier)
         #expect(await registry.allSummaries.isEmpty)
     }
+}
+
+private actor ReaderChangeGate {
+    var entered = false
+    var continuation: CheckedContinuation<Void, Never>?
+    func waitOnce() async {
+        guard !entered else { return }
+        entered = true
+        await withCheckedContinuation { continuation = $0 }
+    }
+    func release() { continuation?.resume(); continuation = nil }
 }
