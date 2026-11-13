@@ -9,13 +9,19 @@ extension ThreadPaneController {
     /// Attaches to the thread. The events then come in batches.
     func attach() {
         let (socket, thread, connect, batches) = (socket, thread, connect, ThreadEventBatches())
+        eventBatches = batches
         work.async { [weak self] in
             let result = Result { try connect(socket, thread) }
             if case .success(let attachment) = result {
-                attachment.startReceiving { event in
-                    guard batches.add(event) else { return }
-                    DispatchQueue.main.async { MainActor.assumeIsolated { self?.take(batches.takeAll()) } }
-                }
+                attachment.startReceiving(measuring: { event, size in
+                    guard batches.add(event, size: size) else { return }
+                    DispatchQueue.main.async { MainActor.assumeIsolated {
+                        // A batch of a closed pane, or of an older attach, shows nothing.
+                        let events = batches.takeAll()
+                        guard let self, !self.isClosed, self.eventBatches === batches else { return }
+                        self.take(events)
+                    } }
+                })
             }
             DispatchQueue.main.async { MainActor.assumeIsolated { self?.attached(result) } }
         }

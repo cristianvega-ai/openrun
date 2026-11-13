@@ -18,7 +18,9 @@ final class ThreadPaneController: NSObject {
     /// Whether the events that the thread kept came, so the chat shows
     /// each later batch as an update.
     var isReplayComplete = false
-    private var isClosed = false
+    var isClosed = false
+    /// The stage of the events of the attach that runs now.
+    var eventBatches: ThreadEventBatches?
     /// The other accounts of the agent, for the box of a login that failed.
     private var otherAccounts: [ChatAccount]
     /// What asks for the next page of the earlier turns: a place in the
@@ -109,6 +111,8 @@ final class ThreadPaneController: NSObject {
     /// Detaches. The thread goes on in the session process.
     func close() {
         isClosed = true
+        // A reader that waits for room must not wait for a pane that is gone.
+        eventBatches?.close()
         attachment?.shutdown()
         attachment = nil
     }
