@@ -9,6 +9,10 @@ import PaneAppearance
     private(set) var controls: [String: any SettingControl] = [:]
     /// Tells the name of a setting and the new text of its value.
     var changed: ((String, String) -> Void)?
+    /// The title of the pane over its sections. Only the results of a
+    /// search show it, because they can hold rows of many panes.
+    let heading = NSTextField(labelWithString: "")
+    private var sections: [(views: [NSView], card: SettingsCardView, rows: [(words: String, view: NSView)])] = []
 
     init(_ pane: SettingsPane) {
         self.pane = pane
@@ -22,6 +26,9 @@ import PaneAppearance
     override func loadView() {
         let stack = NSStackView()
         (stack.orientation, stack.alignment, stack.spacing) = (.vertical, .leading, 4)
+        (heading.stringValue, heading.font, heading.textColor, heading.isHidden) = (pane.title, .systemFont(ofSize: 15, weight: .semibold), PaneColor.text, true)
+        stack.addArrangedSubview(heading)
+        stack.setCustomSpacing(12, after: heading)
         for section in pane.sections { add(section, to: stack) }
         stack.widthAnchor.constraint(equalToConstant: SettingsCardView.width).isActive = true
         view = stack
@@ -35,12 +42,16 @@ import PaneAppearance
             views.append(label)
         }
         if let note = section.note { views.append(SettingRowView.noteLabel(note, width: SettingsCardView.width - 20)) }
-        let card = SettingsCardView(rows: section.rows.map(makeView))
+        let rows = section.rows.map { row in
+            (words: [pane.title, section.title ?? "", row.label, row.note ?? ""].joined(separator: " ").lowercased(), view: makeView(of: row))
+        }
+        let card = SettingsCardView(rows: rows.map(\.view))
         for view in views + [card] { stack.addArrangedSubview(view) }
         card.widthAnchor.constraint(equalTo: stack.widthAnchor).isActive = true
         if let last = views.last { stack.setCustomSpacing(10, after: last) }
         // A section stands apart from the one under it.
         stack.setCustomSpacing(26, after: card)
+        sections.append((views, card, rows))
     }
 
     private func makeView(of row: SettingRow) -> NSView {
@@ -48,6 +59,23 @@ import PaneAppearance
         controls[row.name] = control
         control.changed = { [weak self] text in self?.changed?(row.name, text) }
         return control.isWide ? control.view : SettingRowView(label: row.label, note: row.note, control: control.view)
+    }
+
+    /// Shows only the rows whose words hold each word of a search, and
+    /// each row for no words. A section with no row hides also.
+    ///
+    /// - Returns: Whether a row shows.
+    func filter(_ words: [String]) -> Bool {
+        loadViewIfNeeded()
+        var showsRow = false
+        for section in sections {
+            for row in section.rows { row.view.isHidden = !words.allSatisfy(row.words.contains) }
+            let isEmpty = section.rows.allSatisfy(\.view.isHidden)
+            for view in section.views + [section.card] { view.isHidden = isEmpty }
+            section.card.rows.refreshLines()
+            showsRow = showsRow || !isEmpty
+        }
+        return showsRow
     }
 
     /// Gives each control the text of its setting.

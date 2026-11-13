@@ -51,13 +51,18 @@ import Testing
         controller.loadViewIfNeeded()
         let stack = try #require(controller.view as? NSStackView)
         let texts = stack.arrangedSubviews.map { ($0 as? NSTextField)?.stringValue ?? "card" }
-        #expect(texts == ["card", "Links", "Where a link opens.", "card"])
+        #expect(texts == ["Test", "card", "Links", "Where a link opens.", "card"] && controller.heading.isHidden)
         #expect(pane.rows.map(\.name) == ["notifications", "open-links-in", "commands"] && controller.controls.count == 3)
         // A row has the name and the note of its setting at the left of its control. A list fills its card.
         let cards = stack.arrangedSubviews.compactMap { $0 as? SettingsCardView }
         let first = try #require(cards[0].rows.rows.first as? SettingRowView)
         #expect(first.label?.stringValue == "Notifications" && first.note?.stringValue == "macOS tells you." && first.arrangedSubviews.last is NSSwitch)
         #expect(cards[1].rows.rows.count == 2 && cards[1].rows.rows[1] is SettingRowsView && cards[1].rows.arrangedSubviews.count == 3)
+        // A search hides the rows without its words, and the line between two rows that do not both show.
+        #expect(controller.filter(["commands"]) && cards[0].isHidden && cards[1].rows.rows[0].isHidden && cards[1].rows.arrangedSubviews[1].isHidden)
+        #expect(controller.filter(["links", "open"]) && !cards[1].rows.rows[0].isHidden && cards[1].rows.rows[1].isHidden)
+        #expect(!controller.filter(["nothing"]) && stack.arrangedSubviews.dropFirst().allSatisfy(\.isHidden))
+        #expect(controller.filter([]) && stack.arrangedSubviews.dropFirst().allSatisfy { !$0.isHidden } && !cards[1].rows.arrangedSubviews[1].isHidden)
     }
 
     @Test func theControlsShowTheTextsAndTellAChangeWithTheNameOfTheSetting() throws {
