@@ -72,6 +72,16 @@ import Testing
         #expect(await !left.answerPermission(fourth, allows: true, message: nil))
     }
 
+    @Test func closeDuringPublicationCancelsTheRegisteredRequest() async throws {
+        let record = FakeAgentSettings.record()
+        let runner = ThreadRunner(record: record, launchSettings: { FakeAgentSettings.make() }, changed: { runner in
+            if await !runner.waitingPermissions.isEmpty { await runner.close() }
+        })
+        let answer = await runner.askPermission(try Self.request(for: record), timeLimit: .seconds(2))
+        #expect(answer == .deny(message: "The request ended before the user answered it."))
+        #expect(await runner.waitingPermissions.isEmpty)
+    }
+
     @Test func aRequestOfAnotherConversationIsRefusedAtOnce() async throws {
         let record = FakeAgentSettings.record()
         let runner = ThreadRunner(record: record) { FakeAgentSettings.make() }

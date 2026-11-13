@@ -22,8 +22,6 @@ extension ThreadRunner {
         }
         let identifier = UUID().uuidString.lowercased()
         let call = toolCalls.claim(toolName: request.toolName, input: request.toolInput)
-        emit(.permissionRequested(request.permissionRequest(identifier: identifier, toolCallIdentifier: call)))
-        await changed(self)
         let end = await withTaskCancellationHandler {
             await withCheckedContinuation { continuation in
                 let limit = Task { [weak self] in
@@ -31,6 +29,13 @@ extension ThreadRunner {
                     await self?.endPermission(identifier, .timedOut)
                 }
                 waitingPermissions[identifier] = WaitingPermission(continuation: continuation, timeLimit: limit)
+                // The wait has its answer path before any client sees the request.
+                if Task.isCancelled || isClosed {
+                    endPermission(identifier, .cancelled)
+                } else {
+                    emit(.permissionRequested(request.permissionRequest(identifier: identifier, toolCallIdentifier: call)))
+                    Task { await self.changed(self) }
+                }
             }
         } onCancel: {
             // The hook left, so nobody takes the answer.
