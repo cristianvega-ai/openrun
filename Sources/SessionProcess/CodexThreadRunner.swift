@@ -26,6 +26,13 @@ actor CodexThreadRunner {
     /// before it closes its thread and gives it to no one.
     var openingGeneration = UUID()
     var openingTaskGeneration: UUID?
+    /// The start of the turn that waits for Codex now. A stop waits for it,
+    /// because only the answer of Codex names the turn to stop.
+    var startingTurn: Task<Task<Void, any Error>, any Error>?
+    var startingTurnIdentifier: UUID?
+    /// A second stop waits for the first one.
+    var isStoppingTurn = false
+    var stopWaiters: [CheckedContinuation<Void, Never>] = []
     var waitingMessages: [CodexTurn] = []
     /// Whether a turn runs, from its start to its end.
     var isTurnRunning = false

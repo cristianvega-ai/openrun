@@ -168,6 +168,48 @@ import Testing
         await runner.close()
     }
 
+    @Test func admissionReturnsBeforeStartupAndStopCancelsIt() async throws {
+        let gate = StartupGate()
+        let provider = servers(["handshake", "thread-start", "plain-turn"])
+        let runner = CodexThreadRunner(record: record, servers: {
+            await gate.wait()
+            return try await provider()
+        })
+        let sending = Task {
+            let identifier = try await runner.send(text: "Work")
+            await gate.markAdmitted()
+            return identifier
+        }
+        #expect(await eventually { await gate.entered })
+        let admittedBeforeRelease = await eventually { await gate.admitted }
+        await runner.stop()
+        await gate.release()
+        _ = try await sending.value
+        #expect(admittedBeforeRelease)
+        #expect(await runner.thread == nil)
+        await runner.close()
+    }
+
+
+    @Test func closeStopsAStalledTurnStart() async throws {
+        let fixtures = URL(fileURLWithPath: "../CodexAgentTests/Fixtures", relativeTo: URL(fileURLWithPath: #filePath)).standardizedFileURL
+        let script = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try "{\"client\":\"turn/start\"}\n{\"special\":\"hang\"}\n".write(to: script, atomically: true, encoding: .utf8)
+        defer { try? FileManager.default.removeItem(at: script) }
+        let paths = [fixtures.appending(path: "handshake.jsonl").path, fixtures.appending(path: "thread-start.jsonl").path, script.path]
+        let launch = CodexServerLaunch(executablePath: RunningSessionProcess.productsDirectory.appendingPathComponent("fake-codex").path,
+                                      environment: ["PATH": "/usr/bin:/bin", "FAKE_CODEX_SCRIPTS": paths.joined(separator: ":")], folder: NSTemporaryDirectory())
+        let pool = CodexAccountServers(launch: launch, options: CodexServerOptions(stopTimeLimit: .milliseconds(50)))
+        let runner = CodexThreadRunner(record: record, servers: { pool })
+        let send = Task { try await runner.send(text: "Go") }
+        #expect(await eventually { await runner.startingTurn != nil })
+        await runner.close()
+        _ = try? await send.value
+        #expect(await runner.isClosed)
+        #expect(await eventually { await pool.serverCount == 0 })
+    }
+
+
     @Test func aTurnOfCodexReachesTheListsAndItsAppServerCountsAsAnAgent() async throws {
         let folder = try RunningSessionProcess.makeDirectory()
         defer { try? FileManager.default.removeItem(at: folder) }

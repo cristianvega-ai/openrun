@@ -19,7 +19,8 @@ extension CodexThreadRunner {
         waitingMessages.append(CodexTurn(
             messageIdentifier: identifier.uuidString.lowercased(), text: text, images: images, model: model, sandbox: CodexSandbox(rawValue: record.permissionMode)))
         if record.title == nil { record.title = ThreadList.title(from: text) }
-        await sendNextMessage()
+        // The open of the thread can wait for an app-server, and the caller must not wait with it.
+        Task { await self.sendNextMessage() }
         return identifier
     }
 
@@ -27,7 +28,7 @@ extension CodexThreadRunner {
     func sendNextMessage() async {
         guard admission.acquire() else { return }
         defer { admission.release() }
-        guard !isTurnRunning, !isClosed, !isInTerminal, let turn = waitingMessages.first else { return await changed(self) }
+        guard !isTurnRunning, !isStoppingTurn, !isClosed, !isInTerminal, let turn = waitingMessages.first else { return await changed(self) }
         waitingMessages.removeFirst()
         isTurnRunning = true
         let (generation, owner) = (openingGeneration, UUID())
@@ -35,7 +36,13 @@ extension CodexThreadRunner {
         do {
             let opened = try await openThread()
             guard generation == openingGeneration, !isClosed else { endStaleTurn(turn, owner: owner); return await changed(self) }
-            try await opened.startTurn(turn)
+            let identifier = UUID()
+            let task = Task { try await opened.beginTurn(turn) }
+            (startingTurn, startingTurnIdentifier) = (task, identifier)
+            defer { if startingTurnIdentifier == identifier { (startingTurn, startingTurnIdentifier) = (nil, nil) } }
+            try await task.value.value
+            // A turn that Codex took ends with its own event, also after a stop.
+            guard generation == openingGeneration, !isClosed else { return }
         } catch {
             guard generation == openingGeneration, !isClosed else { endStaleTurn(turn, owner: owner); return await changed(self) }
             // The app-server could not start, or it refused the turn. The later messages would fail in the same way.
@@ -139,6 +146,8 @@ extension CodexThreadRunner {
 
     /// Stops the turn. The messages that waited do not go out.
     func stop() async {
+        if isStoppingTurn { return await withCheckedContinuation { stopWaiters.append($0) } }
+        isStoppingTurn = true
         // An open that runs now gives its thread to no one, and its turn does not start.
         openingGeneration = UUID()
         if opening != nil { isTurnRunning = false }
@@ -146,8 +155,16 @@ extension CodexThreadRunner {
             emit(ConversationEvent(.notice(Notice(level: .information, text: "The stop removed \(waitingMessages.count) messages that waited for the agent."))))
             waitingMessages = []
         }
+        // Only the answer to the start names the turn, so the stop waits for it.
+        if let startingTurn { _ = try? await startingTurn.value }
         if isTurnRunning { await thread?.stop() }
+        isStoppingTurn = false
+        let waiters = stopWaiters
+        stopWaiters = []
+        for waiter in waiters { waiter.resume() }
         await changed(self)
+        // A message that came during the stop waits for its end.
+        await sendNextMessage()
     }
 
     func answerPermission(_ request: String, allows: Bool, message: String?) async -> Bool {
@@ -156,11 +173,16 @@ extension CodexThreadRunner {
 
     func close() async {
         guard !isClosed else { return }
+        let mustStop = isTurnRunning || startingTurn != nil
+        let closingThread = thread
         (isClosed, waitingMessages) = (true, [])
         openingGeneration = UUID()
         isTurnRunning = false
         for listener in listeners.values { listener(.closed) }
         listeners = [:]
-        await thread?.close()
+        // A turn that starts now must not run on after the close.
+        if let startingTurn { _ = try? await startingTurn.value }
+        if mustStop { await closingThread?.stop() }
+        await closingThread?.close()
     }
 }

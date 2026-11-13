@@ -45,7 +45,7 @@ extension CodexThreadRunner {
         await leavingThread?.leave()
         readerGeneration = UUID()
         // The old reader can miss the end of the stopped turn, so the turn ends here.
-        (thread, isTurnRunning) = (nil, false)
+        (thread, isTurnRunning, turnOwner) = (nil, false, nil)
     }
 
     /// The terminal session ended. The turns that the user made there
