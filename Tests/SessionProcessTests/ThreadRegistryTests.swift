@@ -104,8 +104,58 @@ import Testing
         #expect(thread.projectIdentifier == nil)
         var projects = ProjectList()
         let project = try projects.add(folder: fixture.folder.path, name: nil, currentFolder: nil)
-        await registry.updateProjects(projects)
+        await registry.updateProjects(projects, version: 1)
         #expect(await registry.summary(thread.identifier)?.projectIdentifier == project.identifier)
         #expect(fixture.changed.last?.projectIdentifier == project.identifier)
     }
+
+    @Test func olderSettingsCannotApplyAfterANewerUpdate() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let gate = SettingsLaunchGate()
+        let registry = ThreadRegistry(store: fixture.store, processLimit: 1, defaultPermissionMode: "auto") {
+            await gate.settings()
+        }
+        let first = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: "auto", name: nil).identifier
+        let second = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: "auto", name: nil).identifier
+        try await registry.runner(for: first).send(text: "First")
+        #expect(await eventually { await registry.summary(first)?.isProcessRunning == true })
+        try await registry.runner(for: second).send(text: "Second")
+        #expect(await eventually { await registry.slots.waiting.contains(second) })
+        let older = Task { await registry.updateSettings(model: "opus", permissionMode: "plan", processLimit: 2, version: 1) }
+        #expect(await eventually { await gate.entered })
+        await registry.updateSettings(model: "opus", permissionMode: "auto", processLimit: 2, version: 2)
+        await gate.release()
+        await older.value
+        #expect(try await registry.record(first).permissionMode == "auto")
+        #expect(try await registry.record(second).permissionMode == "auto")
+        await registry.terminateAll()
+    }
+
+    @Test func olderProjectChangesCannotReplaceNewerChanges() async throws {
+        let fixture = try Fixture()
+        defer { fixture.remove() }
+        let registry = fixture.registry
+        let thread = try await registry.create(agent: "claude-code", folder: fixture.folder.path, model: nil, permissionMode: nil, name: nil).identifier
+        var projects = ProjectList()
+        let project = try projects.add(folder: fixture.folder.path, name: nil, currentFolder: nil)
+        await registry.updateProjects(projects, version: 2)
+        await registry.updateProjects(ProjectList(), version: 1)
+        #expect(await registry.summary(thread)?.projectIdentifier == project.identifier)
+    }
+}
+
+private actor SettingsLaunchGate {
+    var count = 0
+    var entered = false
+    var continuation: CheckedContinuation<Void, Never>?
+    func settings() async -> AgentLaunchSettings {
+        count += 1
+        if count == 2 {
+            entered = true
+            await withCheckedContinuation { continuation = $0 }
+        }
+        return FakeAgentSettings.make(mode: "neverEnds")
+    }
+    func release() { continuation?.resume(); continuation = nil }
 }

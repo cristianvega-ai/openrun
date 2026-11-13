@@ -28,6 +28,7 @@ actor AgentLaunchProvider {
     private var environment: [String: String]?
     /// The program of Claude Code: a name to find in the `PATH` of the
     /// environment of the agent, or a path.
+    private var programVersion = 0
     private var program: String
 
     /// - Parameter program: The value of the setting `claude-code-program`.
@@ -38,7 +39,9 @@ actor AgentLaunchProvider {
 
     /// Takes a new value of the setting. The next start of an agent uses
     /// it, unless the command line named a program.
-    func setProgram(_ program: String) {
+    func setProgram(_ program: String, version: Int) {
+        guard version > programVersion else { return }
+        programVersion = version
         self.program = options.program ?? program
     }
 

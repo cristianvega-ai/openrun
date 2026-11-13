@@ -508,7 +508,7 @@ actor SessionServer {
         do {
             let (answer, list, version) = try await change()
             await registry.updateProjects(list, version: version)
-            await threads.updateProjects(list)
+            await threads.updateProjects(list, version: version)
             return answer
         } catch {
             return Self.refusal("\(error)")
@@ -532,7 +532,7 @@ actor SessionServer {
             await threads.updateSettings(
                 model: values.claudeCodeModel, permissionMode: values.claudeCodePermissionMode, processLimit: values.agentProcessLimit,
                 accountChoices: ThreadAccountChoices(values), version: version)
-            await agents.setProgram(values.claudeCodeProgram)
+            await agents.setProgram(values.claudeCodeProgram, version: version)
             return .acknowledged
         } catch {
             return Self.refusal("\(error)")

@@ -198,7 +198,9 @@ extension ThreadRegistry {
 
     /// Takes a newer list of the projects, and gives each thread the
     /// project that its folder belongs to now.
-    func updateProjects(_ newer: ProjectList) {
+    func updateProjects(_ newer: ProjectList, version: Int) {
+        guard version > projectsVersion else { return }
+        projectsVersion = version
         projects = newer
         for record in list.threads { publishIfProjectChanged(record) }
     }

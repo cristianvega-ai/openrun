@@ -27,6 +27,7 @@ actor ThreadRegistry {
     /// The newest summary of each thread, as the lists of the clients show it.
     var summaries: [UUID: ThreadSummary] = [:]
     var projects: ProjectList
+    var projectsVersion = 0
     /// The process of the agent of each thread whose agent runs.
     var agentProcesses: [pid_t: UUID] = [:]
     /// The threads that are open in a terminal (proposal 6): the terminal
@@ -75,9 +76,14 @@ actor ThreadRegistry {
         (defaultModel, defaultPermissionMode, settingsVersion) = (model, permissionMode, version)
         // A thread keeps its account, because a resume runs under the same account. It shows the name that the account has now.
         self.accountChoices = accountChoices ?? self.accountChoices
-        for thread in slots.setLimit(processLimit) { await start(thread) }
+        for thread in slots.setLimit(processLimit) {
+            guard settingsVersion == version else { return }
+            await start(thread)
+        }
         // The setting is the widest mode of every thread, so a thread with a wider one comes down to it.
-        for record in list.threads {
+        for identifier in list.threads.map(\.identifier) {
+            guard settingsVersion == version else { return }
+            guard let record = list.thread(identifier) else { continue }
             if record.agent != .claudeCode || Self.offeredModes(upTo: permissionMode).contains(record.permissionMode) {
                 publish(record.identifier)
             } else {
