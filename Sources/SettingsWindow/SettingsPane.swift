@@ -19,10 +19,13 @@ struct SettingsPane {
         self.init(title: title, symbolName: symbolName, sections: [SettingsSection(rows: rows)])
     }
 
+    /// The panes in the groups of the list at the left of the window:
+    /// the app, the agents, and the rest.
+    ///
     /// - Parameter permissionModeTitle: The words of the app for a
     ///   permission mode of Claude Code, as the chat shows them.
-    @MainActor static func all(permissionModeTitle: @escaping (String) -> String) -> [SettingsPane] {
-        [general, appearance, terminal, claudeCode(permissionModeTitle: permissionModeTitle), codex, advanced]
+    @MainActor static func groups(permissionModeTitle: @escaping (String) -> String) -> [[SettingsPane]] {
+        [[general, appearance, terminal], [claudeCode(permissionModeTitle: permissionModeTitle), codex], [advanced]]
     }
 
     @MainActor private static var general: SettingsPane {

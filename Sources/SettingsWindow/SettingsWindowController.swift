@@ -1,7 +1,9 @@
 import AppKit
+import PaneAppearance
 
-/// The settings window (decision of 2026-10-15): one pane for each group
-/// of settings, as in every Mac app.
+/// The settings window (decisions of 2026-10-15 and 2026-11-12): the
+/// list of the panes at the left, and the settings of one pane at the
+/// right, in the colors of the main window.
 ///
 /// The window changes nothing itself. It tells its host the name and the
 /// new text of a setting, the host sends them to the session process, and
@@ -9,26 +11,41 @@ import AppKit
 /// session process refused never stays on the screen.
 @MainActor public final class SettingsWindowController: NSWindowController {
     let panes: [SettingsPaneController]
+    let sidebar: SettingsSidebarController
+    let content: SettingsContentController
     /// The name of a setting and the new text of its value.
     public var change: ((_ name: String, _ text: String) -> Void)?
 
     /// - Parameter permissionModeTitle: The words of the app for a
     ///   permission mode of Claude Code, as the chat shows them.
     public init(permissionModeTitle: @escaping (String) -> String) {
-        panes = SettingsPane.all(permissionModeTitle: permissionModeTitle).map(SettingsPaneController.init)
-        let window = NSWindow(contentRect: .zero, styleMask: [.titled, .closable, .miniaturizable], backing: .buffered, defer: true)
+        let groups = SettingsPane.groups(permissionModeTitle: permissionModeTitle)
+        panes = groups.flatMap { $0 }.map(SettingsPaneController.init)
+        (sidebar, content) = (SettingsSidebarController(groups: groups), SettingsContentController(panes: panes))
+        let width = SettingsSidebarController.width + 1 + SettingsCardView.width + 64
+        let window = NSWindow(contentRect: NSRect(x: 0, y: 0, width: width, height: 600), styleMask: [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView],
+                              backing: .buffered, defer: true)
         super.init(window: window)
-        let tabs = SettingsTabViewController()
-        tabs.tabStyle = .toolbar
-        for pane in panes {
-            let item = NSTabViewItem(viewController: pane)
-            (item.label, item.image) = (pane.pane.title, NSImage(systemSymbolName: pane.pane.symbolName, accessibilityDescription: nil))
-            tabs.addTabViewItem(item)
-            pane.changed = { [weak self] name, text in self?.change?(name, text) }
+        (window.title, window.titleVisibility, window.titlebarAppearsTransparent, window.isReleasedWhenClosed) = ("Settings", .hidden, true, false)
+        // An empty unified toolbar gives the title bar the height of the top rows, as in the main window.
+        (window.toolbar, window.toolbarStyle) = (NSToolbar(identifier: "Settings"), .unified)
+        // The window has one width, so the lines of text end at known places. Its height follows the user.
+        (window.contentMinSize, window.contentMaxSize) = (NSSize(width: width, height: 420), NSSize(width: width, height: 4_000))
+        // The color of the root shows as a line between the two parts.
+        let root = PaneBackgroundView(color: PaneColor.divider)
+        for view in [sidebar.view, content.view] {
+            view.translatesAutoresizingMaskIntoConstraints = false
+            root.addSubview(view)
+            NSLayoutConstraint.activate([view.topAnchor.constraint(equalTo: root.topAnchor), view.bottomAnchor.constraint(equalTo: root.bottomAnchor)])
         }
-        (window.contentViewController, window.isReleasedWhenClosed) = (tabs, false)
-        // The window starts with the height of its first pane, as after a choice of that pane.
-        if let first = panes.first { window.setContentSize(first.view.fittingSize) }
+        NSLayoutConstraint.activate([
+            sidebar.view.leadingAnchor.constraint(equalTo: root.leadingAnchor), content.view.trailingAnchor.constraint(equalTo: root.trailingAnchor),
+            content.view.leadingAnchor.constraint(equalTo: sidebar.view.trailingAnchor, constant: 1),
+        ])
+        window.contentView = root
+        for pane in panes { pane.changed = { [weak self] name, text in self?.change?(name, text) } }
+        sidebar.chose = { [content] in content.show(pane: $0) }
+        sidebar.select(pane: 0)
         window.center()
     }
 

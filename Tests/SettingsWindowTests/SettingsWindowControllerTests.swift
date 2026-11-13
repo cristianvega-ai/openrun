@@ -17,10 +17,6 @@ import Testing
         controller.show(defaults)
         let names = controller.panes.flatMap { $0.controls.keys }
         #expect(Set(names) == Set(SettingName.allCases.map(\.rawValue)) && names.count == SettingName.allCases.count)
-        #expect(controller.window?.contentViewController is NSTabViewController)
-        // The window has the height of its first pane, and a pane keeps its own height in a higher window.
-        let general = controller.panes[0].view
-        #expect(controller.window?.contentView?.frame.height ?? 0 < 420 && general.fittingSize.height < 300)
         let links = controller.panes[0].controls["open-links-in"] as? ChoiceSettingControl
         #expect(links?.popup.itemTitles == ["In the Default Browser", "In a Web Page Beside the Work"])
         // Each pane groups its settings in sections with a heading, so a user sees what each one does.
@@ -28,6 +24,17 @@ import Testing
         #expect(controller.panes[3].pane.sections.map(\.title) == ["New Threads", "Accounts"] && controller.panes[4].pane.rows.map(\.name) == ["codex-accounts"])
         #expect(controller.panes[5].pane.rows.map(\.name) == ["session-limit", "agent-process-limit", "claude-code-program"])
         #expect(controller.panes[2].pane.sections.map(\.title) == ["Keyboard", "Scrollback", "Paste", "New Terminals"])
+    }
+
+    @Test func theListAtTheLeftChoosesThePaneThatShows() {
+        let sidebar = controller.sidebar, content = controller.content
+        #expect(sidebar.items == [0, 1, 2, nil, 3, 4, nil, 5] && sidebar.table.selectedRow == 0 && content.titleLabel.stringValue == "General")
+        #expect(controller.panes.map(\.view.isHidden) == [false, true, true, true, true, true])
+        sidebar.table.selectRowIndexes([4], byExtendingSelection: false)
+        #expect(content.titleLabel.stringValue == "Claude Code" && content.shownPane == 3 && controller.panes.map(\.view.isHidden) == [true, true, true, false, true, true])
+        // The window has the colors and the top rows of the main window, and one width.
+        let window = controller.window
+        #expect(window?.styleMask.contains(.fullSizeContentView) == true && window?.contentMinSize.width == window?.contentMaxSize.width && window?.title == "Settings")
     }
 
     @Test func aPaneShowsTheHeadingOfEachSectionOverItsSettings() throws {

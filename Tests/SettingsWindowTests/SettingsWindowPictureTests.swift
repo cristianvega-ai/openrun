@@ -18,16 +18,18 @@ struct SettingsWindowPictureTests {
         let window = try #require(controller.window)
         defer { window.close() }
         window.orderFrontRegardless()
-        let tabs = try #require(window.contentViewController as? NSTabViewController)
-        for index in tabs.tabViewItems.indices {
-            tabs.selectedTabViewItemIndex = index
-            let end = Date().addingTimeInterval(0.5)
-            while Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
-            let view = try #require(window.contentView)
-            let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
-            view.cacheDisplay(in: view.bounds, to: bitmap)
-            let name = "settings-\(tabs.tabViewItems[index].label.lowercased()).png"
-            try #require(bitmap.representation(using: .png, properties: [:])).write(to: output.appending(path: name))
+        for (index, pane) in controller.panes.enumerated() {
+            controller.sidebar.select(pane: index)
+            try save(window, as: "settings-\(pane.pane.title.lowercased().replacingOccurrences(of: " ", with: "-")).png", in: output)
         }
+    }
+
+    private func save(_ window: NSWindow, as name: String, in output: URL) throws {
+        let end = Date().addingTimeInterval(0.3)
+        while Date() < end { RunLoop.main.run(until: Date().addingTimeInterval(0.02)) }
+        let view = try #require(window.contentView)
+        let bitmap = try #require(view.bitmapImageRepForCachingDisplay(in: view.bounds))
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        try #require(bitmap.representation(using: .png, properties: [:])).write(to: output.appending(path: name))
     }
 }
