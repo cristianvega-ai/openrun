@@ -570,3 +570,89 @@ These persistence transitions have no dedicated TLA+ model.
 
 Relevant tests are in `CommandLineToolTests`, including detach recognition, suspension, terminal restoration, stopped output, signals, and hook failure.
 `LocalScreen.tla` covers window/local-screen size agreement; `InputBacklog` and `AttachSequence` cover other parts of the transport.
+
+## Module coverage
+
+Every source directory is accounted for below.
+File counts include all files under each source directory.
+Several modules provide values or pure transformations for a machine owned elsewhere; they do not each need a separate lifecycle type.
+
+| Source directory | Files | Inventory entries or result |
+|---|---|---|
+| `AgentConversation` | 49 | 74 to 83; shared event and transcript state. |
+| `AgentProgram` | 9 | 42 to 45; pipe and process ownership. |
+| `AgentThreads` | 6 | 46, 50, 59; record and conversation-start facts. |
+| `AlertNotifications` | 3 | 106 and 107; permission, posting, removal, and notification opening. |
+| `BrowserPane` | 5 | 101 and 119; browser lifetime and navigation. |
+| `ChatView` | 78 | 82 and 160 to 170; chat interaction and layout. |
+| `ClaudeCodeAgent` | 19 | 56, 83 to 86, 189; agent decoding, history, and hook protocol. |
+| `CodexAgent` | 40 | 62 to 73; account servers, transport, turns, approvals, and history. |
+| `CommandLineTool` | 31 | 182 to 189; interactive attach and hook request. Other commands are request dispatch and formatting. |
+| `DataStorage` | 12 | 171 to 173; parsing, quarantine, and atomic replacement. |
+| `GitBranch` | 1 | Reads current repository facts. No retained lifecycle across calls. |
+| `ListContent` | 7 | Derives rows and account usage from overview/layout values. Its caller owns selection and update state. |
+| `ListUpdates` | 1 | Computes a pure diff between two row values. No retained machine. |
+| `MainWindow` | 15 | 110 to 114; geometry, focus, animation, and full-screen coordination. |
+| `MarkdownText` | 27 | 87 to 89; incremental document and parser state. |
+| `OpenRunApplication` | 42 | 1, 82, 90 to 109, 181; application and workspace coordination. |
+| `PaneAppearance` | 6 | Appearance/responder presentation under 112 and 146. No separate business lifecycle. |
+| `PaneSplits` | 2 | 118; split-view identity and divider interaction. |
+| `Projects` | 9 | 174 and 175; two-file persistence and project mutation. |
+| `ProjectsList` | 15 | 115; list editing, selection, and dragging. Account displays derive supplied values. |
+| `PseudoTerminal` | 11 | 34 to 41; spawn, flow control, cancellation, and destruction. |
+| `SessionConnection` | 10 | 20 to 22 and 189; request ownership and stream receivers. |
+| `SessionLaunch` | 8 | 1 to 3; registration, wake, and service lifetime. |
+| `SessionOverview` | 7 | 90 to 92 and 108; overview values, batching, reconnection, and request delivery. |
+| `SessionPane` | 11 | 121 to 125; attachment, delivery, confirmation, failure, and focus. |
+| `SessionProcess` | 52 | 4 to 10, 14 to 19, 23 to 33, 46 to 61, 175 to 178; server and domain owners. |
+| `SessionProtocol` | 23 | 10 to 13 and 15; framing, greeting, peer identity, and descriptor lifetime. Message values do not add lifecycles. |
+| `SessionRecords` | 2 | 177 and 178; persistent terminal records consumed by their keeper. |
+| `SessionWindow` | 3 | 126; hosted single-session window. Picker presentation is delegated to AppKit. |
+| `SessionsList` | 19 | 116 and 117; list state and progress animation. |
+| `Settings` | 16 | 54, 108, 120, 176; validated values and permission limits consumed by owners. |
+| `SettingsWindow` | 11 | 120; control edit, chooser, and authoritative update state. |
+| `TerminalEmulation` | 52 | 137, 138, 145, 147 to 154; terminal boundary, prompt parsers, callbacks, search, and snapshots. |
+| `TerminalRendering` | 31 | 155 to 159; cache validity and graphics resource ownership. |
+| `TerminalTheme` | 4 | Color values and deterministic palette construction. Changes are owned by 146 and 153. |
+| `TerminalView` | 52 | 127 to 146; parsing, drawing schedules, input, selection, links, and search. |
+| `ToolInstallation` | 1 | 181; installation state in the filesystem. |
+| `UntrustedText` | 3 | Pure validation and escaping. No retained state across calls. |
+| `WindowLayout` | 10 | 179 and 180; queued persistence and tree reconciliation. |
+| `openrun` | 1 | Thin entry point into `CommandLineTool`; no additional machine. |
+| `openrun-application` | 1 | Thin entry point into `OpenRunApplication`; no additional machine. |
+| `openrun-session` | 1 | Thin entry point into `SessionProcess`; no additional machine. |
+
+## Formal model coverage
+
+The models are useful bounded abstractions of particular contracts.
+Their success does not establish that every implementation suspension corresponds to one modeled atomic step.
+The permission registration gap is a concrete example of that distinction.
+
+| Model | Main contracts and inventory entries | Important boundary |
+|---|---|---|
+| [AttachSequence](../specifications/AttachSequence.tla) | Snapshot/output order, attachment size, reply ownership, viewer precedence, output pause and wake; 19, 25 to 29. | Does not model chat runners, every connection role, or all dispatch-source destruction details. |
+| [ResizeWait](../specifications/ResizeWait.tla) | Fresh editor response, old-width parsing, newest resize, confirmation, late answer, timeout identity; 27 and 28. | Abstracts terminal/editor behavior. Does not cover same-size acknowledgement bookkeeping in the pane. |
+| [LocalDelivery](../specifications/LocalDelivery.tla) | Ordered bounded application delivery and size agreement; 122, 124, 127. | Describes the terminal delivery path, not the unbounded chat batch stage. |
+| [SessionLifecycle](../specifications/SessionLifecycle.tla) | Terminal shutdown admission, status completion, descendant termination, idle exit; 4, 8, 9, 25, 39, 41. | ThreadRegistry, Codex startup, and conversation handoff are outside its session set. |
+| [InputBacklog](../specifications/InputBacklog.tla) | Input order, reply position, withdrawal, partial-piece rule, bounded admission, liveness; 36 and 37. | Does not prove every resource/callback integration around the backlog. |
+| [LocalScreen](../specifications/LocalScreen.tla) | The command-line tool's local screen follows its real window size; 186. | Does not model every escape-mode cleanup or partial title-stack write. |
+| [ApprovalQuestion](../specifications/ApprovalQuestion.tla) | Trusted answerer, question identity, caller withdrawal, first final outcome, timeout; 24 and 94. | Terminal-session caller classification does not include the new headless-agent route. |
+| [ThreadPermission](../specifications/ThreadPermission.tla) | Agent-derived target, trusted user answer, cancellation/finality, failure denial, timeout; 56 and 189. | Registration/publication is atomic in the abstraction. The implementation suspends between those actions. |
+
+No current model covers the complete runner startup/Stop/Close machine, process-slot transfer, Codex pooling, chat reconnection, or conversation ownership transfer.
+The appropriate additions are small models of those owners and their actual suspension boundaries.
+They should retain controls that deliberately remove each protection and produce the expected failure.
+
+## Cross machine transition contracts
+
+| Relationship | Contract that the implementation needs |
+|---|---|
+| Caller classification and request dispatch | A known agent cannot become an unrestricted user caller merely because it has no pseudo terminal. |
+| Startup and Stop or Close | A completed external wait must validate that its startup operation still owns the right to publish or send. |
+| Permission display and answer | A visible request already has a registered continuation. A local answer in flight can recover from transport failure. |
+| Conversation and process ownership | At most one headless owner, reserved handoff, terminal owner, or return operation exists for a conversation. Closed is final. |
+| Shutdown and admission | Set the stopping state before the first await. Include resources still starting in the termination barrier. |
+| Producer and consumer queues | Every asynchronous handoff has a bound, admission rule, and release event. Upstream bounds do not cover a downstream queue that drains them. |
+| Geometry and acknowledgement | Applying an acknowledgement is distinct from changing grid dimensions. Both operations have observable obligations. |
+| Persistent settings and consumers | The version remains attached to the value through every asynchronous hop to an owner that stores it. |
+| Pane cache and user work | Eviction releases transport and views without discarding a submitted message or a draft that the user did not delete. |
