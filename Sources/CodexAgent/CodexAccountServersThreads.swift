@@ -29,22 +29,24 @@ extension CodexAccountServers {
 
     /// The processes of the app-servers that run. A program that one of
     /// them started works for an agent, and not for the user.
-    public func processIdentifiers() async -> [pid_t] {
-        var identifiers: [pid_t] = []
-        for entry in entries.values {
-            if let identifier = (try? await entry.server.value)?.processIdentifier { identifiers.append(identifier) }
-        }
-        return identifiers
+    public func processIdentity() -> (identifiers: [pid_t], hasUnidentifiedProcess: Bool) {
+        let servers = Array(entries.values) + Array(retiring.values)
+        return (servers.compactMap(\.processIdentifier), servers.contains { !$0.hasStarted })
     }
+
+    public func processIdentifiers() -> [pid_t] { processIdentity().identifiers }
 
     /// Ends every server, such as when the session process ends.
     public func shutDown() async {
+        isShutDown = true
         let all = entries
         entries = [:]
+        for entry in all.values { retiring[entry.generation] = entry }
         for entry in all.values {
             // A server that still starts gives up its handshake at once.
             entry.server.cancel()
             if let server = try? await entry.server.value { await server.shutDown() }
+            retiring[entry.generation] = nil
         }
     }
 

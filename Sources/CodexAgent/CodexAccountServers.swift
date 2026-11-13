@@ -1,3 +1,5 @@
+import Darwin
+
 import AgentConversation
 
 /// One app-server for each account, kept while a thread of the account is
@@ -11,13 +13,18 @@ public actor CodexAccountServers {
         var threads: Set<String> = []
         /// Calls that use the server now, such as a thread start.
         var users = 0
+        var hasStarted = false
+        var processIdentifier: pid_t?
     }
 
     let start: Start
     /// The servers by the `CODEX_HOME` folder of the account, or nil for
     /// the default account.
     var entries: [String?: Entry] = [:]
+    var retiring: [Int: Entry] = [:]
     var nextGeneration = 0
+    /// After the shutdown no server starts, so no app-server outlives the session process.
+    var isShutDown = false
 
     /// `launch` gives the program and the environment. Its account folder
     /// is replaced by the account of each call.
@@ -41,7 +48,9 @@ public actor CodexAccountServers {
     func use<Result: Sendable>(
         _ account: String?, _ body: (CodexAppServer, _ generation: Int) async throws -> (Result, thread: String?)
     ) async throws -> Result {
-        if let entry = entries[account], await (try? entry.server.value)?.hasEnded == true {
+        guard !isShutDown else { throw CodexRequestError.connectionEnded }
+        if let entry = entries[account], await (try? entry.server.value)?.hasEnded == true,
+           entries[account]?.generation == entry.generation {
             entries[account] = nil
         }
         if entries[account] == nil {
@@ -51,7 +60,12 @@ public actor CodexAccountServers {
         guard let entry = entries[account] else { throw CodexRequestError.connectionEnded }
         entries[account]?.users += 1
         do {
-            let (result, thread) = try await body(try await entry.server.value, entry.generation)
+            let server = try await entry.server.value
+            if entries[account]?.generation == entry.generation {
+                entries[account]?.hasStarted = true
+                entries[account]?.processIdentifier = server.processIdentifier
+            }
+            let (result, thread) = try await body(server, entry.generation)
             if let thread, entries[account]?.generation == entry.generation { entries[account]?.threads.insert(thread) }
             await release(account, generation: entry.generation, thread: nil, user: true)
             return result
@@ -71,6 +85,8 @@ public actor CodexAccountServers {
             return
         }
         entries[account] = nil
+        retiring[generation] = entry
         if let server = try? await entry.server.value { await server.shutDown() }
+        retiring[generation] = nil
     }
 }
