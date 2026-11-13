@@ -168,3 +168,78 @@ The server's `closeThread` route calls only this method.
 The source path also shows that the ordinary single-terminal case has no terminal termination call.
 The thread record disappears while its work can continue.
 The close transition needs to acquire and end the current owner, including an owner in handoff.
+
+### Medium priority 7 Cached chats do not recover their connections
+
+[ThreadPaneController.take](../Sources/OpenRunApplication/ThreadPaneEvents.swift#L27) ignores `.closed` and `.threadEnded`.
+A transport failure reports a message but does not clear the attachment or evict the pane.
+[Workspace.chatPane](../Sources/OpenRunApplication/WorkspaceThreads.swift#L23) attaches only a newly created pane.
+The overview reconnects independently and can retain the same thread identifiers after a session process restart.
+
+**Established by source inspection:** a cached chat can stay attached to a dead connection after the lists recover.
+Selecting it again reuses the same pane. A failed initial attachment has the same recovery gap.
+Represent disconnected chat panes and invalidate or reconnect their attachments when the overview reconnects.
+
+### Medium priority 8 Thread event delivery has an unbounded stage
+
+[ThreadEventBatches](../Sources/OpenRunApplication/ThreadEventBatches.swift#L9) appends every event to an array until the main thread takes the batch.
+The socket reader returns immediately after each append.
+It therefore drains upstream queues even while the main thread cannot keep up.
+
+**Established by source inspection:** this stage has no byte limit, event limit, coalescing, or producer wait.
+The bounds in `ClientConnection`, `ThreadEventBuffer`, and `CodexEventChannel` do not bound this array.
+The terminal pane already has an admission and completion design in `AttachmentRelay`.
+Give the chat handoff an equivalent bound or coalesce safe event types while preserving event order.
+
+### Medium priority 9 Codex terminal sessions enter restart records
+
+The Claude Code path in [SessionServerThreadTerminal](../Sources/SessionProcess/SessionServerThreadTerminal.swift#L34) calls `records.exclude` for the terminal of a thread.
+The Codex path creates the session and calls `openedInTerminal` without excluding it.
+
+**Established by source inspection:** a Codex conversation terminal can remain in `sessions.json` and return as an unrelated shell after a restart.
+The decision of 2026-11-12 says that a thread's terminal does not come back.
+Put exclusion in the shared successful handoff path so both agents receive it.
+
+### Medium priority 10 A held message can disappear with its pane
+
+[ComposerLogic](../Sources/ChatView/ComposerLogic.swift#L18) retains a message submitted while the agent is busy.
+That message has not reached the session process.
+[ComposerView.submit](../Sources/ChatView/ComposerSending.swift#L24) clears the field and saves the now empty draft.
+`ComposerDrafts` saves the field and images, but not `heldMessage`.
+`ThreadPanes` evicts panes after eight threads, and a window close discards all of them.
+
+**Established by source inspection:** either transition can discard a submitted message that still waits locally.
+Choose an owner whose lifetime matches the waiting message, or return it to the saved draft before a pane closes.
+That rule must also cover terminal handoff and account continuation.
+
+### Medium priority 11 Permission controls have no failure transition
+
+[PermissionRequestRowView.answer](../Sources/ChatView/PermissionRequestRowView.swift#L52) inserts the request into `answeredRequests` and disables its controls before the server acknowledges the answer.
+Transport errors and `.requestFailed` only reach the generic failure callback.
+Neither removes the identifier from `answeredRequests`.
+
+**Established by source inspection:** a rejected or unsent answer leaves a still pending permission request disabled in the cached chat.
+Distinguish an answer in flight from an answer that the server accepted.
+On a refusal or failed send, allow a retry if the request still waits.
+
+### Medium priority 12 A size acknowledgement can leave requests pending
+
+[SessionPaneController](../Sources/SessionPane/SessionPaneController.swift#L238) appends each requested size to `ownSizeRequests`.
+Activation deliberately sends a confirmed size even when the grid already has that size.
+[TerminalView.applySize](../Sources/TerminalView/TerminalView.swift#L690) returns immediately for an unchanged grid, before `didApplyGridSize`.
+That callback is the only place that consumes `ownSizeRequests`.
+
+**Established by source inspection:** repeated activation at the same size can retain acknowledged requests indefinitely.
+The hidden-grid logic continues to treat them as pending.
+Consuming an acknowledgement must not depend on changing geometry.
+
+### Medium priority 13 Some versioned changes become unversioned downstream
+
+[SessionServer.changeProjects](../Sources/SessionProcess/SessionServer.swift#L507) passes a project version to `SessionRegistry`, then awaits it before calling the unversioned `ThreadRegistry.updateProjects`.
+A newer request can finish that path before the older one resumes.
+The older list can then replace the newer project list of the threads.
+`changeSetting` has a similar final unversioned call to `AgentLaunchProvider.setProgram` after versioned actor calls.
+
+**Established by source interleaving:** the version checks at the first consumer do not protect later consumers.
+Carry the same version to every owner that stores the change.
+Check the version at the mutation point, after any preceding wait.
