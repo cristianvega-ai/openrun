@@ -45,6 +45,11 @@ import PaneAppearance
         window.contentView = root
         for pane in panes { pane.changed = { [weak self] name, text in self?.change?(name, text) } }
         sidebar.chose = { [content] in content.show(pane: $0) }
+        sidebar.searched = { [content, sidebar] text in
+            content.search(text)
+            // An empty search goes back to the pane from before it.
+            if !content.isSearching { sidebar.select(pane: content.shownPane) }
+        }
         sidebar.select(pane: 0)
         window.center()
     }

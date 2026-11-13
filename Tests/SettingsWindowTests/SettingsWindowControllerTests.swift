@@ -39,6 +39,33 @@ import Testing
         #expect(window?.styleMask.contains(.fullSizeContentView) == true && window?.contentMinSize.width == window?.contentMaxSize.width && window?.title == "Settings")
     }
 
+    @Test func aSearchShowsTheRowsOfEachPaneThatHoldItsWords() {
+        let sidebar = controller.sidebar, content = controller.content
+        sidebar.select(pane: 2)
+        sidebar.searchField.stringValue = "Claude  MODEL"
+        sidebar.search()
+        // The rows of a search can come from many panes, so each pane shows its title and no pane has the selection.
+        #expect(content.titleLabel.stringValue == "Search" && sidebar.table.selectedRow == -1 && content.isSearching)
+        #expect(controller.panes.map(\.view.isHidden) == [true, true, true, true, false, true] && !controller.panes[4].heading.isHidden)
+        let model = controller.panes[4].controls["claude-code-model"]?.view.superview, mode = controller.panes[4].controls["claude-code-permission-mode"]?.view.superview
+        #expect(model?.isHidden == false && mode?.isHidden == true)
+        sidebar.searchField.stringValue = "accounts"
+        sidebar.search()
+        #expect(controller.panes.map(\.view.isHidden) == [true, true, true, false, true, true] && content.emptyLabel.isHidden)
+        sidebar.searchField.stringValue = "no such words"
+        sidebar.search()
+        #expect(!content.emptyLabel.isHidden && controller.panes.allSatisfy(\.view.isHidden))
+        // An empty search goes back to the pane from before it, with each of its rows.
+        sidebar.searchField.stringValue = ""
+        sidebar.search()
+        #expect(sidebar.table.selectedRow == 2 && content.titleLabel.stringValue == "Terminal" && controller.panes[2].heading.isHidden)
+        // The choice of a pane ends a search.
+        sidebar.searchField.stringValue = "font"
+        sidebar.search()
+        sidebar.select(pane: 4)
+        #expect(sidebar.searchField.stringValue.isEmpty && !content.isSearching && model?.isHidden == false && mode?.isHidden == false)
+    }
+
     @Test func aPaneShowsEachSectionAsACardUnderItsHeading() throws {
         let pane = SettingsPane(title: "Test", symbolName: "gearshape", sections: [
             SettingsSection(rows: [SettingRow(name: "notifications", label: "Notifications", note: "macOS tells you.") { FlagSettingControl() }]),

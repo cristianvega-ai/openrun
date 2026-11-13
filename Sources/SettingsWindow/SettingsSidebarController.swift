@@ -1,17 +1,20 @@
 import AppKit
 import PaneAppearance
 
-/// The left part of the settings window: the list of the panes in
-/// groups, with a line between two groups.
+/// The left part of the settings window: the search field, and the list
+/// of the panes in groups, with a line between two groups.
 @MainActor final class SettingsSidebarController: NSViewController, NSTableViewDataSource, NSTableViewDelegate {
     static let width: CGFloat = 216
     /// The rows of the list: the index of a pane, or `nil` for the line
     /// between two groups.
     let items: [Int?]
     private let panes: [SettingsPane]
+    let searchField = NSSearchField()
     let table = NSTableView()
     /// Tells the index of the pane that the user chose.
     var chose: ((Int) -> Void)?
+    /// Tells the text of the search field after each change.
+    var searched: ((String) -> Void)?
 
     init(groups: [[SettingsPane]]) {
         panes = groups.flatMap { $0 }
@@ -33,14 +36,17 @@ import PaneAppearance
         (table.headerView, table.backgroundColor, table.style, table.intercellSpacing) = (nil, .clear, .fullWidth, .zero)
         (table.dataSource, table.delegate, table.allowsEmptySelection, table.focusRingType) = (self, self, true, .none)
         (scroll.documentView, scroll.drawsBackground) = (table, false)
-        for view in [topRow, scroll] as [NSView] {
+        (searchField.placeholderString, searchField.target, searchField.action) = ("Search", self, #selector(search))
+        searchField.sendsSearchStringImmediately = true
+        for view in [topRow, searchField, scroll] as [NSView] {
             view.translatesAutoresizingMaskIntoConstraints = false
             root.addSubview(view)
         }
         NSLayoutConstraint.activate([
             topRow.topAnchor.constraint(equalTo: root.topAnchor), topRow.leadingAnchor.constraint(equalTo: root.leadingAnchor),
-            topRow.trailingAnchor.constraint(equalTo: root.trailingAnchor),
-            scroll.topAnchor.constraint(equalTo: topRow.bottomAnchor), scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
+            topRow.trailingAnchor.constraint(equalTo: root.trailingAnchor), searchField.topAnchor.constraint(equalTo: topRow.bottomAnchor),
+            searchField.leadingAnchor.constraint(equalTo: root.leadingAnchor, constant: 14), searchField.trailingAnchor.constraint(equalTo: root.trailingAnchor, constant: -14),
+            scroll.topAnchor.constraint(equalTo: searchField.bottomAnchor, constant: 12), scroll.bottomAnchor.constraint(equalTo: root.bottomAnchor),
             scroll.leadingAnchor.constraint(equalTo: root.leadingAnchor), scroll.trailingAnchor.constraint(equalTo: root.trailingAnchor),
             root.widthAnchor.constraint(equalToConstant: Self.width),
         ])
@@ -51,6 +57,12 @@ import PaneAppearance
     func select(pane index: Int) {
         loadViewIfNeeded()
         items.firstIndex(of: index).map { table.selectRowIndexes([$0], byExtendingSelection: false) }
+    }
+
+    /// A search shows rows of many panes, so no pane has the selection.
+    @objc func search() {
+        if !searchField.stringValue.trimmingCharacters(in: .whitespaces).isEmpty { table.deselectAll(nil) }
+        searched?(searchField.stringValue)
     }
 
     func numberOfRows(in tableView: NSTableView) -> Int { items.count }
@@ -71,8 +83,10 @@ import PaneAppearance
         return NSApplication.shared.currentEvent?.type == .keyDown && items.indices.contains(next) ? IndexSet(integer: next) : tableView.selectedRowIndexes
     }
 
+    /// The choice of a pane ends a search.
     func tableViewSelectionDidChange(_ notification: Notification) {
         guard items.indices.contains(table.selectedRow), let pane = items[table.selectedRow] else { return }
+        searchField.stringValue = ""
         chose?(pane)
     }
 

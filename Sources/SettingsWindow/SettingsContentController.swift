@@ -2,12 +2,16 @@ import AppKit
 import PaneAppearance
 
 /// The right part of the settings window: the title of the pane in the
-/// top row, and the sections of that pane under it.
+/// top row, and the sections of that pane under it. A search shows the
+/// rows of every pane that hold the words of the search.
 @MainActor final class SettingsContentController: NSViewController {
     let panes: [SettingsPaneController]
     let titleLabel = NSTextField(labelWithString: "")
+    let emptyLabel = NSTextField(labelWithString: "No Setting Has These Words")
     private let scroll = OverlayScrollView()
     private(set) var shownPane = 0
+    private var words: [String] = []
+    var isSearching: Bool { !words.isEmpty }
 
     init(panes: [SettingsPaneController]) {
         self.panes = panes
@@ -20,9 +24,9 @@ import PaneAppearance
     override func loadView() {
         let root = PaneBackgroundView(color: PaneColor.terminalBackground), topRow = PaneTopRow(background: PaneColor.terminalBackground)
         (titleLabel.font, titleLabel.textColor) = (.systemFont(ofSize: 15, weight: .semibold), PaneColor.text)
-        topRow.leadingSpace = 32
+        (emptyLabel.textColor, emptyLabel.isHidden, topRow.leadingSpace) = (PaneColor.quietText, true, 32)
         topRow.leadingItems.addArrangedSubview(titleLabel)
-        let stack = NSStackView(views: panes.map(\.view)), document = SettingsDocumentView()
+        let stack = NSStackView(views: panes.map(\.view) + [emptyLabel]), document = SettingsDocumentView()
         (stack.orientation, stack.alignment, stack.spacing) = (.vertical, .leading, 26)
         document.addSubview(stack)
         (scroll.documentView, scroll.drawsBackground, scroll.hasVerticalScroller) = (document, false, true)
@@ -39,15 +43,33 @@ import PaneAppearance
             stack.leadingAnchor.constraint(equalTo: document.leadingAnchor, constant: 32), stack.trailingAnchor.constraint(equalTo: document.trailingAnchor, constant: -32),
         ])
         view = root
-        show(pane: shownPane)
+        refresh()
     }
 
-    /// Shows one pane, from its top.
+    /// Shows one pane, and ends a search.
     func show(pane index: Int) {
+        (shownPane, words) = (index, [])
+        refresh()
+    }
+
+    /// Shows the rows of each pane that hold every word of `text`. An
+    /// empty text shows the pane from before the search.
+    func search(_ text: String) {
+        words = text.lowercased().split(separator: " ").map(String.init)
+        refresh()
+    }
+
+    private func refresh() {
         loadViewIfNeeded()
-        shownPane = index
-        for (index, pane) in panes.enumerated() { pane.view.isHidden = index != shownPane }
-        titleLabel.stringValue = panes[shownPane].pane.title
+        var showsRow = false
+        for (index, pane) in panes.enumerated() {
+            let holdsWords = pane.filter(words)
+            pane.view.isHidden = words.isEmpty ? index != shownPane : !holdsWords
+            pane.heading.isHidden = words.isEmpty
+            showsRow = showsRow || !pane.view.isHidden
+        }
+        (titleLabel.stringValue, emptyLabel.isHidden) = (words.isEmpty ? panes[shownPane].pane.title : "Search", showsRow)
+        // Each pane and each search starts at its top.
         scroll.contentView.scroll(to: .zero)
         scroll.reflectScrolledClipView(scroll.contentView)
     }
