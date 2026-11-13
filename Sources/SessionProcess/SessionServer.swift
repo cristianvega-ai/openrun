@@ -341,7 +341,7 @@ actor SessionServer {
             case .receiveApprovalQuestions:
                 // The app, signed and outside every session, is the only
                 // program that can answer (ApprovalQuestion.tla).
-                guard Self.acceptsAnswerer(at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)) else {
+                guard Self.acceptsAnswerer(at: await callerPlace(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)) else {
                     client.send(.failure(SessionFailure(reason: .invalidRequest, message: "Only OpenRun.app receives approval questions.")))
                     break
                 }
@@ -399,7 +399,7 @@ actor SessionServer {
             case .endSessionProcess:
                 // The request ends every program, so only the app of the user may send it.
                 let isApplication = Self.acceptsAnswerer(
-                    at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken))
+                    at: await callerPlace(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken))
                 guard isApplication else {
                     client.send(Self.refusal("Only OpenRun.app may end the session process."))
                     break
@@ -464,7 +464,7 @@ actor SessionServer {
     /// refusal. While the question waits, this client sends no other request
     /// (decisions of 2026-10-15 and 2026-11-10, ApprovalQuestion.tla).
     private func refusal(of peer: PeerProcess, toward target: UUID, _ request: ApprovalQuestion.Request) async -> ServerMessage? {
-        let place = await registry.place(of: peer)
+        let place = await callerPlace(of: peer)
         guard !place.mayAct(on: target) else { return nil }
         let verb = switch request {
         case .type: "type into"
@@ -494,7 +494,7 @@ actor SessionServer {
     /// alert neither types nor reads (decision of 2026-11-10).
     private func changeOwn(_ identifier: UUID, for peer: PeerProcess, verb: String, _ change: @escaping @Sendable (inout SessionSummary) -> Void) async -> ServerMessage {
         guard let session = await registry.session(for: identifier) else { return Self.unknownSession(identifier) }
-        guard await registry.place(of: peer).mayAct(on: identifier) else {
+        guard await callerPlace(of: peer).mayAct(on: identifier) else {
             let target = SessionSummary.text(for: identifier)
             return Self.refusal("Only a program outside every session, or a program in the session itself, may \(verb) session \(target).")
         }
@@ -523,7 +523,7 @@ actor SessionServer {
         // The check of the signature costs a call of the system, so only a
         // protected setting makes it.
         if SettingName(rawValue: name)?.isProtected == true,
-           Self.acceptsAnswerer(at: await registry.place(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)) {
+           Self.acceptsAnswerer(at: await callerPlace(of: peer), meetingRequirement: answererRequirement.isMet(byProgramWithAuditToken: peer.auditToken)) {
             requester = .application
         }
         do {
@@ -537,6 +537,14 @@ actor SessionServer {
         } catch {
             return Self.refusal("\(error)")
         }
+    }
+
+    /// Where a caller acts from. A program that an agent of a thread
+    /// started runs for the agent and not for the user, also outside
+    /// every terminal session, so it counts as another session.
+    private func callerPlace(of peer: PeerProcess) async -> CallerPlace {
+        if await threads.isStartedByAgent(peer.processIdentifier) { return .unknown }
+        return await registry.place(of: peer)
     }
 
     /// Only the signed app outside every session receives questions. An app
