@@ -39,6 +39,9 @@ final class ThreadPaneController: NSObject {
     let socket: SocketLocation
     /// The calls that wait for the socket, in order, off the main thread.
     let work = DispatchQueue(label: "ai.cristianvega.openrun.thread-pane")
+    /// The messages, the stops and the answers, in order, each on a
+    /// connection of its own, so they do not wait for an attach or a page.
+    let messageWork = DispatchQueue(label: "ai.cristianvega.openrun.thread-messages")
     /// Asks the host for the conversation in a terminal, and for the way back.
     var openInTerminal: (() -> Void)?
     var returnFromTerminal: (() -> Void)?

@@ -81,6 +81,13 @@ import AppKit
         reloadRows(changedItems: Set(change.inserted + change.updated))
     }
 
+    /// An answer that did not reach the thread leaves the request open, so
+    /// the user can answer again.
+    public func retryPermissionAnswer(_ identifier: String) {
+        context.answeredRequests.remove(identifier)
+        reloadRows(changedItems: nil)
+    }
+
     private func reloadRows(changedItems: Set<String>?) {
         let showsEarlier = transcript.removedItemCount > 0 || facts.hasEarlierHistory
         let rows = builder.rows(for: transcript, changedItems: changedItems, showsEarlierItems: showsEarlier)

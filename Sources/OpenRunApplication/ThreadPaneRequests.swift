@@ -9,7 +9,7 @@ extension ThreadPaneController: ChatViewControllerDelegate {
     /// Runs a call that waits for the socket, in order, off the main thread.
     private func send(_ call: @escaping @Sendable (ThreadAttachment) throws -> Void) {
         guard let attachment else { return failed?("The thread is not connected yet. Try again in a moment.") ?? () }
-        work.async { [weak self] in
+        messageWork.async { [weak self] in
             do { try call(attachment) } catch {
                 DispatchQueue.main.async { MainActor.assumeIsolated { self?.failed?("The request did not reach the thread. \(error)") } }
             }
@@ -26,9 +26,21 @@ extension ThreadPaneController: ChatViewControllerDelegate {
     }
 
     func chatViewController(_ controller: ChatViewController, answerPermissionRequest identifier: String, with answer: ChatPermissionAnswer) {
-        switch answer {
-        case .allow: send { try $0.answer(permission: identifier, allows: true) }
-        case .deny(let message): send { try $0.answer(permission: identifier, allows: false, message: message) }
+        let (socket, thread) = (socket, thread)
+        // An answer keeps its place among the messages and the stops.
+        messageWork.async { [weak self] in
+            do {
+                let client = try SessionClient(location: socket)
+                switch answer {
+                case .allow: try client.answerToolPermission(thread: thread, request: identifier, allows: true)
+                case .deny(let message): try client.answerToolPermission(thread: thread, request: identifier, allows: false, message: message)
+                }
+            } catch {
+                DispatchQueue.main.async { MainActor.assumeIsolated {
+                    self?.chat.retryPermissionAnswer(identifier)
+                    self?.failed?("The answer did not reach the thread. \(error)")
+                } }
+            }
         }
     }
 
