@@ -7,4 +7,11 @@ import AppKit
     var view: NSView { get }
     var changed: ((String) -> Void)? { get set }
     func show(_ text: String)
+    /// A wide control, such as a list, fills its card. Each other
+    /// control stands at the right of the name of its setting.
+    var isWide: Bool { get }
+}
+
+extension SettingControl {
+    var isWide: Bool { false }
 }

@@ -47,7 +47,7 @@ import PaneAppearance
         let control = row.makeControl()
         controls[row.name] = control
         control.changed = { [weak self] text in self?.changed?(row.name, text) }
-        return SettingRowView(label: row.label, note: row.note, control: control.view)
+        return control.isWide ? control.view : SettingRowView(label: row.label, note: row.note, control: control.view)
     }
 
     /// Gives each control the text of its setting.

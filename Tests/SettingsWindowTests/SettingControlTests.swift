@@ -30,7 +30,7 @@ import Testing
         let control = FlagSettingControl()
         let told = changes(of: control)
         control.show("on")
-        #expect(control.toggle.state == .on)
+        #expect(control.toggle.state == .on && !control.isWide)
         control.toggle.state = .off
         control.toggled()
         #expect(told() == ["off"])
