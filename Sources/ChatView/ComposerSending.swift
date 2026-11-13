@@ -17,7 +17,10 @@ extension ComposerView: NSTextViewDelegate {
     /// The transcript tells whether the agent works. A held message goes
     /// when the turn ends.
     func setBusy(_ isBusy: Bool) {
-        if case .send(let message) = logic.setBusy(isBusy) { sendAction?(message) }
+        if case .send(let message) = logic.setBusy(isBusy) {
+            draftChanged?(draft)
+            sendAction?(message)
+        }
         refresh()
     }
 
@@ -27,6 +30,7 @@ extension ComposerView: NSTextViewDelegate {
         let effect = logic.submit(message)
         if case .send(let outgoing) = effect { sendAction?(outgoing) }
         if effect != .none || logic.heldMessage != nil, !message.text.isEmpty || !images.isEmpty {
+            draftIsSubmitted = false
             textView.string = ""
             images = []
             draftChanged?(draft)

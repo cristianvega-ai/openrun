@@ -14,6 +14,7 @@ final class ComposerView: NSView {
     let footer = ComposerFooterView()
     let heldView = HeldMessageView()
     var logic = ComposerLogic()
+    var draftIsSubmitted = false
     var images: [MessageImage] = [] {
         didSet { draftChanged?(draft) }
     }
@@ -34,8 +35,10 @@ final class ComposerView: NSView {
 
     /// The unsent text and images.
     var draft: ComposerDrafts.Draft {
-        get { ComposerDrafts.Draft(text: textView.string, images: images) }
+        get { ComposerDrafts.Draft(text: textView.string, images: images, heldMessage: logic.heldMessage, isSubmitted: draftIsSubmitted) }
         set {
+            draftIsSubmitted = newValue.isSubmitted
+            logic.restoreHeldMessage(newValue.heldMessage)
             textView.string = newValue.text
             images = newValue.images
             refresh()

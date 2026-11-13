@@ -58,6 +58,12 @@ struct ComposerLogic: Equatable {
         return .none
     }
 
+    /// A saved draft brings back its held message, which waits for the turn that runs.
+    mutating func restoreHeldMessage(_ message: ChatOutgoingMessage?) {
+        heldMessage = message
+        if message != nil { isBusy = true }
+    }
+
     /// The user takes the held message back to change it.
     mutating func takeHeldMessage() -> ChatOutgoingMessage? {
         defer { heldMessage = nil }

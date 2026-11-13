@@ -7,9 +7,14 @@ struct ComposerDrafts {
     struct Draft: Equatable {
         var text = ""
         var images: [MessageImage] = []
+        /// A message that the user sent while the agent worked. It has not
+        /// reached the session process, so only the draft keeps it.
+        var heldMessage: ChatOutgoingMessage?
+        /// The text holds a message that the user sent and that failed.
+        var isSubmitted = false
 
-        var isEmpty: Bool { text.isEmpty && images.isEmpty }
-        var byteCount: Int { text.utf8.count + images.reduce(0) { $0 + $1.data.count } }
+        var isEmpty: Bool { text.isEmpty && images.isEmpty && heldMessage == nil }
+        var byteCount: Int { text.utf8.count + images.reduce(0) { $0 + $1.data.count } + (heldMessage.map { $0.text.utf8.count + $0.images.reduce(0) { $0 + $1.data.count } } ?? 0) }
     }
 
     /// The drafts of every chat of the app.
@@ -34,7 +39,9 @@ struct ComposerDrafts {
         order.append(thread)
         var bytes = drafts.values.reduce(0) { $0 + $1.byteCount }
         while order.count > 1, order.count > Self.countLimit || bytes > Self.byteLimit {
-            let oldest = order.removeFirst()
+            // A message of the user is never dropped for room, only a plain draft.
+            guard let index = order.firstIndex(where: { drafts[$0]?.heldMessage == nil && drafts[$0]?.isSubmitted != true }) else { break }
+            let oldest = order.remove(at: index)
             bytes -= drafts.removeValue(forKey: oldest)?.byteCount ?? 0
         }
     }

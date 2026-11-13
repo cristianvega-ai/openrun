@@ -7,11 +7,13 @@ extension ComposerView {
         previews.removeAction = { [weak self] index in
             guard let self, images.indices.contains(index) else { return }
             images.remove(at: index)
+            draftChanged?(draft)
             refresh()
         }
         heldView.editAction = { [weak self] in self?.takeHeldMessage() }
         heldView.deleteAction = { [weak self] in
             _ = self?.logic.takeHeldMessage()
+            if let self { self.draftChanged?(self.draft) }
             self?.refresh()
         }
     }
@@ -25,6 +27,7 @@ extension ComposerView {
             case .failure(let failure): problem = failure.message
             }
         }
+        draftChanged?(draft)
         refresh()
     }
 
