@@ -107,7 +107,7 @@ openrun-application -> OpenRunApplication -> MainWindow, ProjectsList, SessionsL
                                           -> WindowLayout -> DataStorage
                                           -> ListContent -> SessionOverview, WindowLayout, ProjectsList, SessionsList
                                           -> AlertNotifications
-                                          -> SettingsWindow -> Settings
+                                          -> SettingsWindow -> Settings, PaneAppearance
                                           -> PaneSplits -> WindowLayout
                                           -> BrowserPane -> PaneAppearance
                                           -> ToolInstallation

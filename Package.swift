@@ -168,7 +168,7 @@ let package = Package(
         .target(name: "ToolInstallation"),
         .testTarget(name: "ToolInstallationTests", dependencies: ["ToolInstallation"]),
         // The settings window: one pane for each group of settings, and a control for each setting.
-        .target(name: "SettingsWindow", dependencies: ["Settings"]),
+        .target(name: "SettingsWindow", dependencies: ["Settings", "PaneAppearance"]),
         .testTarget(name: "SettingsWindowTests", dependencies: ["SettingsWindow", "Settings"]),
         // The notifications of macOS for sessions that need the user, behind a type that tests replace.
         .target(name: "AlertNotifications"),
