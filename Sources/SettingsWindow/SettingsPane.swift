@@ -29,27 +29,27 @@ struct SettingsPane {
     }
 
     @MainActor private static var general: SettingsPane {
-        SettingsPane(title: "General", symbolName: "gearshape", sections: [
-            SettingsSection(title: "Notifications", rows: [
-                SettingRow(name: SettingName.showsNotifications.rawValue, label: "Notifications", note: "macOS tells you when a thread or a terminal needs you.") {
-                    FlagSettingControl()
-                },
-            ]),
-            SettingsSection(title: "Links", note: "A web link that you Command-click in a terminal, or click in a chat.", rows: [
-                SettingRow(name: SettingName.linkDestination.rawValue, label: "Open links") {
-                    ChoiceSettingControl([("default-browser", "In the Default Browser"), ("browser-split", "In a Web Page Beside the Work")])
-                },
-            ]),
+        SettingsPane(title: "General", symbolName: "gearshape", rows: [
+            SettingRow(name: SettingName.showsNotifications.rawValue, label: "Notifications", note: "macOS tells you when a thread or a terminal needs you.") {
+                FlagSettingControl()
+            },
+            SettingRow(name: SettingName.linkDestination.rawValue, label: "Open links", note: "A web link that you Command-click in a terminal, or click in a chat.") {
+                ChoiceSettingControl([("default-browser", "In the Default Browser"), ("browser-split", "In a Web Page Beside the Work")])
+            },
         ])
     }
 
     @MainActor private static var appearance: SettingsPane {
         SettingsPane(title: "Appearance", symbolName: "paintbrush", sections: [
-            SettingsSection(title: "Colors", rows: [
-                SettingRow(name: SettingName.theme.rawValue, label: "Theme") { ChoiceSettingControl([("graphite", "Graphite")]) },
+            SettingsSection(rows: [
+                SettingRow(name: SettingName.theme.rawValue, label: "Theme", note: "The colors of the whole window. They follow the light or the dark appearance of macOS.") {
+                    ChoiceSettingControl([("graphite", "Graphite")])
+                },
             ]),
             SettingsSection(title: "Terminal Text", rows: [
-                SettingRow(name: SettingName.fontName.rawValue, label: "Font") { ChoiceSettingControl(fixedPitchFonts.map { ($0, $0) }) },
+                SettingRow(name: SettingName.fontName.rawValue, label: "Font", note: "Each font of the list has one width for every character.") {
+                    ChoiceSettingControl(fixedPitchFonts.map { ($0, $0) })
+                },
                 SettingRow(name: SettingName.fontSize.rawValue, label: "Size") { NumberSettingControl(6...72, unit: "points") },
             ]),
         ])
@@ -57,22 +57,20 @@ struct SettingsPane {
 
     @MainActor private static var terminal: SettingsPane {
         SettingsPane(title: "Terminal", symbolName: "terminal", sections: [
-            SettingsSection(title: "Keyboard", rows: [
+            SettingsSection(rows: [
                 SettingRow(name: SettingName.optionAsAlt.rawValue, label: "Option key", note: "An Option key that is not Alt types the special characters of the keyboard.") {
                     ChoiceSettingControl([("left", "The Left Option Key Is Alt"), ("both", "Both Option Keys Are Alt"), ("neither", "No Option Key Is Alt")])
                 },
-            ]),
-            SettingsSection(title: "Scrollback", note: "The lines that each terminal keeps above its screen.", rows: [
-                SettingRow(name: SettingName.scrollbackLimit.rawValue, label: "Keep") { NumberSettingControl(0...1_000_000, unit: "lines") },
-            ]),
-            SettingsSection(title: "Paste", rows: [
+                SettingRow(name: SettingName.scrollbackLimit.rawValue, label: "Scrollback", note: "The lines that each terminal keeps above its screen.") {
+                    NumberSettingControl(0...1_000_000, unit: "lines")
+                },
                 SettingRow(name: SettingName.asksBeforeUnsafePaste.rawValue, label: "Ask before an unsafe paste", note: "OpenRun asks before a paste that could run a command.") {
                     FlagSettingControl()
                 },
             ]),
-            SettingsSection(
-                title: "New Terminals", note: "The New Thread or Terminal button offers a terminal with each command. An empty command starts your login shell.",
-                rows: [SettingRow(name: SettingName.newSessionCommands.rawValue, label: "Commands") { EntryListSettingControl() }]),
+            SettingsSection(title: "New Terminals", note: "The New Thread or Terminal button offers a terminal with each command.", rows: [
+                SettingRow(name: SettingName.newSessionCommands.rawValue, label: "Commands") { EntryListSettingControl() },
+            ]),
         ])
     }
 

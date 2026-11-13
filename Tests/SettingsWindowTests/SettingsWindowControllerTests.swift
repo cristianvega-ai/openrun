@@ -23,8 +23,9 @@ import Testing
         #expect(controller.panes[3].pane.sections.map(\.title) == ["Claude Code", "Codex"] && controller.panes[3].pane.rows.map(\.name) == ["claude-code-accounts", "codex-accounts"])
         #expect(controller.panes[4].pane.rows.map(\.name) == ["claude-code-model", "claude-code-permission-mode", "claude-code-program"])
         #expect(controller.panes[5].pane.rows.map(\.name) == ["session-limit", "agent-process-limit"])
-        #expect(controller.panes[0].pane.sections.map(\.title) == ["Notifications", "Links"])
-        #expect(controller.panes[2].pane.sections.map(\.title) == ["Keyboard", "Scrollback", "Paste", "New Terminals"])
+        // A row tells what its setting does, so a pane needs a heading only for a second kind of setting.
+        #expect(controller.panes[0].pane.sections.map(\.title) == [nil] && controller.panes[0].pane.rows.allSatisfy { $0.note != nil })
+        #expect(controller.panes[2].pane.sections.map(\.title) == [nil, "New Terminals"])
     }
 
     @Test func theListAtTheLeftChoosesThePaneThatShows() {
