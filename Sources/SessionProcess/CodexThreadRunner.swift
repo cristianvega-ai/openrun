@@ -29,6 +29,8 @@ actor CodexThreadRunner {
     var waitingMessages: [CodexTurn] = []
     /// Whether a turn runs, from its start to its end.
     var isTurnRunning = false
+    /// The call that started the turn that runs, so an old call cannot end a newer turn.
+    var turnOwner: UUID?
     var isClosed = false
     /// Whether Codex in a terminal session has the thread (proposal 6).
     /// The thread takes no message until the session ends.

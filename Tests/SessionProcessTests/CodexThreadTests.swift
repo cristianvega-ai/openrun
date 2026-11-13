@@ -125,6 +125,25 @@ import Testing
         await runner.close()
     }
 
+    @Test(arguments: [false, true]) func openingCannotOutliveStopOrClose(close: Bool) async throws {
+        let gate = StartupGate()
+        let provider = servers(["handshake", "thread-start", "plain-turn"])
+        let runner = CodexThreadRunner(record: record, servers: {
+            await gate.wait()
+            return try await provider()
+        })
+        let sent = Task { try await runner.send(text: "Reply with the single word ok.") }
+        #expect(await eventually { await gate.entered })
+        if close { await runner.close() } else { await runner.stop() }
+        await gate.release()
+        _ = try await sent.value
+        #expect(await runner.thread == nil)
+        #expect(await !runner.isTurnRunning)
+        #expect(await !runner.record.hasConversation)
+        await runner.close()
+    }
+
+
     @Test func sharedOpeningDoesNotResumeDuringTerminalHandoff() async throws {
         let gate = StartupGate()
         let provider = servers(["handshake", "thread-start"])

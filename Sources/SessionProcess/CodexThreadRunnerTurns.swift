@@ -30,15 +30,28 @@ extension CodexThreadRunner {
         guard !isTurnRunning, !isClosed, !isInTerminal, let turn = waitingMessages.first else { return await changed(self) }
         waitingMessages.removeFirst()
         isTurnRunning = true
+        let (generation, owner) = (openingGeneration, UUID())
+        turnOwner = owner
         do {
-            try await openThread().startTurn(turn)
+            let opened = try await openThread()
+            guard generation == openingGeneration, !isClosed else { endStaleTurn(turn, owner: owner); return await changed(self) }
+            try await opened.startTurn(turn)
         } catch {
+            guard generation == openingGeneration, !isClosed else { endStaleTurn(turn, owner: owner); return await changed(self) }
             // The app-server could not start, or it refused the turn. The later messages would fail in the same way.
             (isTurnRunning, waitingMessages) = (false, [])
             emit(ConversationEvent(.userMessage(UserMessage(identifier: turn.messageIdentifier, text: turn.text, imageCount: turn.images.count, isAccepted: false))))
             emit(ConversationEvent(.turnEnded(TurnEnd(outcome: .failed, errorText: "Codex could not take the message. \(error)"))))
         }
         await changed(self)
+    }
+
+    /// A Stop or a Close came while the turn started, and Codex did not take
+    /// it. No event of Codex ends it, so the thread must not stay busy.
+    private func endStaleTurn(_ turn: CodexTurn, owner: UUID) {
+        guard turnOwner == owner else { return }
+        (isTurnRunning, turnOwner) = (false, nil)
+        emit(ConversationEvent(.userMessage(UserMessage(identifier: turn.messageIdentifier, text: turn.text, imageCount: turn.images.count, isAccepted: false))))
     }
 
     /// The thread on the app-server of its account. The first open starts
@@ -128,6 +141,7 @@ extension CodexThreadRunner {
     func stop() async {
         // An open that runs now gives its thread to no one, and its turn does not start.
         openingGeneration = UUID()
+        if opening != nil { isTurnRunning = false }
         if !waitingMessages.isEmpty {
             emit(ConversationEvent(.notice(Notice(level: .information, text: "The stop removed \(waitingMessages.count) messages that waited for the agent."))))
             waitingMessages = []
@@ -144,6 +158,7 @@ extension CodexThreadRunner {
         guard !isClosed else { return }
         (isClosed, waitingMessages) = (true, [])
         openingGeneration = UUID()
+        isTurnRunning = false
         for listener in listeners.values { listener(.closed) }
         listeners = [:]
         await thread?.close()
