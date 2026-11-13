@@ -51,11 +51,11 @@ import Testing
         let texts = stack.arrangedSubviews.map { ($0 as? NSTextField)?.stringValue ?? "card" }
         #expect(texts == ["card", "Links", "Where a link opens.", "card"])
         #expect(pane.rows.map(\.name) == ["notifications", "open-links-in", "commands"] && controller.controls.count == 3)
-        // A row has the name and the note of its setting at the left of its control.
+        // A row has the name and the note of its setting at the left of its control. A list fills its card.
         let cards = stack.arrangedSubviews.compactMap { $0 as? SettingsCardView }
         let first = try #require(cards[0].rows.rows.first as? SettingRowView)
         #expect(first.label?.stringValue == "Notifications" && first.note?.stringValue == "macOS tells you." && first.arrangedSubviews.last is NSSwitch)
-        #expect(cards[1].rows.rows.count == 2 && cards[1].rows.arrangedSubviews.count == 3)
+        #expect(cards[1].rows.rows.count == 2 && cards[1].rows.rows[1] is SettingRowsView && cards[1].rows.arrangedSubviews.count == 3)
     }
 
     @Test func theControlsShowTheTextsAndTellAChangeWithTheNameOfTheSetting() throws {
