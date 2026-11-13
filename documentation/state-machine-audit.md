@@ -77,3 +77,94 @@ The inventory distinguishes three forms:
 One row describes one machine or a tightly coupled family with the same owner and transition rules.
 Small timer machines remain separate because their cancellation and completion rules differ.
 The states in the tables are descriptive names for current behavior. They are not proposed Swift type names.
+
+## Findings that need attention
+
+### High priority 1 Headless agents bypass terminal approval
+
+[SessionServer.refusal](../Sources/SessionProcess/SessionServer.swift#L466) uses only `SessionRegistry.place(of:)` for terminal reads, input, attachment, and termination.
+[CallerPlace.mayAct](../Sources/SessionProcess/CallerPlace.swift#L19) permits every target for a caller outside the known terminal sessions.
+Headless agents run on pipes in a new process group, not a new terminal session.
+They therefore normally take this unrestricted path.
+The thread request path separately checks `ThreadRegistry.isStartedByAgent`; the terminal request path does not.
+
+**Reproduced:** a stand-in agent started by the real `ThreadRunner` received a refusal for `listThreads`, then read a marker from an unrelated terminal through `readScreen`.
+No approval question was involved.
+The server knew that this process was an agent for the first request.
+
+The caller classification machine needs one rule that includes both terminal membership and agent ancestry.
+Apply that classification to every operation whose authority depends on whether the caller acts for the user.
+Review protected settings, approval receivers, and the process restart request against the same rule.
+
+### High priority 2 Terminal handoff has no reservation
+
+[SessionServer.openInTerminal](../Sources/SessionProcess/SessionServerThreadTerminal.swift#L13) checks whether a thread already has a terminal, then suspends repeatedly before it records the new owner.
+The Claude Code runner accepts messages until `openedInTerminal` eventually calls `setInTerminal`.
+Two callers can both pass the initial check.
+A message can also start a headless process during the handoff.
+
+**Reproduced:** two concurrent calls for one new Claude Code thread both returned success and created two live terminal sessions for the same conversation.
+The registry can retain only one of those sessions in `terminals[thread]`.
+
+Reserve the conversation before the first suspension.
+Keep a distinct handoff phase until the terminal is registered.
+A failure must release the reservation.
+Closing, sending, and a second handoff must observe that phase.
+
+### High priority 3 Codex startup survives Stop and Close
+
+[CodexThreadRunner.sendNextMessage](../Sources/SessionProcess/CodexThreadRunnerTurns.swift#L25) sets `isTurnRunning` before it awaits `openThread()`.
+During that wait, `thread` can still be nil.
+`stop()` and `close()` act on `thread` but neither invalidates `opening`.
+`startOrResumeThread()` later publishes the new thread without checking `isClosed` or a startup generation.
+The suspended send then starts its turn.
+
+**Reproduced twice:** after Stop during opening, the stand-in Codex server returned the agent text `ok` and completed the turn.
+After Close during opening, the same happened with `isClosed == true` and `thread != nil`.
+The second call to `close()` returns early, so it cannot close that late thread.
+
+Startup needs a cancellable operation identity and a checked transition from opening to open.
+Recheck it after every external wait, before publishing a resource and before starting a turn.
+A resource returned to an obsolete operation must be closed.
+
+### High priority 4 Permission publication precedes registration
+
+[ThreadRunner.askPermission](../Sources/SessionProcess/ThreadRunnerPermissions.swift#L18) emits the visible request and awaits `changed(self)` before it inserts the continuation into `waitingPermissions`.
+An answer, Stop, Close, or process end can occur in that interval.
+An answer finds no request. A close drains an empty dictionary.
+The suspended method then registers a new wait after the request should have ended.
+
+**Reproduced:** a `changed` callback closed the runner in this interval.
+The request still registered and ended only at the shortened timeout.
+It reported that the user did not answer in time instead of reporting cancellation.
+In normal use the configured timeout is 24 hours.
+
+Register the wait before publishing it and before the first suspension.
+Check cancellation and the closed state at registration.
+Every published request must already have one final answer path.
+
+### High priority 5 Thread shutdown does not close admission
+
+[ThreadRegistry.terminateAll](../Sources/SessionProcess/ThreadRegistryChanges.swift#L212) closes the current runners, but has no stopping state.
+`create`, `runner`, `running`, and `openCodexServers` can still create work.
+[SessionServer.shutDown](../Sources/SessionProcess/SessionServer.swift#L111) leaves existing client handlers active while it awaits termination.
+Those handlers do not test `isClosed` before serving another request.
+
+**Reproduced at the registry boundary:** after `terminateAll()` returned, `create` and `running` admitted a new thread and runner.
+The missing guard also leaves an admission window during shutdown.
+The terminal `SessionRegistry` already closes this window with `isStopping`.
+
+Seal thread admission before any shutdown suspension.
+Include runners that are starting and Codex account servers in the shutdown barrier.
+The `SessionLifecycle` model currently covers terminal sessions, not this extension of the lifecycle.
+
+### High priority 6 Closing a thread leaves its terminal running
+
+[ThreadRegistry.close](../Sources/SessionProcess/ThreadRegistryChanges.swift#L75) removes the record and closes the headless runner.
+It does not end the session in `terminals[identifier]` or remove that ownership entry.
+The server's `closeThread` route calls only this method.
+
+**Reproduced:** after the duplicate handoff above, closing the thread left both terminal sessions running.
+The source path also shows that the ordinary single-terminal case has no terminal termination call.
+The thread record disappears while its work can continue.
+The close transition needs to acquire and end the current owner, including an owner in handoff.
