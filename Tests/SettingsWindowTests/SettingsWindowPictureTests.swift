@@ -24,6 +24,14 @@ struct SettingsWindowPictureTests {
             controller.sidebar.select(pane: index)
             try save(window, as: "settings-\(pane.pane.title.lowercased().replacingOccurrences(of: " ", with: "-")).png", in: output)
         }
+        controller.sidebar.searchField.stringValue = "new thread"
+        controller.sidebar.search()
+        try save(window, as: "settings-search.png", in: output)
+        window.appearance = NSAppearance(named: .darkAqua)
+        for index in [2, 3] {
+            controller.sidebar.select(pane: index)
+            try save(window, as: "settings-dark-\(index).png", in: output)
+        }
     }
 
     private func save(_ window: NSWindow, as name: String, in output: URL) throws {

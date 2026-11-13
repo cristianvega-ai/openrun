@@ -37,6 +37,10 @@ import Testing
         // The window has the colors and the top rows of the main window, and one width.
         let window = controller.window
         #expect(window?.styleMask.contains(.fullSizeContentView) == true && window?.contentMinSize.width == window?.contentMaxSize.width && window?.title == "Settings")
+        // The arrow keys choose a pane when the window opens, and Find of the Edit menu goes to the search field.
+        #expect(window?.initialFirstResponder === sidebar.table && window?.autorecalculatesKeyViewLoop == true)
+        controller.performFindPanelAction(nil)
+        #expect(sidebar.searchField.currentEditor() != nil)
     }
 
     @Test func aSearchShowsTheRowsOfEachPaneThatHoldItsWords() {

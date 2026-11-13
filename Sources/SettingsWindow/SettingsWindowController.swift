@@ -43,6 +43,8 @@ import PaneAppearance
             content.view.leadingAnchor.constraint(equalTo: sidebar.view.trailingAnchor, constant: 1),
         ])
         window.contentView = root
+        // The arrow keys choose a pane when the window opens, and the Tab key goes through the controls in their order.
+        (window.initialFirstResponder, window.autorecalculatesKeyViewLoop) = (sidebar.table, true)
         for pane in panes { pane.changed = { [weak self] name, text in self?.change?(name, text) } }
         sidebar.chose = { [content] in content.show(pane: $0) }
         sidebar.searched = { [content, sidebar] text in
@@ -61,5 +63,10 @@ import PaneAppearance
     /// at the start, after each change, and after a refused change.
     public func show(_ texts: [String: String]) {
         for pane in panes { pane.show(texts) }
+    }
+
+    /// Find of the Edit menu goes to the search field of the window.
+    @objc func performFindPanelAction(_ sender: Any?) {
+        window?.makeFirstResponder(sidebar.searchField)
     }
 }
