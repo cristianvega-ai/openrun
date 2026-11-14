@@ -65,6 +65,12 @@ import PaneAppearance
         for pane in panes { pane.show(texts) }
     }
 
+    /// Shows the Accounts pane, for a user who chose an account in the
+    /// menu of the new-session button and wants another one.
+    public func showAccounts() {
+        panes.firstIndex { $0.pane.title == SettingsPane.accountsTitle }.map { sidebar.select(pane: $0) }
+    }
+
     /// Find of the Edit menu goes to the search field of the window.
     @objc func performFindPanelAction(_ sender: Any?) {
         window?.makeFirstResponder(sidebar.searchField)

@@ -43,6 +43,12 @@ import Testing
         #expect(window?.initialFirstResponder === sidebar.table && window?.autorecalculatesKeyViewLoop == true)
         controller.performFindPanelAction(nil)
         #expect(sidebar.searchField.currentEditor() != nil)
+        // The menu of the new-session button opens the window at the accounts, also during a search.
+        sidebar.select(pane: 0)
+        sidebar.searchField.stringValue = "font"
+        sidebar.search()
+        controller.showAccounts()
+        #expect(content.titleLabel.stringValue == "Accounts" && !content.isSearching && sidebar.table.selectedRow == 4)
     }
 
     @Test func aSearchShowsTheRowsOfEachPaneThatHoldItsWords() {

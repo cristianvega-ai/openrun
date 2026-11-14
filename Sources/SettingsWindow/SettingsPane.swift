@@ -76,8 +76,10 @@ struct SettingsPane {
 
     /// The logins of each agent. The New Thread or Terminal button
     /// offers a thread under each one.
+    static let accountsTitle = "Accounts"
+
     @MainActor private static var accounts: SettingsPane {
-        SettingsPane(title: "Accounts", symbolName: "person.crop.circle", sections: [
+        SettingsPane(title: accountsTitle, symbolName: "person.crop.circle", sections: [
             SettingsSection(title: "Claude Code", note: "Each account is one login of Claude Code. A new thread runs under the account that you choose for it.", rows: [
                 SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Accounts") { accountList(program: "claude") },
             ]),
