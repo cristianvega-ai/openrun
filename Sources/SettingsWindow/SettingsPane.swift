@@ -81,10 +81,10 @@ struct SettingsPane {
     @MainActor private static var accounts: SettingsPane {
         SettingsPane(title: accountsTitle, symbolName: "person.crop.circle", sections: [
             SettingsSection(title: "Claude Code", note: "Each account is one login of Claude Code. A new thread runs under the account that you choose for it.", rows: [
-                SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Accounts") { accountList(program: "claude") },
+                SettingRow(name: SettingName.claudeCodeAccounts.rawValue, label: "Accounts") { accountList(program: "claude", agent: "claude-code") },
             ]),
             SettingsSection(title: "Codex", note: "Each account is one login of Codex, with its Codex home folder.", rows: [
-                SettingRow(name: SettingName.codexAccounts.rawValue, label: "Accounts") { accountList(program: "codex") },
+                SettingRow(name: SettingName.codexAccounts.rawValue, label: "Accounts") { accountList(program: "codex", agent: "codex") },
             ]),
         ])
     }
@@ -117,8 +117,8 @@ struct SettingsPane {
 
     /// The list of the accounts of an agent. The button that adds an
     /// account asks for the folder of its settings.
-    @MainActor private static func accountList(program: String) -> EntryListSettingControl {
-        let control = EntryListSettingControl(.account(program: program))
+    @MainActor private static func accountList(program: String, agent: String) -> EntryListSettingControl {
+        let control = EntryListSettingControl(.account(program: program, agent: agent))
         control.chooseDetail = EntryListSettingControl.chooseFolder
         return control
     }

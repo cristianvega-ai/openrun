@@ -1,3 +1,4 @@
+import AccountUsage
 import AppKit
 import Settings
 import Testing
@@ -20,6 +21,10 @@ struct SettingsWindowPictureTests {
         window.orderFrontRegardless()
         let accounts = #"[{"folder":"/Users/ana/.claude-work","name":"Work"},{"folder":"/Users/ana/.claude-home","name":"Home"}]"#
         controller.show(["claude-code-accounts": accounts])
+        controller.showUsage([
+            AccountUsageDisplay(title: "", windows: [.init(name: "5h", usedFraction: 0.12), .init(name: "Week", usedFraction: 0.38)], readTime: "14:32", help: "", agent: "claude-code"),
+            AccountUsageDisplay(title: "", windows: [.init(name: "5h", usedFraction: 1, isAtLimit: true)], readTime: "Nov 12", help: "", agent: "claude-code", account: "Work"),
+        ])
         for (index, pane) in controller.panes.enumerated() {
             controller.sidebar.select(pane: index)
             try save(window, as: "settings-\(pane.pane.title.lowercased().replacingOccurrences(of: " ", with: "-")).png", in: output)

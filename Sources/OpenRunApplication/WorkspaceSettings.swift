@@ -16,6 +16,8 @@ extension Workspace {
             settingsWindow = controller
         }
         settingsWindow?.show(settingTexts)
+        // The Accounts pane shows the same usage as the foot of the first pane.
+        settingsWindow?.showUsage(window.projectsList.content.accounts)
         settingsWindow?.showWindow(sender)
     }
 

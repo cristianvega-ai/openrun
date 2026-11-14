@@ -204,6 +204,10 @@ import Testing
         workspace.closeRow(thread)
         #expect(await waitUntil { test.shownRows.isEmpty && workspace.connection.overview.threads.isEmpty })
         #expect(workspace.window.projectsList.content.accounts.map(\.title) == ["Claude Code"])
+        // The Accounts pane of the settings shows the same reading.
+        workspace.showSettings(nil)
+        defer { workspace.settingsWindow?.close() }
+        #expect(workspace.settingsWindow?.usage.map(\.title) == ["Claude Code"])
         // The reading stays in the data folder for the next start of the app.
         workspace.usageStore.finishWrites()
         #expect(AccountUsageStore(dataFolder: DataFolder(path: workspace.socket.folder)).load() == workspace.keptUsage && workspace.keptUsage.count == 1)

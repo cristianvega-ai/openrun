@@ -50,6 +50,7 @@ extension Workspace {
         defer { isRefreshing = false }
         let content = ListContent(overview: connection.overview, layout: layout, inView: sessionInView, keptUsage: shownKeptUsage, home: home)
         window.projectsList.show(content.projects)
+        settingsWindow?.showUsage(content.projects.accounts)
         if let project = projectToSelect, content.projects.projects.contains(where: { $0.identifier == project }) {
             window.projectsList.select(.project(project))
             projectToSelect = nil

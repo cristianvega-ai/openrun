@@ -14,7 +14,8 @@ import PaneAppearance
     ///     with its note.
     ///   - control: The control at the right. A row with no control
     ///     gives its whole width to its words.
-    init(label: String, note: String? = nil, control: NSView?) {
+    ///   - under: A view under the note, such as the usage of an account.
+    init(label: String, note: String? = nil, control: NSView?, under: NSView? = nil) {
         super.init(frame: .zero)
         let words = NSStackView()
         (words.orientation, words.alignment, words.spacing) = (.vertical, .leading, 2)
@@ -30,6 +31,7 @@ import PaneAppearance
             words.addArrangedSubview(text)
             self.note = text
         }
+        if let under { words.addArrangedSubview(under) }
         // The words take the room that the control leaves.
         words.setHuggingPriority(.init(1), for: .horizontal)
         words.setHuggingPriority(.required, for: .vertical)

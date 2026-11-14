@@ -1,3 +1,4 @@
+import AccountUsage
 import AppKit
 
 /// A setting that is a list of entries, each with a name and one more
@@ -20,14 +21,18 @@ import AppKit
         var fixedNote: String?
         /// The second text is a folder, which the user chooses in a panel.
         var isFolder = false
+        /// The agent of an account list, as the session process names it.
+        var agent: String?
 
         /// An empty command line starts the login shell.
         static let command = Detail(key: "command", placeholder: "Login shell", newName: "New Command", addTitle: "Add Command", hint: "An empty command starts your login shell.")
 
-        /// - Parameter program: The name of the program of the agent in a shell.
-        static func account(program: String) -> Detail {
+        /// - Parameters:
+        ///   - program: The name of the program of the agent in a shell.
+        ///   - agent: The agent as the session process names it.
+        static func account(program: String, agent: String) -> Detail {
             Detail(key: "folder", newName: "New Account", addTitle: "Add Account…", hint: "An account is the folder of the settings of one login.",
-                   fixedTitle: "Login of Your Shell", fixedNote: "The login that the \(program) command uses in a terminal. It needs no entry.", isFolder: true)
+                   fixedTitle: "Login of Your Shell", fixedNote: "The login that the \(program) command uses in a terminal. It needs no entry.", isFolder: true, agent: agent)
         }
     }
 
@@ -39,6 +44,10 @@ import AppKit
     let detail: Detail
     private(set) var entries: [Entry] = []
     private(set) var entryRows: [EntryRowView] = []
+    /// The usage of each account: the login of the shell first, then one
+    /// line for each entry. A list of commands has none.
+    private(set) var usageLines: [AccountUsageLineView] = []
+    private var usage: [AccountUsageDisplay] = []
     let addButton: NSButton
     private let rows = SettingRowsView()
     var changed: ((String) -> Void)?
@@ -82,8 +91,28 @@ import AppKit
             }
             return row
         }
-        let first = detail.fixedTitle.map { [SettingRowView(label: $0, note: detail.fixedNote, control: nil)] } ?? []
-        rows.show(first + entryRows + [SettingRowView(label: "", note: detail.hint, control: addButton)])
+        usageLines = detail.agent == nil ? [] : (0...entries.count).map { _ in AccountUsageLineView() }
+        let first = detail.fixedTitle.map { [SettingRowView(label: $0, note: detail.fixedNote, control: nil, under: usageLines.first)] } ?? []
+        let entryViews = zip(entryRows, usageLines.dropFirst()).map { row, line -> NSView in
+            // The usage stands under the name of the account.
+            let view = NSStackView(views: [row, line])
+            (view.orientation, view.alignment, view.spacing, view.edgeInsets) = (.vertical, .leading, 0, NSEdgeInsets(top: 0, left: 0, bottom: 10, right: 0))
+            row.widthAnchor.constraint(equalTo: view.widthAnchor).isActive = true
+            line.leadingAnchor.constraint(equalTo: row.nameField.leadingAnchor).isActive = true
+            return view
+        }
+        rows.show(first + (entryViews.isEmpty ? entryRows : entryViews) + [SettingRowView(label: "", note: detail.hint, control: addButton)])
+        showUsage(usage)
+    }
+
+    /// Shows the usage of each account of the agent of the list, from the
+    /// displays of every account.
+    func showUsage(_ displays: [AccountUsageDisplay]) {
+        usage = displays
+        let names = [nil] + entries.map { Optional($0.name) }
+        for (line, name) in zip(usageLines, names) {
+            line.show(displays.first { $0.agent == detail.agent && $0.account == name })
+        }
     }
 
     /// Takes the new text of one field and tells the new list.

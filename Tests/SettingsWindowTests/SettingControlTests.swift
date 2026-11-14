@@ -1,3 +1,4 @@
+import AccountUsage
 import AppKit
 import Testing
 @testable import SettingsWindow
@@ -106,7 +107,7 @@ import Testing
     }
 
     @Test func theAccountsAreRowsWithANameAndASettingsFolder() {
-        let control = EntryListSettingControl(.account(program: "claude"))
+        let control = EntryListSettingControl(.account(program: "claude", agent: "claude-code"))
         let told = changes(of: control)
         control.show(#"[{"folder":"/Users/me/.claude-work","name":"Work"}]"#)
         #expect(control.entries == [.init(name: "Work", detail: "/Users/me/.claude-work")])
@@ -134,5 +135,19 @@ import Testing
         // The commands are no accounts, so they do not show.
         control.show(#"[{"command":"claude","name":"Claude Code"}]"#)
         #expect(control.entries.count == 3)
+    }
+
+    @Test func eachAccountShowsItsUsageUnderItsName() {
+        let control = EntryListSettingControl(.account(program: "claude", agent: "claude-code"))
+        control.show(#"[{"folder":"/Users/me/.claude-work","name":"Work"},{"folder":"/Users/me/.claude-home","name":"Home"}]"#)
+        #expect(control.usageLines.count == 3 && control.usageLines.allSatisfy { $0.display == nil } && EntryListSettingControl().usageLines.isEmpty)
+        let work = AccountUsageDisplay(title: "Claude Code · Work", windows: [.init(name: "Week", usedFraction: 0.4)], readTime: "09:15", help: "", agent: "claude-code", account: "Work")
+        let shell = AccountUsageDisplay(title: "Claude Code", windows: [], readTime: "08:00", help: "", agent: "claude-code")
+        // A reading of another agent with the same name of an account does not show.
+        control.showUsage([work, shell, AccountUsageDisplay(title: "Codex · Home", windows: [], readTime: "", help: "", agent: "codex", account: "Home")])
+        #expect(control.usageLines.map(\.display) == [shell, work, nil])
+        // New rows keep the readings.
+        control.remove(1)
+        #expect(control.usageLines.map(\.display) == [shell, work])
     }
 }

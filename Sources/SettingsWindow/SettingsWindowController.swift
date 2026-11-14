@@ -1,3 +1,4 @@
+import AccountUsage
 import AppKit
 import PaneAppearance
 
@@ -15,6 +16,8 @@ import PaneAppearance
     let content: SettingsContentController
     /// The name of a setting and the new text of its value.
     public var change: ((_ name: String, _ text: String) -> Void)?
+    /// The usage of the accounts that the window shows.
+    public private(set) var usage: [AccountUsageDisplay] = []
 
     /// - Parameter permissionModeTitle: The words of the app for a
     ///   permission mode of Claude Code, as the chat shows them.
@@ -63,6 +66,15 @@ import PaneAppearance
     /// at the start, after each change, and after a refused change.
     public func show(_ texts: [String: String]) {
         for pane in panes { pane.show(texts) }
+    }
+
+    /// Shows the usage of each account in the Accounts pane, from the
+    /// same displays as the foot of the first pane.
+    public func showUsage(_ displays: [AccountUsageDisplay]) {
+        usage = displays
+        for pane in panes {
+            for control in pane.controls.values { (control as? EntryListSettingControl)?.showUsage(displays) }
+        }
     }
 
     /// Shows the Accounts pane, for a user who chose an account in the
