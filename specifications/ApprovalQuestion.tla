@@ -15,10 +15,18 @@
 \* second question of one session comes before the question, so it is one
 \* more way to the "refused" phase.
 \*
+\* A program that the agent of a thread started runs on pipes, outside every
+\* terminal session, but it acts for the agent and not for the user.  The
+\* session process counts it as unknown too (finding 1 of the state machine
+\* audit).  Its request takes the same steps as the request of a caller that
+\* ended early, so CallerEndsEarly also stands for such a program.
+\*
 \* An answerer is a connection that asks to receive the questions.  The
 \* signed OpenRun.app makes such a connection.  Any other program of the user
 \* can make one too, so some answerers are impostors.  The user answers only
-\* through a signed answerer.  An impostor always allows.
+\* through a signed answerer.  An impostor always allows.  A signed app that
+\* a program in a session or an agent started counts as that program, so the
+\* model puts it among the impostors.
 \*
 \* The session process is a Swift actor for the questions, so each step below
 \* is one step of that actor.  A restart of the session process closes every
@@ -91,7 +99,8 @@ InitialState ==
   /\ performedOnce = [request \in Requests |-> FALSE]
 
 \* The caller writes its request and ends before the session process accepts
-\* the connection.  The bytes stay in the socket.
+\* the connection.  The bytes stay in the socket.  The step also stands for a
+\* program of an agent, whose place is unknown from the start.
 CallerEndsEarly(request) ==
   /\ phase[request] = "idle" /\ callerAlive[request]
   /\ callerAlive' = [callerAlive EXCEPT ![request] = FALSE]
@@ -234,7 +243,8 @@ QuestionsReachOnlySignedAnswerers ==
 AllowsApplyToTheirQuestion == applied \subseteq intended
 
 \* A request is performed only after an allow.  The control that takes an
-\* ended caller for one outside every session makes this false.
+\* ended caller, or a program of an agent, for one outside every session
+\* makes this false.
 PerformedOnlyWithAllow ==
   \A request \in Requests :
     performedOnce[request] => \E answerer \in Answerers :
