@@ -22,6 +22,7 @@ extension Workspace {
         threadsChanged(from: previous)
         if overview.settings != previous.settings { settingsChanged() }
         alertsChanged(from: previous)
+        keepUsage()
         let isFirstList = showsSessionAtStart && connection.hasFirstLists
         if isFirstList {
             showsSessionAtStart = false
@@ -47,7 +48,7 @@ extension Workspace {
     func refresh() {
         isRefreshing = true
         defer { isRefreshing = false }
-        let content = ListContent(overview: connection.overview, layout: layout, inView: sessionInView, home: home)
+        let content = ListContent(overview: connection.overview, layout: layout, inView: sessionInView, keptUsage: shownKeptUsage, home: home)
         window.projectsList.show(content.projects)
         if let project = projectToSelect, content.projects.projects.contains(where: { $0.identifier == project }) {
             window.projectsList.select(.project(project))

@@ -1,5 +1,7 @@
+import AccountUsage
 import AgentConversation
 import AppKit
+import DataStorage
 import PseudoTerminal
 @testable import ChatView
 import SessionConnection
@@ -187,6 +189,24 @@ import Testing
         workspace.closeRow(thread)
         #expect(await waitUntil { test.shownRows.isEmpty && workspace.shown == .nothing })
         #expect(workspace.threadPanes.all.isEmpty && workspace.layout.selectedRow == nil)
+    }
+
+    @Test func anAccountKeepsItsLastUsageReadingAfterItsThreadIsGone() async throws {
+        let test = try await start()
+        defer { test.stop() }
+        let workspace = test.workspace
+        workspace.confirmCloseOfThread = { _, answer in answer(true) }
+        workspace.newThread()
+        #expect(await waitUntil { workspace.shownThread.flatMap { workspace.threadPanes.existing($0) }?.isReplayComplete == true })
+        let thread = try #require(workspace.shownThread), pane = try #require(workspace.threadPanes.existing(thread))
+        pane.chatViewController(pane.chat, send: ChatOutgoingMessage(text: "Reply with the single word ok."))
+        #expect(await waitUntil { workspace.window.projectsList.content.accounts.map(\.title) == ["Claude Code"] })
+        workspace.closeRow(thread)
+        #expect(await waitUntil { test.shownRows.isEmpty && workspace.connection.overview.threads.isEmpty })
+        #expect(workspace.window.projectsList.content.accounts.map(\.title) == ["Claude Code"])
+        // The reading stays in the data folder for the next start of the app.
+        workspace.usageStore.finishWrites()
+        #expect(AccountUsageStore(dataFolder: DataFolder(path: workspace.socket.folder)).load() == workspace.keptUsage && workspace.keptUsage.count == 1)
     }
 
     @Test func anAgentThatWaitsForAnAnswerNotifiesUnlessItsChatIsInView() async throws {

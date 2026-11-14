@@ -1,3 +1,4 @@
+import AccountUsage
 import AlertNotifications
 import AppKit
 import BrowserPane
@@ -29,6 +30,9 @@ final class Workspace: NSObject {
     let layoutStore: WindowLayoutStore
     let panes: SessionPanes
     let threadPanes = ThreadPanes()
+    /// The last usage reading of each account, as `account-usage.json` keeps them.
+    let usageStore: AccountUsageStore
+    var keptUsage: [AccountUsageReading]
     /// The web pages of the rows, from the first time that a row shows one.
     var browserPanes: [UUID: BrowserPaneController] = [:]
     /// Where the app keeps what the user chose last, such as the account of a new thread.
@@ -129,6 +133,8 @@ final class Workspace: NSObject {
         // app on a temporary socket never touches the data of the user.
         layoutStore = WindowLayoutStore(dataFolder: DataFolder(path: socket.folder))
         layout = layoutStore.load()
+        usageStore = AccountUsageStore(dataFolder: DataFolder(path: socket.folder))
+        keptUsage = usageStore.load()
         savedLayout = layout
         panes = SessionPanes { SessionPaneController(start: .runningSession($0), socket: socket) }
         super.init()
