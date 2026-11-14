@@ -125,6 +125,16 @@ import Testing
         #expect(size.field.stringValue == "13" && mode.popup.titleOfSelectedItem == "mode default")
     }
 
+    @Test func signInTellsTheAgentAndTheAccount() throws {
+        var told: [String] = []
+        controller.signIn = { told.append("\($0) \($1 ?? "shell")") }
+        controller.show(["codex-accounts": #"[{"folder":"/Users/me/.codex-work","name":"Work"}]"#])
+        let codex = try #require(controller.panes[3].controls["codex-accounts"] as? EntryListSettingControl)
+        codex.entryRows[0].signInToAccount()
+        codex.shellSignInButton.performClick(nil)
+        #expect(told == ["codex Work", "codex shell"])
+    }
+
     @Test func theFontOfTheSystemComesFirstAndEachFontHasOneWidth() {
         let fonts = SettingsPane.fixedPitchFonts
         #expect(fonts.first == "SF Mono" && fonts.contains("Menlo") && !fonts.contains("Helvetica") && Set(fonts).count == fonts.count)

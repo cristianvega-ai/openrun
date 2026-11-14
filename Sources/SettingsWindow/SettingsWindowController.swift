@@ -16,6 +16,9 @@ import PaneAppearance
     let content: SettingsContentController
     /// The name of a setting and the new text of its value.
     public var change: ((_ name: String, _ text: String) -> Void)?
+    /// Starts the login of an agent under an account of the settings, or
+    /// under the login of the shell for `nil`.
+    public var signIn: ((_ agent: String, _ account: String?) -> Void)?
     /// The usage of the accounts that the window shows.
     public private(set) var usage: [AccountUsageDisplay] = []
 
@@ -49,6 +52,7 @@ import PaneAppearance
         // The arrow keys choose a pane when the window opens, and the Tab key goes through the controls in their order.
         (window.initialFirstResponder, window.autorecalculatesKeyViewLoop) = (sidebar.table, true)
         for pane in panes { pane.changed = { [weak self] name, text in self?.change?(name, text) } }
+        for list in accountLists { list.signIn = { [weak self] agent, account in self?.signIn?(agent, account) } }
         sidebar.chose = { [content] in content.show(pane: $0) }
         sidebar.searched = { [content, sidebar] text in
             content.search(text)
@@ -72,8 +76,14 @@ import PaneAppearance
     /// same displays as the foot of the first pane.
     public func showUsage(_ displays: [AccountUsageDisplay]) {
         usage = displays
-        for pane in panes {
-            for control in pane.controls.values { (control as? EntryListSettingControl)?.showUsage(displays) }
+        for list in accountLists { list.showUsage(displays) }
+    }
+
+    /// The lists of the accounts. A pane makes its controls with its view.
+    private var accountLists: [EntryListSettingControl] {
+        panes.flatMap { pane in
+            pane.loadViewIfNeeded()
+            return pane.controls.values.compactMap { ($0 as? EntryListSettingControl).flatMap { $0.detail.agent == nil ? nil : $0 } }
         }
     }
 

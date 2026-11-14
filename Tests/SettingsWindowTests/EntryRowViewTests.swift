@@ -21,6 +21,9 @@ import Testing
         account.choose = { told.append("choose") }
         account.chooseDetail()
         #expect(!account.detailField.isEditable && account.detailField.toolTip == "/Users/me/.claude-work" && told.last == "choose")
-        #expect(account.arrangedSubviews.count == row.arrangedSubviews.count + 1)
+        // A second button starts the login of the agent under the account.
+        account.signIn = { told.append("sign in") }
+        account.signInToAccount()
+        #expect(account.arrangedSubviews.count == row.arrangedSubviews.count + 2 && told.last == "sign in")
     }
 }

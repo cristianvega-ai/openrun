@@ -48,6 +48,10 @@ import AppKit
     /// line for each entry. A list of commands has none.
     private(set) var usageLines: [AccountUsageLineView] = []
     private var usage: [AccountUsageDisplay] = []
+    /// Starts the login of the agent of the list under an account: the
+    /// name of an entry, or `nil` for the login of the shell.
+    var signIn: ((_ agent: String, _ account: String?) -> Void)?
+    let shellSignInButton = NSButton(title: "Sign In", target: nil, action: nil)
     let addButton: NSButton
     private let rows = SettingRowsView()
     var changed: ((String) -> Void)?
@@ -63,6 +67,7 @@ import AppKit
         addButton = NSButton(title: detail.addTitle, target: nil, action: nil)
         super.init()
         (addButton.target, addButton.action) = (self, #selector(add))
+        (shellSignInButton.target, shellSignInButton.action) = (self, #selector(signInToShellAccount))
         makeRows()
     }
 
@@ -86,13 +91,14 @@ import AppKit
             let row = EntryRowView(name: entries[index].name, detail: entries[index].detail, placeholder: detail.placeholder, isFolder: detail.isFolder)
             row.edited = { [weak self] isName, text in self?.take(row: index, isName: isName, text: text) }
             row.remove = { [weak self] in self?.remove(index) }
+            row.signIn = { [weak self] in self?.signIn(to: self?.entries[index].name) }
             row.choose = { [weak self] in
                 self?.chooseDetail? { text in text.map { self?.take(row: index, isName: false, text: $0) } }
             }
             return row
         }
         usageLines = detail.agent == nil ? [] : (0...entries.count).map { _ in AccountUsageLineView() }
-        let first = detail.fixedTitle.map { [SettingRowView(label: $0, note: detail.fixedNote, control: nil, under: usageLines.first)] } ?? []
+        let first = detail.fixedTitle.map { [SettingRowView(label: $0, note: detail.fixedNote, control: detail.agent == nil ? nil : shellSignInButton, under: usageLines.first)] } ?? []
         let entryViews = zip(entryRows, usageLines.dropFirst()).map { row, line -> NSView in
             // The usage stands under the name of the account.
             let view = NSStackView(views: [row, line])
@@ -103,6 +109,12 @@ import AppKit
         }
         rows.show(first + (entryViews.isEmpty ? entryRows : entryViews) + [SettingRowView(label: "", note: detail.hint, control: addButton)])
         showUsage(usage)
+    }
+
+    @objc func signInToShellAccount() { signIn(to: nil) }
+
+    private func signIn(to account: String?) {
+        if let agent = detail.agent { signIn?(agent, account) }
     }
 
     /// Shows the usage of each account of the agent of the list, from the

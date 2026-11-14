@@ -11,6 +11,8 @@ import PaneAppearance
     /// Tells a new text of the name, or of the second text.
     var edited: ((_ isName: Bool, _ text: String) -> Void)?
     var choose: (() -> Void)?
+    /// Starts the login of the agent under the folder of the account.
+    var signIn: (() -> Void)?
     var remove: (() -> Void)?
 
     init(name: String, detail: String, placeholder: String, isFolder: Bool) {
@@ -31,6 +33,7 @@ import PaneAppearance
         if isFolder {
             (detailField.textColor, detailField.toolTip) = (PaneColor.quietText, detail)
             addArrangedSubview(NSButton(title: "Choose…", target: self, action: #selector(chooseDetail)))
+            addArrangedSubview(NSButton(title: "Sign In", target: self, action: #selector(signInToAccount)))
         }
         addArrangedSubview(PaneButton.make(symbol: "trash", label: "Remove", target: self, action: #selector(removeEntry)))
     }
@@ -41,4 +44,5 @@ import PaneAppearance
     @objc func typed(_ field: NSTextField) { edited?(field.tag == 0, field.stringValue) }
     @objc func chooseDetail() { choose?() }
     @objc func removeEntry() { remove?() }
+    @objc func signInToAccount() { signIn?() }
 }

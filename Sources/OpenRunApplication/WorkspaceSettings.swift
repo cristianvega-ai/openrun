@@ -13,6 +13,7 @@ extension Workspace {
         if settingsWindow == nil {
             let controller = SettingsWindowController(permissionModeTitle: ThreadRowFacts.permissionModeTitle)
             controller.change = { [weak self] name, text in self?.changeSetting(name, to: text) }
+            controller.signIn = { [weak self] agent, account in self?.signIn(agent: agent, account: account) }
             settingsWindow = controller
         }
         settingsWindow?.show(settingTexts)
