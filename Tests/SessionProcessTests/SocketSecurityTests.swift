@@ -461,6 +461,14 @@ extension SessionProcessIntegration {
             defer { process.stop() }
             #expect(await process.waitForExit(timeout: 10) == 0)
             #expect(process.log.contains("Usage: openrun-session"))
+            // The usage lines once left out options that the parser accepts.
+            let usageLines = process.log.components(separatedBy: "\n\n").first ?? ""
+            for option in [
+                "--socket", "--data-folder", "--answerer-requirement", "--launch-agent", "--agent-program",
+                "--codex-program", "--own-environment-for-agents", "--build-identifier", "--help",
+            ] {
+                #expect(usageLines.contains(option), "\(option) is not in the usage lines")
+            }
         }
 
         // MARK: - The user at the other end

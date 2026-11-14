@@ -162,6 +162,7 @@ public struct SessionProcess: Sendable {
         Usage: openrun-session [--socket PATH] [--data-folder PATH] [--answerer-requirement REQUIREMENT] [--launch-agent]
                                [--agent-program PROGRAM] [--codex-program PROGRAM] [--own-environment-for-agents]
                openrun-session --build-identifier
+               openrun-session --help
 
         Runs the OpenRun session process in the foreground and logs to standard error.
         The socket is PATH, or OPENRUN_SOCKET, or ~/Library/Application Support/OpenRun/session.socket.
