@@ -52,6 +52,20 @@ import Testing
         #expect(opener.targets == [URL(string: "https://example.com/plain"), URL(string: "https://a.b/x")])
     }
 
+    /// The setting `open-links-in` applies to a plain address as it applies to a link
+    /// of OSC 8 (decision of 2026-11-13), so the browser split must get it too.
+    @Test func aHostThatShowsWebPagesTakesAPlainAddress() throws {
+        let terminal = try Terminal(size: TerminalSize(columns: 40, rows: 5), scrollbackLimit: 0)
+        terminal.write("read https://example.com/plain now")
+        let click = LinkClick(terminal: terminal), opener = RecordingLinkOpener()
+        click.opener = opener
+        var offered: [URL] = []
+        click.webLinkAction = { offered.append($0); return true }
+        #expect(click.press(modifiers: .command, at: cell(8)))
+        click.release(at: cell(12))
+        #expect(offered == [URL(string: "https://example.com/plain")] && opener.targets.isEmpty)
+    }
+
     @Test func otherSchemesWaitForYesAndInvalidAddressesAreRejected() async throws {
         let address = "file:///tmp/example"
         let (click, opener) = try makeClick(address: address)
