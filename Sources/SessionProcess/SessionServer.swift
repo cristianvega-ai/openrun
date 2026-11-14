@@ -483,6 +483,10 @@ actor SessionServer {
         let targetText = SessionSummary.text(for: target)
         guard case .session(let own) = place, let asking = await registry.session(for: own),
               let targetSession = await registry.session(for: target) else {
+            // An agent is no session, so a question could not tell who asks.
+            if await threads.isStartedByAgent(peer.processIdentifier) {
+                return Self.refusal("A program that an agent of a thread started asked to \(verb) session \(targetText). An agent may not act on another terminal, so the request is refused.")
+            }
             return Self.refusal("The program that asked to \(verb) session \(targetText) runs in no session that the session process can name, such as one that has ended. Such a request needs the user's approval, and it is refused.")
         }
         let start = "A program in session \(SessionSummary.text(for: own)) asked to \(verb) session \(targetText)"
@@ -549,7 +553,8 @@ actor SessionServer {
 
     /// Where a caller acts from. A program that an agent of a thread
     /// started runs for the agent and not for the user, also outside
-    /// every terminal session, so it counts as another session.
+    /// every terminal session. Its place is unknown, so it acts on no
+    /// other session, and it is no answerer of the questions.
     private func callerPlace(of peer: PeerProcess) async -> CallerPlace {
         if await threads.isStartedByAgent(peer.processIdentifier) { return .unknown }
         return await registry.place(of: peer)

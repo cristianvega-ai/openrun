@@ -29,7 +29,7 @@ An independent review of the first version of the repairs found eight more defec
 
 | Finding | Repair | Commits |
 |---|---|---|
-| 1 | A program that an agent started counts as a program in another session, so the user is asked first. | `4f65d7e9`, `84622721`, `98d211b4` |
+| 1 | A program that an agent started has an unknown place, so its request to another terminal is refused with no question. | `4f65d7e9`, `84622721`, `98d211b4` |
 | 2 | The registry and the runner reserve a thread before the first wait of a handoff. | `ce679fb2`, `57f73a6e`, `c5692a8f` |
 | 3 | A Codex open and a turn start have a generation, which Stop and Close change. | `04df2bc5`, `b934f9d9`, `64a37c66`, `0670dccf` |
 | 4 | The runner records a permission wait before a client sees the request. | `180335f6` |
@@ -58,6 +58,8 @@ These limits remain:
 - A program that an agent started, and that then left its parent, such as a daemon, escapes the check of finding 1. The terminal path accepts the same limit for `setsid`.
 - No test makes a Codex terminal of finding 9 come back after a restart. The change moves one call into the step that both agents use.
 - No test plays a Stop that comes while Codex refuses the start of a turn. A test plays a Stop and a Close during the open.
+
+The model `ApprovalQuestion` tells of the programs of agents since `9c3bb767`. The full set of the TLA+ models gave every expected outcome after the repairs.
 
 After the last commit of the repairs, the complete `swift test` passed with no failure.
 Timing tests of the terminal flow, the chat speed and the row layout failed now and then under the load of other builds. They passed when they ran alone.

@@ -33,8 +33,8 @@ import Testing
         _ = try client.sendThreadMessage(thread, text: "Read the other terminal.", images: [])
         let output = folder.appendingPathComponent("output")
         #expect(await eventually { (try? String(contentsOf: output, encoding: .utf8))?.contains("status") == true })
-        // No app answers the question in the test, so the read is refused.
+        // An agent is no session, so the read is refused with no question.
         let text = try String(contentsOf: output, encoding: .utf8)
-        #expect(!text.contains("secret-marker") && text.hasSuffix("status 1\n"))
+        #expect(!text.contains("secret-marker") && text.hasSuffix("status 1\n") && text.contains("An agent may not act on another terminal"))
     }
 }
