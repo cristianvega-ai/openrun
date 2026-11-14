@@ -159,8 +159,8 @@ let package = Package(
         .target(name: "SessionsList", dependencies: ["PaneAppearance", "ListUpdates"]),
         .testTarget(name: "SessionsListTests", dependencies: ["SessionsList", "PaneAppearance"]),
         // What the two lists of the main window show, made from the facts of the session process and the layout.
-        .target(name: "ListContent", dependencies: ["SessionOverview", "SessionProtocol", "WindowLayout", "ProjectsList", "SessionsList"]),
-        .testTarget(name: "ListContentTests", dependencies: ["ListContent", "SessionOverview", "SessionProtocol", "WindowLayout", "ProjectsList", "SessionsList"]),
+        .target(name: "ListContent", dependencies: ["SessionOverview", "SessionProtocol", "WindowLayout", "ProjectsList", "SessionsList", "AccountUsage"]),
+        .testTarget(name: "ListContentTests", dependencies: ["ListContent", "SessionOverview", "SessionProtocol", "WindowLayout", "ProjectsList", "SessionsList", "AccountUsage"]),
         // The main window: the three panes as stacked sheets, their widths, and the focus between them.
         .target(name: "MainWindow", dependencies: ["PaneAppearance", "ProjectsList", "SessionsList"]),
         .testTarget(name: "MainWindowTests", dependencies: ["MainWindow", "PaneAppearance", "ProjectsList", "SessionsList", "SessionPane", "SessionProcessHarness", "SessionProtocol"]),
