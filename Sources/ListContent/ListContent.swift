@@ -23,9 +23,12 @@ public struct ListContent {
     private let accounts: [AccountUsageDisplay]
     private let home: String
 
-    /// - Parameter inView: The session that the user looks at and types
-    ///   into. It shows no alert.
-    public init(overview: SessionOverview, layout: WindowLayout, inView: UUID?, home: String = NSHomeDirectory()) {
+    /// - Parameters:
+    ///   - inView: The session that the user looks at and types into. It
+    ///     shows no alert.
+    ///   - keptUsage: The last readings of the accounts, which stay after
+    ///     their threads are gone.
+    public init(overview: SessionOverview, layout: WindowLayout, inView: UUID?, keptUsage: [AccountUsageReading] = [], home: String = NSHomeDirectory()) {
         let sessions = Dictionary(overview.sessions.map { ($0.identifier, $0) }, uniquingKeysWith: { first, _ in first })
         // A session can name a project that a newer list no longer holds.
         let known = Set(overview.projects.filter { $0.folder != nil }.map(\.identifier))
@@ -40,7 +43,7 @@ public struct ListContent {
             let first = row.pane.sessions.lazy.compactMap { sessions[$0] }.first
             return (display, first?.projectIdentifier.flatMap { known.contains($0) ? $0 : nil }, first?.currentFolder ?? first?.folder ?? "")
         }
-        (projectSummaries, accounts, self.home) = (overview.projects, AccountUsageFacts.displays(of: overview.threads), home)
+        (projectSummaries, accounts, self.home) = (overview.projects, AccountUsageFacts.displays(of: overview.threads, kept: keptUsage), home)
     }
 
     /// The content of the first pane.

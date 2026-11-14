@@ -1,43 +1,53 @@
 import AccountUsage
 import Foundation
-import ProjectsList
 import SessionProtocol
 
-/// The usage of each account for the foot of the first pane, from the
-/// readings that the agents gave in the threads (proposal 7).
+/// The usage of each account for the foot of the first pane and for the
+/// settings window, from the readings that the agents gave in the
+/// threads (proposal 7).
 public enum AccountUsageFacts {
     /// The agents in the order of the foot. An agent of a later build
     /// comes after them.
     private static let agentOrder = ["claude-code", "codex"]
 
-    /// One display for each account with a reading: the newest reading
-    /// among its threads. The account of the login shell, which has no
-    /// name, comes before the other accounts of its agent.
-    public static func displays(of threads: [ThreadSummary], timeZone: TimeZone = .current) -> [AccountUsageDisplay] {
-        var newest: [[String]: ThreadSummary] = [:]
-        for thread in threads {
-            guard let readAt = thread.usageReadAt, thread.usageWindows?.contains(where: { $0.usedFraction != nil }) == true else { continue }
-            let rank = String(agentOrder.firstIndex(of: thread.agent) ?? agentOrder.count)
-            let key = [rank, thread.agent, thread.accountName ?? ""]
-            if let kept = newest[key]?.usageReadAt, kept >= readAt { continue }
-            newest[key] = thread
-        }
-        return newest.sorted { $0.key.lexicographicallyPrecedes($1.key) }.compactMap { display(of: $0.value, timeZone: timeZone) }
+    /// The newest reading of each account among the threads.
+    public static func readings(of threads: [ThreadSummary]) -> [AccountUsageReading] {
+        AccountUsageReading.newest(threads.compactMap { thread in
+            guard let readAt = thread.usageReadAt, let windows = thread.usageWindows, windows.contains(where: { $0.usedFraction != nil }) else { return nil }
+            return AccountUsageReading(agent: thread.agent, account: thread.accountName, windows: windows, readAt: readAt)
+        })
     }
 
-    private static func display(of thread: ThreadSummary, timeZone: TimeZone) -> AccountUsageDisplay? {
-        guard let readAt = thread.usageReadAt else { return nil }
+    /// One display for each account with a reading: the newest reading
+    /// among its threads and the kept readings. The account of the login
+    /// shell, which has no name, comes before the other accounts of its
+    /// agent.
+    public static func displays(of threads: [ThreadSummary], kept: [AccountUsageReading] = [], now: Date = Date(), timeZone: TimeZone = .current) -> [AccountUsageDisplay] {
+        let rank = { (reading: AccountUsageReading) in [String(agentOrder.firstIndex(of: reading.agent) ?? agentOrder.count), reading.agent, reading.account ?? ""] }
+        return AccountUsageReading.newest(kept + readings(of: threads))
+            .sorted { rank($0).lexicographicallyPrecedes(rank($1)) }
+            .map { display(of: $0, now: now, timeZone: timeZone) }
+    }
+
+    private static func display(of reading: AccountUsageReading, now: Date, timeZone: TimeZone) -> AccountUsageDisplay {
         var (time, day) = (Date.FormatStyle(date: .omitted, time: .shortened), Date.FormatStyle().weekday(.wide).hour().minute())
-        (time.timeZone, day.timeZone) = (timeZone, timeZone)
+        var date = Date.FormatStyle().month(.abbreviated).day()
+        (time.timeZone, day.timeZone, date.timeZone) = (timeZone, timeZone, timeZone)
+        var calendar = Calendar(identifier: .gregorian)
+        calendar.timeZone = timeZone
+        // A kept reading can be days old, and its time alone would look current.
+        let isToday = calendar.isDate(reading.readAt, inSameDayAs: now)
+        let readTime = isToday ? reading.readAt.formatted(time) : reading.readAt.formatted(date)
         var (windows, words): ([AccountUsageDisplay.Window], [String]) = ([], [])
-        for window in thread.usageWindows ?? [] {
+        for window in reading.windows {
             guard let used = window.usedFraction else { continue }
             let name = ThreadRowFacts.windowName(window)
             windows.append(.init(name: name, usedFraction: used, isAtLimit: window.status == "rejected"))
             words.append("\(name) \(Int((used * 100).rounded()))% used" + (window.resetTime.map { ", resets \($0.formatted(day))" } ?? ""))
         }
-        let title = ThreadRowFacts.agentName(thread.agent) + (thread.accountName.map { " · \($0)" } ?? "")
-        let help = "\(title): \(words.joined(separator: ". ")). Read at \(readAt.formatted(time))."
-        return AccountUsageDisplay(title: title, windows: windows, readTime: readAt.formatted(time), help: help)
+        let title = ThreadRowFacts.agentName(reading.agent) + (reading.account.map { " · \($0)" } ?? "")
+        let when = isToday ? readTime : "\(readTime), \(reading.readAt.formatted(time))"
+        let help = "\(title): \(words.joined(separator: ". ")). Read at \(when)."
+        return AccountUsageDisplay(title: title, windows: windows, readTime: readTime, help: help, agent: reading.agent, account: reading.account)
     }
 }

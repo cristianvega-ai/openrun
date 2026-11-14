@@ -17,12 +17,17 @@ public struct AccountUsageDisplay: Equatable, Sendable {
     /// The agent and the account, such as "Claude Code" or "Codex · Work".
     public var title: String
     public var windows: [Window]
-    /// The time of the reading, such as "14:32".
+    /// The time of the reading, such as "14:32", or its day, such as
+    /// "Nov 12", for a reading of an earlier day.
     public var readTime: String
     /// The whole reading in words, with the reset times.
     public var help: String
+    /// The agent as the session process names it, and the name of the
+    /// account, or `nil` for the account of the login shell.
+    public var agent: String
+    public var account: String?
 
-    public init(title: String, windows: [Window], readTime: String, help: String) {
-        (self.title, self.windows, self.readTime, self.help) = (title, windows, readTime, help)
+    public init(title: String, windows: [Window], readTime: String, help: String, agent: String = "", account: String? = nil) {
+        (self.title, self.windows, self.readTime, self.help, self.agent, self.account) = (title, windows, readTime, help, agent, account)
     }
 }
