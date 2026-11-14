@@ -59,7 +59,7 @@ A module uses another module only through its public types.
 | `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, the selected row and the scroll view of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView`, `OverlayScrollView` |
 | `ListUpdates` | The rows of a list that changed between two contents, so a table updates them in place | `RowChanges` |
 | `ProjectsList` | The first pane of the main window: All Projects, Needs You and the projects under their heading, and the usage of the accounts at its foot | `ProjectsListController`, `ProjectsListDelegate`, `ProjectsListContent`, `ProjectDisplay`, `ProjectsListEntry` |
-| `AccountUsage` | The usage of an account as the window shows it: its words and the meter of each window of its limit, for the first pane and the settings window | `AccountUsageDisplay`, `UsageMeterView` |
+| `AccountUsage` | The usage of an account as the window shows it: its words and the meter of each window of its limit, for the first pane and the settings window, and the last reading of each account | `AccountUsageDisplay`, `UsageMeterView`, `AccountUsageReading` |
 | `SessionsList` | The second pane of the main window: the threads with agents and the terminal sessions as vertical tabs | `SessionsListController`, `SessionsListDelegate`, `SessionsListContent`, `SessionRowDisplay`, `SessionKind`, `SessionsFilter`, `SessionsOrder`, `NewSessionRequest` |
 | `MainWindow` | The main window: the three panes as stacked sheets, their widths, the content of the third pane, and the focus between the panes | `MainWindowController`, `MainWindowDelegate`, `PaneContent`, `ContentPaneController`, `PaneLayout` |
 | `SessionOverview` | What the session process holds, kept live for the app: the sessions, the projects, the settings and the agent threads from the feed, and the sender of the requests of the app | `SessionOverview`, `SessionOverviewConnection`, `ConnectionStatus`, `SessionRequests`, `SessionRequestFailure` |
@@ -120,7 +120,7 @@ SessionConnection -> AgentConversation
 SessionWindow     -> SessionPane -> TerminalView
 MainWindow        -> ProjectsList -> PaneAppearance -> TerminalTheme
                                   -> ListUpdates
-                                  -> AccountUsage -> PaneAppearance
+                                  -> AccountUsage -> PaneAppearance, SessionProtocol
                   -> SessionsList -> PaneAppearance
                                   -> ListUpdates
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt

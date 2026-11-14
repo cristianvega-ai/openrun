@@ -147,8 +147,8 @@ let package = Package(
         .target(name: "PaneAppearance", dependencies: ["TerminalTheme", "TerminalEmulation"]),
         .testTarget(name: "PaneAppearanceTests", dependencies: ["PaneAppearance", "TerminalTheme", "TerminalEmulation"]),
         // The usage of an account in words and meters, for the first pane and the settings window.
-        .target(name: "AccountUsage", dependencies: ["PaneAppearance"]),
-        .testTarget(name: "AccountUsageTests", dependencies: ["AccountUsage"]),
+        .target(name: "AccountUsage", dependencies: ["PaneAppearance", "SessionProtocol"]),
+        .testTarget(name: "AccountUsageTests", dependencies: ["AccountUsage", "SessionProtocol"]),
         // A web page in a split of the third pane. Only this module imports WebKit.
         .target(name: "BrowserPane", dependencies: ["PaneAppearance"]),
         .testTarget(name: "BrowserPaneTests", dependencies: ["BrowserPane"]),
