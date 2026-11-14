@@ -13,7 +13,13 @@ extension Workspace {
     ///   settings. `nil`, or a name that the settings do not hold, starts
     ///   the login shell.
     func newSession(commandNamed name: String? = nil) {
-        let commandLine = settings.newSessionCommands.first { $0.name == name }?.commandLine ?? ""
+        newSession(commandLine: settings.newSessionCommands.first { $0.name == name }?.commandLine ?? "")
+    }
+
+    /// - Parameters:
+    ///   - commandLine: The command for the login shell. An empty one starts the login shell itself.
+    ///   - rowName: The name of the new row, or `nil` for the name that its program gives.
+    func newSession(commandLine: String, rowName: String? = nil) {
         let launch = NewSessionLaunch(commandLine: commandLine, folder: selectedProjectFolder ?? home, shell: loginShell)
         // The session starts with the grid of the third pane, so its
         // program draws once for the right size.
@@ -26,7 +32,9 @@ extension Workspace {
             return summary.identifier
         }, then: { [weak self] result in
             switch result {
-            case .success(let identifier): self?.select(newSession: identifier)
+            case .success(let identifier):
+                self?.select(newSession: identifier)
+                if let rowName { self?.perform("The terminal could not get its name") { try $0.rename(session: identifier, to: rowName) } }
             case .failure(let failure): self?.showFailure("The session could not start", failure.message)
             }
         })

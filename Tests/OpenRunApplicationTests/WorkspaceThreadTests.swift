@@ -213,6 +213,28 @@ import Testing
         #expect(AccountUsageStore(dataFolder: DataFolder(path: workspace.socket.folder)).load() == workspace.keptUsage && workspace.keptUsage.count == 1)
     }
 
+    @Test func signInRunsTheLoginOfTheAgentInATerminalUnderTheAccount() async throws {
+        let test = try await start(isApplication: true)
+        defer { test.stop() }
+        let workspace = test.workspace, folder = test.process.directory.path
+        (workspace.home, workspace.loginShell, workspace.sessionEnvironment) = (folder, LoginShell(path: "/bin/sh"), ["HOME": folder, "PATH": "/usr/bin:/bin"])
+        // A stand-in for the agent, so the test never starts the real login.
+        let program = folder + "/agent-login"
+        try "#!/bin/sh\nexec sleep 30\n".write(toFile: program, atomically: true, encoding: .utf8)
+        try FileManager.default.setAttributes([.posixPermissions: 0o755], ofItemAtPath: program)
+        let client = try SessionClient(location: workspace.socket)
+        try client.changeSetting(named: "claude-code-program", to: program)
+        try client.changeSetting(named: "claude-code-accounts", to: #"[{"folder":"\#(folder)/.claude-work","name":"Work"}]"#)
+        #expect(await waitUntil { workspace.settings.claudeCodeAccounts.count == 1 && workspace.settings.claudeCodeProgram == program })
+        // An account that the settings do not hold starts nothing.
+        workspace.signIn(agent: "claude-code", account: "Home")
+        workspace.signIn(agent: "claude-code", account: "Work")
+        #expect(await waitUntil { workspace.connection.overview.sessions.first?.name == "Sign In to Claude Code · Work" })
+        let session = try #require(workspace.connection.overview.sessions.first)
+        #expect(workspace.connection.overview.sessions.count == 1 && session.command.last == "exec env CLAUDE_CONFIG_DIR='\(folder)/.claude-work' '\(program)' auth login")
+        #expect(await waitUntil { workspace.layout.row(showing: session.identifier)?.identifier == workspace.layout.selectedRow })
+    }
+
     @Test func anAgentThatWaitsForAnAnswerNotifiesUnlessItsChatIsInView() async throws {
         let test = try await start(turns: ["command-turn"], mode: "askPermission", isApplication: true)
         defer { test.stop() }
