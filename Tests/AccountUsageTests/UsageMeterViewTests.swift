@@ -1,6 +1,6 @@
 import AppKit
 import Testing
-@testable import ProjectsList
+import AccountUsage
 
 @MainActor @Suite struct UsageMeterViewTests {
     @Test func aSmallUseStillShowsAndAFullWindowFillsTheMeter() {

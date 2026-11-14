@@ -146,12 +146,15 @@ let package = Package(
         // How the panes of the main window look: the theme colors in AppKit, the top row, the selected row.
         .target(name: "PaneAppearance", dependencies: ["TerminalTheme", "TerminalEmulation"]),
         .testTarget(name: "PaneAppearanceTests", dependencies: ["PaneAppearance", "TerminalTheme", "TerminalEmulation"]),
-        // The first pane of the main window: All Sessions, the projects, and No Project.
+        // The usage of an account in words and meters, for the first pane and the settings window.
+        .target(name: "AccountUsage", dependencies: ["PaneAppearance"]),
+        .testTarget(name: "AccountUsageTests", dependencies: ["AccountUsage"]),
         // A web page in a split of the third pane. Only this module imports WebKit.
         .target(name: "BrowserPane", dependencies: ["PaneAppearance"]),
         .testTarget(name: "BrowserPaneTests", dependencies: ["BrowserPane"]),
-        .target(name: "ProjectsList", dependencies: ["PaneAppearance", "ListUpdates"]),
-        .testTarget(name: "ProjectsListTests", dependencies: ["ProjectsList", "PaneAppearance"]),
+        // The first pane of the main window: All Projects, Needs You, and the projects.
+        .target(name: "ProjectsList", dependencies: ["PaneAppearance", "ListUpdates", "AccountUsage"]),
+        .testTarget(name: "ProjectsListTests", dependencies: ["ProjectsList", "PaneAppearance", "AccountUsage"]),
         // The second pane of the main window: the threads and terminal sessions, as vertical tabs.
         .target(name: "SessionsList", dependencies: ["PaneAppearance", "ListUpdates"]),
         .testTarget(name: "SessionsListTests", dependencies: ["SessionsList", "PaneAppearance"]),
