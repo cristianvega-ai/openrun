@@ -29,7 +29,10 @@ public struct DataFile: Hashable, Sendable, CustomStringConvertible {
     /// restart: the folder, the name and the size of each one.
     public static let sessions = DataFile(name: "sessions.json", scope: .thisMac)
 
-    public static let all: [DataFile] = [.projects, .projectFolders, .settings, .layout, .threads, .sessions]
+    /// The last usage reading of each account, which the app keeps.
+    public static let accountUsage = DataFile(name: "account-usage.json", scope: .thisMac)
+
+    public static let all: [DataFile] = [.projects, .projectFolders, .settings, .layout, .threads, .sessions, .accountUsage]
 
     public var description: String { name }
 }

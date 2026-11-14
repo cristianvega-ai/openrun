@@ -59,7 +59,7 @@ A module uses another module only through its public types.
 | `PaneAppearance` | How the panes of the main window look: the theme colors in AppKit, the background of a pane, the top row, its buttons, the selected row and the scroll view of a list | `PaneColor`, `PaneBackgroundView`, `PaneTopRow`, `PaneButton`, `SelectedRowView`, `OverlayScrollView` |
 | `ListUpdates` | The rows of a list that changed between two contents, so a table updates them in place | `RowChanges` |
 | `ProjectsList` | The first pane of the main window: All Projects, Needs You and the projects under their heading, and the usage of the accounts at its foot | `ProjectsListController`, `ProjectsListDelegate`, `ProjectsListContent`, `ProjectDisplay`, `ProjectsListEntry` |
-| `AccountUsage` | The usage of an account as the window shows it: its words and the meter of each window of its limit, for the first pane and the settings window, and the last reading of each account | `AccountUsageDisplay`, `UsageMeterView`, `AccountUsageReading` |
+| `AccountUsage` | The usage of an account as the window shows it: its words and the meter of each window of its limit, for the first pane and the settings window, and the last reading of each account in its file | `AccountUsageDisplay`, `UsageMeterView`, `AccountUsageReading`, `AccountUsageStore` |
 | `SessionsList` | The second pane of the main window: the threads with agents and the terminal sessions as vertical tabs | `SessionsListController`, `SessionsListDelegate`, `SessionsListContent`, `SessionRowDisplay`, `SessionKind`, `SessionsFilter`, `SessionsOrder`, `NewSessionRequest` |
 | `MainWindow` | The main window: the three panes as stacked sheets, their widths, the content of the third pane, and the focus between the panes | `MainWindowController`, `MainWindowDelegate`, `PaneContent`, `ContentPaneController`, `PaneLayout` |
 | `SessionOverview` | What the session process holds, kept live for the app: the sessions, the projects, the settings and the agent threads from the feed, and the sender of the requests of the app | `SessionOverview`, `SessionOverviewConnection`, `ConnectionStatus`, `SessionRequests`, `SessionRequestFailure` |
@@ -120,7 +120,7 @@ SessionConnection -> AgentConversation
 SessionWindow     -> SessionPane -> TerminalView
 MainWindow        -> ProjectsList -> PaneAppearance -> TerminalTheme
                                   -> ListUpdates
-                                  -> AccountUsage -> PaneAppearance, SessionProtocol
+                                  -> AccountUsage -> PaneAppearance, SessionProtocol, DataStorage
                   -> SessionsList -> PaneAppearance
                                   -> ListUpdates
 TerminalView      -> TerminalRendering -> TerminalEmulation -> libghostty-vt
@@ -810,6 +810,7 @@ A folder that a caller named gets mode 0700 only when `create` makes it. Otherwi
 | `settings.json` | The settings that differ from their defaults, each a key beside `format`, and the settings of a later build | Can sync |
 | `layout.json` | The rows of the sessions list and their splits, with the address of each web page, which the app keeps | This Mac |
 | `sessions.json` | The terminal sessions that run: the identifier, the newest current folder, the name, the size and the start time of each one. It holds no environment and no output | This Mac |
+| `account-usage.json` | The last usage reading of each account, which the app keeps: the agent, the name of the account, the windows of its limit and the time of the reading | This Mac |
 | `threads.json` | The agent threads: the agent, the conversation, the account, the folder, the model, the permission mode, the name and the title of each one. The conversation itself stays in the history of the agent | This Mac |
 
 Data that can sync and data of this Mac never share a file, so a later sync takes whole files.
