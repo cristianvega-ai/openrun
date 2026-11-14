@@ -32,6 +32,9 @@ import Testing
         // A second call shows the same window.
         workspace.showSettings(nil)
         #expect(workspace.settingsWindow === settings)
+        // The menu of the new-session button opens the same window at the accounts.
+        workspace.sessionsListDidRequestAccounts(workspace.window.sessionsList)
+        #expect(workspace.settingsWindow === settings && settings.window?.isVisible == true)
         // Command-W in the settings window closes that window, and the terminal of the main window stays.
         let shell = try test.createShell()
         #expect(await waitUntil { test.shownRows == [shell] })

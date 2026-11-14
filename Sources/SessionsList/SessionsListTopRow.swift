@@ -51,7 +51,11 @@ extension SessionsListController {
                 item.representedObject = [agent, account]
             }
         }
-        if !content.agents.isEmpty { menu.addItem(.separator()) }
+        // The user adds an account where the user chooses one (decision of 2026-11-13).
+        if !content.agents.isEmpty {
+            menu.addItem(withTitle: "Manage Accounts…", action: #selector(requestAccounts), keyEquivalent: "")
+            menu.addItem(.separator())
+        }
         menu.addItem(withTitle: "New Terminal", action: #selector(requestTerminal), keyEquivalent: "")
         for command in content.terminalCommands {
             menu.addItem(withTitle: "New Terminal with \(command)", action: #selector(requestCommand), keyEquivalent: "").representedObject = command
@@ -87,6 +91,10 @@ extension SessionsListController {
     @objc private func requestThread(_ item: NSMenuItem) {
         guard let words = item.representedObject as? [String], let agent = words.first else { return }
         delegate?.sessionsList(self, didRequest: .thread(agent: agent, account: words.dropFirst().first))
+    }
+
+    @objc private func requestAccounts() {
+        delegate?.sessionsListDidRequestAccounts(self)
     }
 
     @objc func requestTerminal() {

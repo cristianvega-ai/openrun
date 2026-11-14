@@ -11,6 +11,8 @@ public protocol SessionsListDelegate: AnyObject {
     func sessionsList(_ list: SessionsListController, didOpen identifier: UUID)
     /// The user wants a new thread or a new terminal.
     func sessionsList(_ list: SessionsListController, didRequest request: NewSessionRequest)
+    /// The user wants to add or change the accounts of the agents.
+    func sessionsListDidRequestAccounts(_ list: SessionsListController)
     /// The user gave a row a new name in place. The name is not empty.
     func sessionsList(_ list: SessionsListController, didRename identifier: UUID, to name: String)
     /// The user closed a row from its context menu.

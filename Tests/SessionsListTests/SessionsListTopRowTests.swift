@@ -25,10 +25,11 @@ import Testing
         let (list, host, window, _) = makeSessionsList()
         defer { window.close() }
         let menu = list.newSessionMenu()
-        #expect(menu.items.map(\.title) == ["New Claude Code Thread", "New Codex Thread", "", "New Terminal"])
+        #expect(menu.items.map(\.title) == ["New Claude Code Thread", "New Codex Thread", "Manage Accounts…", "", "New Terminal"])
         try choose("New Codex Thread", in: menu)
+        try choose("Manage Accounts…", in: menu)
         try choose("New Terminal", in: menu)
-        #expect(host.requests == [.thread(agent: "Codex"), .terminal(command: nil)])
+        #expect(host.requests == [.thread(agent: "Codex"), .terminal(command: nil)] && host.accountRequests == 1)
         #expect(list.topRow.trailingItems.arrangedSubviews == [list.arrangementButton, list.newSessionButton])
         #expect(list.newSessionButton.accessibilityLabel() == "New Thread or Terminal")
     }
@@ -38,7 +39,7 @@ import Testing
         defer { window.close() }
         list.show(SessionsListContent(agents: ["Claude Code"], place: "In openrun"))
         let menu = list.newSessionMenu()
-        #expect(menu.items.map(\.title) == ["In openrun", "New Claude Code Thread", "", "New Terminal"])
+        #expect(menu.items.map(\.title) == ["In openrun", "New Claude Code Thread", "Manage Accounts…", "", "New Terminal"])
         // The heading is no command.
         #expect(menu.items[0].action == nil && menu.items[0].isSectionHeader && menu.items[0].target == nil)
         try choose("New Terminal", in: menu)
@@ -51,7 +52,7 @@ import Testing
         list.show(SessionsListContent(agents: ["Claude Code", "Codex"], accounts: ["Claude Code": ["Work", "Home"]]))
         let menu = list.newSessionMenu()
         #expect(menu.items.map(\.title) == [
-            "New Claude Code Thread", "New Claude Code Thread on Work", "New Claude Code Thread on Home", "New Codex Thread", "", "New Terminal",
+            "New Claude Code Thread", "New Claude Code Thread on Work", "New Claude Code Thread on Home", "New Codex Thread", "Manage Accounts…", "", "New Terminal",
         ])
         try choose("New Claude Code Thread on Home", in: menu)
         try choose("New Claude Code Thread", in: menu)

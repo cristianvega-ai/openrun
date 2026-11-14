@@ -25,6 +25,11 @@ extension Workspace: SessionsListDelegate {
         }
     }
 
+    func sessionsListDidRequestAccounts(_ list: SessionsListController) {
+        showSettings(nil)
+        settingsWindow?.showAccounts()
+    }
+
     func sessionsList(_ list: SessionsListController, didRename identifier: UUID, to name: String) {
         if let thread = layout.row(identifier)?.pane.leadingThread {
             return perform("The thread could not get its name") { try $0.renameThread(thread, to: name) }
