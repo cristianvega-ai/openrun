@@ -58,8 +58,8 @@ struct SettingsPane {
     @MainActor private static var terminal: SettingsPane {
         SettingsPane(title: "Terminal", symbolName: "terminal", sections: [
             SettingsSection(rows: [
-                SettingRow(name: SettingName.optionAsAlt.rawValue, label: "Option key", note: "An Option key that is not Alt types the special characters of the keyboard.") {
-                    ChoiceSettingControl([("left", "The Left Option Key Is Alt"), ("both", "Both Option Keys Are Alt"), ("neither", "No Option Key Is Alt")])
+                SettingRow(name: SettingName.optionAsAlt.rawValue, label: "Option key as Alt", note: "The Option keys that are Alt. An Option key that is not Alt types the special characters of the keyboard.") {
+                    SegmentSettingControl([("left", "Left"), ("both", "Both"), ("neither", "Neither")])
                 },
                 SettingRow(name: SettingName.scrollbackLimit.rawValue, label: "Scrollback", note: "The lines that each terminal keeps above its screen.") {
                     NumberSettingControl(0...1_000_000, unit: "lines")

@@ -26,6 +26,8 @@ import Testing
         // A row tells what its setting does, so a pane needs a heading only for a second kind of setting.
         #expect(controller.panes[0].pane.sections.map(\.title) == [nil] && controller.panes[0].pane.rows.allSatisfy { $0.note != nil })
         #expect(controller.panes[2].pane.sections.map(\.title) == [nil, "New Terminals"])
+        let option = controller.panes[2].controls["option-as-alt"] as? SegmentSettingControl
+        #expect(option?.segments.selectedSegment == 0)
     }
 
     @Test func theListAtTheLeftChoosesThePaneThatShows() {

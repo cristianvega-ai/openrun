@@ -29,6 +29,18 @@ import Testing
         #expect(control.popup.fittingSize.width <= 240 && TextSettingControl().field.fittingSize.width == 220)
     }
 
+    @Test func theSegmentsShowEachChoiceAtOnce() {
+        let control = SegmentSettingControl([("left", "Left"), ("both", "Both"), ("neither", "Neither")])
+        let told = changes(of: control)
+        control.show("both")
+        #expect(control.segments.segmentCount == 3 && control.segments.label(forSegment: 2) == "Neither" && control.segments.selectedSegment == 1)
+        control.segments.selectedSegment = 2
+        control.choose()
+        // A value of a later build selects no segment, so the window shows no wrong value.
+        control.show("later")
+        #expect(control.segments.selectedSegment == -1 && told() == ["neither"])
+    }
+
     @Test func aFlagIsASwitchThatIsOnOrOff() {
         let control = FlagSettingControl()
         let told = changes(of: control)
